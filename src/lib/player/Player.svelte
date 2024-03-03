@@ -94,13 +94,15 @@
 		});
 	});
 </script>
+
+<main id="main-page" class="flex flex-col items-center w-full h-full overflow-auto gap-3 py-4">
 <label class="input input-bordered flex items-center gap-2">
 	Name
 	<input type="text" class="grow" placeholder="Daisy" />
 </label>
 	<media-player
 		id="player"
-		class="w-full aspect-video bg-slate-900 text-white font-sans overflow-hidden rounded-md ring-media-focus data-[focus]:ring-4"
+		class="media-player w-full aspect-video bg-slate-900 text-white font-sans overflow-hidden rounded-md ring-media-focus data-[focus]:ring-4"
 		title="Sprite Fight"
 		src={`http://${host}/static/${id}/out.mp4`}
 		crossorigin
@@ -115,3 +117,12 @@
 		<media-video-layout
 		/>
 	</media-player>
+
+</main>
+
+<style>
+	.media-player{
+			border: none !important;
+			border-radius: unset !important;
+	}
+</style>
