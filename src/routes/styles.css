@@ -195,10 +195,6 @@ code .line::before {
 	background: radial-gradient(circle at 100% 0, hsla(0, 0%, 100%, .95) 0, hsla(0, 0%, 96.1%, .77) 183%);
 }
 
-*:focus-visible{
-	outline: 2px solid var(--color-pink-light) !important;
-	outline-offset: 2px !important;
-}
 
 .article-card {
 	background: white !important;

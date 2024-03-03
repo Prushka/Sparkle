@@ -12,7 +12,7 @@
 	const id = "PC1eyyTa7TVtHiZGKoSWbD2rkxmD7RcX"
 	const host = "192.168.50.182:1323"
 	let socket: WebSocket;
-
+	let name = '';
 	function connect() {
 		if (socket?.readyState === WebSocket.OPEN) {
 			socket.close()
@@ -98,7 +98,15 @@
 <main id="main-page" class="flex flex-col items-center w-full h-full overflow-auto gap-3 py-4">
 <label class="input input-bordered flex items-center gap-2">
 	Name
-	<input type="text" class="grow" placeholder="Daisy" />
+	<input
+		on:focusout = {() => {
+			if (socket?.readyState === WebSocket.OPEN) {
+				socket.send(JSON.stringify({
+					name: name,
+				}))
+			}
+		}}
+		bind:value={name} type="text" class="grow" placeholder="Who?" />
 </label>
 	<media-player
 		id="player"
