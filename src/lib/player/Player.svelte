@@ -8,16 +8,18 @@
 	} from 'vidstack';
 	import { formatSeconds, type Job, type PlayerState } from './t';
 	import { PUBLIC_HOST, PUBLIC_WS } from '$env/static/public';
+	import { page } from '$app/stores';
 	let player: MediaPlayerElement;
 
 	let socket: WebSocket;
 	let name = '';
 	let roomStates: PlayerState[] = [];
 	let jobs: Job[] = [];
+	// load id from query param
 	let id: string = '';
 	let textTracks: TextTrackInit[] = [];
 	let lastTicked = 0;
-	let videoSrc = 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
+	let videoSrc = '';
 
 	function idChanges() {
 		console.log('called');
@@ -109,6 +111,8 @@
 				time: player?.currentTime
 			});
 		}, 4000);
+
+		id = $page.url.searchParams.get('id') || '';
 
 	});
 </script>
