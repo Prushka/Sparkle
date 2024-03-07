@@ -6,7 +6,7 @@
 	import {
 		type TextTrackInit
 	} from 'vidstack';
-	import type { Job, PlayerState } from '../../t';
+	import { formatSeconds, type Job, type PlayerState } from '../../t';
 
 	let player: MediaPlayerElement;
 
@@ -18,8 +18,10 @@
 	let jobs: Job[] = [];
 	let id: string = '';
 	let textTracks: TextTrackInit[] = [];
+	let lastTicked = 0;
+
 	function idChanges() {
-		console.log("called")
+		console.log('called');
 		connect();
 
 		for (const job of jobs) {
@@ -36,8 +38,9 @@
 		}
 		for (const track of textTracks) player.textTracks.add(track);
 	}
+
 	$ : if (id !== '') {
-		idChanges()
+		idChanges();
 	}
 
 	function connect() {
@@ -48,10 +51,9 @@
 		socket.onopen = () => {
 			console.log('Connected to sync server');
 			if (name !== '') {
-				socket.send(JSON.stringify({
-					name: name
-				}));
+				send({ name: name });
 			}
+			send({ reason: 'new player'})
 		};
 
 		socket.onmessage = (event: MessageEvent) => {
@@ -60,6 +62,7 @@
 			if (player) {
 				if (Array.isArray(state)) {
 					roomStates = state;
+					lastTicked = Date.now();
 				} else {
 					if (state['paused'] === true && player.paused === false) {
 						player.pause();
@@ -86,13 +89,10 @@
 		};
 	}
 
-	function syncTime() {
-		if (player !== null && socket.readyState === WebSocket.OPEN) {
-			const curr = player.currentTime;
-			console.log(curr);
-			socket.send(JSON.stringify({
-				time: curr
-			}));
+	function send(data: any) {
+		if (player && socket.readyState === WebSocket.OPEN) {
+			console.log('sending: ' + JSON.stringify(data));
+			socket.send(JSON.stringify(data));
 		}
 	}
 
@@ -102,44 +102,27 @@
 			.then(data => {
 				jobs = data;
 				console.log(jobs);
-			}).catch(error => {
-			console.log(error);
-			return [];
-		});
+			});
 		name = localStorage.getItem('name') || '';
-
-		syncTime();
-		// tick every 2 seconds
 		setInterval(() => {
-			syncTime();
+			send({
+				time: player?.currentTime
+			});
 		}, 4000);
-		// Subscribe to state updates.
-		return player.subscribe(({ paused }: { paused: boolean }
-		) => {
-			if (socket.readyState === WebSocket.OPEN) {
-				console.log({
-					paused: paused
-				});
-				socket.send(JSON.stringify({
-					paused: paused
-				}));
-			}
-		});
+
 	});
 </script>
 
 <main id="main-page" class="flex flex-col items-center w-full h-full overflow-auto gap-3 py-4">
-	<div class="w-full flex gap-2 justify-center items-center px-8">
+	<div class="w-full flex gap-2 items-center px-8">
 		<label class="input input-bordered flex items-center gap-2">
 			Name
 			<input
 				on:focusout={() => {
-			if (socket?.readyState === WebSocket.OPEN) {
-				socket.send(JSON.stringify({
-					name: name,
-				}))
+					send({
+						name: name
+					})
 				localStorage.setItem("name", name)
-			}
 		}}
 				bind:value={name} type="text" class="grow" placeholder="Who?" />
 		</label>
@@ -152,10 +135,13 @@
 		</select>
 		<div class="flex gap-1">
 			{#each roomStates as state}
-				<div class="badge badge-neutral">
-					{state.name}: {state.time}
+				<div class="btn btn-neutral">
+					{state.name}: {formatSeconds(state.time)}, {state.paused ? 'paused' : 'playing'}
 				</div>
 			{/each}
+			<div class="btn">
+				Last tick: {Math.ceil((Date.now() - lastTicked) / 1000)}
+			</div>
 		</div>
 	</div>
 	<media-player
@@ -165,6 +151,14 @@
 		src={`${host}/static/${id}/out.mp4`}
 		crossorigin
 		bind:this={player}
+		on:pause={
+			() => {
+				send({ paused: true });
+			}}
+		on:play={
+			() => {
+				send({ paused: false });
+			}}
 	>
 		<media-provider>
 			<media-poster
