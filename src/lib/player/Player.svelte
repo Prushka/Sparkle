@@ -38,6 +38,7 @@
 			}
 		}
 		for (const track of textTracks) player.textTracks.add(track);
+		console.log('textTracks', textTracks);
 		videoSrc = `${PUBLIC_HOST}/static/${id}/out.mp4`;
 	}
 
@@ -104,6 +105,7 @@
 			.then(data => {
 				jobs = data;
 				console.log(jobs);
+				id = $page.url.searchParams.get('id') || '';
 			});
 		name = localStorage.getItem('name') || '';
 		setInterval(() => {
@@ -112,7 +114,6 @@
 			});
 		}, 4000);
 
-		id = $page.url.searchParams.get('id') || '';
 
 	});
 </script>
