@@ -6,12 +6,10 @@
 	import {
 		type TextTrackInit
 	} from 'vidstack';
-	import { formatSeconds, type Job, type PlayerState } from '../../t';
-
+	import { formatSeconds, type Job, type PlayerState } from './t';
+	import { PUBLIC_HOST, PUBLIC_WS } from '$env/static/public';
 	let player: MediaPlayerElement;
 
-	const ip = '192.168.50.182:1323';
-	const host = `http://${ip}`;
 	let socket: WebSocket;
 	let name = '';
 	let roomStates: PlayerState[] = [];
@@ -19,6 +17,7 @@
 	let id: string = '';
 	let textTracks: TextTrackInit[] = [];
 	let lastTicked = 0;
+	let videoSrc = 'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
 
 	function idChanges() {
 		console.log('called');
@@ -28,7 +27,7 @@
 			if (job.Id === id) {
 				for (const sub of job.Subtitles) {
 					textTracks.push({
-						src: `${host}/static/${id}/${sub}.vtt`,
+						src: `${PUBLIC_HOST}/static/${id}/${sub}.vtt`,
 						label: sub,
 						kind: 'subtitles'
 					});
@@ -37,6 +36,7 @@
 			}
 		}
 		for (const track of textTracks) player.textTracks.add(track);
+		videoSrc = `${PUBLIC_HOST}/static/${id}/out.mp4`;
 	}
 
 	$ : if (id !== '') {
@@ -47,7 +47,7 @@
 		if (socket?.readyState === WebSocket.OPEN) {
 			socket.close();
 		}
-		socket = new WebSocket(`ws://${ip}/sync/${id}`);
+		socket = new WebSocket(`${PUBLIC_WS}/sync/${id}`);
 		socket.onopen = () => {
 			console.log('Connected to sync server');
 			if (name !== '') {
@@ -90,14 +90,14 @@
 	}
 
 	function send(data: any) {
-		if (player && socket.readyState === WebSocket.OPEN) {
+		if (player && socket && socket.readyState === WebSocket.OPEN) {
 			console.log('sending: ' + JSON.stringify(data));
 			socket.send(JSON.stringify(data));
 		}
 	}
 
 	onMount(() => {
-		fetch(`${host}/all`)
+		fetch(`${PUBLIC_HOST}/all`)
 			.then(response => response.json())
 			.then(data => {
 				jobs = data;
@@ -145,10 +145,9 @@
 		</div>
 	</div>
 	<media-player
-		id="player"
 		class="media-player w-full aspect-video bg-slate-900 text-white font-sans overflow-hidden rounded-md ring-media-focus data-[focus]:ring-4"
 		title="Sprite Fight"
-		src={`${host}/static/${id}/out.mp4`}
+		src={videoSrc}
 		crossorigin
 		bind:this={player}
 		on:pause={
@@ -169,6 +168,7 @@
 		<media-video-layout
 		/>
 	</media-player>
+
 
 </main>
 

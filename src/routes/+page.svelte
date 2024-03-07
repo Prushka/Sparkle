@@ -1,9 +1,14 @@
 <script lang="ts">
 	// Import styles.
-	import 'vidstack/bundle';
-	import './styles.css'
+	import './styles.css';
+	import { onMount } from 'svelte';
+
+	let vidstack: any;
+	onMount(async () => {
+		// Load the Vidstack player.
+		vidstack = (await import('$lib/player/Player.svelte')).default;
+	});
 </script>
 
-{#await import('$lib/player/Player.svelte') then {default: Player}}
-	<svelte:component this={Player} />
-{/await}
+
+<svelte:component this={vidstack} />
