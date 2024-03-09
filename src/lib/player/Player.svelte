@@ -29,7 +29,7 @@
 			if (job.Id === id) {
 				for (const sub of job.Subtitles) {
 					textTracks.push({
-						src: `${PUBLIC_HOST}/static/${id}/${sub}.vtt`,
+						src: `${PUBLIC_HOST}/static/${id}/${sub}`,
 						label: sub,
 						kind: 'subtitles'
 					});
