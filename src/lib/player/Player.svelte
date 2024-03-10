@@ -197,11 +197,15 @@
 			<div class="flex gap-1 w-full h-full absolute">
 				<div class="flex flex-col ml-auto mt-8 mr-8 drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)]">
 					{#each messagesToDisplay as message}
-						<p class="text-right">
+						<div class="flex gap-0.5 justify-end items-center">
 							{message.message}
-							[{new Date(message.timestamp * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-							@ {formatSeconds(message.mediaSec)}]: {message.username}
-						</p>
+							[{new Date(message.timestamp * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}, {formatSeconds(message.mediaSec)}]: {message.username}
+							<img src="{PUBLIC_HOST}/static/pfp/{id}.png"
+									 on:error={(e) => {
+							 			e.target.src = '/icons/uwu.png';
+						 }}
+									 alt="pfp" class="w-6 h-6 rounded-full object-cover" />
+						</div>
 					{/each}
 				</div>
 			</div>
@@ -211,13 +215,11 @@
 
 	<div class="w-full flex gap-2 items-start px-4">
 		<label class="custom-file-upload">
-			<picture>
-				<img src="{pfp? URL.createObjectURL(pfp): `${PUBLIC_HOST}/static/pfp/${id}.png`}"
+			<img src="{pfp? URL.createObjectURL(pfp): `${PUBLIC_HOST}/static/pfp/${id}.png`}"
 						 on:error={(e) => {
 							 e.target.src = '/icons/uwu.png';
 						 }}
 						 alt="pfp" class="w-12 h-12 rounded-full object-cover" />
-			</picture>
 			<input accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
 						 bind:this={pfpInput}
 						 on:change={() => {
