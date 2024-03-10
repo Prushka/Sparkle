@@ -143,7 +143,7 @@
 				for (const node of document.querySelectorAll('media-chapter-title')) {
 					const input = document.createElement('input');
 					input.id = 'chat-input';
-					input.classList.add('input', 'input-sm', 'w-80', 'input-sm', 'mx-8', 'text-black');
+					input.classList.add('input', 'input-sm', 'input-sm', 'mx-8', 'text-black');
 					input.placeholder = 'Chat';
 					input.autocomplete = 'off';
 					const form = document.createElement('form');
