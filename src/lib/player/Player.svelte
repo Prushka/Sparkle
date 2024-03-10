@@ -39,10 +39,6 @@
 
 	function idChanges() {
 		console.log('Room ID changed!');
-		if(roomId === '') {
-			return
-		}
-		let found = false;
 		for (const job of jobs) {
 			if (job.Id === roomId) {
 				for (const sub of job.Subtitles) {
@@ -54,13 +50,8 @@
 					});
 				}
 				title = job.FileRawName;
-				found = true;
 				break;
 			}
-		}
-		if (!found) {
-			console.error('Media not found!');
-			roomId = ''
 		}
 		for (const track of textTracks) player.textTracks.add(track);
 		videoSrc = `${PUBLIC_HOST}/static/${roomId}/out.mp4`;
