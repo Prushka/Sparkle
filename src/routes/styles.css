@@ -257,3 +257,8 @@ input[type="file"] {
 	background-color: white;
 	align-self: center;
 }
+
+.chat-line{
+	border-radius: 0.5rem;
+	background-color: rgba(0,0,0,0.2);
+}

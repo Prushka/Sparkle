@@ -201,7 +201,7 @@
 			<div class="flex gap-1 w-full h-full absolute">
 				<div class="flex flex-col gap-0.5 ml-auto mt-8 mr-8 drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)]">
 					{#each messagesToDisplay as message}
-						<div class="flex gap-0.5 justify-end items-center">
+						<div class="flex gap-0.5 justify-end items-center chat-line py-1 px-2">
 							{message.message}
 							[{new Date(message.timestamp * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}, {formatSeconds(message.mediaSec)}]: {message.username}
 							<img src="{PUBLIC_HOST}/static/pfp/{id}.png"
