@@ -3,9 +3,6 @@
 	import 'vidstack/bundle';
 	import type { MediaPlayerElement } from 'vidstack/elements';
 	import { onMount } from 'svelte';
-	import {
-		type TextTrackInit
-	} from 'vidstack';
 	import { formatSeconds, type Job, type Message, nextTheme, type PlayerState, randomString } from './t';
 	import { PUBLIC_HOST, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -14,13 +11,12 @@
 		IconPlayerPause,
 		IconPlayerPlay,
 		IconPlugConnected,
-		IconPlugConnectedX,
-		IconUser
+		IconPlugConnectedX
 	} from '@tabler/icons-svelte';
 	import Chatbox from '$lib/player/Chatbox.svelte';
 
 	let player: MediaPlayerElement;
-
+	let controlsShowing = false;
 	let socket: WebSocket;
 	let name = localStorage.getItem('name') || '';
 	let pfp: File | null = null;
@@ -36,6 +32,7 @@
 	let messagesToDisplay: Message[] = [];
 	let id: string | null = localStorage.getItem('id') || null;
 	let title = '';
+
 
 	function idChanges() {
 		console.log('Room ID changed!');
@@ -157,8 +154,8 @@
 						target: container,
 						props: {
 							send: send,
-							classes: "input-sm mx-6 chat-box",
-							id: "chat-input"
+							classes: 'input-sm mx-6 chat-box',
+							id: 'chat-input'
 						}
 					});
 				}
@@ -173,6 +170,13 @@
 		};
 	});
 
+	onMount(() => {
+		return player.subscribe(({ controlsVisible }) => {
+			controlsShowing = controlsVisible;
+		});
+	});
+
+
 </script>
 
 <svelte:head>
@@ -182,7 +186,7 @@
 <main id="main-page" class="flex flex-col items-center w-full h-full overflow-auto gap-3 pb-4">
 
 	<media-player
-		class="media-player w-full aspect-video bg-slate-900 text-white font-sans overflow-hidden rounded-md ring-media-focus data-[focus]:ring-4"
+		class="media-player-c media-player w-full aspect-video bg-slate-900 text-white font-sans overflow-hidden rounded-md ring-media-focus data-[focus]:ring-4"
 		title={title}
 		src={videoSrc}
 		crossorigin
@@ -205,13 +209,14 @@
 
 		<media-video-layout class="relative">
 			<div class="flex gap-1 w-full h-full absolute">
-				<div class="flex flex-col gap-0.5 ml-auto chat-history drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] items-end">
+				<div class="{controlsShowing? 'shift-down':''} flex flex-col gap-0.5 ml-auto chat-history drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] items-end">
 					{#each messagesToDisplay as message}
 						<div class="flex gap-1 justify-end items-center chat-line py-1 px-2 text-center">
-							<p class="text-center">{message.message} [{new Date(message.timestamp * 1000).toLocaleTimeString('en-US', {
-								hour: '2-digit',
-								minute: '2-digit'
-							})}, {formatSeconds(message.mediaSec)}] {message.username}</p>
+							<p class="text-center">{message.message}
+								[{new Date(message.timestamp * 1000).toLocaleTimeString('en-US', {
+									hour: '2-digit',
+									minute: '2-digit'
+								})}, {formatSeconds(message.mediaSec)}] {message.username}</p>
 							<img src="{PUBLIC_HOST}/static/pfp/{id}.png"
 									 on:error={(e) => {
 							 			e.target.src = '/icons/uwu.png';
@@ -227,7 +232,7 @@
 
 	<div class="w-full flex items-start px-4 input-container">
 		<div class="chat-box-mobile w-full">
-			<Chatbox send={send} class="input-bordered input-md"/>
+			<Chatbox send={send} class="input-bordered input-md" />
 		</div>
 		<div class="profile-input-container">
 			<label class="custom-file-upload">
@@ -344,26 +349,34 @@
         display: block;
     }
 
-		.chat-history {
-				margin-top: 2rem;
-				margin-right: 2rem;
-		}
+    .chat-history {
+        margin-top: 2rem;
+        margin-right: 2rem;
+    }
 
-		.chat-history .avatar {
-				width: 1.5rem;
-				height: 1.5rem;
-		}
+    .chat-history .avatar {
+        width: 1.5rem;
+        height: 1.5rem;
+    }
+
 
     @media (max-width: 1000px) {
-        .chat-history {
-            margin-top: 2.5rem;
-            margin-right: 0.5rem;
-						font-size: 0.64rem;
+
+        .shift-down {
+            margin-top: 2.5rem !important;
         }
+
+        .chat-history {
+						margin-top: 0.5rem;
+            margin-right: 0.5rem;
+            font-size: 0.64rem;
+        }
+
         .chat-history .avatar {
             width: 1rem;
             height: 1rem;
         }
+
         .media-select {
             width: 100%;
         }
@@ -377,4 +390,8 @@
         }
     }
 
+    .media-player-c {
+        max-height: 100vh;
+        max-width: 100vw;
+    }
 </style>
