@@ -6,9 +6,10 @@ export const themes = [
 
 export function nextTheme() {
 	const html = document.querySelector('html')
-	const currentTheme = html?.getAttribute('data-theme') || 'light'
+	const currentTheme = localStorage.getItem("theme") || 'light'
 	const nextTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length]
 	html?.setAttribute('data-theme', nextTheme)
+	localStorage.setItem('theme', nextTheme)
 }
 
 export type PlayerState = {
