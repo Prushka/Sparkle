@@ -7,6 +7,7 @@
 
 		localStorage.setItem('vds-player:background-opacity', '0%')
 		localStorage.setItem('vds-player:text-shadow', 'outline')
+		localStorage.setItem('vds-player:font-size', '120%')
 		const theme = localStorage.getItem('theme');
 		if (theme) {
 			const html = document.querySelector('html');

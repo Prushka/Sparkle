@@ -139,5 +139,5 @@ input {
 :where(.vds-captions [data-part='cue']) {
 	backdrop-filter: unset !important;
 	-webkit-backdrop-filter: unset !important;
-	text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000 !important;
+	text-shadow: 0 0 3px black, 0 0 3px black, 0 0 3px black, 0 0 3px black !important;
 }
