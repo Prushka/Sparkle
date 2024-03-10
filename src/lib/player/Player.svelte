@@ -205,10 +205,10 @@
 
 		<media-video-layout class="relative">
 			<div class="flex gap-1 w-full h-full absolute">
-				<div class="flex flex-col gap-0.5 ml-auto mt-8 mr-8 drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] items-end">
+				<div class="flex flex-col gap-0.5 ml-auto chat-history drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] items-end">
 					{#each messagesToDisplay as message}
 						<div class="flex gap-1 justify-end items-center chat-line py-1 px-2 text-center">
-							<p class="text-center">{message.message}[{new Date(message.timestamp * 1000).toLocaleTimeString('en-US', {
+							<p class="text-center">{message.message} [{new Date(message.timestamp * 1000).toLocaleTimeString('en-US', {
 								hour: '2-digit',
 								minute: '2-digit'
 							})}, {formatSeconds(message.mediaSec)}] {message.username}</p>
@@ -216,7 +216,7 @@
 									 on:error={(e) => {
 							 			e.target.src = '/icons/uwu.png';
 						 }}
-									 alt="pfp" class="w-6 h-6 rounded-full object-cover" />
+									 alt="pfp" class="avatar rounded-full object-cover" />
 						</div>
 					{/each}
 				</div>
@@ -344,7 +344,26 @@
         display: block;
     }
 
+		.chat-history {
+				margin-top: 2rem;
+				margin-right: 2rem;
+		}
+
+		.chat-history .avatar {
+				width: 1.5rem;
+				height: 1.5rem;
+		}
+
     @media (max-width: 1000px) {
+        .chat-history {
+            margin-top: 2.5rem;
+            margin-right: 0.5rem;
+						font-size: 0.64rem;
+        }
+        .chat-history .avatar {
+            width: 1rem;
+            height: 1rem;
+        }
         .media-select {
             width: 100%;
         }
