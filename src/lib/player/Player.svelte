@@ -28,7 +28,6 @@
 	let roomMessages: Message[] = [];
 	let jobs: Job[] = [];
 	let roomId: string = '';
-	let textTracks: TextTrackInit[] = [];
 	let lastTicked = 0;
 	let tickedSecsAgo = 0;
 	let videoSrc = '';
@@ -39,10 +38,11 @@
 
 	function idChanges() {
 		console.log('Room ID changed!');
+		player.textTracks.clear();
 		for (const job of jobs) {
 			if (job.Id === roomId) {
 				for (const sub of job.Subtitles) {
-					textTracks.push({
+					player.textTracks.add({
 						src: `${PUBLIC_HOST}/static/${roomId}/${sub}`,
 						label: sub,
 						kind: 'subtitles',
@@ -53,7 +53,7 @@
 				break;
 			}
 		}
-		for (const track of textTracks) player.textTracks.add(track);
+		console.log('textTracks: ' + JSON.stringify(player.textTracks));
 		videoSrc = `${PUBLIC_HOST}/static/${roomId}/out.mp4`;
 		$page.url.searchParams.set('id', roomId);
 		goto($page.url);
@@ -83,12 +83,13 @@
 		};
 
 		socket.onmessage = (event: MessageEvent) => {
-			console.log('received: ' + event.data);
+			console.debug('received: ' + event.data);
 			const state = JSON.parse(event.data);
 			if (player) {
 				if (Array.isArray(state) && state.length > 0) {
 					if (state[0].message) {
 						roomMessages = state;
+						console.log('received messages: ' + JSON.stringify(roomMessages));
 					} else {
 						roomStates = state;
 						lastTicked = Date.now();
