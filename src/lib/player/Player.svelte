@@ -112,6 +112,7 @@
 
 		socket.onclose = () => {
 			console.log('Socket closed, reconnecting');
+			socketConnected = false;
 			setTimeout(function() {
 				connect();
 			}, 1000);
@@ -290,7 +291,6 @@
 				{:else}
 					<IconPlugConnectedX size={24} stroke={2} />
 				{/if}
-				{syncState}
 			</div>
 		</div>
 	</div>
