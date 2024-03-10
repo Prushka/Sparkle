@@ -285,13 +285,14 @@
 					{state.name}: {formatSeconds(state.time)}
 				</div>
 			{/each}
-			<div class="btn btn-sm font-bold {socketConnected ? 'text-green-600' : 'text-red-600' }">
+			<button
+				class="btn btn-sm font-bold {socketConnected ? 'text-green-600' : 'text-red-600' }">
 				{#if socketConnected}
 					<IconPlugConnected size={24} stroke={2} />
 				{:else}
 					<IconPlugConnectedX size={24} stroke={2} />
 				{/if}
-			</div>
+			</button>
 		</div>
 	</div>
 
