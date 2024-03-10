@@ -70,13 +70,6 @@ button, div, a, pre, code, .code-wrapper, .copy-button {
 	}
 }
 
-#chat-input {
-	width: 32rem;
-
-	font-size: 1rem !important;
-	background-color: rgba(255, 255, 255, 0.9) !important;
-}
-
 input[type="file"] {
 	display: none;
 }
@@ -112,8 +105,22 @@ input[type="file"] {
 	.profile-input-container {
 		width: 100%;
 	}
+	.chat-box {
+		display: none;
+	}
+	.chat-box-mobile {
+		display: block !important;
+	}
 }
 
 input {
 	font-family: 'Nunito', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, sans-serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol, Noto Color Emoji;
+}
+
+.chat-box-mobile {
+	display: none;
+}
+
+.chat-box {
+	display: block !important;
 }
