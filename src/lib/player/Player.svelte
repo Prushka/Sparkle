@@ -6,35 +6,45 @@
 	import {
 		type TextTrackInit
 	} from 'vidstack';
-	import { formatSeconds, type Job, type Message, type PlayerState } from './t';
+	import { formatSeconds, type Job, type Message, type PlayerState, randomString } from './t';
 	import { PUBLIC_HOST, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { IconPlayerPause, IconPlayerPlay, IconPlugConnected, IconPlugConnectedX } from '@tabler/icons-svelte';
+	import {
+		IconPlayerPause,
+		IconPlayerPlay,
+		IconPlugConnected,
+		IconPlugConnectedX,
+		IconUser
+	} from '@tabler/icons-svelte';
 
 	let player: MediaPlayerElement;
 
 	let socket: WebSocket;
 	let name = '';
+	let pfp: File | null = null;
+	let pfpInput: HTMLInputElement | null = null;
 	let roomStates: PlayerState[] = [];
 	let roomMessages: Message[] = [];
 	let jobs: Job[] = [];
-	let id: string = '';
+	let roomId: string = '';
 	let textTracks: TextTrackInit[] = [];
 	let lastTicked = 0;
 	let videoSrc = '';
 	let socketConnected = false;
 	$: syncState = socketConnected && Math.ceil((Date.now() - lastTicked) / 1000) < 5000 ? 'SYNCED' : 'NOT SYNCED';
+	let messagesToDisplay: Message[] = [];
+	let id : string | null = localStorage.getItem('id') || null;
 
 	function idChanges() {
 		console.log('called');
 		connect();
 
 		for (const job of jobs) {
-			if (job.Id === id) {
+			if (job.Id === roomId) {
 				for (const sub of job.Subtitles) {
 					textTracks.push({
-						src: `${PUBLIC_HOST}/static/${id}/${sub}`,
+						src: `${PUBLIC_HOST}/static/${roomId}/${sub}`,
 						label: sub,
 						kind: 'subtitles',
 						default: sub.includes('eng')
@@ -44,12 +54,12 @@
 			}
 		}
 		for (const track of textTracks) player.textTracks.add(track);
-		videoSrc = `${PUBLIC_HOST}/static/${id}/out.mp4`;
-		$page.url.searchParams.set('id', id);
+		videoSrc = `${PUBLIC_HOST}/static/${roomId}/out.mp4`;
+		$page.url.searchParams.set('id', roomId);
 		goto($page.url);
 	}
 
-	$ : if (id !== '') {
+	$ : if (roomId !== '') {
 		idChanges();
 	}
 
@@ -57,7 +67,11 @@
 		if (socketConnected) {
 			socket.close();
 		}
-		socket = new WebSocket(`${PUBLIC_WS}/sync/${id}`);
+		if (id === null) {
+			id = randomString(36);
+			localStorage.setItem('id', id);
+		}
+		socket = new WebSocket(`${PUBLIC_WS}/sync/${roomId}/${id}`);
 		socket.onopen = () => {
 			console.log('Connected to sync server');
 			socketConnected = true;
@@ -72,9 +86,9 @@
 			const state = JSON.parse(event.data);
 			if (player) {
 				if (Array.isArray(state) && state.length > 0) {
-					if(state[0].message){
+					if (state[0].message) {
 						roomMessages = state;
-					}else{
+					} else {
 						roomStates = state;
 						lastTicked = Date.now();
 					}
@@ -112,43 +126,46 @@
 	}
 
 	onMount(() => {
-			fetch(`${PUBLIC_HOST}/all`)
-				.then(response => response.json())
-				.then(data => {
-					jobs = data;
-					console.log(jobs);
-					id = $page.url.searchParams.get('id') || '';
-				});
-			name = localStorage.getItem('name') || '';
-			setInterval(() => {
-				send({
-					time: player?.currentTime
-				});
-				if (!document.getElementById('chat-input')) {
-					console.log('mounting chat')
-					for (const node of document.querySelectorAll('media-chapter-title')) {
-						const input = document.createElement('input');
-						input.id = 'chat-input';
-						input.classList.add('input', "input-sm", "w-80", "input-sm", "mx-8", "text-black")
-						input.placeholder = 'Chat';
-						input.autocomplete = 'off';
-						const form = document.createElement('form');
-						form.appendChild(input);
-						form.autocomplete = 'off';
-						form.addEventListener('submit', (e) => {
-							e.preventDefault();
-							const message = input.value;
-							input.value = '';
-							send({ chat: message });
-						});
-						// add after the node
-						node.parentNode?.insertBefore(form, node.nextSibling);
-					}
+		fetch(`${PUBLIC_HOST}/all`)
+			.then(response => response.json())
+			.then(data => {
+				jobs = data;
+				console.log(jobs);
+				roomId = $page.url.searchParams.get('id') || '';
+			});
+		name = localStorage.getItem('name') || '';
+		setInterval(() => {
+			send({
+				time: player?.currentTime
+			});
+			if (!document.getElementById('chat-input')) {
+				console.log('mounting chat');
+				for (const node of document.querySelectorAll('media-chapter-title')) {
+					const input = document.createElement('input');
+					input.id = 'chat-input';
+					input.classList.add('input', 'input-sm', 'w-80', 'input-sm', 'mx-8', 'text-black');
+					input.placeholder = 'Chat';
+					input.autocomplete = 'off';
+					const form = document.createElement('form');
+					form.appendChild(input);
+					form.autocomplete = 'off';
+					form.addEventListener('submit', (e) => {
+						e.preventDefault();
+						const message = input.value;
+						input.value = '';
+						send({ chat: message });
+					});
+					// add after the node
+					node.parentNode?.insertBefore(form, node.nextSibling);
 				}
-			}, 1000);
-			return () => {
-				socket.close();
-			};
+			}
+			messagesToDisplay = roomMessages.filter((message) => {
+				return (Date.now() / 1000 - message.timestamp) < 120;
+			});
+		}, 1000);
+		return () => {
+			socket.close();
+		};
 	});
 
 </script>
@@ -179,14 +196,12 @@
 		<media-video-layout class="relative">
 			<div class="flex gap-1 w-full h-full absolute">
 				<div class="flex flex-col ml-auto mt-8 mr-8 drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)]">
-					{#each roomMessages as message}
-					<!--	if message was sent within 3 min -->
-						{#if (Date.now()/1000 - message.timestamp) < 180}
-							<p class="text-right">
-								{message.message}
-								[{new Date(message.timestamp * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} @ {formatSeconds(message.mediaSec)}]: {message.username}
-							</p>
-						{/if}
+					{#each messagesToDisplay as message}
+						<p class="text-right">
+							{message.message}
+							[{new Date(message.timestamp * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+							@ {formatSeconds(message.mediaSec)}]: {message.username}
+						</p>
 					{/each}
 				</div>
 			</div>
@@ -195,7 +210,37 @@
 	</media-player>
 
 	<div class="w-full flex gap-2 items-start px-4">
-		<label class="input input-bordered flex items-center gap-2 w-48">
+		<label class="custom-file-upload">
+			{#if pfp}
+				<img src={URL.createObjectURL(pfp)} alt="pfp" class="w-full h-full rounded-full" />
+			{:else}
+				<IconUser size={24} stroke={2} />
+			{/if}
+			<input accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
+						 bind:this={pfpInput}
+						 on:change={() => {
+							 const ppfp = pfpInput?.files;
+							 if (ppfp && ppfp[0]) {
+								 if(ppfp[0].size > 10000000) {
+									 warning_modal.showModal();
+									 pfpInput.value = '';
+									 return;
+								 }
+								 pfp = ppfp[0];
+								 const reader = new FileReader();
+								 reader.onload = function(e) {
+									 const res = e.target?.result;
+									 console.log(res)
+									 if(res && typeof res === 'string') {
+
+									 }
+								 };
+								 reader.readAsDataURL(pfp);
+							 }
+						 }}
+						 type="file" />
+		</label>
+		<label class="input input flex items-center gap-2 w-48">
 			Name
 			<input
 				on:focusout={() => {
@@ -203,11 +248,11 @@
 						name: name
 					})
 				localStorage.setItem("name", name)
-		}}
+			}}
 				bind:value={name} type="text" class="grow" placeholder="Who?" />
 		</label>
-		<select bind:value={id}
-						class="select select-bordered media-select">
+		<select bind:value={roomId}
+						class="select media-select">
 			<option disabled selected>Which media?</option>
 			{#each jobs as job}
 				<option value={job.Id}>{job.FileRawName}</option>
