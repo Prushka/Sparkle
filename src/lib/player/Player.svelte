@@ -30,9 +30,9 @@
 	let roomId: string = '';
 	let textTracks: TextTrackInit[] = [];
 	let lastTicked = 0;
+	let tickedSecsAgo = 0;
 	let videoSrc = '';
 	let socketConnected = false;
-	$: syncState = socketConnected && Math.ceil((Date.now() - lastTicked) / 1000) < 5 ? 'SYNCED' : 'NOT SYNCED';
 	let messagesToDisplay: Message[] = [];
 	let id: string | null = localStorage.getItem('id') || null;
 	let title = '';
@@ -168,6 +168,7 @@
 			messagesToDisplay = roomMessages.filter((message) => {
 				return (Date.now() / 1000 - message.timestamp) < 200;
 			});
+			tickedSecsAgo = (Date.now() - lastTicked) / 1000;
 		}, 1000);
 		return () => {
 			socket.close();
@@ -274,15 +275,18 @@
 			}}
 					bind:value={name} type="text" class="grow" placeholder="Who?" />
 			</label>
+
+			<div class="ml-auto tooltip tooltip-left" data-tip="Last ticked: {tickedSecsAgo} seconds ago">
 			<button
 				id="sync-button-mobile"
-				class="ml-auto btn font-bold {socketConnected ? 'text-green-600' : 'text-red-600' }">
+				class="btn font-bold {socketConnected ? 'text-green-600' : 'text-red-600' }">
 				{#if socketConnected}
 					<IconPlugConnected size={28} stroke={1.5} />
 				{:else}
 					<IconPlugConnectedX size={28} stroke={1.5} />
 				{/if}
 			</button>
+			</div>
 		</div>
 		<select bind:value={roomId}
 						class="select media-select">
@@ -302,15 +306,17 @@
 					{state.name}: {formatSeconds(state.time)}
 				</div>
 			{/each}
-			<button
-				id="sync-button"
-				class="btn btn-sm font-bold {socketConnected ? 'text-green-600' : 'text-red-600' }">
-				{#if socketConnected}
-					<IconPlugConnected size={24} stroke={2} />
-				{:else}
-					<IconPlugConnectedX size={24} stroke={2} />
-				{/if}
-			</button>
+			<div class="tooltip tooltip-left" data-tip="Last ticked: {tickedSecsAgo} seconds ago">
+				<button
+					id="sync-button"
+					class="btn btn-sm font-bold {socketConnected ? 'text-green-600' : 'text-red-600' }">
+					{#if socketConnected}
+						<IconPlugConnected size={24} stroke={2} />
+					{:else}
+						<IconPlugConnectedX size={24} stroke={2} />
+					{/if}
+				</button>
+			</div>
 		</div>
 	</div>
 
