@@ -34,7 +34,8 @@
 					textTracks.push({
 						src: `${PUBLIC_HOST}/static/${id}/${sub}`,
 						label: sub,
-						kind: 'subtitles'
+						kind: 'subtitles',
+						default: sub.includes("eng")
 					});
 				}
 				break;
@@ -43,9 +44,6 @@
 		for (const track of textTracks) player.textTracks.add(track);
 		console.log('textTracks', textTracks);
 		videoSrc = `${PUBLIC_HOST}/static/${id}/out.mp4`;
-
-
-		console.log("setting id")
 		$page.url.searchParams.set('id', id);
 		goto($page.url);
 	}
@@ -125,47 +123,8 @@
 	});
 </script>
 
-<main id="main-page" class="flex flex-col items-center w-full h-full overflow-auto gap-3 py-4">
-	<div class="w-full flex gap-2 items-center px-4">
-		<label class="input input-bordered flex items-center gap-2">
-			Name
-			<input
-				on:focusout={() => {
-					send({
-						name: name
-					})
-				localStorage.setItem("name", name)
-		}}
-				bind:value={name} type="text" class="grow" placeholder="Who?" />
-		</label>
-		<select bind:value={id}
-						class="select select-bordered w-full max-w-xs">
-			<option disabled selected>Which media?</option>
-			{#each jobs as job}
-				<option value={job.Id}>{job.FileRawName}</option>
-			{/each}
-		</select>
-		<div class="flex gap-1 flex-grow">
-			{#each roomStates as state}
-				<div class="btn btn-neutral">
-					{#if state.paused === false}
-						<IconPlayerPlay size={12} stroke={2} />
-					{:else}
-						<IconPlayerPause size={12} stroke={2} />
-					{/if}
-					{state.name}: {formatSeconds(state.time)}
-				</div>
-			{/each}
-			<div class="btn self-end ml-auto {socketConnected ? 'text-green-600' : 'text-red-600' }">
-				{#if socketConnected}
-					<IconPlugConnected size={24} stroke={1} />
-				{:else}
-					<IconPlugConnectedX size={24} stroke={1} />
-				{/if}
-				{syncState}
-			</div>
-		</div>
-	</div>
+<main id="main-page" class="flex flex-col items-center w-full h-full overflow-auto gap-3 pb-4">
+
 	<media-player
 		class="media-player w-full aspect-video bg-slate-900 text-white font-sans overflow-hidden rounded-md ring-media-focus data-[focus]:ring-4"
 		title="Sprite Fight"
@@ -191,6 +150,48 @@
 		/>
 	</media-player>
 
+	<div class="w-full flex gap-2 items-start px-4">
+		<label class="input input-bordered flex items-center gap-2 w-48">
+			Name
+			<input
+				on:focusout={() => {
+					send({
+						name: name
+					})
+				localStorage.setItem("name", name)
+		}}
+				bind:value={name} type="text" class="grow" placeholder="Who?" />
+		</label>
+		<select bind:value={id}
+						class="select select-bordered media-select">
+			<option disabled selected>Which media?</option>
+			{#each jobs as job}
+				<option value={job.Id}>{job.FileRawName}</option>
+			{/each}
+		</select>
+		<div class="flex gap-1 ml-auto self-end">
+			{#each roomStates as state}
+				<div class="btn btn-sm btn-neutral">
+					{#if state.paused === false}
+						<IconPlayerPlay size={12} stroke={2} />
+					{:else}
+						<IconPlayerPause size={12} stroke={2} />
+					{/if}
+					{state.name}: {formatSeconds(state.time)}
+				</div>
+			{/each}
+			<div class="btn btn-sm font-bold {socketConnected ? 'text-green-600' : 'text-red-600' }">
+				{#if socketConnected}
+					<IconPlugConnected size={24} stroke={2} />
+				{:else}
+					<IconPlugConnectedX size={24} stroke={2} />
+				{/if}
+				{syncState}
+			</div>
+		</div>
+	</div>
+
+
 
 </main>
 
@@ -199,4 +200,7 @@
         border: none !important;
         border-radius: unset !important;
     }
+		.media-select {
+				width: 30rem;
+		}
 </style>
