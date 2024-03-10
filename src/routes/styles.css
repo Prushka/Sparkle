@@ -239,3 +239,7 @@ code .line::before {
 		width: 100% !important;
 	}
 }
+
+#chat-input {
+	background-color: rgba(255, 255, 255, 0.9) !important;
+}

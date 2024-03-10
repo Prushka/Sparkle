@@ -6,16 +6,18 @@
 	import {
 		type TextTrackInit
 	} from 'vidstack';
-	import { formatSeconds, type Job, type PlayerState } from './t';
+	import { formatSeconds, type Job, type Message, type PlayerState } from './t';
 	import { PUBLIC_HOST, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { IconPlayerPause, IconPlayerPlay, IconPlugConnected, IconPlugConnectedX } from '@tabler/icons-svelte';
+
 	let player: MediaPlayerElement;
 
 	let socket: WebSocket;
 	let name = '';
 	let roomStates: PlayerState[] = [];
+	let roomMessages: Message[] = [];
 	let jobs: Job[] = [];
 	let id: string = '';
 	let textTracks: TextTrackInit[] = [];
@@ -35,14 +37,13 @@
 						src: `${PUBLIC_HOST}/static/${id}/${sub}`,
 						label: sub,
 						kind: 'subtitles',
-						default: sub.includes("eng")
+						default: sub.includes('eng')
 					});
 				}
 				break;
 			}
 		}
 		for (const track of textTracks) player.textTracks.add(track);
-		console.log('textTracks', textTracks);
 		videoSrc = `${PUBLIC_HOST}/static/${id}/out.mp4`;
 		$page.url.searchParams.set('id', id);
 		goto($page.url);
@@ -63,16 +64,20 @@
 			if (name !== '') {
 				send({ name: name });
 			}
-			send({ reason: 'new player'})
+			send({ reason: 'new player' });
 		};
 
 		socket.onmessage = (event: MessageEvent) => {
 			console.log('received: ' + event.data);
 			const state = JSON.parse(event.data);
 			if (player) {
-				if (Array.isArray(state)) {
-					roomStates = state;
-					lastTicked = Date.now();
+				if (Array.isArray(state) && state.length > 0) {
+					if(state[0].message){
+						roomMessages = state;
+					}else{
+						roomStates = state;
+						lastTicked = Date.now();
+					}
 				} else {
 					if (state['paused'] === true && player.paused === false) {
 						player.pause();
@@ -107,20 +112,45 @@
 	}
 
 	onMount(() => {
-		fetch(`${PUBLIC_HOST}/all`)
-			.then(response => response.json())
-			.then(data => {
-				jobs = data;
-				console.log(jobs);
-				id = $page.url.searchParams.get('id') || '';
-			});
-		name = localStorage.getItem('name') || '';
-		setInterval(() => {
-			send({
-				time: player?.currentTime
-			});
-		}, 4000);
+			fetch(`${PUBLIC_HOST}/all`)
+				.then(response => response.json())
+				.then(data => {
+					jobs = data;
+					console.log(jobs);
+					id = $page.url.searchParams.get('id') || '';
+				});
+			name = localStorage.getItem('name') || '';
+			setInterval(() => {
+				send({
+					time: player?.currentTime
+				});
+				if (!document.getElementById('chat-input')) {
+					console.log('mounting chat')
+					for (const node of document.querySelectorAll('media-chapter-title')) {
+						const input = document.createElement('input');
+						input.id = 'chat-input';
+						input.classList.add('input', "input-sm", "w-80", "input-sm", "mx-8", "text-black")
+						input.placeholder = 'Chat';
+						input.autocomplete = 'off';
+						const form = document.createElement('form');
+						form.appendChild(input);
+						form.autocomplete = 'off';
+						form.addEventListener('submit', (e) => {
+							e.preventDefault();
+							const message = input.value;
+							input.value = '';
+							send({ chat: message });
+						});
+						// add after the node
+						node.parentNode?.insertBefore(form, node.nextSibling);
+					}
+				}
+			}, 1000);
+			return () => {
+				socket.close();
+			};
 	});
+
 </script>
 
 <main id="main-page" class="flex flex-col items-center w-full h-full overflow-auto gap-3 pb-4">
@@ -146,8 +176,22 @@
 			/>
 		</media-provider>
 
-		<media-video-layout
-		/>
+		<media-video-layout class="relative">
+			<div class="flex gap-1 w-full h-full absolute">
+				<div class="flex flex-col ml-auto mt-8 mr-8 drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)]">
+					{#each roomMessages as message}
+					<!--	if message was sent within 3 min -->
+						{#if (Date.now()/1000 - message.timestamp) < 180}
+							<p class="text-right">
+								{message.message}
+								[{new Date(message.timestamp * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })} @ {formatSeconds(message.mediaSec)}]: {message.username}
+							</p>
+						{/if}
+					{/each}
+				</div>
+			</div>
+		</media-video-layout>
+
 	</media-player>
 
 	<div class="w-full flex gap-2 items-start px-4">
@@ -192,7 +236,6 @@
 	</div>
 
 
-
 </main>
 
 <style>
@@ -200,7 +243,9 @@
         border: none !important;
         border-radius: unset !important;
     }
-		.media-select {
-				width: 30rem;
-		}
+
+    .media-select {
+        width: 30rem;
+    }
+
 </style>

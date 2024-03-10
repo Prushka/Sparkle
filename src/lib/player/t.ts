@@ -6,6 +6,13 @@ export type PlayerState = {
 	name: string;
 }
 
+export type Message = {
+	username: string;
+	message: string;
+	timestamp: number;
+	mediaSec: number;
+}
+
 export type Jobs = Job[]
 
 export interface Job {
