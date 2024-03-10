@@ -32,7 +32,7 @@
 	let lastTicked = 0;
 	let videoSrc = '';
 	let socketConnected = false;
-	$: syncState = socketConnected && Math.ceil((Date.now() - lastTicked) / 1000) < 5000 ? 'SYNCED' : 'NOT SYNCED';
+	$: syncState = socketConnected && Math.ceil((Date.now() - lastTicked) / 1000) < 5 ? 'SYNCED' : 'NOT SYNCED';
 	let messagesToDisplay: Message[] = [];
 	let id: string | null = localStorage.getItem('id') || null;
 
@@ -154,13 +154,17 @@
 						const message = input.value;
 						input.value = '';
 						send({ chat: message });
+						input.placeholder = 'Sent!';
+						setTimeout(() => {
+							input.placeholder = 'Chat';
+						}, 2000);
 					});
 					// add after the node
 					node.parentNode?.insertBefore(form, node.nextSibling);
 				}
 			}
 			messagesToDisplay = roomMessages.filter((message) => {
-				return (Date.now() / 1000 - message.timestamp) < 120;
+				return (Date.now() / 1000 - message.timestamp) < 200;
 			});
 		}, 1000);
 		return () => {
