@@ -17,20 +17,13 @@
 	}}
 	autocomplete="off">
 	<input bind:this={i} autocomplete="off" type="text" placeholder="Chat"
-				 class="c-box input text-black {$$restProps.class} {classes}"
+				 class="c-box input {$$restProps.class} {classes}"
 				 id={$$restProps.id}
 	>
 </form>
 
 <style>
 	.c-box{
-      width: 32rem;
       font-size: 1rem !important;
-      background-color: rgba(255, 255, 255, 0.9) !important;
-	}
-	@media (max-width: 1000px) {
-		.c-box{
-			width: 100%;
-		}
 	}
 </style>

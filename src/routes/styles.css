@@ -109,7 +109,10 @@ input[type="file"] {
 		display: none;
 	}
 	.chat-box-mobile {
-		display: block !important;
+		display: block;
+	}
+	.chat-box-mobile > form > input {
+		width: 100%;
 	}
 }
 
@@ -117,10 +120,18 @@ input {
 	font-family: 'Nunito', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, sans-serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol, Noto Color Emoji;
 }
 
-.chat-box-mobile {
-	display: none;
-}
+@media(min-width: 1000px) {
+	.chat-box-mobile {
+		display: none;
+	}
 
-.chat-box {
-	display: block !important;
+	.chat-box {
+		display: block;
+	}
+
+	.chat-box > form > input {
+		width: 32rem;
+		background-color: rgba(255, 255, 255, 0.8) !important;
+		color: black;
+	}
 }
