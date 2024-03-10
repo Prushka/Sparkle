@@ -17,6 +17,7 @@
 		IconPlugConnectedX,
 		IconUser
 	} from '@tabler/icons-svelte';
+	import Chatbox from '$lib/player/Chatbox.svelte';
 
 	let player: MediaPlayerElement;
 
@@ -147,27 +148,15 @@
 			});
 			if (!document.getElementById('chat-input')) {
 				console.log('mounting chat');
-				for (const node of document.querySelectorAll('media-chapter-title')) {
-					const input = document.createElement('input');
-					input.id = 'chat-input';
-					input.classList.add('input', 'input-sm', 'mx-8', 'text-black');
-					input.placeholder = 'Chat';
-					input.autocomplete = 'off';
-					const form = document.createElement('form');
-					form.appendChild(input);
-					form.autocomplete = 'off';
-					form.addEventListener('submit', (e) => {
-						e.preventDefault();
-						const message = input.value;
-						input.value = '';
-						send({ chat: message });
-						input.placeholder = 'Sent!';
-						setTimeout(() => {
-							input.placeholder = 'Chat';
-						}, 2000);
-					});
-					// add after the node
-					node.parentNode?.insertBefore(form, node.nextSibling);
+				const node = document.querySelector('media-chapter-title')
+				if (node) {
+					const container = document.createElement('div');
+					node.parentNode?.insertBefore(container, node.nextSibling);
+					new Chatbox({
+						target: container,
+						props: {
+							send: send
+						}})
 				}
 			}
 			messagesToDisplay = roomMessages.filter((message) => {
@@ -194,6 +183,7 @@
 		src={videoSrc}
 		crossorigin
 		bind:this={player}
+		playsInline
 		on:pause={
 			() => {
 				send({ paused: true });
