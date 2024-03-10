@@ -21,7 +21,7 @@
 	let player: MediaPlayerElement;
 
 	let socket: WebSocket;
-	let name = '';
+	let name = localStorage.getItem('name') || '';
 	let pfp: File | null = null;
 	let pfpInput: HTMLInputElement | null = null;
 	let roomStates: PlayerState[] = [];
@@ -38,9 +38,11 @@
 	let title = "";
 
 	function idChanges() {
-		console.log('called');
-		connect();
-
+		console.log('Room ID changed!');
+		if(roomId === '') {
+			return
+		}
+		let found = false;
 		for (const job of jobs) {
 			if (job.Id === roomId) {
 				for (const sub of job.Subtitles) {
@@ -52,13 +54,21 @@
 					});
 				}
 				title = job.FileRawName;
+				found = true;
 				break;
 			}
+		}
+		if (!found) {
+			console.error('Media not found!');
+			roomId = ''
 		}
 		for (const track of textTracks) player.textTracks.add(track);
 		videoSrc = `${PUBLIC_HOST}/static/${roomId}/out.mp4`;
 		$page.url.searchParams.set('id', roomId);
 		goto($page.url);
+		if(socketConnected) {
+			socket.close();
+		}
 	}
 
 	$ : if (roomId !== '') {
@@ -66,16 +76,14 @@
 	}
 
 	function connect() {
-		if (socketConnected) {
-			socket.close();
-		}
 		if (id === null) {
 			id = randomString(36);
 			localStorage.setItem('id', id);
 		}
 		socket = new WebSocket(`${PUBLIC_WS}/sync/${roomId}/${id}`);
+		console.log(`Connecting to ${roomId}`)
 		socket.onopen = () => {
-			console.log('Connected to sync server');
+			console.log(`Connected to ${roomId}`);
 			socketConnected = true;
 			if (name !== '') {
 				send({ name: name });
@@ -135,8 +143,8 @@
 				jobs = data;
 				console.log(jobs);
 				roomId = $page.url.searchParams.get('id') || '';
+				connect();
 			});
-		name = localStorage.getItem('name') || '';
 		setInterval(() => {
 			send({
 				time: player?.currentTime
