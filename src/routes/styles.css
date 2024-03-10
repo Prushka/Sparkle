@@ -277,6 +277,9 @@ input[type="file"] {
 		flex-direction: column;
 		gap: 1rem;
 	}
+	.profile-input-container {
+		width: 100%;
+	}
 }
 
 input {

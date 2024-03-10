@@ -35,7 +35,7 @@
 	$: syncState = socketConnected && Math.ceil((Date.now() - lastTicked) / 1000) < 5 ? 'SYNCED' : 'NOT SYNCED';
 	let messagesToDisplay: Message[] = [];
 	let id: string | null = localStorage.getItem('id') || null;
-	let title = "";
+	let title = '';
 
 	function idChanges() {
 		console.log('Room ID changed!');
@@ -57,7 +57,7 @@
 		videoSrc = `${PUBLIC_HOST}/static/${roomId}/out.mp4`;
 		$page.url.searchParams.set('id', roomId);
 		goto($page.url);
-		if(socketConnected) {
+		if (socketConnected) {
 			socket.close();
 		}
 	}
@@ -72,7 +72,7 @@
 			localStorage.setItem('id', id);
 		}
 		socket = new WebSocket(`${PUBLIC_WS}/sync/${roomId}/${id}`);
-		console.log(`Connecting to ${roomId}`)
+		console.log(`Connecting to ${roomId}`);
 		socket.onopen = () => {
 			console.log(`Connected to ${roomId}`);
 			socketConnected = true;
@@ -209,7 +209,8 @@
 					{#each messagesToDisplay as message}
 						<div class="flex gap-0.5 justify-end items-center chat-line py-1 px-2 text-center">
 							{message.message}
-							[{new Date(message.timestamp * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}, {formatSeconds(message.mediaSec)}]: {message.username}
+							[{new Date(message.timestamp * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+							, {formatSeconds(message.mediaSec)}]: {message.username}
 							<img src="{PUBLIC_HOST}/static/pfp/{id}.png"
 									 on:error={(e) => {
 							 			e.target.src = '/icons/uwu.png';
@@ -273,6 +274,15 @@
 			}}
 					bind:value={name} type="text" class="grow" placeholder="Who?" />
 			</label>
+			<button
+				id="sync-button-mobile"
+				class="ml-auto btn font-bold {socketConnected ? 'text-green-600' : 'text-red-600' }">
+				{#if socketConnected}
+					<IconPlugConnected size={28} stroke={1.5} />
+				{:else}
+					<IconPlugConnectedX size={28} stroke={1.5} />
+				{/if}
+			</button>
 		</div>
 		<select bind:value={roomId}
 						class="select media-select">
@@ -293,6 +303,7 @@
 				</div>
 			{/each}
 			<button
+				id="sync-button"
 				class="btn btn-sm font-bold {socketConnected ? 'text-green-600' : 'text-red-600' }">
 				{#if socketConnected}
 					<IconPlugConnected size={24} stroke={2} />
@@ -314,6 +325,28 @@
 
     .media-select {
         width: 30rem;
+    }
+
+    #sync-button-mobile {
+        display: none;
+    }
+
+    #sync-button {
+        display: block;
+    }
+
+    @media (max-width: 1000px) {
+        .media-select {
+            width: 100%;
+        }
+
+        #sync-button {
+            display: none;
+        }
+
+        #sync-button-mobile {
+            display: block;
+        }
     }
 
 </style>
