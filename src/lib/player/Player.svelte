@@ -199,7 +199,7 @@
 
 		<media-video-layout class="relative">
 			<div class="flex gap-1 w-full h-full absolute">
-				<div class="flex flex-col ml-auto mt-8 mr-8 drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)]">
+				<div class="flex flex-col gap-0.5 ml-auto mt-8 mr-8 drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)]">
 					{#each messagesToDisplay as message}
 						<div class="flex gap-0.5 justify-end items-center">
 							{message.message}
