@@ -86,13 +86,17 @@
 			console.debug('received: ' + event.data);
 			const state = JSON.parse(event.data);
 			if (player) {
-				if (Array.isArray(state) && state.length > 0) {
-					if (state[0].message) {
-						roomMessages = state;
-						console.log('received messages: ' + JSON.stringify(roomMessages));
-					} else {
-						roomStates = state;
-						lastTicked = Date.now();
+				if (Array.isArray(state)) {
+					if(state.length > 0){
+						if (state[0].message) {
+							roomMessages = state;
+							console.log('received messages: ' + JSON.stringify(roomMessages));
+						} else {
+							roomStates = state;
+							lastTicked = Date.now();
+						}
+					}else{
+						roomMessages = []
 					}
 				} else {
 					if (state['paused'] === true && player.paused === false) {
