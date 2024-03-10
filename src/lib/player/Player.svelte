@@ -34,7 +34,7 @@
 	let socketConnected = false;
 	$: syncState = socketConnected && Math.ceil((Date.now() - lastTicked) / 1000) < 5000 ? 'SYNCED' : 'NOT SYNCED';
 	let messagesToDisplay: Message[] = [];
-	let id : string | null = localStorage.getItem('id') || null;
+	let id: string | null = localStorage.getItem('id') || null;
 
 	function idChanges() {
 		console.log('called');
@@ -211,11 +211,13 @@
 
 	<div class="w-full flex gap-2 items-start px-4">
 		<label class="custom-file-upload">
-			{#if pfp}
-				<img src={URL.createObjectURL(pfp)} alt="pfp" class="w-full h-full rounded-full" />
-			{:else}
-				<IconUser size={24} stroke={2} />
-			{/if}
+			<picture>
+				<img src="{pfp? URL.createObjectURL(pfp): `${PUBLIC_HOST}/static/pfp/${id}.png`}"
+						 on:error={(e) => {
+							 e.target.src = '/icons/uwu.png';
+						 }}
+						 alt="pfp" class="w-12 h-12 rounded-full object-cover" />
+			</picture>
 			<input accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
 						 bind:this={pfpInput}
 						 on:change={() => {
@@ -230,9 +232,16 @@
 								 const reader = new FileReader();
 								 reader.onload = function(e) {
 									 const res = e.target?.result;
-									 console.log(res)
 									 if(res && typeof res === 'string') {
-
+										 // send POST request with form data to /pfp/{id}
+										 const formData = new FormData();
+										 formData.append('pfp', pfp);
+										 fetch(`${PUBLIC_HOST}/pfp/${id}`, {
+											 method: 'POST',
+											 body: formData
+										 }).then(data => {
+												 console.log(data);
+											});
 									 }
 								 };
 								 reader.readAsDataURL(pfp);
