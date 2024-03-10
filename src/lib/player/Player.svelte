@@ -9,17 +9,20 @@
 	import { formatSeconds, type Job, type PlayerState } from './t';
 	import { PUBLIC_HOST, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
+	import { IconPlayerPause, IconPlayerPlay, IconPlugConnected, IconPlugConnectedX } from '@tabler/icons-svelte';
 	let player: MediaPlayerElement;
 
 	let socket: WebSocket;
 	let name = '';
 	let roomStates: PlayerState[] = [];
 	let jobs: Job[] = [];
-	// load id from query param
 	let id: string = '';
 	let textTracks: TextTrackInit[] = [];
 	let lastTicked = 0;
 	let videoSrc = '';
+	let socketConnected = false;
+	$: syncState = socketConnected && Math.ceil((Date.now() - lastTicked) / 1000) < 5000 ? 'SYNCED' : 'NOT SYNCED';
 
 	function idChanges() {
 		console.log('called');
@@ -40,6 +43,11 @@
 		for (const track of textTracks) player.textTracks.add(track);
 		console.log('textTracks', textTracks);
 		videoSrc = `${PUBLIC_HOST}/static/${id}/out.mp4`;
+
+
+		console.log("setting id")
+		$page.url.searchParams.set('id', id);
+		goto($page.url);
 	}
 
 	$ : if (id !== '') {
@@ -47,12 +55,13 @@
 	}
 
 	function connect() {
-		if (socket?.readyState === WebSocket.OPEN) {
+		if (socketConnected) {
 			socket.close();
 		}
 		socket = new WebSocket(`${PUBLIC_WS}/sync/${id}`);
 		socket.onopen = () => {
 			console.log('Connected to sync server');
+			socketConnected = true;
 			if (name !== '') {
 				send({ name: name });
 			}
@@ -93,7 +102,7 @@
 	}
 
 	function send(data: any) {
-		if (player && socket && socket.readyState === WebSocket.OPEN) {
+		if (player && socketConnected) {
 			console.log('sending: ' + JSON.stringify(data));
 			socket.send(JSON.stringify(data));
 		}
@@ -113,13 +122,11 @@
 				time: player?.currentTime
 			});
 		}, 4000);
-
-
 	});
 </script>
 
 <main id="main-page" class="flex flex-col items-center w-full h-full overflow-auto gap-3 py-4">
-	<div class="w-full flex gap-2 items-center px-8">
+	<div class="w-full flex gap-2 items-center px-4">
 		<label class="input input-bordered flex items-center gap-2">
 			Name
 			<input
@@ -138,14 +145,24 @@
 				<option value={job.Id}>{job.FileRawName}</option>
 			{/each}
 		</select>
-		<div class="flex gap-1">
+		<div class="flex gap-1 flex-grow">
 			{#each roomStates as state}
 				<div class="btn btn-neutral">
-					{state.name}: {formatSeconds(state.time)}, {state.paused ? 'paused' : 'playing'}
+					{#if state.paused === false}
+						<IconPlayerPlay size={12} stroke={2} />
+					{:else}
+						<IconPlayerPause size={12} stroke={2} />
+					{/if}
+					{state.name}: {formatSeconds(state.time)}
 				</div>
 			{/each}
-			<div class="btn">
-				Last tick: {Math.ceil((Date.now() - lastTicked) / 1000)}
+			<div class="btn self-end ml-auto {socketConnected ? 'text-green-600' : 'text-red-600' }">
+				{#if socketConnected}
+					<IconPlugConnected size={24} stroke={1} />
+				{:else}
+					<IconPlugConnectedX size={24} stroke={1} />
+				{/if}
+				{syncState}
 			</div>
 		</div>
 	</div>

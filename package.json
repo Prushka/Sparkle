@@ -39,6 +39,7 @@
 	},
 	"type": "module",
 	"dependencies": {
+		"@tabler/icons-svelte": "^2.47.0",
 		"vidstack": "^1.10.9"
 	}
 }
