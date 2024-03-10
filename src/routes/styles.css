@@ -37,10 +37,8 @@ html, #root, body, .app {
 	background-color: #f0f0f0;
 }
 
-@media (min-width: 1150px) {
-	body, #main-page {
-		min-height: 100vh;
-	}
+body, #main-page {
+	min-height: 100vh;
 }
 
 button, div, a, pre, code, .code-wrapper, .copy-button {
@@ -262,4 +260,19 @@ input[type="file"] {
 	width: fit-content;
 	border-radius: 0.5rem;
 	background-color: rgba(0,0,0,0.2);
+}
+
+.profile-input-container {
+	display: flex;
+	gap: 1rem;
+}
+
+@media (max-width: 1000px) {
+	#chat-input {
+		width: 16rem;
+	}
+	.input-container {
+		flex-direction: column;
+		gap: 1rem;
+	}
 }

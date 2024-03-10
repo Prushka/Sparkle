@@ -223,16 +223,17 @@
 
 	</media-player>
 
-	<div class="w-full flex gap-2 items-start px-4">
-		<label class="custom-file-upload">
-			<img src="{pfp? URL.createObjectURL(pfp): `${PUBLIC_HOST}/static/pfp/${id}.png`}"
+	<div class="w-full flex gap-2 items-start px-4 input-container">
+		<div class="profile-input-container">
+			<label class="custom-file-upload">
+				<img src="{pfp? URL.createObjectURL(pfp): `${PUBLIC_HOST}/static/pfp/${id}.png`}"
 						 on:error={(e) => {
 							 e.target.src = '/icons/uwu.png';
 						 }}
 						 alt="pfp" class="w-12 h-12 rounded-full object-cover" />
-			<input accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
-						 bind:this={pfpInput}
-						 on:change={() => {
+				<input accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
+							 bind:this={pfpInput}
+							 on:change={() => {
 							 const ppfp = pfpInput?.files;
 							 if (ppfp && ppfp[0]) {
 								 if(ppfp[0].size > 10000000) {
@@ -259,19 +260,20 @@
 								 reader.readAsDataURL(pfp);
 							 }
 						 }}
-						 type="file" />
-		</label>
-		<label class="input input flex items-center gap-2 w-48">
-			Name
-			<input
-				on:focusout={() => {
+							 type="file" />
+			</label>
+			<label class="input input flex items-center gap-2 w-48">
+				Name
+				<input
+					on:focusout={() => {
 					send({
 						name: name
 					})
 				localStorage.setItem("name", name)
 			}}
-				bind:value={name} type="text" class="grow" placeholder="Who?" />
-		</label>
+					bind:value={name} type="text" class="grow" placeholder="Who?" />
+			</label>
+		</div>
 		<select bind:value={roomId}
 						class="select media-select">
 			<option disabled selected>Which media?</option>
@@ -279,7 +281,7 @@
 				<option value={job.Id}>{job.FileRawName}</option>
 			{/each}
 		</select>
-		<div class="flex gap-1 ml-auto self-end">
+		<div class="flex gap-1 ml-auto">
 			{#each roomStates as state}
 				<div class="btn btn-sm btn-neutral">
 					{#if state.paused === false}
