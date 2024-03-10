@@ -1,4 +1,15 @@
+export const themes = [
+	'light',
+	'dark',
+	'cupcake'
+]
 
+export function nextTheme() {
+	const html = document.querySelector('html')
+	const currentTheme = html?.getAttribute('data-theme') || 'light'
+	const nextTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length]
+	html?.setAttribute('data-theme', nextTheme)
+}
 
 export type PlayerState = {
 	paused?: boolean;

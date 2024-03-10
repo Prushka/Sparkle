@@ -6,7 +6,7 @@
 	import {
 		type TextTrackInit
 	} from 'vidstack';
-	import { formatSeconds, type Job, type Message, type PlayerState, randomString } from './t';
+	import { formatSeconds, type Job, type Message, nextTheme, type PlayerState, randomString } from './t';
 	import { PUBLIC_HOST, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
@@ -208,10 +208,8 @@
 			<div class="flex gap-1 w-full h-full absolute">
 				<div class="flex flex-col gap-0.5 ml-auto mt-8 mr-8 drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] items-end">
 					{#each messagesToDisplay as message}
-						<div class="flex gap-0.5 justify-end items-center chat-line py-1 px-2 text-center">
-							{message.message}
-							[{new Date(message.timestamp * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-							, {formatSeconds(message.mediaSec)}]: {message.username}
+						<div class="flex gap-1 justify-end items-center chat-line py-1 px-2 text-center">
+							<p class="text-center">{message.message} [{new Date(message.timestamp * 1000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}, {formatSeconds(message.mediaSec)}] {message.username}</p>
 							<img src="{PUBLIC_HOST}/static/pfp/{id}.png"
 									 on:error={(e) => {
 							 			e.target.src = '/icons/uwu.png';
@@ -225,7 +223,7 @@
 
 	</media-player>
 
-	<div class="w-full flex gap-2 items-start px-4 input-container">
+	<div class="w-full flex items-start px-4 input-container">
 		<div class="profile-input-container">
 			<label class="custom-file-upload">
 				<img src="{pfp? URL.createObjectURL(pfp): `${PUBLIC_HOST}/static/pfp/${id}.png`}"
@@ -264,7 +262,7 @@
 						 }}
 							 type="file" />
 			</label>
-			<label class="input input flex items-center gap-2 w-48">
+			<label class="input input-bordered flex items-center gap-2 w-48">
 				Name
 				<input
 					on:focusout={() => {
@@ -277,7 +275,7 @@
 			</label>
 
 			<div class="ml-auto tooltip tooltip-left" data-tip="Last ticked: {tickedSecsAgo} seconds ago">
-			<button
+			<button on:click={nextTheme}
 				id="sync-button-mobile"
 				class="btn font-bold {socketConnected ? 'text-green-600' : 'text-red-600' }">
 				{#if socketConnected}
@@ -289,7 +287,7 @@
 			</div>
 		</div>
 		<select bind:value={roomId}
-						class="select media-select">
+						class="select media-select select-bordered mr-1">
 			<option disabled selected>Which media?</option>
 			{#each jobs as job}
 				<option value={job.Id}>{job.FileRawName}</option>
@@ -307,7 +305,7 @@
 				</div>
 			{/each}
 			<div class="tooltip tooltip-left" data-tip="Last ticked: {tickedSecsAgo} seconds ago">
-				<button
+				<button on:click={nextTheme}
 					id="sync-button"
 					class="btn btn-sm font-bold {socketConnected ? 'text-green-600' : 'text-red-600' }">
 					{#if socketConnected}
