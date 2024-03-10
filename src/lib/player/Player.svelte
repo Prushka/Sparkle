@@ -35,6 +35,7 @@
 	$: syncState = socketConnected && Math.ceil((Date.now() - lastTicked) / 1000) < 5 ? 'SYNCED' : 'NOT SYNCED';
 	let messagesToDisplay: Message[] = [];
 	let id: string | null = localStorage.getItem('id') || null;
+	let title = "";
 
 	function idChanges() {
 		console.log('called');
@@ -50,6 +51,7 @@
 						default: sub.includes('eng')
 					});
 				}
+				title = job.FileRawName;
 				break;
 			}
 		}
@@ -175,11 +177,15 @@
 
 </script>
 
+<svelte:head>
+	<title>{title}</title>
+</svelte:head>
+
 <main id="main-page" class="flex flex-col items-center w-full h-full overflow-auto gap-3 pb-4">
 
 	<media-player
 		class="media-player w-full aspect-video bg-slate-900 text-white font-sans overflow-hidden rounded-md ring-media-focus data-[focus]:ring-4"
-		title="Sprite Fight"
+		title={title}
 		src={videoSrc}
 		crossorigin
 		bind:this={player}
