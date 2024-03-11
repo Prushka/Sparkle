@@ -37,7 +37,7 @@
 	function idChanges() {
 		console.log('Room ID changed!');
 		player.textTracks.clear();
-		player.controlsDelay = 10000;
+		player.controlsDelay = 5000;
 		for (const job of jobs) {
 			if (job.Id === roomId) {
 				for (const sub of job.Subtitles) {
@@ -156,7 +156,15 @@
 						props: {
 							send: send,
 							classes: 'input-sm mx-6 chat-box',
-							id: 'chat-input'
+							id: 'chat-input',
+							onFocus: () => {
+								player.hideControlsOnMouseLeave = false;
+								console.log('focused'+player.controlsDelay);
+							},
+							onBlur: () => {
+								player.hideControlsOnMouseLeave = true;
+								console.log('blurred'+player.controlsDelay);
+							}
 						}
 					});
 				}
@@ -164,6 +172,7 @@
 			messagesToDisplay = roomMessages.filter((message) => {
 				return (Date.now() / 1000 - message.timestamp) < 200;
 			});
+			messagesToDisplay = messagesToDisplay.slice(-10);
 			tickedSecsAgo = (Date.now() - lastTicked) / 1000;
 		}, 1000);
 		return () => {

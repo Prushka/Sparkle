@@ -2,6 +2,8 @@
 	let i: any;
 	export let send: any;
 	export let classes = '';
+	export let onFocus: any = () => {};
+	export let onBlur: any = () => {};
 </script>
 
 <form
@@ -17,6 +19,8 @@
 	}}
 	autocomplete="off">
 	<input
+		on:focus={onFocus}
+		on:blur={onBlur}
 		on:keydown={e => {
 				e.stopPropagation()
 		}}
