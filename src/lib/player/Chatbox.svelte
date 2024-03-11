@@ -1,7 +1,7 @@
 <script lang="ts">
-	let i : any;
-	export let send : any;
-	export let classes = "";
+	let i: any;
+	export let send: any;
+	export let classes = '';
 </script>
 
 <form
@@ -16,14 +16,24 @@
 						}, 2000);
 	}}
 	autocomplete="off">
-	<input bind:this={i} autocomplete="off" type="text" placeholder="Chat"
-				 class="c-box input {$$restProps.class} {classes}"
-				 id={$$restProps.id}
+	<input
+		on:keydown={e => {
+				e.stopPropagation()
+		}}
+		on:keyup={e => {
+				e.stopPropagation()
+		}}
+		on:keypress={e => {
+				e.stopPropagation()
+		}}
+		bind:this={i} autocomplete="off" type="text" placeholder="Chat"
+		class="c-box input {$$restProps.class} {classes}"
+		id={$$restProps.id}
 	>
 </form>
 
 <style>
-	.c-box{
-      font-size: 1rem !important;
-	}
+    .c-box {
+        font-size: 1rem !important;
+    }
 </style>

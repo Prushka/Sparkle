@@ -20,6 +20,7 @@ export type Message = {
 	message: string;
 	timestamp: number;
 	mediaSec: number;
+	uid: string;
 }
 
 export type Jobs = Job[]

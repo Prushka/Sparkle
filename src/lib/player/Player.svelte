@@ -37,6 +37,7 @@
 	function idChanges() {
 		console.log('Room ID changed!');
 		player.textTracks.clear();
+		player.controlsDelay = 5000;
 		for (const job of jobs) {
 			if (job.Id === roomId) {
 				for (const sub of job.Subtitles) {
@@ -217,7 +218,7 @@
 									hour: '2-digit',
 									minute: '2-digit'
 								})}, {formatSeconds(message.mediaSec)}] {message.username}</p>
-							<img src="{PUBLIC_HOST}/static/pfp/{id}.png"
+							<img src="{PUBLIC_HOST}/static/pfp/{message.uid}.png"
 									 on:error={(e) => {
 							 			e.target.src = '/icons/uwu.png';
 						 }}
