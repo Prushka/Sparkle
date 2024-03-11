@@ -37,7 +37,7 @@
 	function idChanges() {
 		console.log('Room ID changed!');
 		player.textTracks.clear();
-		player.controlsDelay = 5000;
+		player.controlsDelay = 4000;
 		for (const job of jobs) {
 			if (job.Id === roomId) {
 				for (const sub of job.Subtitles) {
@@ -158,12 +158,10 @@
 							classes: 'input-sm mx-6 chat-box',
 							id: 'chat-input',
 							onFocus: () => {
-								player.hideControlsOnMouseLeave = false;
-								console.log('focused'+player.controlsDelay);
+								player.controls.pause()
 							},
 							onBlur: () => {
-								player.hideControlsOnMouseLeave = true;
-								console.log('blurred'+player.controlsDelay);
+								player.controls.resume()
 							}
 						}
 					});
