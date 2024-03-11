@@ -37,7 +37,7 @@
 	function idChanges() {
 		console.log('Room ID changed!');
 		player.textTracks.clear();
-		player.controlsDelay = 5000;
+		player.controlsDelay = 10000;
 		for (const job of jobs) {
 			if (job.Id === roomId) {
 				for (const sub of job.Subtitles) {
