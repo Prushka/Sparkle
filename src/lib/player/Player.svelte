@@ -40,16 +40,18 @@
 		player.controlsDelay = 4000;
 		for (const job of jobs) {
 			if (job.Id === roomId) {
-				for (const sub of job.Subtitles) {
-					player.textTracks.add({
-						src: `${PUBLIC_HOST}/static/${roomId}/${sub}`,
-						label: sub,
-						kind: 'subtitles',
-						default: sub.includes('eng')
-					});
+				if (job.Subtitles) {
+					for (const sub of job.Subtitles) {
+						player.textTracks.add({
+							src: `${PUBLIC_HOST}/static/${roomId}/${sub}`,
+							label: sub,
+							kind: 'subtitles',
+							default: sub.includes('eng')
+						});
+					}
+					title = job.FileRawName;
+					break;
 				}
-				title = job.FileRawName;
-				break;
 			}
 		}
 		console.log('textTracks: ' + JSON.stringify(player.textTracks));
@@ -158,10 +160,10 @@
 							classes: 'input-sm mx-6 chat-box',
 							id: 'chat-input',
 							onFocus: () => {
-								player.controls.pause()
+								player.controls.pause();
 							},
 							onBlur: () => {
-								player.controls.resume()
+								player.controls.resume();
 							}
 						}
 					});
@@ -217,7 +219,8 @@
 
 		<media-video-layout class="relative">
 			<div class="flex gap-1 w-full h-full absolute">
-				<div class="{controlsShowing? 'shift-down':''} flex flex-col gap-0.5 ml-auto chat-history drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] items-end">
+				<div
+					class="{controlsShowing? 'shift-down':''} flex flex-col gap-0.5 ml-auto chat-history drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] items-end">
 					{#each messagesToDisplay as message}
 						<div class="flex gap-1 justify-end items-center chat-line py-1 px-2 text-center">
 							<p class="text-center">{message.message}
@@ -375,7 +378,7 @@
         }
 
         .chat-history {
-						margin-top: 0.5rem;
+            margin-top: 0.5rem;
             margin-right: 0.5rem;
             font-size: 0.64rem;
         }

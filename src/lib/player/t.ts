@@ -35,7 +35,7 @@ export interface Job {
 	OutputPath: string
 	State: string
 	SHA256: string
-	Subtitles: string[]
+	Subtitles: string[] | null
 }
 
 export function formatSeconds(seconds: number | undefined): string {
