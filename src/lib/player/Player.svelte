@@ -84,10 +84,10 @@
 		};
 
 		socket.onmessage = (event: MessageEvent) => {
-			console.debug('received: ' + event.data);
 			const state = JSON.parse(event.data);
 			if (player) {
 				if (Array.isArray(state)) {
+					console.debug('received: ' + event.data);
 					if (state.length > 0) {
 						if (state[0].message) {
 							roomMessages = state;
@@ -100,9 +100,10 @@
 						roomMessages = [];
 					}
 				} else {
-					if (state['paused'] === true && player.paused === false) {
+					console.log('received: ' + event.data);
+					if (state['paused'] === true) {
 						player.pause();
-					} else if (state['paused'] === false && player.paused === true) {
+					} else if (state['paused'] === false) {
 						player.play();
 					}
 					if (state['time'] !== undefined) {
@@ -316,14 +317,14 @@
 		</select>
 		<div class="flex gap-1 ml-auto">
 			{#each roomStates as state}
-				<div class="btn btn-sm btn-neutral">
+				<button class="btn btn-sm btn-neutral">
 					{#if state.paused === false}
 						<IconPlayerPlay size={12} stroke={2} />
 					{:else}
 						<IconPlayerPause size={12} stroke={2} />
 					{/if}
 					{state.name}: {formatSeconds(state.time)}
-				</div>
+				</button>
 			{/each}
 			<div class="tooltip tooltip-left" data-tip="Last ticked: {tickedSecsAgo} seconds ago">
 				<button on:click={nextTheme}
