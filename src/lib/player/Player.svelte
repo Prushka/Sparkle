@@ -46,8 +46,18 @@
 	let videoCanPlay = false;
 	let videoCanLoad = false;
 	let lastCheckedPlayerCanPlay = -1;
+	let pausedBeforeCodecChange = false;
+	let timeBeforeCodecChange = 0;
 	$: videoSrc = `${PUBLIC_HOST}/static/` + roomId + '/' + selectedCodec + '.' + videoExt;
-
+	function onChange(event: any) {
+		pauseSend = true;
+		if (player) {
+			pausedBeforeCodecChange = player.paused;
+			timeBeforeCodecChange = player.currentTime;
+		}
+		lastCheckedPlayerCanPlay = -1;
+		selectedCodec = event.currentTarget.value;
+	}
 	function idChanges(codecs: string[]): string[] {
 		console.log('Room ID changed!');
 		player.textTracks.clear();
@@ -231,10 +241,18 @@
 		};
 	});
 	onMount(() => {
-		return player.subscribe(({ controlsVisible, canLoadPoster, canLoad }) => {
+		return player.subscribe(({ controlsVisible, canPlay, canLoad }) => {
 			controlsShowing = controlsVisible;
-			videoCanPlay = canLoadPoster;
+			videoCanPlay = canPlay;
 			videoCanLoad = canLoad;
+			if (canLoad && canPlay && pauseSend) {
+				// video loaded, send was paused bcz of codec change
+				player.currentTime = timeBeforeCodecChange;
+				if (!pausedBeforeCodecChange) {
+					player.play();
+				}
+				pauseSend = false;
+			}
 		});
 	});
 
@@ -366,6 +384,13 @@
 				<option value={job.Id}>{job.FileRawName}</option>
 			{/each}
 		</select>
+		<div class="join ml-4">
+			{#each codecs as codec}
+				<input class="join-item btn" type="radio" name="options"
+							 checked={codec === selectedCodec} aria-label={codec}
+							 on:change={onChange} value={codec} />
+			{/each}
+		</div>
 		<div class="flex gap-1 ml-auto">
 			{#each roomStates as state}
 				<button class="btn btn-sm btn-neutral">
