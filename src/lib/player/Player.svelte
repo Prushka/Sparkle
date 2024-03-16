@@ -41,13 +41,14 @@
 	let title = '';
 	let codecs: string[] = [];
 	let videoExt = '';
-	let selectedCodec = '';
+	let selectedCodec = localStorage.getItem('codec') || '';
 	let pauseSend = false;
 	let videoCanPlay = false;
 	let videoCanLoad = false;
 	let lastCheckedPlayerCanPlay = -1;
 	let pausedBeforeCodecChange = false;
 	let timeBeforeCodecChange = 0;
+	let interactedWithPlayer = false;
 	$: videoSrc = `${PUBLIC_HOST}/static/` + roomId + '/' + selectedCodec + '.' + videoExt;
 
 	function onChange(event: any) {
@@ -106,15 +107,21 @@
 	$:{
 		const lsCodec = localStorage.getItem('codec') || '';
 		if (codecs.length > 0 && !codecs.includes(lsCodec)) {
+			console.log("setting codec - no matching codec", lsCodec, codecs)
 			selectedCodec = codecs[0];
 		}
 	}
 	$:{
-		console.log("setting codec", selectedCodec)
-		localStorage.setItem('codec', selectedCodec);
+		if(selectedCodec !== '') {
+			console.log('setting codec to localstorage', selectedCodec);
+			localStorage.setItem('codec', selectedCodec);
+		}
 	}
 
 	function connect() {
+		if (!interactedWithPlayer) {
+			return;
+		}
 		if (id === null) {
 			id = randomString(36);
 			localStorage.setItem('id', id);
@@ -174,7 +181,7 @@
 	}
 
 	function send(data: any) {
-		if (player && socketConnected && !pauseSend) {
+		if (player && socketConnected && !pauseSend && interactedWithPlayer) {
 			console.log('sending: ' + JSON.stringify(data));
 			socket.send(JSON.stringify(data));
 		}
@@ -225,7 +232,7 @@
 
 		const j = setInterval(() => {
 			console.debug('canPlay: ', videoCanPlay, 'canLoad: ', videoCanLoad, 'codecs: ', codecs.length, 'selectedCodec: ', selectedCodec);
-			if (!videoCanPlay && videoCanLoad && codecs.length > 0) {
+			if (!videoCanPlay && videoCanLoad && codecs.length > 0 && selectedCodec !== '') {
 				if (lastCheckedPlayerCanPlay < 0) {
 					lastCheckedPlayerCanPlay = Date.now();
 					return;
@@ -285,7 +292,12 @@
 			}}
 		on:play={
 			() => {
-				send({ paused: false });
+				if(interactedWithPlayer) {
+					send({ paused: false });
+				}else{
+					interactedWithPlayer = true;
+					connect();
+				}
 			}}
 	>
 		<media-provider>
