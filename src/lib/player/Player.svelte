@@ -277,7 +277,7 @@
 	<title>{title}</title>
 </svelte:head>
 
-<main id="main-page" class="flex flex-col items-center w-full h-full overflow-auto gap-3 pb-4">
+<main id="main-page" class="flex flex-col items-center w-full h-full gap-3 pb-4">
 
 	<media-player
 		class="media-player-c media-player w-full aspect-video bg-slate-900 text-white font-sans overflow-hidden rounded-md ring-media-focus data-[focus]:ring-4"
@@ -372,7 +372,7 @@
 						 }}
 							 type="file" />
 			</label>
-			<label class="input input-bordered flex items-center gap-2 w-48">
+			<label class="input input-bordered flex items-center gap-2 w-48 name-input">
 				Name
 				<input
 					on:focusout={() => {
@@ -383,55 +383,45 @@
 			}}
 					bind:value={name} type="text" class="grow" placeholder="Who?" />
 			</label>
-
-			<div class="ml-auto tooltip tooltip-left" data-tip="Last ticked: {tickedSecsAgo} seconds ago">
-				<button on:click={nextTheme}
-								id="sync-button-mobile"
-								class="btn font-bold {socketConnected ? 'text-green-600' : 'text-red-600' }">
-					{#if socketConnected}
-						<IconPlugConnected size={28} stroke={1.5} />
-					{:else}
-						<IconPlugConnectedX size={28} stroke={1.5} />
-					{/if}
-				</button>
-			</div>
 		</div>
 		<select bind:value={roomId}
-						class="select media-select select-bordered">
+						class="select media-select select-bordered flex-grow mr-4">
 			<option disabled selected>Which media?</option>
 			{#each jobs as job}
 				<option value={job.Id}>{job.FileRawName}</option>
 			{/each}
 		</select>
-		<div class="join ml-4">
+		<div class="join self-center">
 			{#each codecs as codec}
 				<input class="join-item btn" type="radio" name="options"
 							 checked={codec === selectedCodec} aria-label={codec}
 							 on:change={onChange} value={codec} />
 			{/each}
 		</div>
-		<div class="flex gap-1 ml-auto">
-			{#each roomStates as state}
-				<button class="btn btn-sm btn-neutral">
-					{#if state.paused === false}
-						<IconPlayerPlay size={12} stroke={2} />
-					{:else}
-						<IconPlayerPause size={12} stroke={2} />
-					{/if}
-					{state.name}: {formatSeconds(state.time)}
-				</button>
-			{/each}
-			<div class="tooltip tooltip-left" data-tip="Last ticked: {tickedSecsAgo} seconds ago">
-				<button on:click={nextTheme}
-								id="sync-button"
-								class="btn btn-sm font-bold {socketConnected ? 'text-green-600' : 'text-red-600' }">
-					{#if socketConnected}
-						<IconPlugConnected size={24} stroke={2} />
-					{:else}
-						<IconPlugConnectedX size={24} stroke={2} />
-					{/if}
-				</button>
-			</div>
+
+	</div>
+
+	<div class="flex gap-1">
+		{#each roomStates as state}
+			<button class="btn btn-sm btn-neutral">
+				{#if state.paused === false}
+					<IconPlayerPlay size={12} stroke={2} />
+				{:else}
+					<IconPlayerPause size={12} stroke={2} />
+				{/if}
+				{state.name}: {formatSeconds(state.time)}
+			</button>
+		{/each}
+		<div class="tooltip tooltip-bottom" data-tip="Last ticked: {tickedSecsAgo} seconds ago">
+			<button on:click={nextTheme}
+							id="sync-button"
+							class="btn btn-sm font-bold {socketConnected ? 'text-green-600' : 'text-red-600' }">
+				{#if socketConnected}
+					<IconPlugConnected size={24} stroke={2} />
+				{:else}
+					<IconPlugConnectedX size={24} stroke={2} />
+				{/if}
+			</button>
 		</div>
 	</div>
 
@@ -448,14 +438,6 @@
         width: 30rem;
     }
 
-    #sync-button-mobile {
-        display: none;
-    }
-
-    #sync-button {
-        display: block;
-    }
-
     .chat-history {
         margin-top: 2rem;
         margin-right: 2rem;
@@ -468,6 +450,10 @@
 
 
     @media (max-width: 1000px) {
+
+				.name-input {
+						flex-grow: 1;
+				}
 
         .shift-down {
             margin-top: 2.5rem !important;
@@ -486,14 +472,6 @@
 
         .media-select {
             width: 100%;
-        }
-
-        #sync-button {
-            display: none;
-        }
-
-        #sync-button-mobile {
-            display: block;
         }
     }
 

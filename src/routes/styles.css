@@ -92,6 +92,7 @@ input[type="file"] {
 .profile-input-container {
 	display: flex;
 	gap: 1rem;
+	margin-right: 1rem;
 }
 
 @media (max-width: 1000px) {
@@ -104,6 +105,7 @@ input[type="file"] {
 	}
 	.profile-input-container {
 		width: 100%;
+		margin-right: 0;
 	}
 	.chat-box {
 		display: none;
