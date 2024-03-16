@@ -43,9 +43,6 @@
 	let videoExt = '';
 	let selectedCodec = localStorage.getItem('codec') || '';
 	let pauseSend = false;
-	let videoCanPlay = false;
-	let videoCanLoad = false;
-	let lastCheckedPlayerCanPlay = -1;
 	let pausedBeforeCodecChange = false;
 	let timeBeforeCodecChange = 0;
 	let interactedWithPlayer = false;
@@ -57,7 +54,6 @@
 			pausedBeforeCodecChange = player.paused;
 			timeBeforeCodecChange = player.currentTime;
 		}
-		lastCheckedPlayerCanPlay = -1;
 		selectedCodec = event.currentTarget.value;
 	}
 
@@ -230,35 +226,14 @@
 			tickedSecsAgo = (Date.now() - lastTicked) / 1000;
 		}, 1000);
 
-		const j = setInterval(() => {
-			console.debug('canPlay: ', videoCanPlay, 'canLoad: ', videoCanLoad, 'codecs: ', codecs.length, 'selectedCodec: ', selectedCodec);
-			if (!videoCanPlay && videoCanLoad && codecs.length > 0 && selectedCodec !== '') {
-				if (lastCheckedPlayerCanPlay < 0) {
-					lastCheckedPlayerCanPlay = Date.now();
-					return;
-				} else if (Date.now() - lastCheckedPlayerCanPlay > 1500) {
-					const selectedCodecIndex = codecs.indexOf(selectedCodec);
-					if (selectedCodecIndex < codecs.length - 1) {
-						selectedCodec = codecs[selectedCodecIndex + 1];
-						console.log('Trying next codec: ' + selectedCodec);
-					} else {
-						console.log('No more codecs to try');
-					}
-					lastCheckedPlayerCanPlay = -1;
-				}
-			}
-		}, 250);
 		return () => {
 			socket.close();
 			clearInterval(i);
-			clearInterval(j);
 		};
 	});
 	onMount(() => {
 		return player.subscribe(({ controlsVisible, canPlay, canLoad }) => {
 			controlsShowing = controlsVisible;
-			videoCanPlay = canPlay;
-			videoCanLoad = canLoad;
 			if (canLoad && canPlay && pauseSend) {
 				// video loaded, send was paused bcz of codec change
 				player.currentTime = timeBeforeCodecChange;
@@ -401,7 +376,7 @@
 
 	</div>
 
-	<div class="flex gap-1">
+	<div class="flex gap-2 sync-states">
 		{#each roomStates as state}
 			<button class="btn btn-sm btn-neutral">
 				{#if state.paused === false}
@@ -450,6 +425,10 @@
 
 
     @media (max-width: 1000px) {
+
+				.sync-states {
+						flex-direction: column;
+				}
 
 				.name-input {
 						flex-grow: 1;
