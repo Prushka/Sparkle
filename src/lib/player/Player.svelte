@@ -3,7 +3,15 @@
 	import 'vidstack/bundle';
 	import type { MediaPlayerElement } from 'vidstack/elements';
 	import { onMount } from 'svelte';
-	import { formatSeconds, type Job, type Message, nextTheme, type PlayerState, randomString } from './t';
+	import {
+		codecsPriority,
+		formatSeconds,
+		type Job,
+		type Message,
+		nextTheme,
+		type PlayerState,
+		randomString
+	} from './t';
 	import { PUBLIC_HOST, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
@@ -37,47 +45,37 @@
 	let pauseSend = false;
 	let timeBeforeCodecChange = 0;
 	let pausedBeforeCodecChange = false;
+	let videoCanPlay = false;
+	let videoCanLoad = false;
 	$: videoSrc = `${PUBLIC_HOST}/static/` + roomId + '/' + selectedCodec + '.' + videoExt;
-	function onChange(event: any) {
-		pauseSend = true;
-		if (player) {
-			pausedBeforeCodecChange = player.paused;
-			timeBeforeCodecChange = player.currentTime;
-		}
-		selectedCodec = event.currentTarget.value;
-	}
 
-	$:{
-		console.log('video:'+videoSrc)
-	}
-
-	function idChanges() {
+	function idChanges(codecs: string[], selectedCodec: string): [string[], string] {
 		console.log('Room ID changed!');
 		player.textTracks.clear();
 		player.controlsDelay = 4000;
-		for (const job of jobs) {
-			if (job.Id === roomId) {
-				if (job.Subtitles) {
-					for (const [, sub] of Object.entries(job.Subtitles)) {
-						const enc = sub.Enc;
-						if (enc) {
-							player.textTracks.add({
-								src: `${PUBLIC_HOST}/static/${roomId}/${enc.Location}`,
-								label: enc.Location,
-								kind: 'subtitles',
-								default: enc.Language.includes('eng')
-							});
-						}
+		const job = jobs.find((job) => job.Id === roomId);
+		if (job) {
+			if (job.Subtitles) {
+				for (const [, sub] of Object.entries(job.Subtitles)) {
+					const enc = sub.Enc;
+					if (enc) {
+						player.textTracks.add({
+							src: `${PUBLIC_HOST}/static/${roomId}/${enc.Location}`,
+							label: enc.Location,
+							kind: 'subtitles',
+							default: enc.Language.includes('eng')
+						});
 					}
 				}
-				title = job.FileRawName;
-				codecs = job.EncodedCodecs;
-				videoExt = job.EncodedExt;
-				if (codecs.length > 0) {
-					selectedCodec = codecs[0];
-					videoSrc = `${PUBLIC_HOST}/static/` + roomId + '/' + selectedCodec + '.' + videoExt;
-				}
-				break;
+			}
+			title = job.FileRawName;
+			codecs = job.EncodedCodecs;
+			videoExt = job.EncodedExt;
+			codecs.sort((a, b) => {
+				return codecsPriority.indexOf(a) - codecsPriority.indexOf(b);
+			});
+			if (codecs.length > 0) {
+				selectedCodec = codecs[0];
 			}
 		}
 		console.debug('textTracks: ' + JSON.stringify(player.textTracks));
@@ -86,10 +84,29 @@
 		if (socketConnected) {
 			socket.close();
 		}
+		return [codecs, selectedCodec];
 	}
 
 	$ : if (roomId !== '') {
-		idChanges();
+		[codecs, selectedCodec] = idChanges(codecs, selectedCodec);
+	}
+
+	$:{
+		console.log('video:' + videoSrc, 'codecs: ' + codecs, 'selectedCodec: ' + selectedCodec);
+	}
+
+	$: {
+		console.log('canPlay: ', videoCanPlay, 'canLoad: ', videoCanLoad, 'codecs: ', codecs.length, 'selectedCodec: ', selectedCodec);
+		if (!videoCanPlay && videoCanLoad && codecs.length > 0) {
+			const selectedCodecIndex = codecs.indexOf(selectedCodec);
+			if (selectedCodecIndex < codecs.length - 1) {
+				selectedCodec = codecs[selectedCodecIndex + 1];
+				console.log('Trying next codec: ' + selectedCodec);
+				videoSrc = `${PUBLIC_HOST}/static/` + roomId + '/' + selectedCodec + '.' + videoExt;
+			} else {
+				console.log('No more codecs to try');
+			}
+		}
 	}
 
 	function connect() {
@@ -207,10 +224,11 @@
 	});
 
 	onMount(() => {
-		return player.subscribe(({ controlsVisible, canPlay }) => {
+		return player.subscribe(({ controlsVisible, canPlay, canLoad }) => {
 			controlsShowing = controlsVisible;
-			console.log(canPlay)
-			if (canPlay && pauseSend) {
+			videoCanPlay = canPlay;
+			videoCanLoad = canLoad;
+			if (canLoad && canPlay && pauseSend) {
 				// video loaded, send was paused bcz of codec change
 				player.currentTime = timeBeforeCodecChange;
 				if (!pausedBeforeCodecChange) {
@@ -349,13 +367,6 @@
 				<option value={job.Id}>{job.FileRawName}</option>
 			{/each}
 		</select>
-		<div class="join ml-4">
-			{#each codecs as codec}
-				<input class="join-item btn" type="radio" name="options"
-							 checked={codec === selectedCodec} aria-label={codec}
-							 on:change={onChange} value={codec} />
-			{/each}
-		</div>
 		<div class="flex gap-1 ml-auto">
 			{#each roomStates as state}
 				<button class="btn btn-sm btn-neutral">

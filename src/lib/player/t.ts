@@ -1,5 +1,7 @@
 export const themes = ["autumn", "dark", "cupcake", "valentine", "lofi", "cyberpunk"]
 export const defaultTheme = "autumn"
+
+export const codecsPriority = ["av1", "hevc"]
 export function nextTheme() {
 	const html = document.querySelector('html')
 	const currentTheme = localStorage.getItem("theme") || defaultTheme
