@@ -1,6 +1,7 @@
 
 <script lang="ts">
 	import { afterNavigate } from '$app/navigation';
+	import { defaultTheme } from '$lib/player/t';
 
 	afterNavigate(() => {
 		console.log('navigated');
@@ -11,7 +12,7 @@
 		const theme = localStorage.getItem('theme');
 		if (theme) {
 			const html = document.querySelector('html');
-			html?.setAttribute('data-theme', theme || "light");
+			html?.setAttribute('data-theme', theme || defaultTheme);
 		}
 	});
 </script>

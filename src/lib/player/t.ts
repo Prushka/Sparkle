@@ -1,8 +1,8 @@
-export const themes = ["light", "dark", "cupcake", "valentine", "lofi", "cyberpunk"]
-
+export const themes = ["autumn", "dark", "cupcake", "valentine", "lofi", "cyberpunk"]
+export const defaultTheme = "autumn"
 export function nextTheme() {
 	const html = document.querySelector('html')
-	const currentTheme = localStorage.getItem("theme") || 'light'
+	const currentTheme = localStorage.getItem("theme") || defaultTheme
 	const nextTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length]
 	console.log('nextTheme', nextTheme)
 	html?.setAttribute('data-theme', nextTheme)
@@ -25,18 +25,50 @@ export type Message = {
 
 export type Jobs = Job[]
 
-export interface Job {
-	Id: string
-	FileRawPath: string
-	FileRawFolder: string
-	FileRawName: string
-	FileRawExt: string
-	Input: string
-	OutputPath: string
-	State: string
-	SHA256: string
-	Subtitles: string[] | null
+type Pair<T> = {
+	Raw: T | null;
+	Enc: T | null;
+};
+
+type Stream = {
+	Bitrate: number;
+	CodecName: string;
+	Index: number;
+	Location: string;
+};
+
+interface Subtitle extends Stream {
+	Language: string;
 }
+
+interface Video extends Stream {
+	Width: number;
+	Height: number;
+	Framerate: string;
+}
+
+interface Audio extends Stream {
+	Channels: number;
+	SampleRate: number;
+}
+
+export type Job = {
+	Id: string;
+	FileRawPath: string;
+	FileRawFolder: string;
+	FileRawName: string;
+	FileRawExt: string;
+	Input: string;
+	OutputPath: string;
+	State: string;
+	SHA256: string;
+	EncodedCodecs: string[];
+	EncodedExt: string;
+	Subtitles: { [key: number]: Pair<Subtitle> };
+	Videos: { [key: number]: Pair<Video> };
+	Audios: { [key: number]: Pair<Audio> };
+};
+
 
 export function formatSeconds(seconds: number | undefined): string {
 	if (seconds === undefined) {

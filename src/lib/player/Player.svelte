@@ -27,12 +27,21 @@
 	let roomId: string = '';
 	let lastTicked = 0;
 	let tickedSecsAgo = 0;
-	let videoSrc = '';
 	let socketConnected = false;
 	let messagesToDisplay: Message[] = [];
 	let id: string | null = localStorage.getItem('id') || null;
 	let title = '';
+	let codecs: string[] = [];
+	let videoExt = '';
+	let selectedCodec = '';
+	$: videoSrc = `${PUBLIC_HOST}/static/` + roomId + '/' + selectedCodec + '.' + videoExt;
+	function onChange(event: any) {
+		selectedCodec = event.currentTarget.value;
+	}
 
+	$:{
+		console.log('video:'+videoSrc)
+	}
 
 	function idChanges() {
 		console.log('Room ID changed!');
@@ -41,21 +50,29 @@
 		for (const job of jobs) {
 			if (job.Id === roomId) {
 				if (job.Subtitles) {
-					for (const sub of job.Subtitles) {
-						player.textTracks.add({
-							src: `${PUBLIC_HOST}/static/${roomId}/${sub}`,
-							label: sub,
-							kind: 'subtitles',
-							default: sub.includes('eng')
-						});
+					for (const [, sub] of Object.entries(job.Subtitles)) {
+						const enc = sub.Enc;
+						if (enc) {
+							player.textTracks.add({
+								src: `${PUBLIC_HOST}/static/${roomId}/${enc.Location}`,
+								label: enc.Location,
+								kind: 'subtitles',
+								default: enc.Language.includes('eng')
+							});
+						}
 					}
-					title = job.FileRawName;
-					break;
 				}
+				title = job.FileRawName;
+				codecs = job.EncodedCodecs;
+				videoExt = job.EncodedExt;
+				if (codecs.length > 0) {
+					selectedCodec = codecs[0];
+					videoSrc = `${PUBLIC_HOST}/static/` + roomId + '/' + selectedCodec + '.' + videoExt;
+				}
+				break;
 			}
 		}
-		console.log('textTracks: ' + JSON.stringify(player.textTracks));
-		videoSrc = `${PUBLIC_HOST}/static/${roomId}/out.mp4`;
+		console.debug('textTracks: ' + JSON.stringify(player.textTracks));
 		$page.url.searchParams.set('id', roomId);
 		goto($page.url);
 		if (socketConnected) {
@@ -309,12 +326,19 @@
 			</div>
 		</div>
 		<select bind:value={roomId}
-						class="select media-select select-bordered mr-1">
+						class="select media-select select-bordered">
 			<option disabled selected>Which media?</option>
 			{#each jobs as job}
 				<option value={job.Id}>{job.FileRawName}</option>
 			{/each}
 		</select>
+		<div class="join ml-4">
+			{#each codecs as codec}
+				<input class="join-item btn" type="radio" name="options"
+							 checked={codec === selectedCodec} aria-label={codec}
+							 on:change={onChange} value={codec} />
+			{/each}
+		</div>
 		<div class="flex gap-1 ml-auto">
 			{#each roomStates as state}
 				<button class="btn btn-sm btn-neutral">
