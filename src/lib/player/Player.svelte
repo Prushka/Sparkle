@@ -43,13 +43,12 @@
 	let videoExt = '';
 	let selectedCodec = '';
 	let pauseSend = false;
-	let timeBeforeCodecChange = 0;
-	let pausedBeforeCodecChange = false;
 	let videoCanPlay = false;
 	let videoCanLoad = false;
+	let lastCheckedPlayerCanPlay = -1;
 	$: videoSrc = `${PUBLIC_HOST}/static/` + roomId + '/' + selectedCodec + '.' + videoExt;
 
-	function idChanges(codecs: string[], selectedCodec: string): [string[], string] {
+	function idChanges(codecs: string[]): string[] {
 		console.log('Room ID changed!');
 		player.textTracks.clear();
 		player.controlsDelay = 4000;
@@ -74,9 +73,6 @@
 			codecs.sort((a, b) => {
 				return codecsPriority.indexOf(a) - codecsPriority.indexOf(b);
 			});
-			if (codecs.length > 0) {
-				selectedCodec = codecs[0];
-			}
 		}
 		console.debug('textTracks: ' + JSON.stringify(player.textTracks));
 		$page.url.searchParams.set('id', roomId);
@@ -84,28 +80,20 @@
 		if (socketConnected) {
 			socket.close();
 		}
-		return [codecs, selectedCodec];
+		return codecs;
 	}
 
 	$ : if (roomId !== '') {
-		[codecs, selectedCodec] = idChanges(codecs, selectedCodec);
+		codecs = idChanges(codecs);
 	}
 
 	$:{
 		console.log('video:' + videoSrc, 'codecs: ' + codecs, 'selectedCodec: ' + selectedCodec);
 	}
 
-	$: {
-		console.log('canPlay: ', videoCanPlay, 'canLoad: ', videoCanLoad, 'codecs: ', codecs.length, 'selectedCodec: ', selectedCodec);
-		if (!videoCanPlay && videoCanLoad && codecs.length > 0) {
-			const selectedCodecIndex = codecs.indexOf(selectedCodec);
-			if (selectedCodecIndex < codecs.length - 1) {
-				selectedCodec = codecs[selectedCodecIndex + 1];
-				console.log('Trying next codec: ' + selectedCodec);
-				videoSrc = `${PUBLIC_HOST}/static/` + roomId + '/' + selectedCodec + '.' + videoExt;
-			} else {
-				console.log('No more codecs to try');
-			}
+	$:{
+		if (codecs.length > 0) {
+			selectedCodec = codecs[0];
 		}
 	}
 
@@ -222,20 +210,29 @@
 			socket.close();
 		};
 	});
-
 	onMount(() => {
+		setInterval(() => {
+			console.debug('canPlay: ', videoCanPlay, 'canLoad: ', videoCanLoad, 'codecs: ', codecs.length, 'selectedCodec: ', selectedCodec);
+			if (!videoCanPlay && videoCanLoad && codecs.length > 0) {
+				if (lastCheckedPlayerCanPlay < 0) {
+					lastCheckedPlayerCanPlay = Date.now();
+					return;
+				} else if (Date.now() - lastCheckedPlayerCanPlay > 1000) {
+					const selectedCodecIndex = codecs.indexOf(selectedCodec);
+					if (selectedCodecIndex < codecs.length - 1) {
+						selectedCodec = codecs[selectedCodecIndex + 1];
+						console.log('Trying next codec: ' + selectedCodec);
+					} else {
+						console.log('No more codecs to try');
+					}
+					lastCheckedPlayerCanPlay = -1;
+				}
+			}
+		}, 1000);
 		return player.subscribe(({ controlsVisible, canPlay, canLoad }) => {
 			controlsShowing = controlsVisible;
 			videoCanPlay = canPlay;
 			videoCanLoad = canLoad;
-			if (canLoad && canPlay && pauseSend) {
-				// video loaded, send was paused bcz of codec change
-				player.currentTime = timeBeforeCodecChange;
-				if (!pausedBeforeCodecChange) {
-					player.play();
-				}
-				pauseSend = false;
-			}
 		});
 	});
 
