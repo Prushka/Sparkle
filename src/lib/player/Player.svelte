@@ -49,6 +49,7 @@
 	let pausedBeforeCodecChange = false;
 	let timeBeforeCodecChange = 0;
 	$: videoSrc = `${PUBLIC_HOST}/static/` + roomId + '/' + selectedCodec + '.' + videoExt;
+
 	function onChange(event: any) {
 		pauseSend = true;
 		if (player) {
@@ -58,6 +59,7 @@
 		lastCheckedPlayerCanPlay = -1;
 		selectedCodec = event.currentTarget.value;
 	}
+
 	function idChanges(codecs: string[]): string[] {
 		console.log('Room ID changed!');
 		player.textTracks.clear();
@@ -102,9 +104,14 @@
 	}
 
 	$:{
-		if (codecs.length > 0) {
+		const lsCodec = localStorage.getItem('codec') || '';
+		if (codecs.length > 0 && !codecs.includes(lsCodec)) {
 			selectedCodec = codecs[0];
 		}
+	}
+	$:{
+		console.log("setting codec", selectedCodec)
+		localStorage.setItem('codec', selectedCodec);
 	}
 
 	function connect() {
@@ -222,7 +229,7 @@
 				if (lastCheckedPlayerCanPlay < 0) {
 					lastCheckedPlayerCanPlay = Date.now();
 					return;
-				} else if (Date.now() - lastCheckedPlayerCanPlay > 1000) {
+				} else if (Date.now() - lastCheckedPlayerCanPlay > 1500) {
 					const selectedCodecIndex = codecs.indexOf(selectedCodec);
 					if (selectedCodecIndex < codecs.length - 1) {
 						selectedCodec = codecs[selectedCodecIndex + 1];
