@@ -34,8 +34,16 @@
 	let codecs: string[] = [];
 	let videoExt = '';
 	let selectedCodec = '';
+	let pauseSend = false;
+	let timeBeforeCodecChange = 0;
+	let pausedBeforeCodecChange = false;
 	$: videoSrc = `${PUBLIC_HOST}/static/` + roomId + '/' + selectedCodec + '.' + videoExt;
 	function onChange(event: any) {
+		pauseSend = true;
+		if (player) {
+			pausedBeforeCodecChange = player.paused;
+			timeBeforeCodecChange = player.currentTime;
+		}
 		selectedCodec = event.currentTarget.value;
 	}
 
@@ -145,7 +153,7 @@
 	}
 
 	function send(data: any) {
-		if (player && socketConnected) {
+		if (player && socketConnected && !pauseSend) {
 			console.log('sending: ' + JSON.stringify(data));
 			socket.send(JSON.stringify(data));
 		}
@@ -199,8 +207,17 @@
 	});
 
 	onMount(() => {
-		return player.subscribe(({ controlsVisible }) => {
+		return player.subscribe(({ controlsVisible, canPlay }) => {
 			controlsShowing = controlsVisible;
+			console.log(canPlay)
+			if (canPlay && pauseSend) {
+				// video loaded, send was paused bcz of codec change
+				player.currentTime = timeBeforeCodecChange;
+				if (!pausedBeforeCodecChange) {
+					player.play();
+				}
+				pauseSend = false;
+			}
 		});
 	});
 
