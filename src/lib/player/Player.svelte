@@ -172,7 +172,7 @@
 				roomId = $page.url.searchParams.get('id') || '';
 				connect();
 			});
-		setInterval(() => {
+		const i = setInterval(() => {
 			send({
 				time: player?.currentTime
 			});
@@ -205,12 +205,8 @@
 			messagesToDisplay = messagesToDisplay.slice(-10);
 			tickedSecsAgo = (Date.now() - lastTicked) / 1000;
 		}, 1000);
-		return () => {
-			socket.close();
-		};
-	});
-	onMount(() => {
-		setInterval(() => {
+
+		const j = setInterval(() => {
 			console.debug('canPlay: ', videoCanPlay, 'canLoad: ', videoCanLoad, 'codecs: ', codecs.length, 'selectedCodec: ', selectedCodec);
 			if (!videoCanPlay && videoCanLoad && codecs.length > 0) {
 				if (lastCheckedPlayerCanPlay < 0) {
@@ -228,9 +224,16 @@
 				}
 			}
 		}, 250);
-		return player.subscribe(({ controlsVisible, canPlay, canLoad }) => {
+		return () => {
+			socket.close();
+			clearInterval(i);
+			clearInterval(j);
+		};
+	});
+	onMount(() => {
+		return player.subscribe(({ controlsVisible, canLoadPoster, canLoad }) => {
 			controlsShowing = controlsVisible;
-			videoCanPlay = canPlay;
+			videoCanPlay = canLoadPoster;
 			videoCanLoad = canLoad;
 		});
 	});
