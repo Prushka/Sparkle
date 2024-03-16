@@ -131,12 +131,11 @@
 					}
 				} else {
 					console.log('received: ' + event.data);
-					if (state['paused'] === true) {
+					if (state['paused'] === true && player.paused === false) {
 						player.pause();
-					} else if (state['paused'] === false) {
+					} else if (state['paused'] === false && player.paused === true) {
 						player.play();
-					}
-					if (state['time'] !== undefined) {
+					} else if (state['time'] !== undefined) {
 						player.currentTime = state['time'];
 					}
 				}
@@ -228,7 +227,7 @@
 					lastCheckedPlayerCanPlay = -1;
 				}
 			}
-		}, 1000);
+		}, 250);
 		return player.subscribe(({ controlsVisible, canPlay, canLoad }) => {
 			controlsShowing = controlsVisible;
 			videoCanPlay = canPlay;
