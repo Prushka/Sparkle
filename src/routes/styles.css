@@ -33,7 +33,7 @@ html {
 
 html, #root, body, .app {
 	max-width: 100vw;
-	overflow-x: hidden;
+	overflow: auto;
 }
 
 body, #main-page {

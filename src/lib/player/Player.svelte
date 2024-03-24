@@ -252,7 +252,7 @@
 	<title>{title}</title>
 </svelte:head>
 
-<main id="main-page" class="flex flex-col items-center w-full h-full gap-3 pb-4">
+<main id="main-page" class="overflow-hidden flex flex-col items-center w-full h-full gap-3 pb-4">
 
 	<media-player
 		keyShortcuts={{
