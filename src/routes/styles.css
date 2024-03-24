@@ -32,7 +32,8 @@ html {
 }
 
 html, #root, body, .app {
-	width: 100%;
+	max-width: 100vw;
+	overflow-x: hidden;
 }
 
 body, #main-page {

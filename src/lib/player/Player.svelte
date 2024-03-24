@@ -103,12 +103,12 @@
 	$:{
 		const lsCodec = localStorage.getItem('codec') || '';
 		if (codecs.length > 0 && !codecs.includes(lsCodec)) {
-			console.log("setting codec - no matching codec", lsCodec, codecs)
+			console.log('setting codec - no matching codec', lsCodec, codecs);
 			selectedCodec = codecs[0];
 		}
 	}
 	$:{
-		if(selectedCodec !== '') {
+		if (selectedCodec !== '') {
 			console.log('setting codec to localstorage', selectedCodec);
 			localStorage.setItem('codec', selectedCodec);
 		}
@@ -255,6 +255,17 @@
 <main id="main-page" class="flex flex-col items-center w-full h-full gap-3 pb-4">
 
 	<media-player
+		keyShortcuts={{
+    // Space-separated list.
+    togglePaused: 'k Space',
+    toggleMuted: 'm',
+    toggleFullscreen: 'f',
+    togglePictureInPicture: 'i',
+    seekBackward: ['j', 'J', 'ArrowLeft'],
+    seekForward: ['l', 'L', 'ArrowRight'],
+    volumeUp: 'ArrowUp',
+    volumeDown: 'ArrowDown',
+    }}
 		class="media-player-c media-player w-full aspect-video bg-slate-900 text-white font-sans overflow-hidden rounded-md ring-media-focus data-[focus]:ring-4"
 		title={title}
 		src={videoSrc}
@@ -426,13 +437,13 @@
 
     @media (max-width: 1000px) {
 
-				.sync-states {
-						flex-direction: column;
-				}
+        .sync-states {
+            flex-direction: column;
+        }
 
-				.name-input {
-						flex-grow: 1;
-				}
+        .name-input {
+            flex-grow: 1;
+        }
 
         .shift-down {
             margin-top: 2.5rem !important;
