@@ -60,7 +60,6 @@
 	function idChanges(codecs: string[]): string[] {
 		console.log('Room ID changed!');
 		player.textTracks.clear();
-		player.controlsDelay = 4000;
 		const job = jobs.find((job) => job.Id === roomId);
 		if (job) {
 			if (job.Subtitles) {
