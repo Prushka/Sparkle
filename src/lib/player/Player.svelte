@@ -187,6 +187,9 @@
 			.then(response => response.json())
 			.then(data => {
 				jobs = data;
+				jobs.sort((a, b) => {
+					return a.FileRawName.localeCompare(b.FileRawName);
+				});
 				console.log(jobs);
 				roomId = $page.url.searchParams.get('id') || '';
 				connect();
