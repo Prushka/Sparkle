@@ -231,6 +231,9 @@
 		if (name === '') {
 			document.getElementById('name_modal')?.showModal();
 		}
+		const chatOverlay = document.getElementById('chat-overlay');
+		const thePlayer = document.getElementById('the-player');
+		thePlayer!.appendChild(chatOverlay!);
 		return () => {
 			socket.close();
 			clearInterval(i);
@@ -295,6 +298,7 @@
     volumeUp: 'ArrowUp',
     volumeDown: 'ArrowDown',
     }}
+		id="the-player"
 		class="media-player-c media-player w-full aspect-video bg-slate-900 text-white font-sans overflow-hidden rounded-md ring-media-focus data-[focus]:ring-4 relative"
 		src={videoSrc}
 		crossorigin
@@ -318,7 +322,7 @@
 		<media-video-layout/>
 	</media-player>
 
-	<div class="flex gap-1 w-full h-full absolute pointer-events-none">
+	<div class="flex gap-1 w-full h-full absolute pointer-events-none" id="chat-overlay">
 		<div
 			class="{controlsShowing? 'shift-down':''} flex flex-col gap-0.5 ml-auto chat-history drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] items-end">
 			{#each messagesToDisplay as message}
@@ -337,6 +341,7 @@
 			{/each}
 		</div>
 	</div>
+
 	<div class="w-full flex items-start px-4 input-container">
 		<div class="chat-box-mobile w-full">
 			<Chatbox send={send} class="input-bordered input-md" />
