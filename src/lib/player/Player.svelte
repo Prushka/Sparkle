@@ -75,6 +75,7 @@
 						});
 					}
 				}
+				player.remoteControl.showCaptions();
 			}
 			title = job.FileRawName;
 			codecs = job.EncodedCodecs;
