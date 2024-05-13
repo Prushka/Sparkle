@@ -48,6 +48,7 @@
 	let timeBeforeCodecChange = 0;
 	let interactedWithPlayer = false;
 	$: videoSrc = `${PUBLIC_HOST}/static/` + roomId + '/' + selectedCodec + '.' + videoExt;
+	$: thumbnailVttSrc = `${PUBLIC_HOST}/static/` + roomId + `/storyboard.vtt`;
 
 	function onChange(event: any) {
 		pauseSend = true;
@@ -320,7 +321,7 @@
 			}}
 	>
 		<media-provider></media-provider>
-		<media-video-layout></media-video-layout>
+		<media-video-layout thumbnails={thumbnailVttSrc}></media-video-layout>
 	</media-player>
 
 	<div class="flex gap-1 w-full h-full absolute pointer-events-none" id="chat-overlay">
