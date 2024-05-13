@@ -293,7 +293,7 @@
     // Space-separated list.
     togglePaused: 'k Space',
     toggleMuted: 'm',
-    toggleFullscreen: 'f',
+    toggleFullscreen: null,
     togglePictureInPicture: 'i',
     seekBackward: ['j', 'J', 'ArrowLeft'],
     seekForward: ['l', 'L', 'ArrowRight'],
@@ -398,8 +398,14 @@
 					bind:value={name} type="text" class="grow" placeholder="Who?" />
 			</label>
 		</div>
-		<select bind:value={roomId}
-						class="select media-select select-bordered flex-grow mr-4">
+		<select
+			on:change={(e) => {
+				const roomId = e.currentTarget.value;
+				$page.url.searchParams.set('id', roomId);
+				window.location.href = $page.url.toString();
+			}}
+			bind:value={roomId}
+			class="select media-select select-bordered flex-grow mr-4">
 			<option disabled selected>Which media?</option>
 			{#each jobs as job}
 				<option value={job.Id}>{job.FileRawName}</option>
