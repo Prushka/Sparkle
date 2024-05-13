@@ -16,6 +16,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import {
+		IconBrightnessHalf,
 		IconPlayerPause,
 		IconPlayerPlay,
 		IconPlugConnected,
@@ -200,7 +201,7 @@
 			});
 			if (!document.getElementById('chat-input')) {
 				console.log('mounting chat');
-				const node = document.querySelector('media-chapter-title');
+				const node = document.querySelector('media-title');
 				if (node) {
 					const container = document.createElement('div');
 					container.classList.add('chat-box');
@@ -227,7 +228,9 @@
 			messagesToDisplay = messagesToDisplay.slice(-10);
 			tickedSecsAgo = (Date.now() - lastTicked) / 1000;
 		}, 1000);
-
+		if (name === '') {
+			document.getElementById('name_modal')?.showModal();
+		}
 		return () => {
 			socket.close();
 			clearInterval(i);
@@ -256,6 +259,30 @@
 
 <main id="main-page" class="overflow-hidden flex flex-col items-center w-full h-full gap-3 pb-4">
 
+	<dialog id="name_modal" class="modal">
+		<div class="modal-box">
+			<h3 class="font-bold text-lg">Name is required for syncing</h3>
+			<label class="input input-bordered flex items-center gap-2 name-input mt-5 mb-2">
+				Name
+				<input
+					on:focusout={() => {
+					send({
+						name: name
+					})
+				localStorage.setItem("name", name)
+			}}
+					bind:value={name} type="text" class="grow" placeholder="Name?" />
+			</label>
+			{#if name !== ''}
+				<div class="modal-action">
+					<form method="dialog">
+						<button class="btn">Done</button>
+					</form>
+				</div>
+			{/if}
+		</div>
+	</dialog>
+
 	<media-player
 		keyShortcuts={{
     // Space-separated list.
@@ -268,8 +295,7 @@
     volumeUp: 'ArrowUp',
     volumeDown: 'ArrowDown',
     }}
-		class="media-player-c media-player w-full aspect-video bg-slate-900 text-white font-sans overflow-hidden rounded-md ring-media-focus data-[focus]:ring-4"
-		title={title}
+		class="media-player-c media-player w-full aspect-video bg-slate-900 text-white font-sans overflow-hidden rounded-md ring-media-focus data-[focus]:ring-4 relative"
 		src={videoSrc}
 		crossorigin
 		bind:this={player}
@@ -288,36 +314,29 @@
 				}
 			}}
 	>
-		<media-provider>
-			<media-poster
-				class="absolute inset-0 block h-full w-full rounded-md opacity-0 transition-opacity data-[visible]:opacity-100 [&>img]:h-full [&>img]:w-full [&>img]:object-cover"
-			/>
-		</media-provider>
-
-		<media-video-layout class="relative">
-			<div class="flex gap-1 w-full h-full absolute">
-				<div
-					class="{controlsShowing? 'shift-down':''} flex flex-col gap-0.5 ml-auto chat-history drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] items-end">
-					{#each messagesToDisplay as message}
-						<div class="flex gap-1 justify-end items-center chat-line py-1 px-2 text-center">
-							<p class="text-center">{message.message}
-								[{new Date(message.timestamp * 1000).toLocaleTimeString('en-US', {
-									hour: '2-digit',
-									minute: '2-digit'
-								})}, {formatSeconds(message.mediaSec)}] {message.username}</p>
-							<img src="{PUBLIC_HOST}/static/pfp/{message.uid}.png"
-									 on:error={(e) => {
-							 			e.target.src = '/icons/uwu.png';
-						 }}
-									 alt="pfp" class="avatar rounded-full object-cover" />
-						</div>
-					{/each}
-				</div>
-			</div>
-		</media-video-layout>
-
+		<media-provider/>
+		<media-video-layout/>
 	</media-player>
 
+	<div class="flex gap-1 w-full h-full absolute pointer-events-none">
+		<div
+			class="{controlsShowing? 'shift-down':''} flex flex-col gap-0.5 ml-auto chat-history drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] items-end">
+			{#each messagesToDisplay as message}
+				<div class="flex gap-1 justify-end items-center chat-line py-1 px-2 text-center">
+					<p class="text-center text-white">{message.message}
+						[{new Date(message.timestamp * 1000).toLocaleTimeString('en-US', {
+							hour: '2-digit',
+							minute: '2-digit'
+						})}, {formatSeconds(message.mediaSec)}] {message.username}</p>
+					<img src="{PUBLIC_HOST}/static/pfp/{message.uid}.png"
+							 on:error={(e) => {
+							 			e.target.src = '/icons/uwu.png';
+						 }}
+							 alt="pfp" class="avatar rounded-full object-cover" />
+				</div>
+			{/each}
+		</div>
+	</div>
 	<div class="w-full flex items-start px-4 input-container">
 		<div class="chat-box-mobile w-full">
 			<Chatbox send={send} class="input-bordered input-md" />
@@ -401,7 +420,7 @@
 			</button>
 		{/each}
 		<div class="tooltip tooltip-bottom" data-tip="Last ticked: {tickedSecsAgo} seconds ago">
-			<button on:click={nextTheme}
+			<button
 							id="sync-button"
 							class="btn btn-sm font-bold {socketConnected ? 'text-green-600' : 'text-red-600' }">
 				{#if socketConnected}
@@ -411,6 +430,9 @@
 				{/if}
 			</button>
 		</div>
+		<button id="theme-button"  on:click={nextTheme} class="btn btn-sm font-bold">
+			<IconBrightnessHalf size={24} stroke={2} />
+		</button>
 	</div>
 
 
