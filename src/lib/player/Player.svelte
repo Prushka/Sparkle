@@ -319,8 +319,8 @@
 				}
 			}}
 	>
-		<media-provider/>
-		<media-video-layout/>
+		<media-provider></media-provider>
+		<media-video-layout></media-video-layout>
 	</media-player>
 
 	<div class="flex gap-1 w-full h-full absolute pointer-events-none" id="chat-overlay">
