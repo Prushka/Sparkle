@@ -153,3 +153,7 @@ input {
 :where([data-preview] .vds-video-layout .vds-captions) {
 	opacity: 1 !important;
 }
+
+.vds-gesture[action="toggle:paused"] {
+	display: none !important;
+}

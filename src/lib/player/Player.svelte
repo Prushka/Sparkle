@@ -38,6 +38,7 @@
 	let tickedSecsAgo = 0;
 	let socketConnected = false;
 	let messagesToDisplay: Message[] = [];
+	let controlsToDisplay: string[] = [];
 	let id: string | null = localStorage.getItem('id') || null;
 	let title = '';
 	let codecs: string[] = [];
@@ -153,12 +154,16 @@
 					}
 				} else {
 					console.log('received: ' + event.data);
+					const reason = state['reason'];
+					if (!reason.includes("new")){
+						controlsToDisplay.push(reason);
+					}
 					if (state['paused'] === true && player.paused === false) {
 						player.pause();
 					} else if (state['paused'] === false && player.paused === true) {
 						player.play();
 					} else if (state['time'] !== undefined) {
-						player.currentTime = state['time'];
+						player.currentTime! = state['time'];
 					}
 				}
 			}
@@ -185,7 +190,7 @@
 		}
 	}
 
-	onMount(() => {
+	function updateList() {
 		fetch(`${PUBLIC_HOST}/all`)
 			.then(response => response.json())
 			.then(data => {
@@ -197,6 +202,13 @@
 				roomId = $page.url.searchParams.get('id') || '';
 				connect();
 			});
+	}
+
+	onMount(() => {
+		updateList();
+		const ii = setInterval(() => {
+			updateList();
+		}, 60000);
 		const i = setInterval(() => {
 			send({
 				time: player?.currentTime
@@ -239,6 +251,7 @@
 		return () => {
 			socket.close();
 			clearInterval(i);
+			clearInterval(ii);
 		};
 	});
 	onMount(() => {
@@ -432,20 +445,24 @@
 				{state.name}: {formatSeconds(state.time)}
 			</button>
 		{/each}
-		<div class="tooltip tooltip-bottom" data-tip="Last ticked: {tickedSecsAgo} seconds ago">
-			<button
-							id="sync-button"
-							class="btn btn-sm font-bold {socketConnected ? 'text-green-600' : 'text-red-600' }">
-				{#if socketConnected}
-					<IconPlugConnected size={24} stroke={2} />
-				{:else}
-					<IconPlugConnectedX size={24} stroke={2} />
-				{/if}
-			</button>
+		<div class="flex gap-2">
+			<div class="tooltip tooltip-bottom" data-tip="Last ticked: {tickedSecsAgo} seconds ago">
+				<button
+					id="sync-button"
+					class="btn btn-sm font-bold {socketConnected ? 'text-green-600' : 'text-red-600' }">
+					{#if socketConnected}
+						<IconPlugConnected size={24} stroke={2} />
+					{:else}
+						<IconPlugConnectedX size={24} stroke={2} />
+					{/if}
+				</button>
+			</div>
+			<div class="tooltip tooltip-bottom" data-tip="Switch Theme">
+				<button id="theme-button" on:click={nextTheme} class="btn btn-sm font-bold">
+					<IconBrightnessHalf size={24} stroke={2} />
+				</button>
+			</div>
 		</div>
-		<button id="theme-button"  on:click={nextTheme} class="btn btn-sm font-bold">
-			<IconBrightnessHalf size={24} stroke={2} />
-		</button>
 	</div>
 
 
