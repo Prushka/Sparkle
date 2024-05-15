@@ -457,12 +457,33 @@
 				<option value={job.Id}>{job.FileRawName}</option>
 			{/each}
 		</select>
-		<div class="join self-center">
-			{#each codecs as codec}
-				<input class="join-item btn" type="radio" name="options"
-							 checked={codec === selectedCodec} aria-label={codec}
-							 on:change={onChange} value={codec} />
-			{/each}
+
+		<div class="flex gap-2 self-center">
+			<div class="tooltip tooltip-left" data-tip="Video Codec">
+			<div class="join">
+				{#each codecs as codec}
+					<input class="join-item btn" type="radio" name="options"
+								 checked={codec === selectedCodec} aria-label={codec}
+								 on:change={onChange} value={codec} />
+				{/each}
+			</div>
+			</div>
+			<div class="tooltip tooltip-left" data-tip="Ticked: {tickedSecsAgo}s ago">
+				<button
+					id="sync-button"
+					class="btn font-bold {socketConnected ? 'text-green-600' : 'text-red-600' }">
+					{#if socketConnected}
+						<IconPlugConnected size={24} stroke={2} />
+					{:else}
+						<IconPlugConnectedX size={24} stroke={2} />
+					{/if}
+				</button>
+			</div>
+			<div class="tooltip tooltip-left" data-tip="Theme">
+				<button id="theme-button" on:click={nextTheme} class="btn font-bold">
+					<IconBrightnessHalf size={24} stroke={2} />
+				</button>
+			</div>
 		</div>
 
 	</div>
@@ -479,24 +500,6 @@
 				{player.name}: {formatSeconds(player.time)}
 			</button>
 		{/each}
-		<div class="flex gap-2">
-			<div class="tooltip tooltip-bottom" data-tip="Last ticked: {tickedSecsAgo} seconds ago">
-				<button
-					id="sync-button"
-					class="btn btn-sm font-bold {socketConnected ? 'text-green-600' : 'text-red-600' }">
-					{#if socketConnected}
-						<IconPlugConnected size={24} stroke={2} />
-					{:else}
-						<IconPlugConnectedX size={24} stroke={2} />
-					{/if}
-				</button>
-			</div>
-			<div class="tooltip tooltip-bottom" data-tip="Switch Theme">
-				<button id="theme-button" on:click={nextTheme} class="btn btn-sm font-bold">
-					<IconBrightnessHalf size={24} stroke={2} />
-				</button>
-			</div>
-		</div>
 	</div>
 
 
@@ -519,9 +522,10 @@
 
     @media (max-width: 1000px) {
 
-        .sync-states {
-            flex-direction: column;
-        }
+				.sync-states {
+            display: grid;
+            grid-template-columns: auto auto;
+				}
 
         .name-input {
             flex-grow: 1;
