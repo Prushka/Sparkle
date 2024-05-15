@@ -1,5 +1,4 @@
 <script lang="ts">
-	// Import styles.
 	import 'vidstack/bundle';
 	import type { MediaPlayerElement } from 'vidstack/elements';
 	import { onMount } from 'svelte';
@@ -17,13 +16,12 @@
 	import { goto } from '$app/navigation';
 	import {
 		IconBrightnessHalf,
-		IconPlayerPause, IconPlayerPauseFilled,
-		IconPlayerPlay, IconPlayerPlayFilled,
+		IconPlayerPauseFilled,
+		IconPlayerPlayFilled,
 		IconPlugConnected,
 		IconPlugConnectedX
 	} from '@tabler/icons-svelte';
 	import Chatbox from '$lib/player/Chatbox.svelte';
-	import { writable } from 'svelte/store';
 	import Pfp from '$lib/player/Pfp.svelte';
 	import { pfpLastFetched } from '../../store';
 
