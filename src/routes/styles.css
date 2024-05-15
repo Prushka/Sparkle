@@ -169,3 +169,16 @@ input {
 .vds-gesture[action="toggle:paused"] {
 	display: none !important;
 }
+
+.avatar {
+	width: 1.5rem;
+	height: 1.5rem;
+}
+
+
+@media (max-width: 1000px) {
+	.avatar {
+		width: 1rem;
+		height: 1rem;
+	}
+}

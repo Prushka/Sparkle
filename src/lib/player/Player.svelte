@@ -400,7 +400,7 @@
 							hour: '2-digit',
 							minute: '2-digit'
 						})}]</span> {message.username}</p>
-					<Pfp id={message.uid} />
+					<Pfp id={message.uid} class="avatar" />
 				</div>
 			{/each}
 		</div>
@@ -412,11 +412,9 @@
 		</div>
 		<div class="profile-input-container">
 			<label class="custom-file-upload">
-				<img src="{pfp? URL.createObjectURL(pfp): `${PUBLIC_HOST}/static/pfp/${id}.png`}"
-						 on:error={(e) => {
-							 e.target.src = '/icons/uwu.png';
-						 }}
-						 alt="pfp" class="w-12 h-12 rounded-full object-cover" />
+				{#if id}
+					<Pfp id={id} class="w-12 h-12 " />
+				{/if}
 				<input accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
 							 bind:this={pfpInput}
 							 on:change={() => {
@@ -519,7 +517,7 @@
 	<div class="flex gap-4 sync-states">
 		{#each roomPlayers as player}
 			<button
-				class="btn btn-neutral border-none h-auto min-h-full pr-4 py-0 pl-0 rounded-l-full rounded-r-full shadow-sm flex gap-3.5">
+				class="btn btn-neutral border-none h-auto min-h-full pr-4 py-0 pl-0 rounded-l-full rounded-r-full shadow-md flex gap-3.5">
 				<Pfp class="w-12 h-12 mr-0.5" id={player.id} />
 				<div class="flex gap-1 flex-col items-center justify-center">
 					<p class="font-semibold">{player.name}</p>
