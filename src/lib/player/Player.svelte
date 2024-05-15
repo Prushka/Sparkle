@@ -139,7 +139,6 @@
 
 		socket.onmessage = (event: MessageEvent) => {
 			const state: SendPayload = JSON.parse(event.data);
-			let me = null;
 			if (player) {
 				switch (state.type) {
 					case SyncTypes.PfpSync:
@@ -157,10 +156,6 @@
 					case SyncTypes.PlayersStatusSync:
 						roomPlayers = state.players;
 						lastTicked = Date.now();
-						me = roomPlayers.find((player) => player.id === id);
-						if (me && me.paused !== undefined && me.paused !== player.paused) {
-							player.paused = me.paused;
-						}
 						break;
 					case SyncTypes.PauseSync:
 						console.log('received: ' + JSON.stringify(state));
@@ -217,7 +212,6 @@
 				});
 				console.log(jobs);
 				roomId = $page.url.searchParams.get('id') || '';
-				connect();
 			});
 	}
 
