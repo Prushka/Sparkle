@@ -393,7 +393,7 @@
 		<div
 			class="{controlsShowing? 'shift-down':''} flex flex-col gap-0.5 ml-auto chat-history drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] items-end">
 			{#each messagesToDisplay as message}
-				<div class={`flex gap-1 justify-center items-center chat-line py-1 pl-3 pr-2 text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''}`}>
+				<div class={`flex gap-1 justify-center items-center chat-line py-1 pl-2.5 pr-2 text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''}`}>
 					<p>{message.message}</p>
 						<p class="text-sm">[{message.isStateUpdate ? '' : `${formatSeconds(message.mediaSec)}, `}{new Date(message.timestamp).toLocaleTimeString('en-US', {
 					hour: '2-digit',
