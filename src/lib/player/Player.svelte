@@ -1,7 +1,7 @@
 <script lang="ts">
 	import 'vidstack/bundle';
 	import type { MediaPlayerElement } from 'vidstack/elements';
-	import { onMount } from 'svelte';
+	import { onDestroy, onMount } from 'svelte';
 	import {
 		codecsPriority,
 		formatSeconds,
@@ -14,7 +14,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import {
-		IconBrightnessHalf,
+		IconBrightnessHalf, IconEye, IconEyeOff,
 		IconPlayerPauseFilled,
 		IconPlayerPlayFilled,
 		IconPlugConnected,
@@ -22,7 +22,7 @@
 	} from '@tabler/icons-svelte';
 	import Chatbox from '$lib/player/Chatbox.svelte';
 	import Pfp from '$lib/player/Pfp.svelte';
-	import { pfpLastFetched } from '../../store';
+	import { chatHiddenStore, pfpLastFetched } from '../../store';
 
 	let player: MediaPlayerElement;
 	let controlsShowing = false;
@@ -49,8 +49,12 @@
 	let timeBeforeCodecChange = 0;
 	let interactedWithPlayer = false;
 	let currentTheme = localStorage.getItem('theme') || defaultTheme;
+	let chatHidden = false;
+	const unsubscribe = chatHiddenStore.subscribe((value) => chatHidden = value);
 	$: videoSrc = `${PUBLIC_HOST}/static/` + roomId + '/' + selectedCodec + '.' + videoExt;
 	$: thumbnailVttSrc = `${PUBLIC_HOST}/static/` + roomId + `/storyboard.vtt`;
+
+	onDestroy(unsubscribe);
 
 	function nextTheme() {
 		const html = document.querySelector('html')
@@ -382,7 +386,9 @@
 		<media-video-layout thumbnails={thumbnailVttSrc}></media-video-layout>
 	</media-player>
 
-	<div class="flex gap-1 w-full h-full absolute pointer-events-none" id="chat-overlay">
+	<div class="flex gap-1 w-full h-full absolute pointer-events-none" id="chat-overlay"
+	style={chatHidden ? 'display: none' : ''}
+	>
 		<div
 			class="{controlsShowing? 'shift-down':''} flex flex-col gap-0.5 ml-auto chat-history drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] items-end">
 			{#each messagesToDisplay as message}
@@ -485,6 +491,17 @@
 						<IconPlugConnected size={24} stroke={2} />
 					{:else}
 						<IconPlugConnectedX size={24} stroke={2} />
+					{/if}
+				</button>
+			</div>
+			<div class="tooltip tooltip-left" data-tip={chatHidden ? "Show Chat" : "Hide Chat"}>
+				<button id="chat-hide-button" on:click={()=>{
+					$chatHiddenStore = !chatHidden;
+				}} class="btn font-bold">
+					{#if chatHidden}
+						<IconEye size={24} stroke={2} />
+					{:else}
+						<IconEyeOff size={24} stroke={2} />
 					{/if}
 				</button>
 			</div>

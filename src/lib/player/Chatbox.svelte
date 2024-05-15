@@ -1,11 +1,17 @@
 <script lang="ts">
 	import { SyncTypes } from '$lib/player/t';
+	import { chatHiddenStore } from '../../store';
+	import { onDestroy } from 'svelte';
 
 	let i: any;
 	export let send: any;
 	export let classes = '';
 	export let onFocus: any = () => {};
 	export let onBlur: any = () => {};
+	let chatHidden = false;
+	const unsubscribe = chatHiddenStore.subscribe((value) => chatHidden = value);
+	onDestroy(unsubscribe);
+	$: placeholder = chatHidden ? 'Chat (hidden)' : 'Chat'
 </script>
 
 <form
@@ -16,7 +22,7 @@
 						send({ chat: message, type: SyncTypes.ChatSync });
 						i.placeholder = 'Sent!';
 						setTimeout(() => {
-							i.placeholder = 'Chat';
+							i.placeholder = placeholder;
 						}, 2000);
 	}}
 	autocomplete="off">
@@ -32,7 +38,7 @@
 		on:keypress={e => {
 				e.stopPropagation()
 		}}
-		bind:this={i} autocomplete="off" type="text" placeholder="Chat"
+		bind:this={i} autocomplete="off" type="text" placeholder={placeholder}
 		class="c-box input {$$restProps.class} {classes}"
 		id={$$restProps.id}
 	>
