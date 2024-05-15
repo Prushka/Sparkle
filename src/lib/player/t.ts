@@ -38,6 +38,7 @@ export interface SendPayload {
 	firedBy?: Player;
 	chats: Chat[];
 	players: Player[];
+	timestamp: number;
 }
 
 export type Player = {
@@ -53,6 +54,7 @@ export type Chat = {
 	timestamp: number;
 	mediaSec: number;
 	uid: string;
+	isStateUpdate: boolean;
 }
 
 export type Jobs = Job[]

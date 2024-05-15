@@ -152,6 +152,7 @@
 						break;
 					case SyncTypes.ChatSync:
 						roomMessages = state.chats;
+						updateMessages()
 						break;
 					case SyncTypes.PlayersStatusSync:
 						roomPlayers = state.players;
@@ -166,6 +167,7 @@
 						}
 						if (state['firedBy'] !== undefined) {
 							controlsToDisplay.push(state);
+							updateMessages()
 						}
 						break;
 					case SyncTypes.TimeSync:
@@ -175,6 +177,7 @@
 						}
 						if (state['firedBy'] !== undefined) {
 							controlsToDisplay.push(state);
+							updateMessages()
 						}
 						break;
 				}
@@ -215,6 +218,29 @@
 			});
 	}
 
+	function updateMessages() {
+		messagesToDisplay = roomMessages.filter((message) => {
+			return (Date.now() - message.timestamp) < 200000;
+		});
+		messagesToDisplay = messagesToDisplay.slice(-10);
+		for (const control of controlsToDisplay) {
+			if (control.firedBy && (Date.now() - control.timestamp) < 8000) {
+				const message: Chat = {
+					uid: control.firedBy.id,
+					username: control.firedBy.name,
+					message: control.type === SyncTypes.PauseSync ? (control.paused ? 'paused' : 'resumed') : 'seeked to ' + formatSeconds(control.time),
+					timestamp: control.timestamp,
+					mediaSec: player.currentTime,
+					isStateUpdate: true
+				};
+				messagesToDisplay.push(message);
+			}
+		}
+		messagesToDisplay.sort((a, b) => {
+			return a.timestamp - b.timestamp;
+		});
+	}
+
 	onMount(() => {
 		updateList();
 		const ii = setInterval(() => {
@@ -248,10 +274,7 @@
 					});
 				}
 			}
-			messagesToDisplay = roomMessages.filter((message) => {
-				return (Date.now() / 1000 - message.timestamp) < 200;
-			});
-			messagesToDisplay = messagesToDisplay.slice(-10);
+			updateMessages()
 			tickedSecsAgo = (Date.now() - lastTicked) / 1000;
 		}, 1000);
 		if (name === '') {
@@ -355,11 +378,11 @@
 			class="{controlsShowing? 'shift-down':''} flex flex-col gap-0.5 ml-auto chat-history drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] items-end">
 			{#each messagesToDisplay as message}
 				<div class="flex gap-1 justify-end items-center chat-line py-1 px-2 text-center">
-					<p class="text-center text-white">{message.message}
-						[{new Date(message.timestamp * 1000).toLocaleTimeString('en-US', {
-							hour: '2-digit',
-							minute: '2-digit'
-						})}, {formatSeconds(message.mediaSec)}] {message.username}</p>
+					<p class={`text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''}`}>{message.message}
+						[{new Date(message.timestamp).toLocaleTimeString('en-US', {
+					hour: '2-digit',
+					minute: '2-digit'
+				})}{message.isStateUpdate ? '':`, ${formatSeconds(message.mediaSec)}`}] {message.username}</p>
 					<Pfp id={message.uid} />
 				</div>
 			{/each}
