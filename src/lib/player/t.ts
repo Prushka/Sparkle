@@ -10,7 +10,8 @@ export enum SyncTypes {
 	PauseSync = "pause",
 	ChatSync = "chat",
 	FullSync = "full",
-	PlayersStatusSync = "players"
+	PlayersStatusSync = "players",
+	PfpSync = "pfp"
 }
 
 export function nextTheme() {
@@ -118,4 +119,8 @@ export function randomString(length: number): string {
 	let result = ''
 	for (let i = length; i > 0; --i) result += chars[Math.floor(Math.random() * chars.length)]
 	return result
+}
+
+export function secondsSince(date: Date): number {
+	return Math.floor((new Date().getTime() - date.getTime()) / 1000)
 }

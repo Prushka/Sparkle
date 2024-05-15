@@ -17,12 +17,15 @@
 	import { goto } from '$app/navigation';
 	import {
 		IconBrightnessHalf,
-		IconPlayerPause,
-		IconPlayerPlay,
+		IconPlayerPause, IconPlayerPauseFilled,
+		IconPlayerPlay, IconPlayerPlayFilled,
 		IconPlugConnected,
 		IconPlugConnectedX
 	} from '@tabler/icons-svelte';
 	import Chatbox from '$lib/player/Chatbox.svelte';
+	import { writable } from 'svelte/store';
+	import Pfp from '$lib/player/Pfp.svelte';
+	import { pfpLastFetched } from '../../store';
 
 	let player: MediaPlayerElement;
 	let controlsShowing = false;
@@ -30,7 +33,7 @@
 	let name = localStorage.getItem('name') || '';
 	let pfp: File | null = null;
 	let pfpInput: HTMLInputElement | null = null;
-	let roomStates: Player[] = [];
+	let roomPlayers: Player[] = [];
 	let roomMessages: Chat[] = [];
 	let jobs: Job[] = [];
 	let roomId: string = '';
@@ -137,14 +140,23 @@
 		};
 
 		socket.onmessage = (event: MessageEvent) => {
-			const state : SendPayload = JSON.parse(event.data);
+			const state: SendPayload = JSON.parse(event.data);
 			if (player) {
 				switch (state.type) {
+					case SyncTypes.PfpSync:
+						console.log('received: ' + JSON.stringify(state));
+						if (state.firedBy) {
+							$pfpLastFetched = {
+								...pfpLastFetched,
+								[state.firedBy.id]: `${PUBLIC_HOST}/static/pfp/${state.firedBy.id}.png?${Date.now()}`
+							};
+						}
+						break;
 					case SyncTypes.ChatSync:
 						roomMessages = state.chats;
 						break;
 					case SyncTypes.PlayersStatusSync:
-						roomStates = state.players;
+						roomPlayers = state.players;
 						lastTicked = Date.now();
 						break;
 					case SyncTypes.PauseSync:
@@ -159,6 +171,7 @@
 						}
 						break;
 					case SyncTypes.TimeSync:
+						console.log('received: ' + JSON.stringify(state));
 						if (state['time'] !== undefined) {
 							player.currentTime! = state['time'];
 						}
@@ -350,11 +363,7 @@
 							hour: '2-digit',
 							minute: '2-digit'
 						})}, {formatSeconds(message.mediaSec)}] {message.username}</p>
-					<img src="{PUBLIC_HOST}/static/pfp/{message.uid}.png"
-							 on:error={(e) => {
-							 			e.target.src = '/icons/uwu.png';
-						 }}
-							 alt="pfp" class="avatar rounded-full object-cover" />
+					<Pfp id={message.uid} />
 				</div>
 			{/each}
 		</div>
@@ -439,14 +448,15 @@
 	</div>
 
 	<div class="flex gap-2 sync-states">
-		{#each roomStates as state}
+		{#each roomPlayers as player}
 			<button class="btn btn-sm btn-neutral">
-				{#if state.paused === false}
-					<IconPlayerPlay size={12} stroke={2} />
+				<Pfp id={player.id} />
+				{#if player.paused === false}
+					<IconPlayerPlayFilled size={12} stroke={2} />
 				{:else}
-					<IconPlayerPause size={12} stroke={2} />
+					<IconPlayerPauseFilled size={12} stroke={2} />
 				{/if}
-				{state.name}: {formatSeconds(state.time)}
+				{player.name}: {formatSeconds(player.time)}
 			</button>
 		{/each}
 		<div class="flex gap-2">
@@ -487,12 +497,6 @@
         margin-right: 2rem;
     }
 
-    .chat-history .avatar {
-        width: 1.5rem;
-        height: 1.5rem;
-    }
-
-
     @media (max-width: 1000px) {
 
         .sync-states {
@@ -511,11 +515,6 @@
             margin-top: 0.5rem;
             margin-right: 0.5rem;
             font-size: 0.64rem;
-        }
-
-        .chat-history .avatar {
-            width: 1rem;
-            height: 1rem;
         }
 
         .media-select {
