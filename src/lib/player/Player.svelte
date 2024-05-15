@@ -363,7 +363,7 @@
     volumeDown: 'ArrowDown',
     }}
 		id="the-player"
-		class="media-player-c media-player w-full aspect-video bg-slate-900 text-white font-sans overflow-hidden rounded-md ring-media-focus data-[focus]:ring-4 relative"
+		class="media-player-c media-player w-full aspect-video overflow-hidden ring-media-focus data-[focus]:ring-4 relative"
 		src={videoSrc}
 		crossorigin
 		bind:this={player}

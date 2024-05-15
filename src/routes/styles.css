@@ -20,6 +20,7 @@
 	--color-pink-light: rgba(236, 1, 139, 0.75);
 	--color-sub-pink: #ee2e63;
 	--code-bg: #fff;
+	--video-controls-color: rgba(255, 255, 255, 0.9) !important;
 	-webkit-font-smoothing: antialiased;
 }
 
@@ -133,14 +134,14 @@ input {
 	}
 
 	.chat-box > form > input::placeholder {
-		color: rgba(122, 122, 122, 0.6);
+		color: rgba(233, 233, 233, 0.55);
 		opacity: 1;
 	}
 
 	.chat-box > form > input {
 		width: 32rem;
-		background-color: rgba(255, 255, 255, 0.77) !important;
-		color: black;
+		background-color: hsla(0,0%,100%,.3) !important;
+		color: white;
 	}
 }
 
@@ -152,7 +153,7 @@ input {
 }
 
 :where(.vds-video-layout .vds-controls[data-visible]) {
-	background-image: linear-gradient(to top, rgba(0, 0, 0, 0.28) 0%, rgba(0, 0, 0, 0) 15%) !important;
+	background-image: linear-gradient(to top, rgba(0, 0, 0, 0.34) 0%, rgba(0, 0, 0, 0) 12%) !important;
 }
 
 :where([data-preview] .vds-video-layout .vds-captions) {
