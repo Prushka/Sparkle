@@ -139,6 +139,7 @@
 
 		socket.onmessage = (event: MessageEvent) => {
 			const state: SendPayload = JSON.parse(event.data);
+			let me = null;
 			if (player) {
 				switch (state.type) {
 					case SyncTypes.PfpSync:
@@ -156,6 +157,10 @@
 					case SyncTypes.PlayersStatusSync:
 						roomPlayers = state.players;
 						lastTicked = Date.now();
+						me = roomPlayers.find((player) => player.id === id);
+						if (me && me.paused !== undefined && me.paused !== player.paused) {
+							player.paused = me.paused;
+						}
 						break;
 					case SyncTypes.PauseSync:
 						console.log('received: ' + JSON.stringify(state));
@@ -383,7 +388,7 @@
 							 on:change={() => {
 							 const ppfp = pfpInput?.files;
 							 if (ppfp && ppfp[0]) {
-								 if(ppfp[0].size > 10000000) {
+								 if(ppfp[0].size > 12000000) {
 									 warning_modal.showModal();
 									 pfpInput.value = '';
 									 return;
