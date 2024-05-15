@@ -147,6 +147,7 @@ input {
 		width: 32rem;
 		background-color: hsla(0,0%,100%,.42) !important;
 		color: white;
+		font-weight: 600;
 	}
 }
 
