@@ -538,7 +538,7 @@
     }
 
     .media-select {
-        width: 30rem;
+        width: 20rem;
     }
 
     .chat-history {
