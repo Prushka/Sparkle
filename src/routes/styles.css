@@ -20,7 +20,7 @@
 	--color-pink-light: rgba(236, 1, 139, 0.75);
 	--color-sub-pink: #ee2e63;
 	--code-bg: #fff;
-	--video-controls-color: rgba(255, 255, 255, 0.9) !important;
+	--video-controls-color: rgba(255, 255, 255, 0.85) !important;
 	--media-slider-track-fill-bg: rgba(255, 255, 255, 0.85) !important;
 	-webkit-font-smoothing: antialiased;
 }
@@ -145,7 +145,7 @@ input {
 
 	.chat-box > form > input {
 		width: 32rem;
-		background-color: hsla(0,0%,100%,.4) !important;
+		background-color: hsla(0,0%,100%,.42) !important;
 		color: white;
 	}
 }
@@ -158,7 +158,7 @@ input {
 }
 
 :where(.vds-video-layout .vds-controls[data-visible]) {
-	background-image: linear-gradient(to top, rgba(0, 0, 0, 0.34) 0%, rgba(0, 0, 0, 0) 12%) !important;
+	background-image: linear-gradient(to top, rgba(0, 0, 0, 0.36) 0%, rgba(0, 0, 0, 0) 12%) !important;
 }
 
 :where([data-preview] .vds-video-layout .vds-captions) {
