@@ -134,6 +134,10 @@ input {
 		display: block;
 	}
 
+	.chat-box > form > input:focus{
+		outline: none !important;
+	}
+
 	.chat-box > form > input::placeholder {
 		color: rgba(233, 233, 233, 0.55);
 		opacity: 1;
