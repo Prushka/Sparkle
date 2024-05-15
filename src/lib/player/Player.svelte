@@ -57,12 +57,12 @@
 	onDestroy(unsubscribe);
 
 	function nextTheme() {
-		const html = document.querySelector('html')
-		const cT = localStorage.getItem("theme") || defaultTheme
-		const nextTheme = themes[(themes.indexOf(cT) + 1) % themes.length]
-		html?.setAttribute('data-theme', nextTheme)
-		localStorage.setItem('theme', nextTheme)
-		currentTheme = nextTheme
+		const html = document.querySelector('html');
+		const cT = localStorage.getItem('theme') || defaultTheme;
+		const nextTheme = themes[(themes.indexOf(cT) + 1) % themes.length];
+		html?.setAttribute('data-theme', nextTheme);
+		localStorage.setItem('theme', nextTheme);
+		currentTheme = nextTheme;
 	}
 
 	function onChange(event: any) {
@@ -166,7 +166,7 @@
 						break;
 					case SyncTypes.ChatSync:
 						roomMessages = state.chats;
-						updateMessages()
+						updateMessages();
 						break;
 					case SyncTypes.PlayersStatusSync:
 						roomPlayers = state.players;
@@ -181,7 +181,7 @@
 						}
 						if (state['firedBy'] !== undefined) {
 							controlsToDisplay.push(state);
-							updateMessages()
+							updateMessages();
 						}
 						break;
 					case SyncTypes.TimeSync:
@@ -191,7 +191,7 @@
 						}
 						if (state['firedBy'] !== undefined) {
 							controlsToDisplay.push(state);
-							updateMessages()
+							updateMessages();
 						}
 						break;
 				}
@@ -234,7 +234,7 @@
 
 	function updateMessages() {
 		messagesToDisplay = roomMessages.filter((message) => {
-			return (Date.now() - message.timestamp) < 200000;
+			return (Date.now() - message.timestamp) < 220000;
 		});
 		messagesToDisplay = messagesToDisplay.slice(-10);
 		for (const control of controlsToDisplay) {
@@ -288,7 +288,7 @@
 					});
 				}
 			}
-			updateMessages()
+			updateMessages();
 			tickedSecsAgo = (Date.now() - lastTicked) / 1000;
 		}, 1000);
 		if (name === '') {
@@ -388,17 +388,18 @@
 	</media-player>
 
 	<div class="flex gap-1 w-full h-full absolute pointer-events-none" id="chat-overlay"
-	style={chatHidden ? 'display: none' : ''}
+			 style={chatHidden ? 'display: none' : ''}
 	>
 		<div
 			class="{controlsShowing? 'shift-down':''} flex flex-col gap-0.5 ml-auto chat-history drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] items-end">
 			{#each messagesToDisplay as message}
-				<div class="flex gap-1 justify-end items-center chat-line py-1 px-2 text-center">
-					<p class={`text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''}`}>{message.message}
-						[{new Date(message.timestamp).toLocaleTimeString('en-US', {
-					hour: '2-digit',
-					minute: '2-digit'
-				})}{message.isStateUpdate ? '':`, ${formatSeconds(message.mediaSec)}`}] {message.username}</p>
+				<div class="flex gap-1 justify-end items-center chat-line py-1 px-2 text-center leading-6">
+					<p class={`text-lg text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''}`}>{message.message}
+						<span
+							class={`text-sm text-gray-100`}>[{message.isStateUpdate ? '' : `${formatSeconds(message.mediaSec)}, `}{new Date(message.timestamp).toLocaleTimeString('en-US', {
+							hour: '2-digit',
+							minute: '2-digit'
+						})}]</span> {message.username}</p>
 					<Pfp id={message.uid} />
 				</div>
 			{/each}
@@ -476,13 +477,13 @@
 
 		<div class="flex gap-2 self-center">
 			<div class="tooltip tooltip-left" data-tip="Video Codec">
-			<div class="join">
-				{#each codecs as codec}
-					<input class="join-item btn" type="radio" name="options"
-								 checked={codec === selectedCodec} aria-label={codec}
-								 on:change={onChange} value={codec} />
-				{/each}
-			</div>
+				<div class="join">
+					{#each codecs as codec}
+						<input class="join-item btn" type="radio" name="options"
+									 checked={codec === selectedCodec} aria-label={codec}
+									 on:change={onChange} value={codec} />
+					{/each}
+				</div>
 			</div>
 			<div class="tooltip tooltip-left" data-tip="Ticked: {tickedSecsAgo}s ago">
 				<button
@@ -515,16 +516,20 @@
 
 	</div>
 
-	<div class="flex gap-2 sync-states">
+	<div class="flex gap-4 sync-states">
 		{#each roomPlayers as player}
-			<button class="btn btn-sm btn-neutral">
-				<Pfp id={player.id} />
+			<button
+				class="btn btn-neutral border-none h-auto min-h-full pr-4 py-0 pl-0 rounded-l-full rounded-r-full shadow-sm flex gap-3.5">
+				<Pfp class="w-12 h-12 mr-0.5" id={player.id} />
+				<div class="flex gap-1 flex-col items-center justify-center">
+					<p class="font-semibold">{player.name}</p>
+					{formatSeconds(player.time)}
+				</div>
 				{#if player.paused === false}
-					<IconPlayerPlayFilled size={12} stroke={2} />
+					<IconPlayerPlayFilled size={18} stroke={2} />
 				{:else}
-					<IconPlayerPauseFilled size={12} stroke={2} />
+					<IconPlayerPauseFilled size={18} stroke={2} />
 				{/if}
-				{player.name}: {formatSeconds(player.time)}
 			</button>
 		{/each}
 	</div>
@@ -549,10 +554,10 @@
 
     @media (max-width: 1000px) {
 
-				.sync-states {
+        .sync-states {
             display: grid;
             grid-template-columns: auto auto;
-				}
+        }
 
         .name-input {
             flex-grow: 1;

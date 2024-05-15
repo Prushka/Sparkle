@@ -11,23 +11,17 @@
 	onMount(() => {
 		pageLoaded = Date.now();
 	});
-
 </script>
 
 
-<img src={(pfpLast[id] === undefined) ? `${PUBLIC_HOST}/static/pfp/${id}.png?${pageLoaded}` : pfpLast[id]}
+<img
+	src={(pfpLast[id] === undefined) ? `${PUBLIC_HOST}/static/pfp/${id}.png?${pageLoaded}` : pfpLast[id]}
 		 on:error={() => {
 			 $pfpLastFetched = { ...pfpLast, [id]: '/icons/uwu.png' }
 						 }}
-		 alt="pfp" class="avatar rounded-full object-cover" />
+		 alt="pfp" class="rounded-full object-cover {$$restProps.class}" />
 
 <style>
-
-    .avatar {
-        width: 1.5rem;
-        height: 1.5rem;
-    }
-
     @media (max-width: 1000px) {
         .avatar {
             width: 1rem;
