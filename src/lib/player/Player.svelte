@@ -99,6 +99,7 @@
 			codecs.sort((a, b) => {
 				return codecsPriority.indexOf(a) - codecsPriority.indexOf(b);
 			});
+			player.controlsDelay = 1600;
 		}
 		console.debug('textTracks: ' + JSON.stringify(player.textTracks));
 		$page.url.searchParams.set('id', roomId);
