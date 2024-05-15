@@ -141,7 +141,7 @@ input {
 
 	.chat-box > form > input {
 		width: 32rem;
-		background-color: hsla(0,0%,100%,.38) !important;
+		background-color: hsla(0,0%,100%,.4) !important;
 		color: white;
 	}
 }
