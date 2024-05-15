@@ -7,10 +7,10 @@
 		codecsPriority,
 		formatSeconds,
 		type Job,
-		type Message,
+		type Chat,
 		nextTheme,
-		type PlayerState,
-		randomString
+		type Player,
+		randomString, SyncTypes, type SendPayload
 	} from './t';
 	import { PUBLIC_HOST, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -30,15 +30,15 @@
 	let name = localStorage.getItem('name') || '';
 	let pfp: File | null = null;
 	let pfpInput: HTMLInputElement | null = null;
-	let roomStates: PlayerState[] = [];
-	let roomMessages: Message[] = [];
+	let roomStates: Player[] = [];
+	let roomMessages: Chat[] = [];
 	let jobs: Job[] = [];
 	let roomId: string = '';
 	let lastTicked = 0;
 	let tickedSecsAgo = 0;
 	let socketConnected = false;
-	let messagesToDisplay: Message[] = [];
-	let controlsToDisplay: string[] = [];
+	let messagesToDisplay: Chat[] = [];
+	let controlsToDisplay: SendPayload[] = [];
 	let id: string | null = localStorage.getItem('id') || null;
 	let title = '';
 	let codecs: string[] = [];
@@ -131,40 +131,41 @@
 			console.log(`Connected to ${roomId}`);
 			socketConnected = true;
 			if (name !== '') {
-				send({ name: name });
+				send({ name: name, type: SyncTypes.NameSync });
 			}
-			send({ reason: 'new player' });
+			send({ type: SyncTypes.NewPlayer });
 		};
 
 		socket.onmessage = (event: MessageEvent) => {
-			const state = JSON.parse(event.data);
+			const state : SendPayload = JSON.parse(event.data);
 			if (player) {
-				if (Array.isArray(state)) {
-					console.debug('received: ' + event.data);
-					if (state.length > 0) {
-						if (state[0].message) {
-							roomMessages = state;
-							console.log('received messages: ' + JSON.stringify(roomMessages));
-						} else {
-							roomStates = state;
-							lastTicked = Date.now();
+				switch (state.type) {
+					case SyncTypes.ChatSync:
+						roomMessages = state.chats;
+						break;
+					case SyncTypes.PlayersStatusSync:
+						roomStates = state.players;
+						lastTicked = Date.now();
+						break;
+					case SyncTypes.PauseSync:
+						console.log('received: ' + JSON.stringify(state));
+						if (state.paused === true && player.paused === false) {
+							player.pause();
+						} else if (state.paused === false && player.paused === true) {
+							player.play();
 						}
-					} else {
-						roomMessages = [];
-					}
-				} else {
-					console.log('received: ' + event.data);
-					const reason = state['reason'];
-					if (!reason.includes("new")){
-						controlsToDisplay.push(reason);
-					}
-					if (state['paused'] === true && player.paused === false) {
-						player.pause();
-					} else if (state['paused'] === false && player.paused === true) {
-						player.play();
-					} else if (state['time'] !== undefined) {
-						player.currentTime! = state['time'];
-					}
+						if (state['firedBy'] !== undefined) {
+							controlsToDisplay.push(state);
+						}
+						break;
+					case SyncTypes.TimeSync:
+						if (state['time'] !== undefined) {
+							player.currentTime! = state['time'];
+						}
+						if (state['firedBy'] !== undefined) {
+							controlsToDisplay.push(state);
+						}
+						break;
 				}
 			}
 		};
@@ -211,6 +212,7 @@
 		}, 60000);
 		const i = setInterval(() => {
 			send({
+				type: SyncTypes.TimeSync,
 				time: player?.currentTime
 			});
 			if (!document.getElementById('chat-input')) {
@@ -285,6 +287,7 @@
 				<input
 					on:focusout={() => {
 					send({
+					  type: SyncTypes.NameSync,
 						name: name
 					})
 				localStorage.setItem("name", name)
@@ -321,12 +324,12 @@
 		playsInline
 		on:pause={
 			() => {
-				send({ paused: true });
+				send({ paused: true, type: SyncTypes.PauseSync });
 			}}
 		on:play={
 			() => {
 				if(interactedWithPlayer) {
-					send({ paused: false });
+					send({ paused: false, type: SyncTypes.PauseSync });
 				}else{
 					interactedWithPlayer = true;
 					connect();
@@ -404,6 +407,7 @@
 				<input
 					on:focusout={() => {
 					send({
+					  type: SyncTypes.NameSync,
 						name: name
 					})
 				localStorage.setItem("name", name)

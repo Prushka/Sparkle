@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { SyncTypes } from '$lib/player/t';
+
 	let i: any;
 	export let send: any;
 	export let classes = '';
@@ -11,7 +13,7 @@
 		e.preventDefault();
 						const message = i.value;
 						i.value = '';
-						send({ chat: message });
+						send({ chat: message, type: SyncTypes.ChatSync });
 						i.placeholder = 'Sent!';
 						setTimeout(() => {
 							i.placeholder = 'Chat';

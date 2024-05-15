@@ -2,6 +2,17 @@ export const themes = ["autumn", "dark", "lofi"]
 export const defaultTheme = "autumn"
 
 export const codecsPriority = ["av1", "hevc"]
+
+export enum SyncTypes {
+	NewPlayer = "new player",
+	NameSync = "name",
+	TimeSync = "time",
+	PauseSync = "pause",
+	ChatSync = "chat",
+	FullSync = "full",
+	PlayersStatusSync = "players"
+}
+
 export function nextTheme() {
 	const html = document.querySelector('html')
 	const currentTheme = localStorage.getItem("theme") || defaultTheme
@@ -11,13 +22,31 @@ export function nextTheme() {
 	localStorage.setItem('theme', nextTheme)
 }
 
-export type PlayerState = {
+export interface PlayerPayload {
+	type: string;
+	time: number;
+	name: string;
+	paused: boolean;
+	chat: string;
+}
+
+export interface SendPayload {
+	type: string;
+	time?: number;
+	paused: boolean;
+	firedBy?: Player;
+	chats: Chat[];
+	players: Player[];
+}
+
+export type Player = {
 	paused?: boolean;
 	time?: number;
 	name: string;
+	id: string;
 }
 
-export type Message = {
+export type Chat = {
 	username: string;
 	message: string;
 	timestamp: number;
