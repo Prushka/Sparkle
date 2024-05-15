@@ -7,9 +7,8 @@
 		formatSeconds,
 		type Job,
 		type Chat,
-		nextTheme,
 		type Player,
-		randomString, SyncTypes, type SendPayload
+		randomString, SyncTypes, type SendPayload, defaultTheme, themes
 	} from './t';
 	import { PUBLIC_HOST, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -49,8 +48,18 @@
 	let pausedBeforeCodecChange = false;
 	let timeBeforeCodecChange = 0;
 	let interactedWithPlayer = false;
+	let currentTheme = localStorage.getItem('theme') || defaultTheme;
 	$: videoSrc = `${PUBLIC_HOST}/static/` + roomId + '/' + selectedCodec + '.' + videoExt;
 	$: thumbnailVttSrc = `${PUBLIC_HOST}/static/` + roomId + `/storyboard.vtt`;
+
+	function nextTheme() {
+		const html = document.querySelector('html')
+		const cT = localStorage.getItem("theme") || defaultTheme
+		const nextTheme = themes[(themes.indexOf(cT) + 1) % themes.length]
+		html?.setAttribute('data-theme', nextTheme)
+		localStorage.setItem('theme', nextTheme)
+		currentTheme = nextTheme
+	}
 
 	function onChange(event: any) {
 		pauseSend = true;
@@ -479,7 +488,7 @@
 					{/if}
 				</button>
 			</div>
-			<div class="tooltip tooltip-left" data-tip="Theme">
+			<div class="tooltip tooltip-left" data-tip={`Theme: ${currentTheme}`}>
 				<button id="theme-button" on:click={nextTheme} class="btn font-bold">
 					<IconBrightnessHalf size={24} stroke={2} />
 				</button>

@@ -1,26 +1,17 @@
-export const themes = ["autumn", "dark", "lofi"]
-export const defaultTheme = "autumn"
+export const themes = ['emerald', 'nord', 'dark', 'halloween'];
+export const defaultTheme = themes[0];
 
-export const codecsPriority = ["av1", "hevc"]
+export const codecsPriority = ['av1', 'hevc'];
 
 export enum SyncTypes {
-	NewPlayer = "new player",
-	NameSync = "name",
-	TimeSync = "time",
-	PauseSync = "pause",
-	ChatSync = "chat",
-	FullSync = "full",
-	PlayersStatusSync = "players",
-	PfpSync = "pfp"
-}
-
-export function nextTheme() {
-	const html = document.querySelector('html')
-	const currentTheme = localStorage.getItem("theme") || defaultTheme
-	const nextTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length]
-	console.log('nextTheme', nextTheme)
-	html?.setAttribute('data-theme', nextTheme)
-	localStorage.setItem('theme', nextTheme)
+	NewPlayer = 'new player',
+	NameSync = 'name',
+	TimeSync = 'time',
+	PauseSync = 'pause',
+	ChatSync = 'chat',
+	FullSync = 'full',
+	PlayersStatusSync = 'players',
+	PfpSync = 'pfp'
 }
 
 export interface PlayerPayload {
@@ -106,23 +97,23 @@ export type Job = {
 
 export function formatSeconds(seconds: number | undefined): string {
 	if (seconds === undefined) {
-		return '00:00'
+		return '00:00';
 	}
 	// convert seconds to minutes and seconds
-	const minutes = Math.floor(seconds / 60)
-	const remainingSeconds = Math.floor(seconds % 60)
+	const minutes = Math.floor(seconds / 60);
+	const remainingSeconds = Math.floor(seconds % 60);
 	// add leading zero if seconds < 10
-	const secondsStr = remainingSeconds < 10 ? `0${remainingSeconds}` : remainingSeconds
-	return `${minutes}:${secondsStr}`
+	const secondsStr = remainingSeconds < 10 ? `0${remainingSeconds}` : remainingSeconds;
+	return `${minutes}:${secondsStr}`;
 }
 
 export function randomString(length: number): string {
-	const chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
-	let result = ''
-	for (let i = length; i > 0; --i) result += chars[Math.floor(Math.random() * chars.length)]
-	return result
+	const chars = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+	let result = '';
+	for (let i = length; i > 0; --i) result += chars[Math.floor(Math.random() * chars.length)];
+	return result;
 }
 
 export function secondsSince(date: Date): number {
-	return Math.floor((new Date().getTime() - date.getTime()) / 1000)
+	return Math.floor((new Date().getTime() - date.getTime()) / 1000);
 }
