@@ -1,4 +1,4 @@
-export const themes = ['emerald', 'nord', 'dark', 'halloween'];
+export const themes = ['nord', 'emerald', 'dark', 'halloween'];
 export const defaultTheme = themes[0];
 
 export const codecsPriority = ['av1', 'hevc'];
