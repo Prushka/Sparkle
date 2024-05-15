@@ -393,13 +393,13 @@
 		<div
 			class="{controlsShowing? 'shift-down':''} flex flex-col gap-0.5 ml-auto chat-history drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] items-end">
 			{#each messagesToDisplay as message}
-				<div class="flex gap-1 justify-end items-center chat-line py-1 px-2 text-center leading-6">
-					<p class={`text-lg text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''}`}>{message.message}
-						<span
-							class={`text-sm text-gray-100`}>[{message.isStateUpdate ? '' : `${formatSeconds(message.mediaSec)}, `}{new Date(message.timestamp).toLocaleTimeString('en-US', {
-							hour: '2-digit',
-							minute: '2-digit'
-						})}]</span> {message.username}</p>
+				<div class={`flex gap-1 justify-center items-center chat-line py-1 pl-3 pr-2 text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''}`}>
+					<p>{message.message}</p>
+						<p class="text-sm">[{message.isStateUpdate ? '' : `${formatSeconds(message.mediaSec)}, `}{new Date(message.timestamp).toLocaleTimeString('en-US', {
+					hour: '2-digit',
+					minute: '2-digit'
+				})}]</p>
+						 <p>{message.username}</p>
 					<Pfp id={message.uid} class="avatar" />
 				</div>
 			{/each}
@@ -550,6 +550,12 @@
         margin-right: 2rem;
     }
 
+    .chat-line{
+        width: fit-content;
+        border-radius: 0.5rem;
+        background-color: rgba(0,0,0,0.2);
+    }
+
     @media (max-width: 1000px) {
 
         .sync-states {
@@ -570,6 +576,11 @@
             margin-right: 0.5rem;
             font-size: 0.64rem;
         }
+
+        .chat-history .text-sm {
+						line-height: unset;
+            font-size: 0.64rem;
+				}
 
         .media-select {
             width: 100%;

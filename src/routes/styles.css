@@ -76,6 +76,7 @@ button, div, a, pre, code, .code-wrapper, .copy-button {
 input[type="file"] {
 	display: none;
 }
+
 .custom-file-upload {
 	display: flex;
 	cursor: pointer;
@@ -84,12 +85,6 @@ input[type="file"] {
 	align-items: center;
 	background-color: white;
 	align-self: center;
-}
-
-.chat-line{
-	width: fit-content;
-	border-radius: 0.5rem;
-	background-color: rgba(0,0,0,0.2);
 }
 
 .profile-input-container {
