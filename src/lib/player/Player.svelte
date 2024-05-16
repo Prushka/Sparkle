@@ -153,6 +153,12 @@
 
 		socket.onmessage = (event: MessageEvent) => {
 			const state: SendPayload = JSON.parse(event.data);
+			const persistControlState = (state: any) => {
+				if (state.firedBy !== undefined) {
+					controlsToDisplay.push(state);
+					updateMessages();
+				}
+			}
 			if (player) {
 				switch (state.type) {
 					case SyncTypes.PfpSync:
@@ -176,22 +182,17 @@
 						console.log('received: ' + JSON.stringify(state));
 						if (state.paused === true && player.paused === false) {
 							player.pause();
+							persistControlState(state)
 						} else if (state.paused === false && player.paused === true) {
 							player.play();
-						}
-						if (state['firedBy'] !== undefined) {
-							controlsToDisplay.push(state);
-							updateMessages();
+							persistControlState(state)
 						}
 						break;
 					case SyncTypes.TimeSync:
 						console.log('received: ' + JSON.stringify(state));
-						if (state['time'] !== undefined) {
-							player.currentTime! = state['time'];
-						}
-						if (state['firedBy'] !== undefined) {
-							controlsToDisplay.push(state);
-							updateMessages();
+						if (state.time !== undefined && Math.abs(player.currentTime - state.time) > 3) {
+							player.currentTime! = state.time;
+							persistControlState(state);
 						}
 						break;
 				}
