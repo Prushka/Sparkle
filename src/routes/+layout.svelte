@@ -3,7 +3,6 @@
 	import { afterNavigate } from '$app/navigation';
 	import { defaultTheme } from '$lib/player/t';
 	import './styles.css';
-
 	afterNavigate(() => {
 		console.log('navigated');
 		const theme = localStorage.getItem('theme');
@@ -13,5 +12,6 @@
 		}
 	});
 </script>
+
 
 <slot/>

@@ -8,7 +8,7 @@
 		type Job,
 		type Chat,
 		type Player,
-		SyncTypes, type SendPayload, defaultTheme, themes, setGetPlayerId, getMbps, formatMbps
+		SyncTypes, type SendPayload, defaultTheme, themes, setGetPlayerId, formatMbps
 	} from './t';
 	import { PUBLIC_HOST, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -23,7 +23,6 @@
 	import Chatbox from '$lib/player/Chatbox.svelte';
 	import Pfp from '$lib/player/Pfp.svelte';
 	import { chatFocusedStore, chatHiddenStore, pfpLastFetched } from '../../store';
-
 	let controlsShowing = false;
 	let player: MediaPlayerElement;
 	let socket: WebSocket;
@@ -328,15 +327,20 @@
 			lastSentTime = timeRounded;
 		}
 	}
-
-
 </script>
 
-<svelte:head>
-	<title>{job?.FileRawName}</title>
-</svelte:head>
-
 <main id="main-page" class="overflow-hidden flex flex-col items-center w-full h-full">
+	<dialog id="warning_modal" class="modal">
+		<div class="modal-box">
+			<h3 class="font-bold text-lg">Image is too large</h3>
+			<p class="py-4">Size limit: 10 MB</p>
+			<div class="modal-action">
+				<form method="dialog">
+					<button class="btn">Close</button>
+				</form>
+			</div>
+		</div>
+	</dialog>
 	<dialog id="name_modal" class="modal">
 		<div class="modal-box">
 			<h3 class="font-bold text-lg">Name is required for syncing</h3>

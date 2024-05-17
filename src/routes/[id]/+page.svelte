@@ -2,21 +2,18 @@
 	import { onMount } from 'svelte';
 
 	let vidstack: any;
+
+	export let data : any;
+
 	onMount(async () => {
 		vidstack = (await import('$lib/player/Player.svelte')).default;
 	});
 </script>
 
-
+<svelte:head>
+	<title>{data.title}</title>
+	<meta property="og:title" content={data.title}>
+	<meta property="og:image" content={data.preview}>
+	<meta property="og:image:type" content="image/jpeg">
+</svelte:head>
 <svelte:component this={vidstack} />
-<dialog id="warning_modal" class="modal">
-	<div class="modal-box">
-		<h3 class="font-bold text-lg">Image is too large</h3>
-		<p class="py-4">Size limit: 10 MB</p>
-		<div class="modal-action">
-			<form method="dialog">
-				<button class="btn">Close</button>
-			</form>
-		</div>
-	</div>
-</dialog>
