@@ -268,6 +268,7 @@
 	function reloadPlayer() {
 		if (job) {
 			player.textTracks.clear()
+			player.remoteControl.disableCaptions();
 			if (job.Subtitles) {
 				for (const [, sub] of Object.entries(job.Subtitles)) {
 					const enc = sub.Enc;
