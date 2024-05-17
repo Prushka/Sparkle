@@ -54,12 +54,6 @@
 	let selectedCodec = localStorage.getItem('sCodec') || 'auto';
 	let pauseSend = false;
 	let supportedCodecs: string[] = [];
-	let stateBeforeCodecChange = {
-		paused: false,
-		time: 0,
-		volume: 1,
-		muted: false
-	};
 	let interactedWithPlayer = false;
 	let currentTheme = localStorage.getItem('theme') || defaultTheme;
 	let chatHidden = false;
@@ -294,19 +288,8 @@
 				send({ state: 'fg', type: SyncTypes.StateSync });
 			}
 		});
-		const playerUnsubscribe = player.subscribe(({ controlsVisible, canPlay, canLoad }) => {
+		const playerUnsubscribe = player.subscribe(({ controlsVisible }) => {
 			controlsShowing = controlsVisible;
-			if (canLoad && canPlay && pauseSend) {
-				// video loaded, send was paused bcz of codec change
-				player.currentTime = stateBeforeCodecChange.time;
-				if (!stateBeforeCodecChange.paused) {
-					player.play();
-				}
-				player.volume = stateBeforeCodecChange.volume;
-				player.muted = stateBeforeCodecChange.muted;
-				reloadPlayer();
-				pauseSend = false;
-			}
 		});
 		const i = setInterval(() => {
 			updateTime();
