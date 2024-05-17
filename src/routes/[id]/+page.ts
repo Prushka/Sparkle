@@ -31,8 +31,9 @@ export async function load({ params }) {
 		season = parseInt($('season').text());
 		rating = parseFloat($('rating').text());
 		plot = $('plot').text();
+		const movieTagExists = $('movie').length > 0;
 		const nfoTitle = $('title').text()
-		if (nfoTitle.length > 0) {
+		if (movieTagExists && nfoTitle.length > 0) {
 			title = nfoTitle;
 		}
 	} catch (e) {
