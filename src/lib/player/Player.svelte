@@ -559,7 +559,7 @@
 		<div class="flex gap-4 sync-states w-full justify-center">
 			{#each roomPlayers as player}
 				<button
-					class="btn btn-neutral border-none h-auto pr-4 py-0 pl-0 rounded-l-full rounded-r-full shadow-md flex gap-3.5 min-w-40">
+					class="btn btn-neutral border-none h-auto pr-4 py-0 pl-0 rounded-l-full rounded-r-full shadow-md flex gap-3.5">
 					<Pfp class="w-12 h-12 mr-0.5" id={player.id} />
 					<span class="flex gap-1 flex-col items-center justify-center font-semibold">
 						<span class="font-bold">{player.name}</span>
