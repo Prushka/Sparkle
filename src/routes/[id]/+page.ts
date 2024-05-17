@@ -45,7 +45,7 @@ export async function load({ params }) {
 		if (title.includes(seasonEpisode)) {
 			title = title.substring(0, title.indexOf(seasonEpisode))
 			title = title.substring(0, title.length - 3)
-			title = `${title} - Season ${season} - Episode ${episode} ${nfoTitle ? `(${nfoTitle})` : ''}`
+			title = `${title}${nfoTitle ? ` - ${nfoTitle}` : ''} - Season ${season} - Episode ${episode}`
 		}
 	}
 	return {
