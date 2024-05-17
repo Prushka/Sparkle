@@ -136,13 +136,13 @@
 	function onCodecChange(selected: string) {
 		selectedCodec = selected;
 		localStorage.setItem('sCodec', selectedCodec);
-		setVideoSrc();
+		window.location.reload()
 	}
 
 	$:{
 		if (selectedCodec !== "auto" && job?.EncodedCodecs && job?.EncodedCodecs.length > 0 && !job?.EncodedCodecs.includes(selectedCodec)) {
 			console.log('setting codec - no matching codec', selectedCodec, job?.EncodedCodecs);
-			selectedCodec = 'auto';
+			onCodecChange("auto");
 		}
 	}
 
