@@ -21,6 +21,7 @@
 	import { PUBLIC_HOST, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
 	import {
+		IconAlertOctagonFilled,
 		IconAt, IconAtOff,
 		IconBrightnessHalf, IconEye, IconEyeOff,
 		IconPlayerPauseFilled,
@@ -542,7 +543,12 @@
 						{#each job?.EncodedCodecs as codec}
 							<li><a tabindex="0" role="button" on:click={()=>{
 							onCodecChange(codec)
-							}}>{codec}{formatMbps(job, codec)}</a></li>
+							}}>
+								{codec}{formatMbps(job, codec)}
+								{#if !supportedCodecs.includes(codec)}
+									<IconAlertOctagonFilled size={16} stroke={2} />
+								{/if}
+							</a></li>
 						{/each}
 					{/if}
 				</ul>
