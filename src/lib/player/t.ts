@@ -11,6 +11,21 @@ export const codecMap: {[key: string]: string} = {
 	'h264': 'avc1.42E01E'
 }
 
+export function getSupportedCodecs() {
+	const supported = []
+	for (const codec of supportedCodecs) {
+		const obj = document.createElement("video");
+		const toTest = `video/mp4; codecs="${codecMap[codec]}"`
+		const canPlayType = obj.canPlayType(toTest)
+		const isSupported = MediaSource.isTypeSupported(toTest);
+		console.log(codecMap[codec], canPlayType, isSupported);
+		if (canPlayType !== "" && isSupported) {
+			supported.push(codec);
+		}
+	}
+	return supported;
+}
+
 export enum SyncTypes {
 	NewPlayer = 'new player',
 	NameSync = 'name',

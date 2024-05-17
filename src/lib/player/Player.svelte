@@ -7,7 +7,16 @@
 		type Job,
 		type Chat,
 		type Player,
-		SyncTypes, type SendPayload, defaultTheme, themes, setGetPlayerId, formatMbps, languageMap, languageSrcMap, codecMap
+		SyncTypes,
+		type SendPayload,
+		defaultTheme,
+		themes,
+		setGetPlayerId,
+		formatMbps,
+		languageMap,
+		languageSrcMap,
+		codecMap,
+		getSupportedCodecs
 	} from './t';
 	import { PUBLIC_HOST, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -43,6 +52,7 @@
 	let controlsToDisplay: SendPayload[] = [];
 	let selectedCodec = localStorage.getItem('sCodec') || 'auto';
 	let pauseSend = false;
+	let supportedCodecs: string[] = [];
 	let stateBeforeCodecChange = {
 		paused: false,
 		time: 0,
@@ -60,7 +70,6 @@
 	const unsubscribeMetadata = metadataStore.subscribe((value) => {
 		metadata = value;
 		job = metadata.job;
-		setVideoSrc();
 	});
 	const unsubscribeChatHidden = chatHiddenStore.subscribe((value) => chatHidden = value);
 	const unsubscribeChatFocused = chatFocusedStore.subscribe((value) => chatFocused = value);
@@ -80,18 +89,6 @@
 
 	function setVideoSrc() {
 		if(job){
-			let autoCodec = ""
-			for (const codec of job.EncodedCodecs) {
-				let obj = document.createElement("video");
-				const toTest = `video/mp4; codecs="${codecMap[codec]}"`
-				const canPlayType = obj.canPlayType(toTest)
-				const isSupported = MediaSource.isTypeSupported(toTest);
-				console.log(codecMap[codec], canPlayType, isSupported);
-				if (canPlayType !== "" && isSupported) {
-					autoCodec = codec;
-					break;
-				}
-			}
 			const prevCodec = videoSrc?.sCodec
 			const change = () => {
 				pauseSend = true;
@@ -104,6 +101,7 @@
 					};
 				}
 			}
+			const autoCodec = supportedCodecs.length > 0 ? supportedCodecs[0] : job?.EncodedCodecs[0];
 			if(selectedCodec === "auto" && prevCodec !== autoCodec) {
 				videoSrc = {
 					src: `${PUBLIC_HOST}/static/${roomId}/${autoCodec}.mp4`,
@@ -293,6 +291,8 @@
 
 	onMount(() => {
 		updateList();
+		supportedCodecs = getSupportedCodecs();
+		setVideoSrc()
 		reloadPlayer();
 		const ii = setInterval(() => {
 			updateList();
@@ -541,16 +541,16 @@
 			</select>
 			<div class="dropdown dropdown-end" id="codec-dropdown">
 				<div
-					tabindex="0" role="button" class="btn m-1">{selectedCodec} {videoSrc?.sCodec ? `(${videoSrc.sCodec})`: ''}</div>
-				<ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
-					<li><button on:click={()=>{
+					tabindex="0" role="button" class="btn m-1 w-28">{selectedCodec} {(videoSrc?.sCodec && selectedCodec === "auto") ? `(${videoSrc.sCodec})`: ''}</div>
+				<ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-48">
+					<li><div tabindex="0" role="button" on:click={()=>{
 						onCodecChange("auto")
-					}}>Auto</button></li>
+					}}>Auto</div></li>
 					{#if job?.EncodedCodecs}
 						{#each job?.EncodedCodecs as codec}
-							<li><button on:click={()=>{
+							<li><div tabindex="0" role="button" on:click={()=>{
 							onCodecChange(codec)
-							}}>{codec}{formatMbps(job, codec)}</button></li>
+							}}>{codec}{formatMbps(job, codec)}</div></li>
 						{/each}
 					{/if}
 				</ul>
