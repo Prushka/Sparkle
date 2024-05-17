@@ -117,7 +117,8 @@
 				videoSrc = {
 					src: `${PUBLIC_HOST}/static/${roomId}/${selectedCodec}.mp4`,
 					type: 'video/mp4',
-					codec: codecMap[selectedCodec]
+					codec: codecMap[selectedCodec],
+					sCodec: selectedCodec
 				};
 				console.log("selected codec", selectedCodec, codecMap[selectedCodec])
 				change()
