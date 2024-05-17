@@ -41,12 +41,13 @@
 	let socketConnected = false;
 	let messagesToDisplay: Chat[] = [];
 	let controlsToDisplay: SendPayload[] = [];
-	let selectedCodec = localStorage.getItem('codec') || '';
+	let selectedCodec = localStorage.getItem('codec') || 'auto';
 	let pauseSend = false;
 	let stateBeforeCodecChange = {
 		paused: false,
 		time: 0,
-		volume: 1
+		volume: 1,
+		muted: false
 	};
 	let interactedWithPlayer = false;
 	let currentTheme = localStorage.getItem('theme') || defaultTheme;
@@ -80,7 +81,7 @@
 	function setVideoSrc() {
 		const lst = [];
 		if(job){
-			if(selectedCodec === "") {
+			if(selectedCodec === "auto") {
 				for (const codec of job.EncodedCodecs) {
 					lst.push({
 						src: `${PUBLIC_HOST}/static/${roomId}/${codec}.mp4`,
@@ -88,6 +89,7 @@
 						codec: codecMap[codec]
 					});
 				}
+				lst.reverse()
 				videoSrc = lst;
 			}else{
 				videoSrc = [{
@@ -114,10 +116,13 @@
 			stateBeforeCodecChange = {
 				paused: player.paused,
 				time: player.currentTime,
-				volume: player.volume
+				volume: player.volume,
+				muted: player.muted
 			};
 		}
 		selectedCodec = event.currentTarget.value;
+		localStorage.setItem('codec', selectedCodec);
+		setVideoSrc();
 	}
 
 	$:{
@@ -125,18 +130,10 @@
 	}
 
 	$:{
-		const lsCodec = localStorage.getItem('codec') || '';
-		if (job?.EncodedCodecs && job?.EncodedCodecs.length > 0 && !job?.EncodedCodecs.includes(lsCodec)) {
-			console.log('setting codec - no matching codec', lsCodec, job?.EncodedCodecs);
-			selectedCodec = '';
+		if (selectedCodec !== "auto" && job?.EncodedCodecs && job?.EncodedCodecs.length > 0 && !job?.EncodedCodecs.includes(selectedCodec)) {
+			console.log('setting codec - no matching codec', selectedCodec, job?.EncodedCodecs);
+			selectedCodec = 'auto';
 		}
-	}
-
-	$:{
-			localStorage.setItem('codec', selectedCodec);
-			if (selectedCodec === "") {
-				setVideoSrc();
-			}
 	}
 
 	function connect() {
@@ -302,6 +299,7 @@
 					player.play();
 				}
 				player.volume = stateBeforeCodecChange.volume;
+				player.muted = stateBeforeCodecChange.muted;
 				player.remoteControl.showCaptions();
 				pauseSend = false;
 			}
@@ -529,6 +527,12 @@
 			</select>
 			<div class="join">
 				{#if job?.EncodedCodecs}
+					<div class="tooltip tooltip-left" data-tip="Video Codec - Auto Select">
+						<input class="join-item btn" type="radio" name="options"
+									 checked={"auto" === selectedCodec}
+									 aria-label="Auto"
+									 on:change={onCodecChange} value="auto" />
+					</div>
 					{#each job?.EncodedCodecs as codec}
 						<div class="tooltip tooltip-left" data-tip="Video Codec - {codec}{formatMbps(job, codec)}">
 							<input class="join-item btn" type="radio" name="options"
