@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { metadataStore } from '../../store';
 
 	let vidstack: any;
 
 	export let data : any;
 
 	onMount(async () => {
+		$metadataStore = data;
 		vidstack = (await import('$lib/player/Player.svelte')).default;
 	});
 

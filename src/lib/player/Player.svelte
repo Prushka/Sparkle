@@ -22,7 +22,7 @@
 	} from '@tabler/icons-svelte';
 	import Chatbox from '$lib/player/Chatbox.svelte';
 	import Pfp from '$lib/player/Pfp.svelte';
-	import { chatFocusedStore, chatHiddenStore, pfpLastFetched } from '../../store';
+	import { chatFocusedStore, chatHiddenStore, metadataStore, pfpLastFetched } from '../../store';
 	let controlsShowing = false;
 	let player: MediaPlayerElement;
 	let socket: WebSocket;
@@ -51,15 +51,22 @@
 	let lastSentTime = -100;
 	let chatFocused = false;
 	let chatPfpHidden: boolean = localStorage.getItem('chatPfpHidden') ? localStorage.getItem('chatPfpHidden') === 'true' : true;
+	let metadata: any;
+	const unsubscribeMetadata = metadataStore.subscribe((value) => metadata = value);
 	const unsubscribeChatHidden = chatHiddenStore.subscribe((value) => chatHidden = value);
 	const unsubscribeChatFocused = chatFocusedStore.subscribe((value) => chatFocused = value);
 	$: videoSrc = `${PUBLIC_HOST}/static/${roomId}/${selectedCodec}.mp4`;
 	$: thumbnailVttSrc = `${PUBLIC_HOST}/static/${roomId}/storyboard.vtt`;
 	$: socketCommunicating = socketConnected && (tickedSecsAgo >= 0 && tickedSecsAgo < 5);
 
+	$: {
+		console.log(metadata)
+	}
+
 	onDestroy(() => {
 		unsubscribeChatHidden();
 		unsubscribeChatFocused();
+		unsubscribeMetadata();
 	});
 
 	function nextTheme() {

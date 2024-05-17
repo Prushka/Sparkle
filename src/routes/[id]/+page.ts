@@ -7,7 +7,7 @@ export async function load({ params }) {
 	const { id } = params;
 	let job: Job | null = null
 	let codec = 'h264'
-	const base = `${PUBLIC_HOST}/static/${id}/`
+	const base = `${PUBLIC_HOST}/static/${id}`
 	let episode = -1
 	let season = -1
 	let plot = ''
