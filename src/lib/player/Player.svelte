@@ -518,7 +518,7 @@
 					{/if}
 				</button>
 			</div>
-			<div class="tooltip tooltip-top" data-tip={chatPfpHidden ? "Show Pfp" : "Hide Pfp"}>
+			<div class="tooltip tooltip-top" data-tip={chatPfpHidden ? "Show Avatar in Chat" : "Hide Avatar in Chat"}>
 				<button id="chat-hide-button" on:click={()=>{
 					chatPfpHidden = !chatPfpHidden;
 					localStorage.setItem('chatPfpHidden', chatPfpHidden.toString());
