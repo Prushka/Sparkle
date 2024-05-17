@@ -226,7 +226,6 @@
 	}
 
 	function initFromId() {
-		player.textTracks.clear();
 		job = jobs.find((job) => job.Id === roomId);
 		if (job) {
 			if (job.Subtitles) {
@@ -241,7 +240,6 @@
 						});
 					}
 				}
-				player.remoteControl.showCaptions();
 			}
 			job.EncodedCodecs.sort((a, b) => {
 				return codecsPriority.indexOf(a) - codecsPriority.indexOf(b);
