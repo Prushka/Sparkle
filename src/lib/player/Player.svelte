@@ -18,7 +18,7 @@
 		IconPlayerPauseFilled,
 		IconPlayerPlayFilled,
 		IconPlugConnected,
-		IconPlugConnectedX
+		IconPlugConnectedX, IconTableExport
 	} from '@tabler/icons-svelte';
 	import Chatbox from '$lib/player/Chatbox.svelte';
 	import Pfp from '$lib/player/Pfp.svelte';
@@ -37,7 +37,8 @@
 	let job: Job | undefined;
 	let roomId: string = '';
 	let lastTicked = 0;
-	let tickedSecsAgo = '0';
+	let tickedSecsAgo = 0;
+	let tickedSecsAgoStr = '0';
 	let socketConnected = false;
 	let messagesToDisplay: Chat[] = [];
 	let controlsToDisplay: SendPayload[] = [];
@@ -55,6 +56,7 @@
 	const unsubscribeChatFocused = chatFocusedStore.subscribe((value) => chatFocused = value);
 	$: videoSrc = `${PUBLIC_HOST}/static/` + roomId + '/' + selectedCodec + '.' + job?.EncodedExt;
 	$: thumbnailVttSrc = `${PUBLIC_HOST}/static/` + roomId + `/storyboard.vtt`;
+	$: socketCommunicating = socketConnected && (tickedSecsAgo >= 0 && tickedSecsAgo < 5);
 
 	onDestroy(() => {
 		unsubscribeChatHidden();
@@ -250,6 +252,13 @@
 		const ii = setInterval(() => {
 			updateList();
 		}, 60000);
+		document.addEventListener("visibilitychange", () => {
+			if (document.hidden) {
+				send({ state: "bg", type: SyncTypes.StateSync });
+			} else {
+				send({ state: "fg", type: SyncTypes.StateSync });
+			}
+		});
 		const i = setInterval(() => {
 			updateTime();
 			if (!document.getElementById('chat-input')) {
@@ -279,8 +288,8 @@
 				}
 			}
 			updateMessages();
-			const ticked = (socketConnected && roomPlayers.length > 0) ? (Date.now() - lastTicked) / 1000 : 0
-			tickedSecsAgo = (Math.round(ticked * 100) / 100).toFixed(2);
+			tickedSecsAgo = (socketConnected && roomPlayers.length > 0) ? (Date.now() - lastTicked) / 1000 : -1
+			tickedSecsAgoStr = (Math.round(tickedSecsAgo * 100) / 100).toFixed(2);
 		}, 1000);
 		if (name === '') {
 			document.getElementById('name_modal')?.showModal();
@@ -310,7 +319,7 @@
 	});
 
 	function updateTime() {
-		const timeRounded = Math.round(player.currentTime);
+		const timeRounded = Math.floor(player.currentTime);
 		if (lastSentTime !== timeRounded) {
 			send({
 				type: SyncTypes.TimeSync,
@@ -496,11 +505,11 @@
 
 		<div class="flex gap-2 self-center">
 
-			<div class="tooltip tooltip-top" data-tip="Ticked: {tickedSecsAgo}s ago">
+			<div class="tooltip tooltip-top" data-tip="Ticked: {tickedSecsAgoStr}s ago">
 				<button
 					id="sync-button"
-					class="btn font-bold {socketConnected ? 'text-green-600' : 'text-red-600' }">
-					{#if socketConnected}
+					class="btn font-bold {socketCommunicating ? 'text-green-600' : 'text-red-600' }">
+					{#if socketCommunicating}
 						<IconPlugConnected size={24} stroke={2} />
 					{:else}
 						<IconPlugConnectedX size={24} stroke={2} />
@@ -540,11 +549,15 @@
 		<div class="flex gap-4 sync-states w-full justify-center">
 			{#each roomPlayers as player}
 				<button
-					class="btn btn-neutral border-none h-auto pr-4 py-0 pl-0 rounded-l-full rounded-r-full shadow-md flex gap-3.5">
+					class="btn btn-neutral border-none h-auto pr-4 py-0 pl-0 rounded-l-full rounded-r-full shadow-md flex gap-3.5 min-w-40">
 					<Pfp class="w-12 h-12 mr-0.5" id={player.id} />
-					<span class="flex gap-1 flex-col items-center justify-center">
-						<span class="font-semibold">{player.name}</span>
-						{formatSeconds(player.time)}
+					<span class="flex gap-1 flex-col items-center justify-center font-semibold">
+						<span class="font-bold">{player.name}</span>
+						{#if player.inBg}
+							<div class="flex gap-1 items-center justify-center"><IconTableExport size={14} stroke={2} /><span>BG</span></div>
+						{:else}
+							<span>{formatSeconds(player.time)}</span>
+						{/if}
 					</span>
 					{#if player.paused === false}
 						<IconPlayerPlayFilled size={18} stroke={2} />

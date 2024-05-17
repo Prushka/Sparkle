@@ -11,15 +11,8 @@ export enum SyncTypes {
 	ChatSync = 'chat',
 	FullSync = 'full',
 	PlayersStatusSync = 'players',
-	PfpSync = 'pfp'
-}
-
-export interface PlayerPayload {
-	type: string;
-	time: number;
-	name: string;
-	paused: boolean;
-	chat: string;
+	PfpSync = 'pfp',
+	StateSync = 'state'
 }
 
 export interface SendPayload {
@@ -37,6 +30,7 @@ export type Player = {
 	time?: number;
 	name: string;
 	id: string;
+	inBg: boolean;
 }
 
 export type Chat = {
