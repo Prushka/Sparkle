@@ -41,7 +41,7 @@
 	let socketConnected = false;
 	let messagesToDisplay: Chat[] = [];
 	let controlsToDisplay: SendPayload[] = [];
-	let selectedCodec = localStorage.getItem('codec') || 'auto';
+	let selectedCodec = localStorage.getItem('sCodec') || 'auto';
 	let pauseSend = false;
 	let stateBeforeCodecChange = {
 		paused: false,
@@ -135,9 +135,9 @@
 		currentTheme = nextTheme;
 	}
 
-	function onCodecChange(event: any) {
-		selectedCodec = event.currentTarget.value;
-		localStorage.setItem('codec', selectedCodec);
+	function onCodecChange(selected: string) {
+		selectedCodec = selected;
+		localStorage.setItem('sCodec', selectedCodec);
 		setVideoSrc();
 	}
 
@@ -524,7 +524,7 @@
 			</div>
 		</div>
 
-		<div class="flex gap-2 w-full">
+		<div class="flex gap-2 w-full items-center justify-center">
 			<select
 				on:change={(e) => {
 				const roomId = e.currentTarget.value;
@@ -537,23 +537,21 @@
 					<option value={job.Id}>{job.FileRawName}</option>
 				{/each}
 			</select>
-			<div class="join">
-				{#if job?.EncodedCodecs}
-					<div class="tooltip tooltip-left" data-tip="Video Codec - Auto {videoSrc?.sCodec ? `(${videoSrc.sCodec})`: ''}">
-						<input class="join-item btn" type="radio" name="options"
-									 checked={"auto" === selectedCodec}
-									 aria-label="Auto"
-									 on:change={onCodecChange} value="auto" />
-					</div>
-					{#each job?.EncodedCodecs as codec}
-						<div class="tooltip tooltip-left" data-tip="Video Codec - {codec}{formatMbps(job, codec)}">
-							<input class="join-item btn" type="radio" name="options"
-										 checked={codec === selectedCodec}
-										 aria-label="{codec}"
-										 on:change={onCodecChange} value="{codec}" />
-						</div>
-					{/each}
-				{/if}
+			<div class="dropdown dropdown-end" id="codec-dropdown">
+				<div
+					tabindex="0" role="button" class="btn m-1">{selectedCodec} {videoSrc?.sCodec ? `(${videoSrc.sCodec})`: ''}</div>
+				<ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-52">
+					<li><button on:click={()=>{
+						onCodecChange("auto")
+					}}>Auto</button></li>
+					{#if job?.EncodedCodecs}
+						{#each job?.EncodedCodecs as codec}
+							<li><button on:click={()=>{
+							onCodecChange(codec)
+							}}>{codec}{formatMbps(job, codec)}</button></li>
+						{/each}
+					{/if}
+				</ul>
 			</div>
 		</div>
 
