@@ -87,20 +87,9 @@
 		unsubscribeMetadata();
 	});
 
-	function setVideoSrc() {
+	function setVideoSrc(onChange = ()=>{}) {
 		if(job){
 			const prevCodec = videoSrc?.sCodec
-			const change = () => {
-				pauseSend = true;
-				if (player) {
-					stateBeforeCodecChange = {
-						paused: player.paused,
-						time: player.currentTime,
-						volume: player.volume,
-						muted: player.muted
-					};
-				}
-			}
 			const autoCodec = supportedCodecs.length > 0 ? supportedCodecs[0] : job?.EncodedCodecs[0];
 			if(selectedCodec === "auto" && prevCodec !== autoCodec) {
 				videoSrc = {
@@ -110,7 +99,7 @@
 					sCodec: autoCodec
 				};
 				console.log("auto codec", autoCodec, codecMap[autoCodec])
-				change()
+				onChange()
 			}else if (selectedCodec !== "auto" && prevCodec !== selectedCodec) {
 				videoSrc = {
 					src: `${PUBLIC_HOST}/static/${roomId}/${selectedCodec}.mp4`,
@@ -119,7 +108,7 @@
 					sCodec: selectedCodec
 				};
 				console.log("selected codec", selectedCodec, codecMap[selectedCodec])
-				change()
+				onChange()
 			}
 		}
 	}
@@ -136,7 +125,9 @@
 	function onCodecChange(selected: string) {
 		selectedCodec = selected;
 		localStorage.setItem('sCodec', selectedCodec);
-		window.location.reload()
+		setVideoSrc(()=>{
+			window.location.reload()
+		});
 	}
 
 	$:{
