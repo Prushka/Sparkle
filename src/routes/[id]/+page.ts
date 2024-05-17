@@ -1,5 +1,5 @@
 import { PUBLIC_HOST } from '$env/static/public';
-import type { Job } from '$lib/player/t';
+import { codecsPriority, type Job } from '$lib/player/t';
 import * as cheerio from 'cheerio';
 
 /** @type {import('./$types').PageServerLoad} */
@@ -24,6 +24,9 @@ export async function load({ params }) {
 				codec = 'hevc'
 			}
 		}
+		job?.EncodedCodecs.sort((a, b) => {
+			return codecsPriority.indexOf(a) - codecsPriority.indexOf(b);
+		});
 		title = job?.FileRawName || "UwU"
 		const infoResponse = await fetch(`${base}/info.nfo`);
 		const info = await infoResponse.text();
