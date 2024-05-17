@@ -543,14 +543,14 @@
 				<div
 					tabindex="0" role="button" class="btn m-1 w-28">{selectedCodec} {(videoSrc?.sCodec && selectedCodec === "auto") ? `(${videoSrc.sCodec})`: ''}</div>
 				<ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-48">
-					<li><div tabindex="0" role="button" on:click={()=>{
+					<li><a tabindex="0" role="button" on:click={()=>{
 						onCodecChange("auto")
-					}}>Auto</div></li>
+					}}>Auto</a></li>
 					{#if job?.EncodedCodecs}
 						{#each job?.EncodedCodecs as codec}
-							<li><div tabindex="0" role="button" on:click={()=>{
+							<li><a tabindex="0" role="button" on:click={()=>{
 							onCodecChange(codec)
-							}}>{codec}{formatMbps(job, codec)}</div></li>
+							}}>{codec}{formatMbps(job, codec)}</a></li>
 						{/each}
 					{/if}
 				</ul>
