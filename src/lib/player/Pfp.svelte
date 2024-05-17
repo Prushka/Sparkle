@@ -1,21 +1,17 @@
 <script lang="ts">
 	import { PUBLIC_HOST } from '$env/static/public';
 	import { pfpLastFetched } from '../../store';
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy } from 'svelte';
 
 	let pfpLast: any = {};
-	let pageLoaded = Date.now();
 	export let id: string;
 	const unsubscribe = pfpLastFetched.subscribe((value) => pfpLast = value);
 	onDestroy(unsubscribe);
-	onMount(() => {
-		pageLoaded = Date.now();
-	});
 </script>
 
 
 <img
-	src={(pfpLast[id] === undefined) ? `${PUBLIC_HOST}/static/pfp/${id}.png?${pageLoaded}` : pfpLast[id]}
+	src={(pfpLast[id] === undefined) ? `${PUBLIC_HOST}/static/pfp/${id}.png?${Date.now()}` : pfpLast[id]}
 		 on:error={() => {
 			 $pfpLastFetched = { ...pfpLast, [id]: '/icons/uwu.gif' }
 						 }}
