@@ -267,8 +267,9 @@
 		});
 	}
 
-	function initFromId() {
+	function reloadPlayer() {
 		if (job) {
+			player.textTracks.clear()
 			if (job.Subtitles) {
 				for (const [, sub] of Object.entries(job.Subtitles)) {
 					const enc = sub.Enc;
@@ -283,6 +284,7 @@
 						});
 					}
 				}
+				player.remoteControl.showCaptions();
 			}
 			player.controlsDelay = 1600;
 		}
@@ -291,7 +293,7 @@
 
 	onMount(() => {
 		updateList();
-		initFromId();
+		reloadPlayer();
 		const ii = setInterval(() => {
 			updateList();
 		}, 60000);
@@ -312,7 +314,7 @@
 				}
 				player.volume = stateBeforeCodecChange.volume;
 				player.muted = stateBeforeCodecChange.muted;
-				player.remoteControl.showCaptions();
+				reloadPlayer();
 				pauseSend = false;
 			}
 		});
@@ -531,7 +533,7 @@
 				window.location.href = `/${roomId}`;
 			}}
 				bind:value={roomId}
-				class="select media-select select-bordered flex-grow mr-4">
+				class="select media-select select-bordered flex-grow">
 				<option disabled selected>Which media?</option>
 				{#each jobs as job}
 					<option value={job.Id}>{job.FileRawName}</option>
