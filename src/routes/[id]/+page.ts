@@ -15,7 +15,7 @@ export async function load({ params }) {
 	let rating = -1
 	let nfoTitle = ''
 	try {
-		const jobResponse = await fetch(`${base}/job.json`);
+		const jobResponse = await fetch(`${PUBLIC_HOST}/job/${id}`);
 		job = await jobResponse.json();
 		if (!job?.EncodedCodecs?.includes('h264')) {
 			if (job?.EncodedCodecs?.includes('av1')) {

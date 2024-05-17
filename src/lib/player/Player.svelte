@@ -23,6 +23,7 @@
 	import Chatbox from '$lib/player/Chatbox.svelte';
 	import Pfp from '$lib/player/Pfp.svelte';
 	import { chatFocusedStore, chatHiddenStore, metadataStore, pfpLastFetched } from '../../store';
+
 	let controlsShowing = false;
 	let player: MediaPlayerElement;
 	let socket: WebSocket;
@@ -63,7 +64,7 @@
 	$: socketCommunicating = socketConnected && (tickedSecsAgo >= 0 && tickedSecsAgo < 5);
 
 	$: {
-		console.log(metadata)
+		console.log(metadata);
 	}
 
 	onDestroy(() => {
@@ -255,11 +256,11 @@
 		const ii = setInterval(() => {
 			updateList();
 		}, 60000);
-		document.addEventListener("visibilitychange", () => {
+		document.addEventListener('visibilitychange', () => {
 			if (document.hidden) {
-				send({ state: "bg", type: SyncTypes.StateSync });
+				send({ state: 'bg', type: SyncTypes.StateSync });
 			} else {
-				send({ state: "fg", type: SyncTypes.StateSync });
+				send({ state: 'fg', type: SyncTypes.StateSync });
 			}
 		});
 		const playerUnsubscribe = player.subscribe(({ controlsVisible, canPlay, canLoad }) => {
@@ -270,6 +271,7 @@
 				if (!pausedBeforeCodecChange) {
 					player.play();
 				}
+				player.remoteControl.showCaptions();
 				pauseSend = false;
 			}
 		});
@@ -302,7 +304,7 @@
 				}
 			}
 			updateMessages();
-			tickedSecsAgo = (socketConnected && roomPlayers.length > 0) ? (Date.now() - lastTicked) / 1000 : -1
+			tickedSecsAgo = (socketConnected && roomPlayers.length > 0) ? (Date.now() - lastTicked) / 1000 : -1;
 			tickedSecsAgoStr = (Math.round(tickedSecsAgo * 100) / 100).toFixed(2);
 		}, 1000);
 		if (name === '') {
@@ -494,17 +496,17 @@
 					<option value={job.Id}>{job.FileRawName}</option>
 				{/each}
 			</select>
-				<div class="join">
-					{#if job?.EncodedCodecs}
-						{#each job?.EncodedCodecs as codec}
-							<div class="tooltip tooltip-left" data-tip="Video Codec - {codec}{formatMbps(job, codec)}">
+			<div class="join">
+				{#if job?.EncodedCodecs}
+					{#each job?.EncodedCodecs as codec}
+						<div class="tooltip tooltip-left" data-tip="Video Codec - {codec}{formatMbps(job, codec)}">
 							<input class="join-item btn" type="radio" name="options"
 										 checked={codec === selectedCodec}
 										 aria-label="{codec}"
 										 on:change={onCodecChange} value="{codec}" />
-							</div>
-						{/each}
-					{/if}
+						</div>
+					{/each}
+				{/if}
 			</div>
 		</div>
 
@@ -526,9 +528,11 @@
 					$chatHiddenStore = !chatHidden;
 				}} class="btn font-bold">
 					{#if !chatHidden}
-						<IconEye size={16} stroke={2} /> Chat
+						<IconEye size={16} stroke={2} />
+						Chat
 					{:else}
-						<IconEyeOff size={16} stroke={2} /> Chat
+						<IconEyeOff size={16} stroke={2} />
+						Chat
 					{/if}
 				</button>
 			</div>
@@ -538,9 +542,11 @@
 					localStorage.setItem('chatPfpHidden', chatPfpHidden.toString());
 				}} class="btn font-bold">
 					{#if !chatPfpHidden}
-						<IconAt size={16} stroke={2} /> Avatar
+						<IconAt size={16} stroke={2} />
+						Avatar
 					{:else}
-						<IconAtOff size={16} stroke={2} /> Avatar
+						<IconAtOff size={16} stroke={2} />
+						Avatar
 					{/if}
 				</button>
 			</div>
@@ -559,7 +565,8 @@
 					<span class="flex gap-1 flex-col items-center justify-center font-semibold">
 						<span class="font-bold">{player.name}</span>
 						{#if player.inBg}
-							<div class="flex gap-1 items-center justify-center"><IconTableExport size={14} stroke={2} /><span>BG</span></div>
+							<div class="flex gap-1 items-center justify-center"><IconTableExport size={14}
+																																									 stroke={2} /><span>BG</span></div>
 						{:else}
 							<span>{formatSeconds(player.time)}</span>
 						{/if}
