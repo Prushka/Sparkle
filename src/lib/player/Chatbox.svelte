@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { SyncTypes } from '$lib/player/t';
-	import { chatHiddenStore } from '../../store';
+	import { chatFocusedStore, chatHiddenStore } from '../../store';
 	import { onDestroy } from 'svelte';
 
 	let i: any;
@@ -8,9 +8,14 @@
 	export let classes = '';
 	export let onFocus: any = () => {};
 	export let onBlur: any = () => {};
+	export let chatFocused = false;
 	let chatHidden = false;
-	const unsubscribe = chatHiddenStore.subscribe((value) => chatHidden = value);
-	onDestroy(unsubscribe);
+	const unsubscribeChatHidden = chatHiddenStore.subscribe((value) => chatHidden = value);
+	const unsubscribeChatFocused = chatFocusedStore.subscribe((value) => chatFocused = value);
+	onDestroy(() => {
+		unsubscribeChatHidden();
+		unsubscribeChatFocused();
+	});
 	$: placeholder = chatHidden ? 'Chat (hidden)' : 'Chat'
 </script>
 
@@ -25,6 +30,7 @@
 							i.placeholder = placeholder;
 						}, 2000);
 	}}
+	style={chatFocused ? 'visibility: visible;' : 'visibility: unset;'}
 	autocomplete="off">
 	<input
 		on:focus={onFocus}

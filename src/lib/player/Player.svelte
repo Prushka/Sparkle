@@ -23,7 +23,7 @@
 	} from '@tabler/icons-svelte';
 	import Chatbox from '$lib/player/Chatbox.svelte';
 	import Pfp from '$lib/player/Pfp.svelte';
-	import { chatHiddenStore, pfpLastFetched } from '../../store';
+	import { chatFocusedStore, chatHiddenStore, pfpLastFetched } from '../../store';
 
 	let player: MediaPlayerElement;
 	let controlsShowing = false;
@@ -52,12 +52,17 @@
 	let currentTheme = localStorage.getItem('theme') || defaultTheme;
 	let chatHidden = false;
 	let lastSentTime = -100;
-	let chatPfpHidden: boolean = localStorage.getItem('chatPfpHidden') === 'true' || true;
-	const unsubscribe = chatHiddenStore.subscribe((value) => chatHidden = value);
+	let chatFocused = false;
+	let chatPfpHidden: boolean = localStorage.getItem('chatPfpHidden') ? localStorage.getItem('chatPfpHidden') === 'true' : true;
+	const unsubscribeChatHidden = chatHiddenStore.subscribe((value) => chatHidden = value);
+	const unsubscribeChatFocused = chatFocusedStore.subscribe((value) => chatFocused = value);
 	$: videoSrc = `${PUBLIC_HOST}/static/` + roomId + '/' + selectedCodec + '.' + videoExt;
 	$: thumbnailVttSrc = `${PUBLIC_HOST}/static/` + roomId + `/storyboard.vtt`;
 
-	onDestroy(unsubscribe);
+	onDestroy(() => {
+		unsubscribeChatHidden();
+		unsubscribeChatFocused();
+	});
 
 	function nextTheme() {
 		const html = document.querySelector('html');
@@ -161,7 +166,7 @@
 					controlsToDisplay.push(state);
 					updateMessages();
 				}
-			}
+			};
 			if (player) {
 				switch (state.type) {
 					case SyncTypes.PfpSync:
@@ -185,10 +190,10 @@
 						console.log('received: ' + JSON.stringify(state));
 						if (state.paused === true && player.paused === false) {
 							player.pause();
-							persistControlState(state)
+							persistControlState(state);
 						} else if (state.paused === false && player.paused === true) {
 							player.play();
-							persistControlState(state)
+							persistControlState(state);
 						}
 						break;
 					case SyncTypes.TimeSync:
@@ -265,6 +270,7 @@
 			updateList();
 		}, 60000);
 		const i = setInterval(() => {
+			updateTime();
 			if (!document.getElementById('chat-input')) {
 				console.log('mounting chat');
 				const node = document.querySelector('media-title');
@@ -276,13 +282,16 @@
 						target: container,
 						props: {
 							send: send,
+							chatFocused: chatFocused,
 							classes: 'input-sm mx-6 chat-box',
 							id: 'chat-input',
 							onFocus: () => {
 								player.controls.pause();
+								$chatFocusedStore = true;
 							},
 							onBlur: () => {
 								player.controls.resume();
+								$chatFocusedStore = false;
 							}
 						}
 					});
@@ -317,18 +326,16 @@
 		});
 	});
 
-	onMount(() => {
-		return player.subscribe(({ currentTime }) => {
-			const timeRounded = Math.round(currentTime);
-			if (lastSentTime !== timeRounded) {
-				send({
-					type: SyncTypes.TimeSync,
-					time: timeRounded
-				});
-				lastSentTime = timeRounded;
-			}
-		});
-	})
+	function updateTime() {
+		const timeRounded = Math.round(player.currentTime);
+		if (lastSentTime !== timeRounded) {
+			send({
+				type: SyncTypes.TimeSync,
+				time: timeRounded
+			});
+			lastSentTime = timeRounded;
+		}
+	}
 
 
 </script>
@@ -406,13 +413,15 @@
 		<div
 			class="{controlsShowing? 'shift-down':''} flex flex-col gap-0.5 ml-auto chat-history drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] items-end">
 			{#each messagesToDisplay as message}
-				<div class={`flex gap-1 justify-center items-center chat-line py-1 pl-2.5 pr-2 text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''}`}>
+				<div
+					class={`flex gap-1 justify-center items-center chat-line py-1 pl-2.5 pr-2 text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''}`}>
 					<p>{message.message}</p>
-						<p class="text-sm">[{message.isStateUpdate ? '' : `${formatSeconds(message.mediaSec)}, `}{new Date(message.timestamp).toLocaleTimeString('en-US', {
-					hour: '2-digit',
-					minute: '2-digit'
-				})}]</p>
-						 <p>{message.username}</p>
+					<p class="text-sm">
+						[{message.isStateUpdate ? '' : `${formatSeconds(message.mediaSec)}, `}{new Date(message.timestamp).toLocaleTimeString('en-US', {
+						hour: '2-digit',
+						minute: '2-digit'
+					})}]</p>
+					<p>{message.username}</p>
 					{#if chatPfpHidden === false}
 						<Pfp id={message.uid} class="avatar" />
 					{/if}
@@ -421,18 +430,16 @@
 		</div>
 	</div>
 
-	<div class="w-full flex items-start px-4 input-container">
-		<div class="chat-box-mobile w-full">
-			<Chatbox send={send} class="input-bordered input-md" />
-		</div>
-		<div class="profile-input-container">
-			<label class="custom-file-upload">
-				{#if id}
-					<Pfp id={id} class="w-12 h-12 " />
-				{/if}
-				<input accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
-							 bind:this={pfpInput}
-							 on:change={() => {
+	<div class="px-2 w-full flex flex-col gap-4">
+		<div class="w-full flex gap-2 input-container">
+			<div class="flex gap-2">
+				<label class="custom-file-upload">
+					{#if id}
+						<Pfp id={id} class="w-12 h-12" />
+					{/if}
+					<input accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
+								 bind:this={pfpInput}
+								 on:change={() => {
 							 const ppfp = pfpInput?.files;
 							 if (ppfp && ppfp[0]) {
 								 if(ppfp[0].size > 12000000) {
@@ -459,36 +466,40 @@
 								 reader.readAsDataURL(pfp);
 							 }
 						 }}
-							 type="file" />
-			</label>
-			<label class="input input-bordered flex items-center gap-2 w-48 name-input">
-				Name
-				<input
-					on:focusout={() => {
+								 type="file" />
+				</label>
+				<label class="input input-bordered flex items-center gap-2 w-48 name-input">
+					Name
+					<input
+						on:focusout={() => {
 					send({
 					  type: SyncTypes.NameSync,
 						name: name
 					})
 				localStorage.setItem("name", name)
 			}}
-					bind:value={name} type="text" class="grow" placeholder="Who?" />
-			</label>
+						bind:value={name} type="text" class="grow" placeholder="Who?" />
+				</label>
+			</div>
+			<div class="chat-box-main flex-grow">
+				<Chatbox send={send} class="input-bordered input-md" />
+			</div>
 		</div>
-		<select
-			on:change={(e) => {
+
+		<div class="flex gap-2 w-full">
+			<select
+				on:change={(e) => {
 				const roomId = e.currentTarget.value;
 				$page.url.searchParams.set('id', roomId);
 				window.location.href = $page.url.toString();
 			}}
-			bind:value={roomId}
-			class="select media-select select-bordered flex-grow mr-4">
-			<option disabled selected>Which media?</option>
-			{#each jobs as job}
-				<option value={job.Id}>{job.FileRawName}</option>
-			{/each}
-		</select>
-
-		<div class="flex gap-2 self-center">
+				bind:value={roomId}
+				class="select media-select select-bordered flex-grow mr-4">
+				<option disabled selected>Which media?</option>
+				{#each jobs as job}
+					<option value={job.Id}>{job.FileRawName}</option>
+				{/each}
+			</select>
 			<div class="tooltip tooltip-left" data-tip="Video Codec">
 				<div class="join">
 					{#each codecs as codec}
@@ -498,6 +509,10 @@
 					{/each}
 				</div>
 			</div>
+		</div>
+
+		<div class="flex gap-2 self-center">
+
 			<div class="tooltip tooltip-left" data-tip="Ticked: {tickedSecsAgo}s ago">
 				<button
 					id="sync-button"
@@ -539,24 +554,23 @@
 			</div>
 		</div>
 
-	</div>
-
-	<div class="flex gap-4 sync-states">
-		{#each roomPlayers as player}
-			<button
-				class="btn btn-neutral border-none h-auto pr-4 py-0 pl-0 rounded-l-full rounded-r-full shadow-md flex gap-3.5">
-				<Pfp class="w-12 h-12 mr-0.5" id={player.id} />
-				<div class="flex gap-1 flex-col items-center justify-center">
-					<p class="font-semibold">{player.name}</p>
-					{formatSeconds(player.time)}
-				</div>
-				{#if player.paused === false}
-					<IconPlayerPlayFilled size={18} stroke={2} />
-				{:else}
-					<IconPlayerPauseFilled size={18} stroke={2} />
-				{/if}
-			</button>
-		{/each}
+		<div class="flex gap-4 sync-states w-full justify-center">
+			{#each roomPlayers as player}
+				<button
+					class="btn btn-neutral border-none h-auto pr-4 py-0 pl-0 rounded-l-full rounded-r-full shadow-md flex gap-3.5">
+					<Pfp class="w-12 h-12 mr-0.5" id={player.id} />
+					<div class="flex gap-1 flex-col items-center justify-center">
+						<p class="font-semibold">{player.name}</p>
+						{formatSeconds(player.time)}
+					</div>
+					{#if player.paused === false}
+						<IconPlayerPlayFilled size={18} stroke={2} />
+					{:else}
+						<IconPlayerPauseFilled size={18} stroke={2} />
+					{/if}
+				</button>
+			{/each}
+		</div>
 	</div>
 
 
@@ -577,13 +591,18 @@
         margin-right: 2rem;
     }
 
-    .chat-line{
+    .chat-line {
         width: fit-content;
         border-radius: 0.5rem;
-        background-color: rgba(0,0,0,0.2);
+        background-color: rgba(0, 0, 0, 0.2);
     }
 
     @media (max-width: 1000px) {
+
+				.input-container {
+						flex-direction: column;
+						gap: 1rem;
+				}
 
         .sync-states {
             display: grid;
@@ -605,9 +624,9 @@
         }
 
         .chat-history .text-sm {
-						line-height: unset;
+            line-height: unset;
             font-size: 0.64rem;
-				}
+        }
 
         .media-select {
             width: 100%;
@@ -618,4 +637,5 @@
         max-height: 100vh;
         max-width: 100vw;
     }
+
 </style>
