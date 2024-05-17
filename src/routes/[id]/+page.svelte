@@ -8,11 +8,13 @@
 	onMount(async () => {
 		vidstack = (await import('$lib/player/Player.svelte')).default;
 	});
+
+	$: title = data?.job?.FileRawName || "UwU"
 </script>
 
 <svelte:head>
-	<title>{data.title}</title>
-	<meta property="og:title" content={data?.job?.FileRawName || "UwU"}>
+	<title>{title}</title>
+	<meta property="og:title" content={title}>
 	<meta property="og:image" content={data.preview}>
 	<meta property="og:video" content={data.video}>
 	<meta property="og:image:type" content="image/jpeg">
