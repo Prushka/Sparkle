@@ -23,10 +23,7 @@
 	--video-controls-color: rgba(255, 255, 255, 0.88) !important;
 	--media-slider-track-fill-bg: rgba(255, 255, 255, 0.85) !important;
 	-webkit-font-smoothing: antialiased;
-}
 
-.tooltip-success {
-	--tooltip-text-color: white;
 }
 
 html {
@@ -43,7 +40,7 @@ body, #main-page {
 }
 
 button, div, a, pre, code, .code-wrapper, .copy-button {
-	transition: all 0.2s cubic-bezier(.32,.08,.24,1);
+	transition: all 0.1s cubic-bezier(.32,.08,.24,1);
 }
 
 *::-webkit-scrollbar-track {

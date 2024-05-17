@@ -8,11 +8,10 @@
 		type Job,
 		type Chat,
 		type Player,
-		randomString, SyncTypes, type SendPayload, defaultTheme, themes
+		SyncTypes, type SendPayload, defaultTheme, themes, setGetPlayerId, getMbps, formatMbps
 	} from './t';
 	import { PUBLIC_HOST, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
 	import {
 		IconAt, IconAtOff,
 		IconBrightnessHalf, IconEye, IconEyeOff,
@@ -25,25 +24,23 @@
 	import Pfp from '$lib/player/Pfp.svelte';
 	import { chatFocusedStore, chatHiddenStore, pfpLastFetched } from '../../store';
 
-	let player: MediaPlayerElement;
 	let controlsShowing = false;
+	let player: MediaPlayerElement;
 	let socket: WebSocket;
 	let name = localStorage.getItem('name') || '';
-	let pfp: File | null = null;
-	let pfpInput: HTMLInputElement | null = null;
+	let playerId: string = setGetPlayerId();
+	let pfp: File;
+	let pfpInput: HTMLInputElement;
 	let roomPlayers: Player[] = [];
 	let roomMessages: Chat[] = [];
 	let jobs: Job[] = [];
+	let job: Job | undefined;
 	let roomId: string = '';
 	let lastTicked = 0;
-	let tickedSecsAgo = 0;
+	let tickedSecsAgo = '0';
 	let socketConnected = false;
 	let messagesToDisplay: Chat[] = [];
 	let controlsToDisplay: SendPayload[] = [];
-	let id: string | null = localStorage.getItem('id') || null;
-	let title = '';
-	let codecs: string[] = [];
-	let videoExt = '';
 	let selectedCodec = localStorage.getItem('codec') || '';
 	let pauseSend = false;
 	let pausedBeforeCodecChange = false;
@@ -56,7 +53,7 @@
 	let chatPfpHidden: boolean = localStorage.getItem('chatPfpHidden') ? localStorage.getItem('chatPfpHidden') === 'true' : true;
 	const unsubscribeChatHidden = chatHiddenStore.subscribe((value) => chatHidden = value);
 	const unsubscribeChatFocused = chatFocusedStore.subscribe((value) => chatFocused = value);
-	$: videoSrc = `${PUBLIC_HOST}/static/` + roomId + '/' + selectedCodec + '.' + videoExt;
+	$: videoSrc = `${PUBLIC_HOST}/static/` + roomId + '/' + selectedCodec + '.' + job?.EncodedExt;
 	$: thumbnailVttSrc = `${PUBLIC_HOST}/static/` + roomId + `/storyboard.vtt`;
 
 	onDestroy(() => {
@@ -73,7 +70,7 @@
 		currentTheme = nextTheme;
 	}
 
-	function onChange(event: any) {
+	function onCodecChange(event: any) {
 		pauseSend = true;
 		if (player) {
 			pausedBeforeCodecChange = player.paused;
@@ -82,60 +79,20 @@
 		selectedCodec = event.currentTarget.value;
 	}
 
-	function idChanges(codecs: string[]): string[] {
-		console.log('Room ID changed!');
-		player.textTracks.clear();
-		const job = jobs.find((job) => job.Id === roomId);
-		if (job) {
-			if (job.Subtitles) {
-				for (const [, sub] of Object.entries(job.Subtitles)) {
-					const enc = sub.Enc;
-					if (enc) {
-						player.textTracks.add({
-							src: `${PUBLIC_HOST}/static/${roomId}/${enc.Location}`,
-							label: enc.Location,
-							kind: 'subtitles',
-							default: enc.Language.includes('eng')
-						});
-					}
-				}
-				player.remoteControl.showCaptions();
-			}
-			title = job.FileRawName;
-			codecs = job.EncodedCodecs;
-			videoExt = job.EncodedExt;
-			codecs.sort((a, b) => {
-				return codecsPriority.indexOf(a) - codecsPriority.indexOf(b);
-			});
-			player.controlsDelay = 1600;
-		}
-		console.debug('textTracks: ' + JSON.stringify(player.textTracks));
-		$page.url.searchParams.set('id', roomId);
-		goto($page.url);
-		if (socketConnected) {
-			socket.close();
-		}
-		return codecs;
-	}
-
-	$ : if (roomId !== '') {
-		codecs = idChanges(codecs);
-	}
-
 	$:{
-		console.log('video:' + videoSrc, 'codecs: ' + codecs, 'selectedCodec: ' + selectedCodec);
+		console.log('video:' + videoSrc, 'codecs: ' + job?.EncodedCodecs, 'selectedCodec: ' + selectedCodec);
 	}
 
 	$:{
 		const lsCodec = localStorage.getItem('codec') || '';
-		if (codecs.length > 0 && !codecs.includes(lsCodec)) {
-			console.log('setting codec - no matching codec', lsCodec, codecs);
-			selectedCodec = codecs[0];
+		if (job?.EncodedCodecs && job?.EncodedCodecs.length > 0 && !job?.EncodedCodecs.includes(lsCodec)) {
+			console.log('setting codec - no matching codec', lsCodec, job?.EncodedCodecs);
+			selectedCodec = job!.EncodedCodecs[0];
 		}
 	}
+
 	$:{
 		if (selectedCodec !== '') {
-			console.log('setting codec to localstorage', selectedCodec);
 			localStorage.setItem('codec', selectedCodec);
 		}
 	}
@@ -144,11 +101,7 @@
 		if (!interactedWithPlayer) {
 			return;
 		}
-		if (id === null) {
-			id = randomString(36);
-			localStorage.setItem('id', id);
-		}
-		socket = new WebSocket(`${PUBLIC_WS}/sync/${roomId}/${id}`);
+		socket = new WebSocket(`${PUBLIC_WS}/sync/${roomId}/${playerId}`);
 		console.log(`Connecting to ${roomId}`);
 		socket.onopen = () => {
 			console.log(`Connected to ${roomId}`);
@@ -168,9 +121,9 @@
 				}
 			};
 			if (player) {
+				console.debug('received: ' + JSON.stringify(state));
 				switch (state.type) {
 					case SyncTypes.PfpSync:
-						console.log('received: ' + JSON.stringify(state));
 						if (state.firedBy) {
 							$pfpLastFetched = {
 								...pfpLastFetched,
@@ -187,7 +140,6 @@
 						lastTicked = Date.now();
 						break;
 					case SyncTypes.PauseSync:
-						console.log('received: ' + JSON.stringify(state));
 						if (state.paused === true && player.paused === false) {
 							player.pause();
 							persistControlState(state);
@@ -197,7 +149,6 @@
 						}
 						break;
 					case SyncTypes.TimeSync:
-						console.log('received: ' + JSON.stringify(state));
 						if (state.time !== undefined && Math.abs(player.currentTime - state.time) > 3) {
 							player.currentTime! = state.time;
 							persistControlState(state);
@@ -228,7 +179,8 @@
 		}
 	}
 
-	function updateList() {
+	function updateList(onSuccess: any = () => {
+	}) {
 		fetch(`${PUBLIC_HOST}/all`)
 			.then(response => response.json())
 			.then(data => {
@@ -238,6 +190,7 @@
 				});
 				console.log(jobs);
 				roomId = $page.url.searchParams.get('id') || '';
+				onSuccess();
 			});
 	}
 
@@ -264,8 +217,36 @@
 		});
 	}
 
+	function initFromId() {
+		player.textTracks.clear();
+		job = jobs.find((job) => job.Id === roomId);
+		if (job) {
+			if (job.Subtitles) {
+				for (const [, sub] of Object.entries(job.Subtitles)) {
+					const enc = sub.Enc;
+					if (enc) {
+						player.textTracks.add({
+							src: `${PUBLIC_HOST}/static/${roomId}/${enc.Location}`,
+							label: enc.Location,
+							kind: 'subtitles',
+							default: enc.Language.includes('eng')
+						});
+					}
+				}
+				player.remoteControl.showCaptions();
+			}
+			job.EncodedCodecs.sort((a, b) => {
+				return codecsPriority.indexOf(a) - codecsPriority.indexOf(b);
+			});
+			player.controlsDelay = 1600;
+		}
+		console.debug('textTracks: ' + JSON.stringify(player.textTracks));
+	}
+
 	onMount(() => {
-		updateList();
+		updateList(() => {
+			initFromId();
+		});
 		const ii = setInterval(() => {
 			updateList();
 		}, 60000);
@@ -298,7 +279,8 @@
 				}
 			}
 			updateMessages();
-			tickedSecsAgo = (Date.now() - lastTicked) / 1000;
+			const ticked = (socketConnected && roomPlayers.length > 0) ? (Date.now() - lastTicked) / 1000 : 0
+			tickedSecsAgo = (Math.round(ticked * 100) / 100).toFixed(2);
 		}, 1000);
 		if (name === '') {
 			document.getElementById('name_modal')?.showModal();
@@ -307,11 +289,12 @@
 		const thePlayer = document.getElementById('the-player');
 		thePlayer!.appendChild(chatOverlay!);
 		return () => {
-			socket.close();
+			socket?.close();
 			clearInterval(i);
 			clearInterval(ii);
 		};
 	});
+
 	onMount(() => {
 		return player.subscribe(({ controlsVisible, canPlay, canLoad }) => {
 			controlsShowing = controlsVisible;
@@ -341,11 +324,10 @@
 </script>
 
 <svelte:head>
-	<title>{title}</title>
+	<title>{job?.FileRawName}</title>
 </svelte:head>
 
-<main id="main-page" class="overflow-hidden flex flex-col items-center w-full h-full gap-4 pb-4">
-
+<main id="main-page" class="overflow-hidden flex flex-col items-center w-full h-full">
 	<dialog id="name_modal" class="modal">
 		<div class="modal-box">
 			<h3 class="font-bold text-lg">Name is required for syncing</h3>
@@ -384,7 +366,7 @@
     volumeDown: 'ArrowDown',
     }}
 		id="the-player"
-		class="media-player-c media-player w-full aspect-video overflow-hidden bg-slate-900 ring-media-focus data-[focus]:ring-4 relative"
+		class="media-player w-full bg-slate-900 aspect-video relative"
 		src={videoSrc}
 		crossorigin
 		bind:this={player}
@@ -411,7 +393,7 @@
 			 style={chatHidden ? 'display: none' : ''}
 	>
 		<div
-			class="{controlsShowing? 'shift-down':''} flex flex-col gap-0.5 ml-auto chat-history drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] items-end">
+			class="{controlsShowing ? 'shift-down':''} flex flex-col gap-0.5 ml-auto chat-history drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] items-end">
 			{#each messagesToDisplay as message}
 				<div
 					class={`flex gap-1 justify-center items-center chat-line py-1 pl-2.5 pr-2 text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''}`}>
@@ -430,13 +412,11 @@
 		</div>
 	</div>
 
-	<div class="px-2 w-full flex flex-col gap-4">
+	<div class="p-4 w-full flex flex-col gap-4 font-semibold">
 		<div class="w-full flex gap-2 input-container">
 			<div class="flex gap-2">
 				<label class="custom-file-upload">
-					{#if id}
-						<Pfp id={id} class="w-12 h-12" />
-					{/if}
+					<Pfp id={playerId} class="w-12 h-12" />
 					<input accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
 								 bind:this={pfpInput}
 								 on:change={() => {
@@ -455,7 +435,7 @@
 										 // send POST request with form data to /pfp/{id}
 										 const formData = new FormData();
 										 formData.append('pfp', pfp);
-										 fetch(`${PUBLIC_HOST}/pfp/${id}`, {
+										 fetch(`${PUBLIC_HOST}/pfp/${playerId}`, {
 											 method: 'POST',
 											 body: formData
 										 }).then(data => {
@@ -500,20 +480,23 @@
 					<option value={job.Id}>{job.FileRawName}</option>
 				{/each}
 			</select>
-			<div class="tooltip tooltip-left" data-tip="Video Codec">
 				<div class="join">
-					{#each codecs as codec}
-						<input class="join-item btn" type="radio" name="options"
-									 checked={codec === selectedCodec} aria-label={codec}
-									 on:change={onChange} value={codec} />
-					{/each}
-				</div>
+					{#if job?.EncodedCodecs}
+						{#each job?.EncodedCodecs as codec}
+							<div class="tooltip tooltip-left" data-tip="Video Codec - {codec}{formatMbps(job, codec)}">
+							<input class="join-item btn" type="radio" name="options"
+										 checked={codec === selectedCodec}
+										 aria-label="{codec}"
+										 on:change={onCodecChange} value="{codec}" />
+							</div>
+						{/each}
+					{/if}
 			</div>
 		</div>
 
 		<div class="flex gap-2 self-center">
 
-			<div class="tooltip tooltip-left" data-tip="Ticked: {tickedSecsAgo}s ago">
+			<div class="tooltip tooltip-top" data-tip="Ticked: {tickedSecsAgo}s ago">
 				<button
 					id="sync-button"
 					class="btn font-bold {socketConnected ? 'text-green-600' : 'text-red-600' }">
@@ -524,30 +507,30 @@
 					{/if}
 				</button>
 			</div>
-			<div class="tooltip tooltip-left" data-tip={chatHidden ? "Show Chat" : "Hide Chat"}>
+			<div class="tooltip tooltip-top" data-tip={chatHidden ? "Show Chat" : "Hide Chat"}>
 				<button id="chat-hide-button" on:click={()=>{
 					$chatHiddenStore = !chatHidden;
 				}} class="btn font-bold">
-					{#if chatHidden}
-						<IconEye size={24} stroke={2} />
+					{#if !chatHidden}
+						<IconEye size={16} stroke={2} /> Chat
 					{:else}
-						<IconEyeOff size={24} stroke={2} />
+						<IconEyeOff size={16} stroke={2} /> Chat
 					{/if}
 				</button>
 			</div>
-			<div class="tooltip tooltip-left" data-tip={chatPfpHidden ? "Show Pfp" : "Hide Pfp"}>
+			<div class="tooltip tooltip-top" data-tip={chatPfpHidden ? "Show Pfp" : "Hide Pfp"}>
 				<button id="chat-hide-button" on:click={()=>{
 					chatPfpHidden = !chatPfpHidden;
 					localStorage.setItem('chatPfpHidden', chatPfpHidden.toString());
 				}} class="btn font-bold">
-					{#if chatPfpHidden}
-						<IconAt size={24} stroke={2} />
+					{#if !chatPfpHidden}
+						<IconAt size={16} stroke={2} /> Avatar
 					{:else}
-						<IconAtOff size={24} stroke={2} />
+						<IconAtOff size={16} stroke={2} /> Avatar
 					{/if}
 				</button>
 			</div>
-			<div class="tooltip tooltip-left" data-tip={`Theme: ${currentTheme}`}>
+			<div class="tooltip tooltip-top" data-tip={`Theme: ${currentTheme}`}>
 				<button id="theme-button" on:click={nextTheme} class="btn font-bold">
 					<IconBrightnessHalf size={24} stroke={2} />
 				</button>
@@ -559,10 +542,10 @@
 				<button
 					class="btn btn-neutral border-none h-auto pr-4 py-0 pl-0 rounded-l-full rounded-r-full shadow-md flex gap-3.5">
 					<Pfp class="w-12 h-12 mr-0.5" id={player.id} />
-					<div class="flex gap-1 flex-col items-center justify-center">
-						<p class="font-semibold">{player.name}</p>
+					<span class="flex gap-1 flex-col items-center justify-center">
+						<span class="font-semibold">{player.name}</span>
 						{formatSeconds(player.time)}
-					</div>
+					</span>
 					{#if player.paused === false}
 						<IconPlayerPlayFilled size={18} stroke={2} />
 					{:else}
@@ -580,6 +563,8 @@
     .media-player {
         border: none !important;
         border-radius: unset !important;
+        max-height: 100vh;
+        max-width: 100vw;
     }
 
     .media-select {
@@ -599,10 +584,10 @@
 
     @media (max-width: 1000px) {
 
-				.input-container {
-						flex-direction: column;
-						gap: 1rem;
-				}
+        .input-container {
+            flex-direction: column-reverse;
+            gap: 1rem;
+        }
 
         .sync-states {
             display: grid;
@@ -631,11 +616,6 @@
         .media-select {
             width: 100%;
         }
-    }
-
-    .media-player-c {
-        max-height: 100vh;
-        max-width: 100vw;
     }
 
 </style>

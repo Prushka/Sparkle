@@ -6,7 +6,7 @@ export default {
   },
   plugins: [require("daisyui")],
   daisyui: {
-    themes: ["emerald", "dark", "nord", "halloween"],
+    themes: ['sunset', "black", 'nord', 'emerald'],
   },
 }
 

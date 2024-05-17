@@ -1,4 +1,4 @@
-export const themes = ['nord', 'emerald', 'dark', 'halloween'];
+export const themes = ['sunset', 'black', 'nord', 'emerald'];
 export const defaultTheme = themes[0];
 
 export const codecsPriority = ['av1', 'hevc'];
@@ -88,10 +88,14 @@ export type Job = {
 	State: string;
 	SHA256: string;
 	EncodedCodecs: string[];
+	EncodedCodecsSize: { [key: string]: number };
 	EncodedExt: string;
 	Subtitles: { [key: number]: Pair<Subtitle> };
 	Videos: { [key: number]: Pair<Video> };
 	Audios: { [key: number]: Pair<Audio> };
+	Width: number;
+	Height: number;
+	Duration: number;
 };
 
 
@@ -115,4 +119,29 @@ export function randomString(length: number): string {
 
 export function secondsSince(date: Date): number {
 	return Math.floor((new Date().getTime() - date.getTime()) / 1000);
+}
+
+export function setGetPlayerId(): string {
+	const lsId = localStorage.getItem('id')
+	if (lsId) {
+		return lsId;
+	}
+	const id = randomString(36);
+	localStorage.setItem('id', id);
+	return id;
+}
+
+export function getMbps(job: Job | undefined | null, codec: string): number {
+	if (!job?.EncodedCodecsSize[codec] || !job?.Duration) {
+		return 0;
+	}
+	return Math.round(job?.EncodedCodecsSize[codec] / 1024 / 1024 / job?.Duration / 0.125)
+}
+
+export function formatMbps(job: Job | undefined | null, codec: string): string {
+	const mbps = getMbps(job, codec);
+	if (mbps === 0) {
+		return '';
+	}
+	return `: ${mbps} Mbps`;
 }
