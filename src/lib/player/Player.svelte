@@ -44,8 +44,11 @@
 	let controlsToDisplay: SendPayload[] = [];
 	let selectedCodec = localStorage.getItem('codec') || '';
 	let pauseSend = false;
-	let pausedBeforeCodecChange = false;
-	let timeBeforeCodecChange = 0;
+	let stateBeforeCodecChange = {
+		paused: false,
+		time: 0,
+		volume: 1
+	};
 	let interactedWithPlayer = false;
 	let currentTheme = localStorage.getItem('theme') || defaultTheme;
 	let chatHidden = false;
@@ -85,8 +88,11 @@
 	function onCodecChange(event: any) {
 		pauseSend = true;
 		if (player) {
-			pausedBeforeCodecChange = player.paused;
-			timeBeforeCodecChange = player.currentTime;
+			stateBeforeCodecChange = {
+				paused: player.paused,
+				time: player.currentTime,
+				volume: player.volume
+			};
 		}
 		selectedCodec = event.currentTarget.value;
 	}
@@ -267,10 +273,11 @@
 			controlsShowing = controlsVisible;
 			if (canLoad && canPlay && pauseSend) {
 				// video loaded, send was paused bcz of codec change
-				player.currentTime = timeBeforeCodecChange;
-				if (!pausedBeforeCodecChange) {
+				player.currentTime = stateBeforeCodecChange.time;
+				if (!stateBeforeCodecChange.paused) {
 					player.play();
 				}
+				player.volume = stateBeforeCodecChange.volume;
 				player.remoteControl.showCaptions();
 				pauseSend = false;
 			}
@@ -384,7 +391,12 @@
     }}
 		id="the-player"
 		class="media-player w-full bg-slate-900 aspect-video relative"
-		src={videoSrc}
+		src={[
+			{
+				src: videoSrc,
+				type: 'video/mp4'
+			}
+		]}
 		crossorigin
 		bind:this={player}
 		playsInline
