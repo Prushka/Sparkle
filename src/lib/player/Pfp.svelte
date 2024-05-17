@@ -4,7 +4,7 @@
 	import { onDestroy, onMount } from 'svelte';
 
 	let pfpLast: any = {};
-	let pageLoaded = 0;
+	let pageLoaded = Date.now();
 	export let id: string;
 	const unsubscribe = pfpLastFetched.subscribe((value) => pfpLast = value);
 	onDestroy(unsubscribe);
