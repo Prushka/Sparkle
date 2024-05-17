@@ -13,6 +13,7 @@ export async function load({ params }) {
 	let plot = ''
 	let title = 'UwU'
 	let rating = -1
+	let nfoTitle = ''
 	try {
 		const jobResponse = await fetch(`${base}/job.json`);
 		job = await jobResponse.json();
@@ -32,7 +33,7 @@ export async function load({ params }) {
 		rating = parseFloat($('rating').text());
 		plot = $('plot').text();
 		const movieTagExists = $('movie').length > 0;
-		const nfoTitle = $('title').text()
+		nfoTitle = $('title').text()
 		if (movieTagExists && nfoTitle.length > 0) {
 			title = nfoTitle;
 		}
@@ -44,13 +45,14 @@ export async function load({ params }) {
 		if (title.includes(seasonEpisode)) {
 			title = title.substring(0, title.indexOf(seasonEpisode))
 			title = title.substring(0, title.length - 3)
-			title = `${title} - Season ${season} - Episode ${episode}`
+			title = `${title} - Season ${season} - Episode ${episode} ${nfoTitle ? `(${nfoTitle})` : ''}`
 		}
 	}
 	return {
 		job: job,
 		video: `${base}/${codec}.mp4`,
 		preview: `${base}/poster.jpg`,
+		icon: `${base}/poster.jpg`,
 		rating,
 		title,
 		plot,
