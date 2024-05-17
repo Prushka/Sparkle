@@ -92,6 +92,28 @@ export type Job = {
 	Duration: number;
 };
 
+export const languageMap: {[key: string]:string} = {
+	"eng": "English-English",
+	"ara": "Arabic-العربية",
+	"ger": "German-Deutsch",
+	"spa": "Spanish-Español",
+	"fre": "French-Français",
+	"ita": "Italian-Italiano",
+	"por": "Portuguese-Português",
+	"rus": "Russian-Русский",
+	"chi": "Chinese-中文",
+	"jpn": "Japanese-日本語",
+	"kor": "Korean-한국어",
+	"hin": "Hindi-हिन्दी",
+	"urd": "Urdu-اردو",
+	"tur": "Turkish-Türkçe",
+	"vie": "Vietnamese-Tiếng Việt",
+	"tha": "Thai-ไทย",
+	"dut": "Dutch-Nederlands",
+	"swe": "Swedish-Svenska",
+	"dan": "Danish-Dansk",
+	"nor": "Norwegian-Norsk"
+};
 
 export function formatSeconds(seconds: number | undefined): string {
 	if (seconds === undefined) {

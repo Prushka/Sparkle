@@ -8,7 +8,7 @@
 		type Job,
 		type Chat,
 		type Player,
-		SyncTypes, type SendPayload, defaultTheme, themes, setGetPlayerId, formatMbps
+		SyncTypes, type SendPayload, defaultTheme, themes, setGetPlayerId, formatMbps, languageMap
 	} from './t';
 	import { PUBLIC_HOST, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -234,7 +234,7 @@
 					if (enc) {
 						player.textTracks.add({
 							src: `${PUBLIC_HOST}/static/${roomId}/${enc.Location}`,
-							label: enc.Location,
+							label: languageMap[enc.Language] || enc.Language,
 							kind: 'subtitles',
 							default: enc.Language.includes('eng')
 						});
