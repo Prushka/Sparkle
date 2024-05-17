@@ -318,7 +318,7 @@
 	});
 
 	function updateTime() {
-		const timeRounded = Math.floor(player.currentTime);
+		const timeRounded = Math.ceil(player.currentTime);
 		if (lastSentTime !== timeRounded) {
 			send({
 				type: SyncTypes.TimeSync,
