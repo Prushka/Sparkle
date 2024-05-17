@@ -3,6 +3,14 @@ export const defaultTheme = themes[0];
 
 export const codecsPriority = ['av1', 'hevc', 'h264'];
 
+export const supportedCodecs = ['av1', 'hevc'];
+
+export const codecMap: {[key: string]: string} = {
+	'av1': 'av01.0.05M.08, opus',
+	'hevc': 'hvc1.1.6.L93.B0, opus',
+	'h264': 'avc1.42E01E, opus'
+}
+
 export enum SyncTypes {
 	NewPlayer = 'new player',
 	NameSync = 'name',

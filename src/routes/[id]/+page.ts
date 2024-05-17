@@ -1,5 +1,5 @@
 import { PUBLIC_HOST } from '$env/static/public';
-import { codecsPriority, type Job } from '$lib/player/t';
+import { codecsPriority, type Job, supportedCodecs } from '$lib/player/t';
 import * as cheerio from 'cheerio';
 
 /** @type {import('./$types').PageServerLoad} */
@@ -24,9 +24,16 @@ export async function load({ params }) {
 				codec = 'hevc'
 			}
 		}
-		job?.EncodedCodecs.sort((a, b) => {
-			return codecsPriority.indexOf(a) - codecsPriority.indexOf(b);
-		});
+		if(job?.EncodedCodecs){
+			job.EncodedCodecs.sort((a, b) => {
+				return codecsPriority.indexOf(a) - codecsPriority.indexOf(b);
+			});
+			for (const codec of job.EncodedCodecs) {
+				if (!supportedCodecs.includes(codec)) {
+					job.EncodedCodecs.splice(job.EncodedCodecs.indexOf(codec), 1);
+				}
+			}
+		}
 		title = job?.FileRawName || "UwU"
 		const infoResponse = await fetch(`${base}/info.nfo`);
 		const info = await infoResponse.text();

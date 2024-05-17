@@ -3,12 +3,11 @@
 	import type { MediaPlayerElement } from 'vidstack/elements';
 	import { onDestroy, onMount } from 'svelte';
 	import {
-		codecsPriority,
 		formatSeconds,
 		type Job,
 		type Chat,
 		type Player,
-		SyncTypes, type SendPayload, defaultTheme, themes, setGetPlayerId, formatMbps, languageMap, languageSrcMap
+		SyncTypes, type SendPayload, defaultTheme, themes, setGetPlayerId, formatMbps, languageMap, languageSrcMap, codecMap
 	} from './t';
 	import { PUBLIC_HOST, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -56,18 +55,20 @@
 	let chatFocused = false;
 	let chatPfpHidden: boolean = localStorage.getItem('chatPfpHidden') ? localStorage.getItem('chatPfpHidden') === 'true' : true;
 	let metadata: any;
+	let videoSrc: any = []
 	const unsubscribeMetadata = metadataStore.subscribe((value) => {
 		metadata = value;
 		job = metadata.job;
+		setVideoSrc();
 	});
 	const unsubscribeChatHidden = chatHiddenStore.subscribe((value) => chatHidden = value);
 	const unsubscribeChatFocused = chatFocusedStore.subscribe((value) => chatFocused = value);
-	$: videoSrc = `${PUBLIC_HOST}/static/${roomId}/${selectedCodec}.mp4`;
 	$: thumbnailVttSrc = `${PUBLIC_HOST}/static/${roomId}/storyboard.vtt`;
 	$: socketCommunicating = socketConnected && (tickedSecsAgo >= 0 && tickedSecsAgo < 5);
 
 	$: {
 		console.log(metadata);
+		console.log("srcList:", videoSrc)
 	}
 
 	onDestroy(() => {
@@ -75,6 +76,28 @@
 		unsubscribeChatFocused();
 		unsubscribeMetadata();
 	});
+
+	function setVideoSrc() {
+		const lst = [];
+		if(job){
+			if(selectedCodec === "") {
+				for (const codec of job.EncodedCodecs) {
+					lst.push({
+						src: `${PUBLIC_HOST}/static/${roomId}/${codec}.mp4`,
+						type: 'video/mp4',
+						codec: codecMap[codec]
+					});
+				}
+				videoSrc = lst;
+			}else{
+				videoSrc = [{
+					src: `${PUBLIC_HOST}/static/${roomId}/${selectedCodec}.mp4`,
+					type: 'video/mp4',
+					codec: codecMap[selectedCodec]
+				}];
+			}
+		}
+	}
 
 	function nextTheme() {
 		const html = document.querySelector('html');
@@ -105,14 +128,15 @@
 		const lsCodec = localStorage.getItem('codec') || '';
 		if (job?.EncodedCodecs && job?.EncodedCodecs.length > 0 && !job?.EncodedCodecs.includes(lsCodec)) {
 			console.log('setting codec - no matching codec', lsCodec, job?.EncodedCodecs);
-			selectedCodec = job!.EncodedCodecs[0];
+			selectedCodec = '';
 		}
 	}
 
 	$:{
-		if (selectedCodec !== '') {
 			localStorage.setItem('codec', selectedCodec);
-		}
+			if (selectedCodec === "") {
+				setVideoSrc();
+			}
 	}
 
 	function connect() {
@@ -391,12 +415,7 @@
     }}
 		id="the-player"
 		class="media-player w-full bg-slate-900 aspect-video relative"
-		src={[
-			{
-				src: videoSrc,
-				type: 'video/mp4'
-			}
-		]}
+		src={videoSrc}
 		crossorigin
 		bind:this={player}
 		playsInline
