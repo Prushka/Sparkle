@@ -13,15 +13,18 @@ export const codecMap: {[key: string]: string} = {
 
 export function getSupportedCodecs() {
 	const supported = []
-	for (const codec of supportedCodecs) {
-		const obj = document.createElement("video");
-		const toTest = `video/mp4; codecs="${codecMap[codec]}"`
-		const canPlayType = obj.canPlayType(toTest)
-		const isSupported = MediaSource.isTypeSupported(toTest);
-		console.log(codecMap[codec], canPlayType, isSupported);
-		if (canPlayType !== "" && isSupported) {
-			supported.push(codec);
+	try{
+		for (const codec of supportedCodecs) {
+			const obj = document.createElement("video");
+			const toTest = `video/mp4; codecs="${codecMap[codec]}"`
+			const canPlayType = obj.canPlayType(toTest)
+			console.log(codecMap[codec], canPlayType);
+			if (canPlayType !== "") {
+				supported.push(codec);
+			}
 		}
+	}catch (e) {
+		console.log(e);
 	}
 	return supported;
 }
