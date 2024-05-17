@@ -34,7 +34,7 @@
 	let roomMessages: Chat[] = [];
 	let jobs: Job[] = [];
 	let job: Job | undefined;
-	let roomId: string = '';
+	let roomId = $page.params.id || '';
 	let lastTicked = 0;
 	let tickedSecsAgo = 0;
 	let tickedSecsAgoStr = '0';
@@ -52,7 +52,10 @@
 	let chatFocused = false;
 	let chatPfpHidden: boolean = localStorage.getItem('chatPfpHidden') ? localStorage.getItem('chatPfpHidden') === 'true' : true;
 	let metadata: any;
-	const unsubscribeMetadata = metadataStore.subscribe((value) => metadata = value);
+	const unsubscribeMetadata = metadataStore.subscribe((value) => {
+		metadata = value;
+		job = metadata.job;
+	});
 	const unsubscribeChatHidden = chatHiddenStore.subscribe((value) => chatHidden = value);
 	const unsubscribeChatFocused = chatFocusedStore.subscribe((value) => chatFocused = value);
 	$: videoSrc = `${PUBLIC_HOST}/static/${roomId}/${selectedCodec}.mp4`;
@@ -197,7 +200,6 @@
 					return a.FileRawName.localeCompare(b.FileRawName);
 				});
 				console.log(jobs);
-				roomId = $page.params.id || '';
 				onSuccess();
 			});
 	}
@@ -226,7 +228,6 @@
 	}
 
 	function initFromId() {
-		job = jobs.find((job) => job.Id === roomId);
 		if (job) {
 			if (job.Subtitles) {
 				for (const [, sub] of Object.entries(job.Subtitles)) {
@@ -252,9 +253,8 @@
 	}
 
 	onMount(() => {
-		updateList(() => {
-			initFromId();
-		});
+		updateList();
+		initFromId();
 		const ii = setInterval(() => {
 			updateList();
 		}, 60000);
@@ -263,6 +263,17 @@
 				send({ state: "bg", type: SyncTypes.StateSync });
 			} else {
 				send({ state: "fg", type: SyncTypes.StateSync });
+			}
+		});
+		const playerUnsubscribe = player.subscribe(({ controlsVisible, canPlay, canLoad }) => {
+			controlsShowing = controlsVisible;
+			if (canLoad && canPlay && pauseSend) {
+				// video loaded, send was paused bcz of codec change
+				player.currentTime = timeBeforeCodecChange;
+				if (!pausedBeforeCodecChange) {
+					player.play();
+				}
+				pauseSend = false;
 			}
 		});
 		const i = setInterval(() => {
@@ -307,21 +318,8 @@
 			socket?.close();
 			clearInterval(i);
 			clearInterval(ii);
+			playerUnsubscribe();
 		};
-	});
-
-	onMount(() => {
-		return player.subscribe(({ controlsVisible, canPlay, canLoad }) => {
-			controlsShowing = controlsVisible;
-			if (canLoad && canPlay && pauseSend) {
-				// video loaded, send was paused bcz of codec change
-				player.currentTime = timeBeforeCodecChange;
-				if (!pausedBeforeCodecChange) {
-					player.play();
-				}
-				pauseSend = false;
-			}
-		});
 	});
 
 	function updateTime() {

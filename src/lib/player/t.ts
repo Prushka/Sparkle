@@ -171,7 +171,7 @@ export function setGetPlayerId(): string {
 }
 
 export function getMbps(job: Job | undefined | null, codec: string): number {
-	if (!job?.EncodedCodecsSize[codec] || !job?.Duration) {
+	if (!job?.EncodedCodecsSize?.[codec] || !job?.Duration) {
 		return 0;
 	}
 	return job?.EncodedCodecsSize[codec] / 1024 / 1024 / job?.Duration / 0.125
