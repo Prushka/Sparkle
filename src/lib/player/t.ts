@@ -1,7 +1,7 @@
 export const themes = ['sunset', 'dark', 'nord', 'emerald'];
 export const defaultTheme = themes[0];
 
-export const codecsPriority = ['av1', 'hevc'];
+export const codecsPriority = ['av1', 'hevc', 'h264'];
 
 export enum SyncTypes {
 	NewPlayer = 'new player',
@@ -129,7 +129,7 @@ export function getMbps(job: Job | undefined | null, codec: string): number {
 	if (!job?.EncodedCodecsSize[codec] || !job?.Duration) {
 		return 0;
 	}
-	return Math.round(job?.EncodedCodecsSize[codec] / 1024 / 1024 / job?.Duration / 0.125)
+	return job?.EncodedCodecsSize[codec] / 1024 / 1024 / job?.Duration / 0.125
 }
 
 export function formatMbps(job: Job | undefined | null, codec: string): string {
@@ -137,5 +137,5 @@ export function formatMbps(job: Job | undefined | null, codec: string): string {
 	if (mbps === 0) {
 		return '';
 	}
-	return `: ${mbps} Mbps`;
+	return `: ${mbps.toFixed(2)} Mbps`;
 }
