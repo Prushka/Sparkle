@@ -191,7 +191,7 @@
 					return a.FileRawName.localeCompare(b.FileRawName);
 				});
 				console.log(jobs);
-				roomId = $page.url.searchParams.get('id') || '';
+				roomId = $page.params.id || '';
 				onSuccess();
 			});
 	}
@@ -479,8 +479,7 @@
 			<select
 				on:change={(e) => {
 				const roomId = e.currentTarget.value;
-				$page.url.searchParams.set('id', roomId);
-				window.location.href = $page.url.toString();
+				window.location.href = `/${roomId}`;
 			}}
 				bind:value={roomId}
 				class="select media-select select-bordered flex-grow mr-4">
