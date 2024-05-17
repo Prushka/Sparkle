@@ -14,6 +14,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import {
+		IconAt, IconAtOff,
 		IconBrightnessHalf, IconEye, IconEyeOff,
 		IconPlayerPauseFilled,
 		IconPlayerPlayFilled,
@@ -50,6 +51,8 @@
 	let interactedWithPlayer = false;
 	let currentTheme = localStorage.getItem('theme') || defaultTheme;
 	let chatHidden = false;
+	let lastSentTime = -100;
+	let chatPfpHidden: boolean = localStorage.getItem('chatPfpHidden') === 'true' || true;
 	const unsubscribe = chatHiddenStore.subscribe((value) => chatHidden = value);
 	$: videoSrc = `${PUBLIC_HOST}/static/` + roomId + '/' + selectedCodec + '.' + videoExt;
 	$: thumbnailVttSrc = `${PUBLIC_HOST}/static/` + roomId + `/storyboard.vtt`;
@@ -262,10 +265,6 @@
 			updateList();
 		}, 60000);
 		const i = setInterval(() => {
-			send({
-				type: SyncTypes.TimeSync,
-				time: player?.currentTime
-			});
 			if (!document.getElementById('chat-input')) {
 				console.log('mounting chat');
 				const node = document.querySelector('media-title');
@@ -317,6 +316,19 @@
 			}
 		});
 	});
+
+	onMount(() => {
+		return player.subscribe(({ currentTime }) => {
+			const timeRounded = Math.round(currentTime);
+			if (lastSentTime !== timeRounded) {
+				send({
+					type: SyncTypes.TimeSync,
+					time: timeRounded
+				});
+				lastSentTime = timeRounded;
+			}
+		});
+	})
 
 
 </script>
@@ -401,7 +413,9 @@
 					minute: '2-digit'
 				})}]</p>
 						 <p>{message.username}</p>
-					<Pfp id={message.uid} class="avatar" />
+					{#if chatPfpHidden === false}
+						<Pfp id={message.uid} class="avatar" />
+					{/if}
 				</div>
 			{/each}
 		</div>
@@ -503,6 +517,18 @@
 						<IconEye size={24} stroke={2} />
 					{:else}
 						<IconEyeOff size={24} stroke={2} />
+					{/if}
+				</button>
+			</div>
+			<div class="tooltip tooltip-left" data-tip={chatPfpHidden ? "Show Pfp" : "Hide Pfp"}>
+				<button id="chat-hide-button" on:click={()=>{
+					chatPfpHidden = !chatPfpHidden;
+					localStorage.setItem('chatPfpHidden', chatPfpHidden.toString());
+				}} class="btn font-bold">
+					{#if chatPfpHidden}
+						<IconAt size={24} stroke={2} />
+					{:else}
+						<IconAtOff size={24} stroke={2} />
 					{/if}
 				</button>
 			</div>
