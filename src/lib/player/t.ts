@@ -3,12 +3,12 @@ export const defaultTheme = themes[0];
 
 export const codecsPriority = ['av1', 'hevc', 'h264'];
 
-export const supportedCodecs = ['av1', 'hevc'];
+export const supportedCodecs = ['av1', 'hevc', 'h264'];
 
 export const codecMap: {[key: string]: string} = {
-	'av1': 'av01.1.04M.08,opus',
-	'hevc': 'hvc1.1.6.L93.B0,opus',
-	'h264': 'avc1.42E01E,opus'
+	'av1': 'av01.0.01M.08',
+	'hevc': 'hvc1.1.6.L93.B0',
+	'h264': 'avc1.42E01E'
 }
 
 export enum SyncTypes {

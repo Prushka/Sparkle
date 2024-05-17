@@ -79,24 +79,48 @@
 	});
 
 	function setVideoSrc() {
-		const lst = [];
 		if(job){
-			if(selectedCodec === "auto") {
-				for (const codec of job.EncodedCodecs) {
-					lst.push({
-						src: `${PUBLIC_HOST}/static/${roomId}/${codec}.mp4`,
-						type: 'video/mp4',
-						codec: codecMap[codec]
-					});
+			let autoCodec = ""
+			for (const codec of job.EncodedCodecs) {
+				let obj = document.createElement("video");
+				const toTest = `video/mp4; codecs="${codecMap[codec]}"`
+				const canPlayType = obj.canPlayType(toTest)
+				const isSupported = MediaSource.isTypeSupported(toTest);
+				console.log(codecMap[codec], canPlayType, isSupported);
+				if (canPlayType !== "" && isSupported) {
+					autoCodec = codec;
+					break;
 				}
-				lst.reverse()
-				videoSrc = lst;
-			}else{
-				videoSrc = [{
+			}
+			const prevCodec = videoSrc?.sCodec
+			const change = () => {
+				pauseSend = true;
+				if (player) {
+					stateBeforeCodecChange = {
+						paused: player.paused,
+						time: player.currentTime,
+						volume: player.volume,
+						muted: player.muted
+					};
+				}
+			}
+			if(selectedCodec === "auto" && prevCodec !== autoCodec) {
+				videoSrc = {
+					src: `${PUBLIC_HOST}/static/${roomId}/${autoCodec}.mp4`,
+					type: 'video/mp4',
+					codec: codecMap[autoCodec],
+					sCodec: autoCodec
+				};
+				console.log("auto codec", autoCodec, codecMap[autoCodec])
+				change()
+			}else if (selectedCodec !== "auto" && prevCodec !== selectedCodec) {
+				videoSrc = {
 					src: `${PUBLIC_HOST}/static/${roomId}/${selectedCodec}.mp4`,
 					type: 'video/mp4',
 					codec: codecMap[selectedCodec]
-				}];
+				};
+				console.log("selected codec", selectedCodec, codecMap[selectedCodec])
+				change()
 			}
 		}
 	}
@@ -111,15 +135,6 @@
 	}
 
 	function onCodecChange(event: any) {
-		pauseSend = true;
-		if (player) {
-			stateBeforeCodecChange = {
-				paused: player.paused,
-				time: player.currentTime,
-				volume: player.volume,
-				muted: player.muted
-			};
-		}
 		selectedCodec = event.currentTarget.value;
 		localStorage.setItem('codec', selectedCodec);
 		setVideoSrc();
@@ -527,7 +542,7 @@
 			</select>
 			<div class="join">
 				{#if job?.EncodedCodecs}
-					<div class="tooltip tooltip-left" data-tip="Video Codec - Auto Select">
+					<div class="tooltip tooltip-left" data-tip="Video Codec - Auto {videoSrc?.sCodec ? `(${videoSrc.sCodec})`: ''}">
 						<input class="join-item btn" type="radio" name="options"
 									 checked={"auto" === selectedCodec}
 									 aria-label="Auto"
