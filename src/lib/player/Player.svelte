@@ -8,7 +8,7 @@
 		type Job,
 		type Chat,
 		type Player,
-		SyncTypes, type SendPayload, defaultTheme, themes, setGetPlayerId, formatMbps, languageMap
+		SyncTypes, type SendPayload, defaultTheme, themes, setGetPlayerId, formatMbps, languageMap, languageSrcMap
 	} from './t';
 	import { PUBLIC_HOST, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -236,6 +236,8 @@
 							src: `${PUBLIC_HOST}/static/${roomId}/${enc.Location}`,
 							label: languageMap[enc.Language] || enc.Language,
 							kind: 'subtitles',
+							type: 'vtt',
+							language: languageSrcMap[enc.Language] || enc.Language,
 							default: enc.Language.includes('eng')
 						});
 					}

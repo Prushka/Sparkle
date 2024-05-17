@@ -115,6 +115,29 @@ export const languageMap: {[key: string]:string} = {
 	"nor": "Norwegian-Norsk"
 };
 
+export const languageSrcMap: {[key: string]:string} = {
+	"eng": "en-US",
+	"ara": "ar-SA",
+	"ger": "de-DE",
+	"spa": "es-ES",
+	"fre": "fr-FR",
+	"ita": "it-IT",
+	"por": "pt-PT",
+	"rus": "ru-RU",
+	"chi": "zh-CN",
+	"jpn": "ja-JP",
+	"kor": "ko-KR",
+	"hin": "hi-IN",
+	"urd": "ur-PK",
+	"tur": "tr-TR",
+	"vie": "vi-VN",
+	"tha": "th-TH",
+	"dut": "nl-NL",
+	"swe": "sv-SE",
+	"dan": "da-DK",
+	"nor": "no-NO"
+};
+
 export function formatSeconds(seconds: number | undefined): string {
 	if (seconds === undefined) {
 		return '00:00';
