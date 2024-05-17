@@ -1,8 +1,6 @@
 services:
   sparkle-fe:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: meinya/sparkle-fe:latest
     ports:
       - "1330:3000"
     environment:
