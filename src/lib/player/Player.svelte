@@ -532,16 +532,20 @@
 					<option value={job.Id}>{job.FileRawName}</option>
 				{/each}
 			</select>
-			<div class="dropdown dropdown-end" id="codec-dropdown">
+			<div class="dropdown dropdown-left" id="codec-dropdown">
 				<div
 					tabindex="0" role="button" class="btn m-1 w-28">{selectedCodec} {(videoSrc?.sCodec && selectedCodec === "auto") ? `(${videoSrc.sCodec})`: ''}</div>
 				<ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-48">
-					<li><a tabindex="0" role="button" on:click={()=>{
+					<li><a
+						class={selectedCodec === "auto"? "selected-dropdown" : ""}
+						tabindex="0" role="button" on:click={()=>{
 						onCodecChange("auto")
 					}}>Auto</a></li>
 					{#if job?.EncodedCodecs}
 						{#each job?.EncodedCodecs as codec}
-							<li><a tabindex="0" role="button" on:click={()=>{
+							<li><a
+								class={selectedCodec === codec? "selected-dropdown" : ""}
+								tabindex="0" role="button" on:click={()=>{
 							onCodecChange(codec)
 							}}>
 								{codec}{formatMbps(job, codec)}
@@ -602,7 +606,7 @@
 			</div>
 		</div>
 
-		<div class="flex gap-4 sync-states w-full justify-center">
+		<div class="flex gap-4 sync-states w-full justify-center mb-16">
 			{#each roomPlayers as player}
 				<button
 					class="btn btn-neutral border-none h-auto pr-4 py-0 pl-0 rounded-l-full rounded-r-full shadow-md flex gap-3.5">
