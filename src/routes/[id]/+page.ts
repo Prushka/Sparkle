@@ -1,14 +1,21 @@
 import { PUBLIC_HOST } from '$env/static/public';
 import type { Job } from '$lib/player/t';
+import * as cheerio from 'cheerio';
 
 /** @type {import('./$types').PageServerLoad} */
 export async function load({ params }) {
 	const { id } = params;
 	let job: Job | null = null
 	let codec = 'h264'
+	const base = `${PUBLIC_HOST}/static/${id}/`
+	let episode = -1
+	let season = -1
+	let plot = ''
+	let title = 'UwU'
+	let rating = -1
 	try {
-		const titleResponse = await fetch(`${PUBLIC_HOST}/static/` + id + '/job.json');
-		job = await titleResponse.json();
+		const jobResponse = await fetch(`${base}/job.json`);
+		job = await jobResponse.json();
 		if (!job?.EncodedCodecs?.includes('h264')) {
 			if (job?.EncodedCodecs?.includes('av1')) {
 				codec = 'av1'
@@ -16,12 +23,37 @@ export async function load({ params }) {
 				codec = 'hevc'
 			}
 		}
+		title = job?.FileRawName || "UwU"
+		const infoResponse = await fetch(`${base}/info.nfo`);
+		const info = await infoResponse.text();
+		const $ = cheerio.load(info);
+		episode = parseInt($('episode').text());
+		season = parseInt($('season').text());
+		rating = parseFloat($('rating').text());
+		plot = $('plot').text();
+		const nfoTitle = $('title').text()
+		if (nfoTitle.length > 0) {
+			title = nfoTitle;
+		}
 	} catch (e) {
 		console.log(params, e);
 	}
+	if (episode >=0 && season >=0) {
+		const seasonEpisode = `S${season.toString().padStart(2, '0')}E${episode.toString().padStart(2, '0')}`
+		if (title.includes(seasonEpisode)) {
+			title = title.substring(0, title.indexOf(seasonEpisode))
+			title = title.substring(0, title.length - 3)
+			title = `${title} - Season ${season} - Episode ${episode}`
+		}
+	}
 	return {
 		job: job,
-		video: `${PUBLIC_HOST}/static/${id}/${codec}.mp4`,
-		preview: `${PUBLIC_HOST}/static/` + id + '/poster.jpg',
+		video: `${base}/${codec}.mp4`,
+		preview: `${base}/poster.jpg`,
+		rating,
+		title,
+		plot,
+		episode,
+		season,
 	};
 }
