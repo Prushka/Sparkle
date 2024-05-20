@@ -22,8 +22,7 @@
 	import { page } from '$app/stores';
 	import {
 		IconAlertOctagonFilled,
-		IconAt, IconAtOff,
-		IconBrightnessHalf, IconEye, IconEyeOff,
+		IconBrightnessHalf, IconCone, IconConePlus, IconEye, IconEyeOff,
 		IconPlayerPauseFilled,
 		IconPlayerPlayFilled,
 		IconPlugConnected,
@@ -59,7 +58,7 @@
 	let chatHidden = false;
 	let lastSentTime = -100;
 	let chatFocused = false;
-	let chatPfpHidden: boolean = localStorage.getItem('chatPfpHidden') ? localStorage.getItem('chatPfpHidden') === 'true' : true;
+	let chatDisplay: string = localStorage.getItem('chatDisplay') ? localStorage.getItem('chatDisplay')! : 'simple';
 	let metadata: any;
 	let videoSrc: any = []
 	const unsubscribeMetadata = metadataStore.subscribe((value) => {
@@ -431,13 +430,15 @@
 				<div
 					class={`flex gap-1 justify-center items-center chat-line py-1 pl-2.5 pr-2 text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''}`}>
 					<p>{message.message}</p>
-					<p class="text-sm">
-						[{message.isStateUpdate ? '' : `${formatSeconds(message.mediaSec)}, `}{new Date(message.timestamp).toLocaleTimeString('en-US', {
+							<p class="text-sm">
+						[{(message.isStateUpdate || chatDisplay !== "full") ? '' : `${formatSeconds(message.mediaSec)}, `}{new Date(message.timestamp).toLocaleTimeString('en-US', {
 						hour: '2-digit',
 						minute: '2-digit'
-					})}]</p>
+					})}]
+							</p>
+
 					<p>{message.username}</p>
-					{#if chatPfpHidden === false}
+					{#if chatDisplay === "full"}
 						<Pfp id={message.uid} class="avatar" />
 					{/if}
 				</div>
@@ -565,17 +566,17 @@
 					{/if}
 				</button>
 			</div>
-			<div class="tooltip tooltip-top" data-tip={chatPfpHidden ? "Show Avatar in Chat" : "Hide Avatar in Chat"}>
+			<div class="tooltip tooltip-top" data-tip={chatDisplay === "full" ? "Switch to simple chat layout" : "Switch to full chat layout"}>
 				<button id="chat-hide-button" on:click={()=>{
-					chatPfpHidden = !chatPfpHidden;
-					localStorage.setItem('chatPfpHidden', chatPfpHidden.toString());
+					chatDisplay = chatDisplay === "full" ? "simple" : "full";
+					localStorage.setItem('chatDisplay', chatDisplay);
 				}} class="btn font-bold">
-					{#if !chatPfpHidden}
-						<IconAt size={16} stroke={2} />
-						Avatar
+					{#if chatDisplay === "full"}
+						<IconConePlus size={16} stroke={2} />
+						Full
 					{:else}
-						<IconAtOff size={16} stroke={2} />
-						Avatar
+						<IconCone size={16} stroke={2} />
+						Simple
 					{/if}
 				</button>
 			</div>
