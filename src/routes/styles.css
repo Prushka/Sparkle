@@ -154,6 +154,9 @@ input {
 		width: 1rem;
 		height: 1rem;
 	}
+	:where(.vds-video-layout .vds-controls[data-visible]) {
+		background-image: linear-gradient(to top, rgba(0, 0, 0, 0.44) 0%, rgba(0, 0, 0, 0) 22%) !important;
+	}
 }
 
 .selected-dropdown {
