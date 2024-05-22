@@ -2,6 +2,7 @@
 	import 'vidstack/bundle';
 	import type { MediaPlayerElement } from 'vidstack/elements';
 	import { onDestroy, onMount } from 'svelte';
+	import SUPtitles from 'suptitles';
 	import {
 		formatSeconds,
 		type Job,
@@ -65,6 +66,8 @@
 		metadata = value;
 		job = metadata.job;
 	});
+	let sup : any;
+	let supLink: string = "";
 	const unsubscribeChatHidden = chatHiddenStore.subscribe((value) => chatHidden = value);
 	const unsubscribeChatFocused = chatFocusedStore.subscribe((value) => chatFocused = value);
 	$: thumbnailVttSrc = `${PUBLIC_HOST}/static/${roomId}/storyboard.vtt`;
@@ -255,13 +258,14 @@
 				for (const [, sub] of Object.entries(job.Subtitles)) {
 					const enc = sub.Enc;
 					if (enc) {
+						const loc = `${PUBLIC_HOST}/static/${roomId}/${enc.Location}`
 						player.textTracks.add({
-							src: `${PUBLIC_HOST}/static/${roomId}/${enc.Location}`,
+							src: loc,
 							label: languageMap[enc.Language] || enc.Language,
 							kind: 'subtitles',
-							type: 'vtt',
+							type: enc.CodecName.includes('vtt') ? "vtt" : enc.CodecName.includes('ass') ? "ass" : "srt",
 							language: languageSrcMap[enc.Language] || enc.Language,
-							default: enc.Language.includes('eng')
+							default: enc.Language.includes('eng'),
 						});
 					}
 				}
@@ -320,6 +324,20 @@
 			updateMessages();
 			tickedSecsAgo = (socketConnected && roomPlayers.length > 0) ? (Date.now() - lastTicked) / 1000 : -1;
 			tickedSecsAgoStr = (Math.round(tickedSecsAgo * 100) / 100).toFixed(2);
+			const videoElement = document.querySelector("media-provider video")
+			if (videoElement) {
+				const selectedTrack = player.textTracks.selected;
+				if (selectedTrack?.src && selectedTrack.src.slice(-4).includes("sup")) {
+					if (supLink !== selectedTrack.src) {
+						if(sup != null){
+							sup.dispose()
+						}
+						console.log("sup", selectedTrack.src)
+						sup = new SUPtitles(videoElement, selectedTrack.src)
+						supLink = selectedTrack.src
+					}
+				}
+			}
 		}, 1000);
 		if (name === '') {
 			document.getElementById('name_modal')?.showModal();
