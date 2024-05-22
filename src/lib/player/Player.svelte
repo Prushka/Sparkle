@@ -337,14 +337,19 @@
 							sup.dispose()
 						}
 						console.log("sup", selectedTrack.src)
-						sup = new SUPtitles(videoElement, selectedTrack.src, () => {
-							return player.currentTime * 1000
-						})
-						onPlay = sup.playHandler
-						onPause = sup.pauseHandler
-						onSeek = sup.seekHandler
+
+						fetch(selectedTrack.src)
+							.then(response => response.arrayBuffer())
+							.then(buffer => {
+								const file = new Uint8Array(buffer)
+								sup = new SUPtitles(videoElement, file, () => {
+									return player.currentTime * 1000
+								})
+								onPlay = sup.playHandler
+								onPause = sup.pauseHandler
+								onSeek = sup.seekHandler
+							})
 						supLink = selectedTrack.src
-						footer = "Using bitmap subtitles, render may be slow when seeking"
 					}
 				}
 			}

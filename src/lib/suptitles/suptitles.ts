@@ -12,7 +12,7 @@ import {
 import { getRgb, getPxAlpha } from './imageParser.js'
 
 export default class SUPtitles {
-	file: Uint8Array | undefined
+	file: Uint8Array
 	offset: number = 0
 	timeout: any = null
 	lastPalette: Palette[] | null = null
@@ -20,7 +20,7 @@ export default class SUPtitles {
 	canvasSizeSet = false
 	videoTime: () => number
 
-	constructor(video: HTMLVideoElement, link: string, getTime: () => number) {
+	constructor(video: HTMLVideoElement, file: Uint8Array, getTime: () => number) {
 		console.info('# SUP Starting')
 
 		const canvas = document.createElement('canvas')
@@ -38,13 +38,7 @@ export default class SUPtitles {
 		this.videoTime = getTime
 
 		this.cv.push(canvas)
-
-		fetch(link)
-			.then(response => response.arrayBuffer())
-			.then(buffer => {
-				this.file = new Uint8Array(buffer)
-				console.info('# SUP Ready')
-			})
+		this.file = file
 	}
 
 	seekHandler = (): void => {
@@ -66,8 +60,6 @@ export default class SUPtitles {
 
 	dispose(): void {
 		clearTimeout(this.timeout)
-		this.timeout = null
-		this.lastPalette = null
 		this.cv.map(c => (c.outerHTML = ''))
 		console.info('# SUP Disposed')
 	}
@@ -91,12 +83,11 @@ export default class SUPtitles {
 
 	getNextSubtitle(): void {
 		if (this.offset < this.file.length) {
-			console.log("Offset: ", this.offset)
 			let ended = false
 			let PCS: PresentationCompositionSegment
 			let WDS: WindowDefinitionSegment
 			let PDS: PaletteDefinitionSegment
-			let ODS: ObjectDefinitionSegment[] = []
+			const ODS: ObjectDefinitionSegment[] = []
 
 			while (!ended) {
 				const size = 13 + a2h2i(this.file, this.offset + 11, this.offset + 13)
@@ -133,14 +124,12 @@ export default class SUPtitles {
 				}
 				this.offset += size
 			}
-			console.log("Video: ", this.videoTime())
-			console.log("PTS: ", PCS.base.pts)
 			this.timeout = setTimeout(() => {
 				PDS || this.lastPalette
 					? this.draw(PCS, WDS, PDS, ODS)
 					: console.log('# SUP SKIPPING, NO PALETTE')
 				this.getNextSubtitle()
-			}, PCS.base.pts - this.videoTime())
+			}, PCS!.base.pts - this.videoTime())
 		}
 	}
 
@@ -152,7 +141,7 @@ export default class SUPtitles {
 	): void {
 		if (ODS.length > 0) {
 			// DRAW
-			let first: ObjectDefinitionSegment
+			let first: ObjectDefinitionSegment | null
 			ODS.map(o => {
 				if (o.type === 'First') {
 					first = o
@@ -167,20 +156,20 @@ export default class SUPtitles {
 					const width = first ? first.width : o.width
 					const height = first ? first.height : o.height
 					const object = PCS.getObjectById(first ? first.id : o.id)
-					const xOffset = object.xOffset
-					const yOffset = object.yOffset
+					const xOffset = object?.xOffset
+					const yOffset = object?.yOffset
 					const pixels = this.getPixels(
 						imgData,
-						PDS ? PDS.palette : this.lastPalette,
+						PDS ? PDS.palette : this.lastPalette!,
 						width,
 						height
 					)
 					this.cv[0] // object.windowId
 						.getContext('2d')
-						.putImageData(
+						?.putImageData(
 							new ImageData(pixels, width, height),
-							xOffset,
-							yOffset
+							xOffset!,
+							yOffset!
 						)
 					first = null
 				}
@@ -195,7 +184,7 @@ export default class SUPtitles {
 				) {
 					this.cv[0] // w.windowId
 						.getContext('2d')
-						.putImageData(
+						?.putImageData(
 							new ImageData(
 								new Uint8ClampedArray(w.width * w.height * 4),
 								w.width,
@@ -218,7 +207,7 @@ export default class SUPtitles {
 	): Uint8ClampedArray {
 		const rgb = getRgb(palette)
 
-		let [pxMx1, alphaMx1] = getPxAlpha(imgData, palette)
+		const [pxMx1, alphaMx1] = getPxAlpha(imgData, palette)
 
 		const pxls = new Uint8ClampedArray(width * height * 4)
 
@@ -226,7 +215,7 @@ export default class SUPtitles {
 			for (let w = 0; w < pxMx1[h].length; w++) {
 				const i = h * pxMx1[h].length + w
 
-				pxls[i * 4 + 0] = rgb[pxMx1[h][w]][0]
+				pxls[i * 4] = rgb[pxMx1[h][w]][0]
 				pxls[i * 4 + 1] = rgb[pxMx1[h][w]][1]
 				pxls[i * 4 + 2] = rgb[pxMx1[h][w]][2]
 				pxls[i * 4 + 3] = alphaMx1[h][w]
