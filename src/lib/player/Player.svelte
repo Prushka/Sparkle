@@ -16,7 +16,7 @@
 		languageMap,
 		languageSrcMap,
 		codecMap,
-		getSupportedCodecs
+		getSupportedCodecs, lightThemes
 	} from './t';
 	import { PUBLIC_HOST, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -109,8 +109,7 @@
 
 	function nextTheme() {
 		const html = document.querySelector('html');
-		const cT = localStorage.getItem('theme') || defaultTheme;
-		const nextTheme = themes[(themes.indexOf(cT) + 1) % themes.length];
+		const nextTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length];
 		html?.setAttribute('data-theme', nextTheme);
 		localStorage.setItem('theme', nextTheme);
 		currentTheme = nextTheme;
@@ -418,7 +417,7 @@
 			}}
 	>
 		<media-provider></media-provider>
-		<media-video-layout thumbnails={thumbnailVttSrc}></media-video-layout>
+		<media-video-layout colorScheme={lightThemes.includes(currentTheme) ? "light" : "dark"} thumbnails={thumbnailVttSrc}></media-video-layout>
 	</media-player>
 
 	<div class="flex gap-1 w-full h-full absolute pointer-events-none" id="chat-overlay"

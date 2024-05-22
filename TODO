@@ -1,2 +1,1 @@
-Pause send when in bg until reentry, don't send previous ones
-Simple and full chat display
+Pause send when in bg until reentry, don't send previous ones - pause state won't be sent
