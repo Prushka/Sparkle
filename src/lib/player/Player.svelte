@@ -321,7 +321,7 @@
 						const loc = `${PUBLIC_HOST}/static/${roomId}/${enc.Location}`;
 						player.textTracks.add({
 							src: loc,
-							label: languageMap[enc.Language] || enc.Language,
+							label: enc.Index + "-" + (languageMap[enc.Language] || enc.Language),
 							kind: 'subtitles',
 							type: enc.CodecName.includes('vtt') ? 'vtt' : enc.CodecName.includes('ass') ? 'ass' : 'srt',
 							language: languageSrcMap[enc.Language] || enc.Language,
