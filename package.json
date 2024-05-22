@@ -41,6 +41,7 @@
 	"dependencies": {
 		"@tabler/icons-svelte": "^2.47.0",
 		"cheerio": "^1.0.0-rc.12",
+		"jassub": "^1.7.15",
 		"vidstack": "1.11.21"
 	}
 }

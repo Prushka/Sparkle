@@ -38,6 +38,8 @@
 	import { chatFocusedStore, chatHiddenStore, metadataStore, pfpLastFetched } from '../../store';
 	import SUPtitles from '$lib/suptitles/suptitles';
 
+	import JASSUB from 'jassub';
+
 	let controlsShowing = false;
 	let player: MediaPlayerElement;
 	let socket: WebSocket;
@@ -57,7 +59,7 @@
 	let messagesToDisplay: Chat[] = [];
 	let controlsToDisplay: SendPayload[] = [];
 	let selectedCodec = localStorage.getItem('sCodec') || 'auto';
-	let selectedAudioMapping = localStorage.getItem('preferredAudio') || "jpn"
+	let selectedAudioMapping = localStorage.getItem('preferredAudio') || 'jpn';
 	let pauseSend = false;
 	let supportedCodecs: string[] = [];
 	let interactedWithPlayer = false;
@@ -162,7 +164,7 @@
 					codec: codecMap[codec],
 					sCodec: codec
 				};
-			}
+			};
 			if (selectedCodec === 'auto' && prevCodec !== autoCodec) {
 				videoSrc = getVideoSrc(autoCodec);
 				onChange();
@@ -328,7 +330,7 @@
 							src: loc,
 							label: formatPair(sub, true),
 							kind: 'subtitles',
-							type: enc.CodecName.includes('vtt') ? 'vtt' : enc.CodecName.includes('ass') ? 'ass' : 'srt',
+							type: enc.CodecName.includes('vtt') ? 'vtt' : enc.CodecName.includes('ass') ? 'asshuh' : 'srt',
 							language: languageSrcMap[enc.Language] || enc.Language,
 							default: enc.Language.includes('eng')
 						});
@@ -451,7 +453,8 @@
 					};
 					if (prevTrackSrc !== selectedTrack.src) {
 						dispose();
-						if (selectedTrack.src.slice(-4).includes('sup')) {
+						const ext = selectedTrack.src.slice(-4);
+						if (ext.includes('sup')) {
 							console.log('sup', selectedTrack.src);
 							fetch(selectedTrack.src)
 								.then(response => response.arrayBuffer())
@@ -465,6 +468,29 @@
 									onSeeked = sup.seekedHandler;
 									onSeeking = sup.seekingHandler;
 								});
+						} else if (ext.includes('ass')) {
+							let canvas = document.getElementById('ass-canvas') as HTMLCanvasElement;
+							if (!canvas) {
+								canvas = document.createElement('canvas');
+								canvas.height = 1080;
+								canvas.width = 1920;
+								canvas.style.width = '100%';
+								canvas.style.height = '100%';
+								canvas.style.top = '0';
+								canvas.style.left = '0';
+								canvas.style.position = 'absolute';
+								canvas.style.pointerEvents = 'none';
+								canvas.id = 'ass-canvas';
+								videoElement.parentNode?.appendChild(canvas);
+							}
+							new JASSUB({
+								video: videoElement,
+								canvas: canvas,
+								subUrl: selectedTrack.src,
+								offscreenRender: false,
+								workerUrl: '/scripts/jassub-worker.js',
+								wasmUrl: '/scripts/jassub-worker.wasm'
+							});
 						}
 						prevTrackSrc = selectedTrack.src;
 					}
@@ -719,7 +745,7 @@
 									{formatPair(am)}
 								</a></li>
 							{/if}
-							{/each}
+						{/each}
 					</ul>
 				</div>
 			{/if}
@@ -838,6 +864,7 @@
         max-width: 100vw;
         display: flex;
         justify-content: center;
+        flex-direction: column;
     }
 
     .media-provider {

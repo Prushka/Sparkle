@@ -163,7 +163,8 @@ export const languageMap: {[key: string]:string} = {
 	"dut": "Dutch-Nederlands",
 	"swe": "Swedish-Svenska",
 	"dan": "Danish-Dansk",
-	"nor": "Norwegian-Norsk"
+	"nor": "Norwegian-Norsk",
+	"ind": "Indonesian-Bahasa Indonesia",
 };
 
 export const languageSrcMap: {[key: string]:string} = {
