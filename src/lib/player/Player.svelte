@@ -432,7 +432,7 @@
     volumeDown: 'ArrowDown',
     }}
 		id="the-player"
-		class="media-player w-full bg-slate-900 aspect-video relative"
+		class="media-player bg-slate-900 aspect-video relative w-full"
 		src={videoSrc}
 		crossorigin
 		bind:this={player}
@@ -459,7 +459,7 @@
 				onPlay()
 			}}
 	>
-		<media-provider></media-provider>
+		<media-provider class="aspect-video media-provider"></media-provider>
 		<media-video-layout colorScheme={lightThemes.includes(currentTheme) ? "light" : "dark"} thumbnails={thumbnailVttSrc}></media-video-layout>
 	</media-player>
 
@@ -665,7 +665,14 @@
         border: none !important;
         border-radius: unset !important;
         max-height: 100vh;
+				max-width: 100vw;
+				display: flex;
+				justify-content: center;
     }
+
+		.media-provider {
+				width: auto !important;
+		}
 
     .media-select {
         width: 20rem;
