@@ -2,7 +2,6 @@
 	import 'vidstack/bundle';
 	import type { MediaPlayerElement } from 'vidstack/elements';
 	import { onDestroy, onMount } from 'svelte';
-	import SUPtitles from 'suptitles';
 	import {
 		formatSeconds,
 		type Job,
@@ -32,6 +31,7 @@
 	import Chatbox from '$lib/player/Chatbox.svelte';
 	import Pfp from '$lib/player/Pfp.svelte';
 	import { chatFocusedStore, chatHiddenStore, metadataStore, pfpLastFetched } from '../../store';
+	import SUPtitles from '$lib/suptitles/suptitles';
 
 	let controlsShowing = false;
 	let player: MediaPlayerElement;
@@ -68,6 +68,10 @@
 	});
 	let sup : any;
 	let supLink: string = "";
+	let footer: string = "";
+	let onPlay = () => {};
+	let onPause = () => {};
+	let onSeek = () => {};
 	const unsubscribeChatHidden = chatHiddenStore.subscribe((value) => chatHidden = value);
 	const unsubscribeChatFocused = chatFocusedStore.subscribe((value) => chatFocused = value);
 	$: thumbnailVttSrc = `${PUBLIC_HOST}/static/${roomId}/storyboard.vtt`;
@@ -324,7 +328,7 @@
 			updateMessages();
 			tickedSecsAgo = (socketConnected && roomPlayers.length > 0) ? (Date.now() - lastTicked) / 1000 : -1;
 			tickedSecsAgoStr = (Math.round(tickedSecsAgo * 100) / 100).toFixed(2);
-			const videoElement = document.querySelector("media-provider video")
+			const videoElement = document.querySelector("media-provider video") as HTMLVideoElement;
 			if (videoElement) {
 				const selectedTrack = player.textTracks.selected;
 				if (selectedTrack?.src && selectedTrack.src.slice(-4).includes("sup")) {
@@ -333,8 +337,14 @@
 							sup.dispose()
 						}
 						console.log("sup", selectedTrack.src)
-						sup = new SUPtitles(videoElement, selectedTrack.src)
+						sup = new SUPtitles(videoElement, selectedTrack.src, () => {
+							return player.currentTime * 1000
+						})
+						onPlay = sup.playHandler
+						onPause = sup.pauseHandler
+						onSeek = sup.seekHandler
 						supLink = selectedTrack.src
+						footer = "Using bitmap subtitles, render may be slow when seeking"
 					}
 				}
 			}
@@ -420,9 +430,13 @@
 		crossorigin
 		bind:this={player}
 		playsInline
+		on:seeked={()=>{
+			onSeek()
+		}}
 		on:pause={
 			() => {
 				send({ paused: true, type: SyncTypes.PauseSync });
+				onPause()
 			}}
 		on:play={
 			() => {
@@ -432,6 +446,7 @@
 					interactedWithPlayer = true;
 					connect();
 				}
+				onPlay()
 			}}
 	>
 		<media-provider></media-provider>
@@ -628,7 +643,11 @@
 		</div>
 	</div>
 
-
+	<div class="mt-auto bottom-0 mb-4 w-full flex px-4">
+		{#if footer}
+		<div class="badge badge-outline">{footer}</div>
+			{/if}
+	</div>
 </main>
 
 <style>
