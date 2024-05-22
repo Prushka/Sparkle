@@ -76,6 +76,14 @@ type Pair<T> = {
 	Enc: T | null;
 };
 
+export function formatPair(pair: Pair<any>, includeIndex = false): string {
+	if(pair.Enc){
+		const enc = pair.Enc
+		return (includeIndex ? enc.Index + "-" : "")  + (languageMap[enc.Language] || enc.Language)
+	}
+	return ""
+}
+
 type Stream = {
 	Bitrate: number;
 	CodecName: string;
@@ -118,7 +126,22 @@ export type Job = {
 	Width: number;
 	Height: number;
 	Duration: number;
+	MappedAudio: { [key: string]: { [key: number]: Pair<Audio> } };
 };
+
+export function audiosExistForCodec(job :Job, codec: string){
+	return job.MappedAudio && job.MappedAudio[codec] && Object.entries(job.MappedAudio[codec]).length > 0
+}
+
+export function getAudioLocForCodec(job :Job, codec: string, language: string = "") : string {
+	if(audiosExistForCodec(job, codec)) {
+		const audioMapping = Object.values(job.MappedAudio[codec]).find((am) => am.Enc?.Language === language);
+		if (audioMapping && audioMapping.Enc) {
+			return `${codec}-${audioMapping.Enc.Index}-${audioMapping.Enc.Language}`;
+		}
+	}
+	return codec;
+}
 
 export const languageMap: {[key: string]:string} = {
 	"eng": "English-English",

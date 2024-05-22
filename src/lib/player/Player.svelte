@@ -13,10 +13,15 @@
 		themes,
 		setGetPlayerId,
 		formatMbps,
-		languageMap,
 		languageSrcMap,
 		codecMap,
-		getSupportedCodecs, lightThemes, audioTrackFeature
+		getSupportedCodecs,
+		lightThemes,
+		audioTrackFeature,
+		formatPair,
+		getAudioLocForCodec,
+		audiosExistForCodec,
+		languageMap
 	} from './t';
 	import { PUBLIC_HOST, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -43,7 +48,7 @@
 	let roomPlayers: Player[] = [];
 	let roomMessages: Chat[] = [];
 	let jobs: Job[] = [];
-	let job: Job | undefined;
+	let job: Job;
 	let roomId = $page.params.id || '';
 	let lastTicked = 0;
 	let tickedSecsAgo = 0;
@@ -52,6 +57,7 @@
 	let messagesToDisplay: Chat[] = [];
 	let controlsToDisplay: SendPayload[] = [];
 	let selectedCodec = localStorage.getItem('sCodec') || 'auto';
+	let selectedAudioMapping = localStorage.getItem('preferredAudio') || "jpn"
 	let pauseSend = false;
 	let supportedCodecs: string[] = [];
 	let interactedWithPlayer = false;
@@ -150,7 +156,7 @@
 			}
 			if (selectedCodec === 'auto' && prevCodec !== autoCodec) {
 				videoSrc = {
-					src: `${PUBLIC_HOST}/static/${roomId}/${autoCodec}.mp4`,
+					src: `${PUBLIC_HOST}/static/${roomId}/${getAudioLocForCodec(job, autoCodec, selectedAudioMapping)}.mp4`,
 					type: 'video/mp4',
 					codec: codecMap[autoCodec],
 					sCodec: autoCodec
@@ -159,7 +165,7 @@
 				onChange();
 			} else if (selectedCodec !== 'auto' && prevCodec !== selectedCodec) {
 				videoSrc = {
-					src: `${PUBLIC_HOST}/static/${roomId}/${selectedCodec}.mp4`,
+					src: `${PUBLIC_HOST}/static/${roomId}/${getAudioLocForCodec(job, selectedCodec, selectedAudioMapping)}.mp4`,
 					type: 'video/mp4',
 					codec: codecMap[selectedCodec],
 					sCodec: selectedCodec
@@ -321,7 +327,7 @@
 						const loc = `${PUBLIC_HOST}/static/${roomId}/${enc.Location}`;
 						player.textTracks.add({
 							src: loc,
-							label: enc.Index + "-" + (languageMap[enc.Language] || enc.Language),
+							label: formatPair(sub, true),
 							kind: 'subtitles',
 							type: enc.CodecName.includes('vtt') ? 'vtt' : enc.CodecName.includes('ass') ? 'ass' : 'srt',
 							language: languageSrcMap[enc.Language] || enc.Language,
@@ -695,6 +701,29 @@
 					<option value={job.Id}>{job.FileRawName}</option>
 				{/each}
 			</select>
+			{#if audiosExistForCodec(job, videoSrc?.sCodec)}
+				<div class="dropdown dropdown-left" id="codec-dropdown">
+					<div
+						tabindex="0" role="button"
+						class="btn m-1 w-44">{getAudioLocForCodec(job, videoSrc?.sCodec, selectedAudioMapping)
+						? `${(languageMap[selectedAudioMapping] || selectedAudioMapping)}` : "Audio"}</div>
+					<ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-48">
+						{#each Object.values(job.MappedAudio[videoSrc?.sCodec]) as am}
+							{#if am.Enc}
+								<li><a
+									class={selectedAudioMapping === am.Enc.Language? "selected-dropdown" : ""}
+									tabindex="0" role="button" on:click={()=>{
+									selectedAudioMapping = am.Enc.Language;
+									localStorage.setItem('preferredAudio', selectedAudioMapping);
+									window.location.reload();
+							}}>
+									{formatPair(am)}
+								</a></li>
+							{/if}
+							{/each}
+					</ul>
+				</div>
+			{/if}
 			<div class="dropdown dropdown-left" id="codec-dropdown">
 				<div
 					tabindex="0" role="button"
