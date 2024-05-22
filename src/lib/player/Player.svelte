@@ -154,25 +154,24 @@
 			if (!autoCodec) {
 				autoCodec = job?.EncodedCodecs[0];
 			}
-			if (selectedCodec === 'auto' && prevCodec !== autoCodec) {
-				videoSrc = {
-					src: `${PUBLIC_HOST}/static/${roomId}/${getAudioLocForCodec(job, autoCodec, selectedAudioMapping)}.mp4`,
+			const getVideoSrc = (codec: string) => {
+				console.log('codec', codec, codecMap[codec]);
+				return {
+					src: `${PUBLIC_HOST}/static/${roomId}/${getAudioLocForCodec(job, codec, selectedAudioMapping)}.mp4`,
 					type: 'video/mp4',
-					codec: codecMap[autoCodec],
-					sCodec: autoCodec
+					codec: codecMap[codec],
+					sCodec: codec
 				};
-				console.log('auto codec', autoCodec, codecMap[autoCodec]);
+			}
+			if (selectedCodec === 'auto' && prevCodec !== autoCodec) {
+				videoSrc = getVideoSrc(autoCodec);
 				onChange();
 			} else if (selectedCodec !== 'auto' && prevCodec !== selectedCodec) {
-				videoSrc = {
-					src: `${PUBLIC_HOST}/static/${roomId}/${getAudioLocForCodec(job, selectedCodec, selectedAudioMapping)}.mp4`,
-					type: 'video/mp4',
-					codec: codecMap[selectedCodec],
-					sCodec: selectedCodec
-				};
+				videoSrc = getVideoSrc(selectedCodec);
 				console.log('selected codec', selectedCodec, codecMap[selectedCodec]);
 				onChange();
 			}
+
 		}
 	}
 
