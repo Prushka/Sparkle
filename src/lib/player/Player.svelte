@@ -61,20 +61,24 @@
 	let chatFocused = false;
 	let chatDisplay: string = localStorage.getItem('chatDisplay') ? localStorage.getItem('chatDisplay')! : 'simple';
 	let metadata: any;
-	let videoSrc: any = []
+	let videoSrc: any = [];
 	const unsubscribeMetadata = metadataStore.subscribe((value) => {
 		metadata = value;
 		job = metadata.job;
 	});
-	let sup : any;
-	let supLink: string = "";
-	let footer: string = "";
-	let onPlay = () => {};
-	let onPause = () => {};
-	let onSeeked = () => {};
-	let onSeeking = () => {};
+	let sup: any;
+	let prevTrackSrc: string = '';
+	let footer: string = '';
+	let onPlay = () => {
+	};
+	let onPause = () => {
+	};
+	let onSeeked = () => {
+	};
+	let onSeeking = () => {
+	};
 	let audio: HTMLAudioElement;
-	const audioTracks : any[] = [];
+	const audioTracks: any[] = [];
 	let selectedAudioTrack = -1;
 	let videoLoaded = false;
 	let audioLoaded = false;
@@ -89,14 +93,14 @@
 
 	$: {
 		console.log(metadata);
-		console.log("srcList:", videoSrc)
+		console.log('srcList:', videoSrc);
 	}
 
 	$: audioTrackEnabled = selectedAudioTrack >= 0;
 
 	function internalPause() {
-		if(player) {
-			audio.currentTime = player.currentTime
+		if (player) {
+			audio.currentTime = player.currentTime;
 			player.pause();
 			audio.pause();
 			internalPaused = true;
@@ -104,7 +108,7 @@
 	}
 
 	function internalPlay() {
-		if(player) {
+		if (player) {
 			player.play();
 			audio.play();
 			internalPaused = false;
@@ -112,13 +116,13 @@
 	}
 
 	$: {
-		if(audioTrackEnabled) {
-			console.log("audioVideoLoaded", audioVideoLoaded, pausedBeforeLoading, internalPaused)
-			if(!pausedBeforeLoading){
-				if(audioVideoLoaded && internalPaused){
-					internalPlay()
-				}else if(!audioVideoLoaded && !internalPaused){
-					internalPause()
+		if (audioTrackEnabled) {
+			console.log('audioVideoLoaded', audioVideoLoaded, pausedBeforeLoading, internalPaused);
+			if (!pausedBeforeLoading) {
+				if (audioVideoLoaded && internalPaused) {
+					internalPlay();
+				} else if (!audioVideoLoaded && !internalPaused) {
+					internalPause();
 				}
 			}
 		}
@@ -130,9 +134,10 @@
 		unsubscribeMetadata();
 	});
 
-	function setVideoSrc(onChange = ()=>{}) {
-		if(job){
-			const prevCodec = videoSrc?.sCodec
+	function setVideoSrc(onChange = () => {
+	}) {
+		if (job) {
+			const prevCodec = videoSrc?.sCodec;
 			let autoCodec;
 			for (const codec of supportedCodecs) {
 				if (job?.EncodedCodecs.includes(codec)) {
@@ -143,24 +148,24 @@
 			if (!autoCodec) {
 				autoCodec = job?.EncodedCodecs[0];
 			}
-			if(selectedCodec === "auto" && prevCodec !== autoCodec) {
+			if (selectedCodec === 'auto' && prevCodec !== autoCodec) {
 				videoSrc = {
 					src: `${PUBLIC_HOST}/static/${roomId}/${autoCodec}.mp4`,
 					type: 'video/mp4',
 					codec: codecMap[autoCodec],
 					sCodec: autoCodec
 				};
-				console.log("auto codec", autoCodec, codecMap[autoCodec])
-				onChange()
-			}else if (selectedCodec !== "auto" && prevCodec !== selectedCodec) {
+				console.log('auto codec', autoCodec, codecMap[autoCodec]);
+				onChange();
+			} else if (selectedCodec !== 'auto' && prevCodec !== selectedCodec) {
 				videoSrc = {
 					src: `${PUBLIC_HOST}/static/${roomId}/${selectedCodec}.mp4`,
 					type: 'video/mp4',
 					codec: codecMap[selectedCodec],
 					sCodec: selectedCodec
 				};
-				console.log("selected codec", selectedCodec, codecMap[selectedCodec])
-				onChange()
+				console.log('selected codec', selectedCodec, codecMap[selectedCodec]);
+				onChange();
 			}
 		}
 	}
@@ -176,15 +181,15 @@
 	function onCodecChange(selected: string) {
 		selectedCodec = selected;
 		localStorage.setItem('sCodec', selectedCodec);
-		setVideoSrc(()=>{
-			window.location.reload()
+		setVideoSrc(() => {
+			window.location.reload();
 		});
 	}
 
 	$:{
-		if (selectedCodec !== "auto" && job?.EncodedCodecs && job?.EncodedCodecs.length > 0 && !job?.EncodedCodecs.includes(selectedCodec)) {
+		if (selectedCodec !== 'auto' && job?.EncodedCodecs && job?.EncodedCodecs.length > 0 && !job?.EncodedCodecs.includes(selectedCodec)) {
 			console.log('setting codec - no matching codec', selectedCodec, job?.EncodedCodecs);
-			onCodecChange("auto");
+			onCodecChange('auto');
 		}
 	}
 
@@ -313,36 +318,36 @@
 				for (const [, sub] of Object.entries(job.Subtitles)) {
 					const enc = sub.Enc;
 					if (enc) {
-						const loc = `${PUBLIC_HOST}/static/${roomId}/${enc.Location}`
+						const loc = `${PUBLIC_HOST}/static/${roomId}/${enc.Location}`;
 						player.textTracks.add({
 							src: loc,
 							label: languageMap[enc.Language] || enc.Language,
 							kind: 'subtitles',
-							type: enc.CodecName.includes('vtt') ? "vtt" : enc.CodecName.includes('ass') ? "ass" : "srt",
+							type: enc.CodecName.includes('vtt') ? 'vtt' : enc.CodecName.includes('ass') ? 'ass' : 'srt',
 							language: languageSrcMap[enc.Language] || enc.Language,
-							default: enc.Language.includes('eng'),
+							default: enc.Language.includes('eng')
 						});
 					}
 				}
 			}
 			if (job.Audios && audioTrackFeature) {
-				let counter = 0
-				selectedAudioTrack = -1
+				let counter = 0;
+				selectedAudioTrack = -1;
 				for (const [, sub] of Object.entries(job.Audios)) {
 					const enc = sub.Enc;
 					if (enc) {
-						const loc = `${PUBLIC_HOST}/static/${roomId}/${enc.Location}`
-						audio.src = loc
+						const loc = `${PUBLIC_HOST}/static/${roomId}/${enc.Location}`;
+						audio.src = loc;
 						audioTracks.push({
 							src: loc,
 							kind: 'audio',
 							language: languageSrcMap[enc.Language] || enc.Language
-						})
-						if (enc.Language.includes("jp")) {
+						});
+						if (enc.Language.includes('jp')) {
 							selectedAudioTrack = counter;
 						}
 					}
-					counter++
+					counter++;
 				}
 				if (audioTracks.length > 0 && selectedAudioTrack < 0) {
 					selectedAudioTrack = 0;
@@ -356,7 +361,7 @@
 	onMount(() => {
 		updateList();
 		supportedCodecs = getSupportedCodecs();
-		setVideoSrc()
+		setVideoSrc();
 		reloadPlayer();
 		const ii = setInterval(() => {
 			updateList();
@@ -371,7 +376,7 @@
 		const playerUnsubscribe = player.subscribe(({ controlsVisible }) => {
 			controlsShowing = controlsVisible;
 		});
-		const playerAudioUnsubscribe = player.subscribe(({volume, muted}) => {
+		const playerAudioUnsubscribe = player.subscribe(({ volume, muted }) => {
 			if (audioTrackEnabled) {
 				audio.volume = volume;
 				audio.muted = muted;
@@ -408,43 +413,55 @@
 			updateMessages();
 			tickedSecsAgo = (socketConnected && roomPlayers.length > 0) ? (Date.now() - lastTicked) / 1000 : -1;
 			tickedSecsAgoStr = (Math.round(tickedSecsAgo * 100) / 100).toFixed(2);
-			const videoElement = document.querySelector("media-provider video") as HTMLVideoElement;
+			const videoElement = document.querySelector('media-provider video') as HTMLVideoElement;
 			if (videoElement) {
-				if (!videoListenersAttached && audioTrackEnabled) {
+				if (!videoListenersAttached && audioTrackFeature) {
 					videoElement.addEventListener('canplay', () => {
-						console.log("Video canplay")
+						console.log('Video canplay');
 						videoLoaded = true;
 					});
 					videoElement.addEventListener('waiting', () => {
-						console.log("Video waiting")
+						console.log('Video waiting');
 						videoLoaded = false;
 					});
 					videoElement.addEventListener('stalled', () => {
-						console.log("Video stalled")
+						console.log('Video stalled');
 						videoLoaded = false;
 					});
 				}
 				const selectedTrack = player.textTracks.selected;
-				if (selectedTrack?.src && selectedTrack.src.slice(-4).includes("sup")) {
-					if (supLink !== selectedTrack.src) {
-						if(sup != null){
-							sup.dispose()
+				if (selectedTrack?.src) {
+					const dispose = () => {
+						if (sup != null) {
+							sup.dispose();
+							onPlay = () => {
+							};
+							onPause = () => {
+							};
+							onSeeked = () => {
+							};
+							onSeeking = () => {
+							};
 						}
-						console.log("sup", selectedTrack.src)
-
-						fetch(selectedTrack.src)
-							.then(response => response.arrayBuffer())
-							.then(buffer => {
-								const file = new Uint8Array(buffer)
-								sup = new SUPtitles(videoElement, file, () => {
-									return player.currentTime * 1000
-								})
-								onPlay = sup.playHandler
-								onPause = sup.pauseHandler
-								onSeeked = sup.seekedHandler
-								onSeeking = sup.seekingHandler
-							})
-						supLink = selectedTrack.src
+					};
+					if (prevTrackSrc !== selectedTrack.src) {
+						dispose();
+						if (selectedTrack.src.slice(-4).includes('sup')) {
+							console.log('sup', selectedTrack.src);
+							fetch(selectedTrack.src)
+								.then(response => response.arrayBuffer())
+								.then(buffer => {
+									const file = new Uint8Array(buffer);
+									sup = new SUPtitles(videoElement, file, () => {
+										return player.currentTime * 1000;
+									});
+									onPlay = sup.playHandler;
+									onPause = sup.pauseHandler;
+									onSeeked = sup.seekedHandler;
+									onSeeking = sup.seekingHandler;
+								});
+						}
+						prevTrackSrc = selectedTrack.src;
 					}
 				}
 			}
@@ -526,7 +543,7 @@
 			console.log("Audio stalled")
 			audioLoaded = false;
 		}}
-			class="hidden" bind:this={audio}/>
+			class="hidden" bind:this={audio} />
 	{/if}
 	<media-player
 		keyShortcuts={{
@@ -579,8 +596,11 @@
 				}
 			}}
 	>
-		<media-provider class="aspect-video media-provider {(!audioVideoLoaded && audioTrackEnabled) ? 'invisible':'visible'}"></media-provider>
-		<media-video-layout class="{(!audioVideoLoaded && audioTrackEnabled) ? 'invisible':'visible'}" colorScheme={lightThemes.includes(currentTheme) ? "light" : "dark"} thumbnails={thumbnailVttSrc}></media-video-layout>
+		<media-provider
+			class="aspect-video media-provider {(!audioVideoLoaded && audioTrackEnabled) ? 'invisible':'visible'}"></media-provider>
+		<media-video-layout class="{(!audioVideoLoaded && audioTrackEnabled) ? 'invisible':'visible'}"
+												colorScheme={lightThemes.includes(currentTheme) ? "light" : "dark"}
+												thumbnails={thumbnailVttSrc}></media-video-layout>
 	</media-player>
 
 	<div class="flex gap-1 w-full h-full absolute pointer-events-none" id="chat-overlay"
@@ -592,12 +612,12 @@
 				<div
 					class={`flex gap-1 justify-center items-center chat-line py-1 pl-2.5 pr-2 text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''}`}>
 					<p>{message.message}</p>
-							<p class="text-sm">
+					<p class="text-sm">
 						[{(message.isStateUpdate || chatDisplay !== "full") ? '' : `${formatSeconds(message.mediaSec)}, `}{new Date(message.timestamp).toLocaleTimeString('en-US', {
 						hour: '2-digit',
 						minute: '2-digit'
 					})}]
-							</p>
+					</p>
 
 					<p>{message.username}</p>
 					{#if chatDisplay === "full"}
@@ -677,7 +697,8 @@
 			</select>
 			<div class="dropdown dropdown-left" id="codec-dropdown">
 				<div
-					tabindex="0" role="button" class="btn m-1 w-28">{selectedCodec} {(videoSrc?.sCodec && selectedCodec === "auto") ? `(${videoSrc.sCodec})`: ''}</div>
+					tabindex="0" role="button"
+					class="btn m-1 w-28">{selectedCodec} {(videoSrc?.sCodec && selectedCodec === "auto") ? `(${videoSrc.sCodec})` : ''}</div>
 				<ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-48">
 					<li><a
 						class={selectedCodec === "auto"? "selected-dropdown" : ""}
@@ -728,7 +749,8 @@
 					{/if}
 				</button>
 			</div>
-			<div class="tooltip tooltip-top" data-tip={chatDisplay === "full" ? "Switch to simple chat layout" : "Switch to full chat layout"}>
+			<div class="tooltip tooltip-top"
+					 data-tip={chatDisplay === "full" ? "Switch to simple chat layout" : "Switch to full chat layout"}>
 				<button id="chat-hide-button" on:click={()=>{
 					chatDisplay = chatDisplay === "full" ? "simple" : "full";
 					localStorage.setItem('chatDisplay', chatDisplay);
@@ -775,8 +797,8 @@
 
 	<div class="mt-auto bottom-0 mb-4 w-full flex px-4">
 		{#if footer}
-		<div class="badge badge-outline">{footer}</div>
-			{/if}
+			<div class="badge badge-outline">{footer}</div>
+		{/if}
 	</div>
 </main>
 
@@ -785,14 +807,14 @@
         border: none !important;
         border-radius: unset !important;
         max-height: 100vh;
-				max-width: 100vw;
-				display: flex;
-				justify-content: center;
+        max-width: 100vw;
+        display: flex;
+        justify-content: center;
     }
 
-		.media-provider {
-				width: auto !important;
-		}
+    .media-provider {
+        width: auto !important;
+    }
 
     .media-select {
         width: 20rem;
