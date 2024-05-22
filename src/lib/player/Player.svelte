@@ -16,7 +16,7 @@
 		languageMap,
 		languageSrcMap,
 		codecMap,
-		getSupportedCodecs, lightThemes
+		getSupportedCodecs, lightThemes, audioTrackFeature
 	} from './t';
 	import { PUBLIC_HOST, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -73,6 +73,15 @@
 	let onPause = () => {};
 	let onSeeked = () => {};
 	let onSeeking = () => {};
+	let audio: HTMLAudioElement;
+	const audioTracks : any[] = [];
+	let selectedAudioTrack = -1;
+	let videoLoaded = false;
+	let audioLoaded = false;
+	$: audioVideoLoaded = videoLoaded && audioLoaded;
+	let videoListenersAttached = false;
+	let internalPaused = false;
+	let pausedBeforeLoading = false;
 	const unsubscribeChatHidden = chatHiddenStore.subscribe((value) => chatHidden = value);
 	const unsubscribeChatFocused = chatFocusedStore.subscribe((value) => chatFocused = value);
 	$: thumbnailVttSrc = `${PUBLIC_HOST}/static/${roomId}/storyboard.vtt`;
@@ -81,6 +90,38 @@
 	$: {
 		console.log(metadata);
 		console.log("srcList:", videoSrc)
+	}
+
+	$: audioTrackEnabled = selectedAudioTrack >= 0;
+
+	function internalPause() {
+		if(player) {
+			audio.currentTime = player.currentTime
+			player.pause();
+			audio.pause();
+			internalPaused = true;
+		}
+	}
+
+	function internalPlay() {
+		if(player) {
+			player.play();
+			audio.play();
+			internalPaused = false;
+		}
+	}
+
+	$: {
+		if(audioTrackEnabled) {
+			console.log("audioVideoLoaded", audioVideoLoaded, pausedBeforeLoading, internalPaused)
+			if(!pausedBeforeLoading){
+				if(audioVideoLoaded && internalPaused){
+					internalPlay()
+				}else if(!audioVideoLoaded && !internalPaused){
+					internalPause()
+				}
+			}
+		}
 	}
 
 	onDestroy(() => {
@@ -92,7 +133,16 @@
 	function setVideoSrc(onChange = ()=>{}) {
 		if(job){
 			const prevCodec = videoSrc?.sCodec
-			const autoCodec = supportedCodecs.length > 0 ? supportedCodecs[0] : job?.EncodedCodecs[0];
+			let autoCodec;
+			for (const codec of supportedCodecs) {
+				if (job?.EncodedCodecs.includes(codec)) {
+					autoCodec = codec;
+					break;
+				}
+			}
+			if (!autoCodec) {
+				autoCodec = job?.EncodedCodecs[0];
+			}
 			if(selectedCodec === "auto" && prevCodec !== autoCodec) {
 				videoSrc = {
 					src: `${PUBLIC_HOST}/static/${roomId}/${autoCodec}.mp4`,
@@ -191,7 +241,7 @@
 						break;
 					case SyncTypes.TimeSync:
 						if (state.time !== undefined && Math.abs(player.currentTime - state.time) > 3) {
-							player.currentTime! = state.time;
+							player.currentTime = state.time;
 							persistControlState(state);
 						}
 						break;
@@ -275,6 +325,29 @@
 					}
 				}
 			}
+			if (job.Audios && audioTrackFeature) {
+				let counter = 0
+				selectedAudioTrack = -1
+				for (const [, sub] of Object.entries(job.Audios)) {
+					const enc = sub.Enc;
+					if (enc) {
+						const loc = `${PUBLIC_HOST}/static/${roomId}/${enc.Location}`
+						audio.src = loc
+						audioTracks.push({
+							src: loc,
+							kind: 'audio',
+							language: languageSrcMap[enc.Language] || enc.Language
+						})
+						if (enc.Language.includes("jp")) {
+							selectedAudioTrack = counter;
+						}
+					}
+					counter++
+				}
+				if (audioTracks.length > 0 && selectedAudioTrack < 0) {
+					selectedAudioTrack = 0;
+				}
+			}
 			player.controlsDelay = 1600;
 		}
 		console.debug('textTracks: ' + JSON.stringify(player.textTracks));
@@ -297,6 +370,12 @@
 		});
 		const playerUnsubscribe = player.subscribe(({ controlsVisible }) => {
 			controlsShowing = controlsVisible;
+		});
+		const playerAudioUnsubscribe = player.subscribe(({volume, muted}) => {
+			if (audioTrackEnabled) {
+				audio.volume = volume;
+				audio.muted = muted;
+			}
 		});
 		const i = setInterval(() => {
 			updateTime();
@@ -331,6 +410,20 @@
 			tickedSecsAgoStr = (Math.round(tickedSecsAgo * 100) / 100).toFixed(2);
 			const videoElement = document.querySelector("media-provider video") as HTMLVideoElement;
 			if (videoElement) {
+				if (!videoListenersAttached && audioTrackEnabled) {
+					videoElement.addEventListener('canplay', () => {
+						console.log("Video canplay")
+						videoLoaded = true;
+					});
+					videoElement.addEventListener('waiting', () => {
+						console.log("Video waiting")
+						videoLoaded = false;
+					});
+					videoElement.addEventListener('stalled', () => {
+						console.log("Video stalled")
+						videoLoaded = false;
+					});
+				}
 				const selectedTrack = player.textTracks.selected;
 				if (selectedTrack?.src && selectedTrack.src.slice(-4).includes("sup")) {
 					if (supLink !== selectedTrack.src) {
@@ -367,6 +460,7 @@
 			clearInterval(i);
 			clearInterval(ii);
 			playerUnsubscribe();
+			playerAudioUnsubscribe();
 		};
 	});
 
@@ -418,7 +512,22 @@
 			{/if}
 		</div>
 	</dialog>
-
+	{#if audioTrackFeature}
+		<audio
+			on:canplay={()=>{
+			console.log("Audio canplay")
+			audioLoaded = true;
+		}}
+			on:waiting={()=>{
+			console.log("Audio waiting")
+			audioLoaded = false;
+		}}
+			on:stalled={()=>{
+			console.log("Audio stalled")
+			audioLoaded = false;
+		}}
+			class="hidden" bind:this={audio}/>
+	{/if}
 	<media-player
 		keyShortcuts={{
     // Space-separated list.
@@ -442,11 +551,18 @@
 		}}
 		on:seeking={()=>{
 			onSeeking()
+			if (audioTrackEnabled) {
+				audio.currentTime = player.currentTime;
+			}
 		}}
 		on:pause={
 			() => {
 				send({ paused: true, type: SyncTypes.PauseSync });
 				onPause()
+				if(audioTrackEnabled && audioVideoLoaded) {
+					audio.pause()
+					pausedBeforeLoading = true;
+				}
 			}}
 		on:play={
 			() => {
@@ -457,10 +573,14 @@
 					connect();
 				}
 				onPlay()
+				if(audioTrackEnabled && audioVideoLoaded) {
+					audio.play()
+					pausedBeforeLoading = false;
+				}
 			}}
 	>
-		<media-provider class="aspect-video media-provider"></media-provider>
-		<media-video-layout colorScheme={lightThemes.includes(currentTheme) ? "light" : "dark"} thumbnails={thumbnailVttSrc}></media-video-layout>
+		<media-provider class="aspect-video media-provider {(!audioVideoLoaded && audioTrackEnabled) ? 'invisible':'visible'}"></media-provider>
+		<media-video-layout class="{(!audioVideoLoaded && audioTrackEnabled) ? 'invisible':'visible'}" colorScheme={lightThemes.includes(currentTheme) ? "light" : "dark"} thumbnails={thumbnailVttSrc}></media-video-layout>
 	</media-player>
 
 	<div class="flex gap-1 w-full h-full absolute pointer-events-none" id="chat-overlay"
