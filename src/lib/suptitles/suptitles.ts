@@ -41,11 +41,14 @@ export default class SUPtitles {
 		this.file = file
 	}
 
-	seekHandler = (): void => {
+	seekedHandler = (): void => {
+		this.start()
+	}
+
+	seekingHandler = (): void => {
 		clearTimeout(this.timeout)
 		this.offset = 0
 		this.cv.map(c => c.getContext('2d')?.clearRect(0, 0, c.width, c.height))
-		this.start()
 	}
 
 	playHandler = (): void => {

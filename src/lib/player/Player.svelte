@@ -71,7 +71,8 @@
 	let footer: string = "";
 	let onPlay = () => {};
 	let onPause = () => {};
-	let onSeek = () => {};
+	let onSeeked = () => {};
+	let onSeeking = () => {};
 	const unsubscribeChatHidden = chatHiddenStore.subscribe((value) => chatHidden = value);
 	const unsubscribeChatFocused = chatFocusedStore.subscribe((value) => chatFocused = value);
 	$: thumbnailVttSrc = `${PUBLIC_HOST}/static/${roomId}/storyboard.vtt`;
@@ -347,7 +348,8 @@
 								})
 								onPlay = sup.playHandler
 								onPause = sup.pauseHandler
-								onSeek = sup.seekHandler
+								onSeeked = sup.seekedHandler
+								onSeeking = sup.seekingHandler
 							})
 						supLink = selectedTrack.src
 					}
@@ -436,7 +438,10 @@
 		bind:this={player}
 		playsInline
 		on:seeked={()=>{
-			onSeek()
+			onSeeked()
+		}}
+		on:seeking={()=>{
+			onSeeking()
 		}}
 		on:pause={
 			() => {
@@ -660,7 +665,6 @@
         border: none !important;
         border-radius: unset !important;
         max-height: 100vh;
-        max-width: 100vw;
     }
 
     .media-select {
