@@ -69,75 +69,56 @@ export type Chat = {
 	isStateUpdate: boolean;
 }
 
-export type Jobs = Job[]
-
-type Pair<T> = {
-	Raw: T | null;
-	Enc: T | null;
-};
-
-export function formatPair(pair: Pair<any>, includeIndex = false): string {
-	if(pair.Enc){
-		const enc = pair.Enc
-		return (includeIndex ? enc.Index + "-" : "")  + (languageMap[enc.Language] || enc.Language)
+export function formatPair(stream: Stream, includeIndex = false, includeCodec = false): string {
+	if(stream){
+		let lang = languageMap[stream.Language] || stream.Language
+		if (includeIndex && includeCodec) {
+			lang = lang.split("-")[0]
+		}
+		return (includeIndex ? stream.Index + "-" : "")  + lang + (includeCodec ? ` (${stream.CodecName})` : "");
 	}
 	return ""
 }
 
-type Stream = {
-	Bitrate: number;
-	CodecName: string;
-	Index: number;
-	Location: string;
-};
-
-interface Subtitle extends Stream {
-	Language: string;
-}
-
-interface Video extends Stream {
-	Width: number;
-	Height: number;
-	Framerate: string;
-}
-
-interface Audio extends Stream {
-	Channels: number;
-	SampleRate: number;
-	Language: string;
-}
-
-export type Job = {
+export interface Job {
 	Id: string;
-	FileRawPath: string;
-	FileRawFolder: string;
-	FileRawName: string;
-	FileRawExt: string;
+	InputParent: string;
 	Input: string;
-	OutputPath: string;
 	State: string;
 	SHA256: string;
 	EncodedCodecs: string[];
-	EncodedCodecsSize: { [key: string]: number };
-	EncodedExt: string;
-	Subtitles: { [key: number]: Pair<Subtitle> };
-	Videos: { [key: number]: Pair<Video> };
-	Audios: { [key: number]: Pair<Audio> };
+	MappedAudio: { [key: string]: Stream[] };
+	Files: { [key: string]: number };
+	Streams: Stream[];
+	Duration: number;
 	Width: number;
 	Height: number;
-	Duration: number;
-	MappedAudio: { [key: string]: { [key: number]: Pair<Audio> } };
-};
-
-export function audiosExistForCodec(job :Job, codec: string){
-	return job.MappedAudio && job.MappedAudio[codec] && Object.entries(job.MappedAudio[codec]).length > 0
+	EncodedExt: string;
 }
 
-export function getAudioLocForCodec(job :Job, codec: string, language: string = "") : string {
+export interface Stream {
+	Bitrate: number;
+	CodecName: string;
+	CodecType: string;
+	Index: number;
+	Location: string;
+	Language: string;
+	Title: string;
+	Filename: string;
+	MimeType: string;
+	Channels: number;
+	SampleRate: number;
+}
+
+export function audiosExistForCodec(job :Job | undefined, codec: string){
+	return job && job.MappedAudio && job.MappedAudio[codec] && Object.entries(job.MappedAudio[codec]).length > 0
+}
+
+export function getAudioLocForCodec(job :Job | undefined, codec: string, language: string = "") : string {
 	if(audiosExistForCodec(job, codec)) {
-		const audioMapping = Object.values(job.MappedAudio[codec]).find((am) => am.Enc?.Language === language);
-		if (audioMapping && audioMapping.Enc) {
-			return `${codec}-${audioMapping.Enc.Index}-${audioMapping.Enc.Language}`;
+		const audioMapping = Object.values(job!.MappedAudio[codec]).find((am) => am.Language === language);
+		if (audioMapping) {
+			return `${codec}-${audioMapping.Index}-${audioMapping.Language}`;
 		}
 	}
 	return codec;
@@ -223,10 +204,10 @@ export function setGetPlayerId(): string {
 }
 
 export function getMbps(job: Job | undefined | null, codec: string): number {
-	if (!job?.EncodedCodecsSize?.[codec] || !job?.Duration) {
+	if (!job?.Files?.[codec + ".mp4"] || !job?.Duration) {
 		return 0;
 	}
-	return job?.EncodedCodecsSize[codec] / 1024 / 1024 / job?.Duration / 0.125
+	return job?.Files[codec + ".mp4"] / 1024 / 1024 / job?.Duration / 0.125
 }
 
 export function formatMbps(job: Job | undefined | null, codec: string): string {

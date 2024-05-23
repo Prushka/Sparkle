@@ -50,7 +50,7 @@
 	let roomPlayers: Player[] = [];
 	let roomMessages: Chat[] = [];
 	let jobs: Job[] = [];
-	let job: Job;
+	let job: Job | undefined;
 	let roomId = $page.params.id || '';
 	let lastTicked = 0;
 	let tickedSecsAgo = 0;
@@ -70,11 +70,13 @@
 	let chatDisplay: string = localStorage.getItem('chatDisplay') ? localStorage.getItem('chatDisplay')! : 'simple';
 	let metadata: any;
 	let videoSrc: any = [];
+	let fonts : string[] = [];
 	const unsubscribeMetadata = metadataStore.subscribe((value) => {
 		metadata = value;
 		job = metadata.job;
 	});
 	let sup: any;
+	let jas: any;
 	let prevTrackSrc: string = '';
 	let footer: string = '';
 	let onPlay = () => {
@@ -96,7 +98,8 @@
 	let pausedBeforeLoading = false;
 	const unsubscribeChatHidden = chatHiddenStore.subscribe((value) => chatHidden = value);
 	const unsubscribeChatFocused = chatFocusedStore.subscribe((value) => chatFocused = value);
-	$: thumbnailVttSrc = `${PUBLIC_HOST}/static/${roomId}/storyboard.vtt`;
+	$: BASE_STATIC = `${PUBLIC_HOST}/static/${roomId}`;
+	$: thumbnailVttSrc = `${BASE_STATIC}/storyboard.vtt`;
 	$: socketCommunicating = socketConnected && (tickedSecsAgo >= 0 && tickedSecsAgo < 5);
 
 	$: {
@@ -159,7 +162,7 @@
 			const getVideoSrc = (codec: string) => {
 				console.log('codec', codec, codecMap[codec]);
 				return {
-					src: `${PUBLIC_HOST}/static/${roomId}/${getAudioLocForCodec(job, codec, selectedAudioMapping)}.mp4`,
+					src: `${BASE_STATIC}/${getAudioLocForCodec(job, codec, selectedAudioMapping)}.mp4`,
 					type: 'video/mp4',
 					codec: codecMap[codec],
 					sCodec: codec
@@ -174,6 +177,8 @@
 				onChange();
 			}
 
+		} else {
+			videoSrc = `${BASE_STATIC}/un.mp4`;
 		}
 	}
 
@@ -253,7 +258,7 @@
 						break;
 					case SyncTypes.TimeSync:
 						if (state.time !== undefined && Math.abs(player.currentTime - state.time) > 3) {
-							player.currentTime = state.time;
+							player.currentTime! = state.time;
 							persistControlState(state);
 						}
 						break;
@@ -289,7 +294,7 @@
 			.then(data => {
 				jobs = data;
 				jobs.sort((a, b) => {
-					return a.FileRawName.localeCompare(b.FileRawName);
+					return a.Input.localeCompare(b.Input);
 				});
 				console.log(jobs);
 				onSuccess();
@@ -321,43 +326,46 @@
 
 	function reloadPlayer() {
 		if (job) {
-			if (job.Subtitles) {
-				for (const [, sub] of Object.entries(job.Subtitles)) {
-					const enc = sub.Enc;
-					if (enc) {
-						const loc = `${PUBLIC_HOST}/static/${roomId}/${enc.Location}`;
-						player.textTracks.add({
-							src: loc,
-							label: formatPair(sub, true),
-							kind: 'subtitles',
-							type: enc.CodecName.includes('vtt') ? 'vtt' : enc.CodecName.includes('ass') ? 'asshuh' : 'srt',
-							language: languageSrcMap[enc.Language] || enc.Language,
-							default: enc.Language.includes('eng')
-						});
+			if (job.Streams) {
+				fonts = [];
+				for (const [, stream] of Object.entries(job.Streams)) {
+					switch (stream.CodecType) {
+						case "attachment":
+							if (stream.Filename?.includes("otf") || stream.Filename?.includes("ttf")) {
+								fonts.push(`${BASE_STATIC}/${stream.Location}`);
+							}
+							break;
+						case 'subtitle':
+								player.textTracks.add({
+									src: `${BASE_STATIC}/${stream.Location}`,
+									label: formatPair(stream, true, true),
+									kind: 'subtitles',
+									type: stream.CodecName.includes('vtt') ? 'vtt' : stream.CodecName.includes('ass') ? 'asshuh' : 'srt',
+									language: languageSrcMap[stream.Language] || stream.Language,
+									default: stream.Language.includes('eng')
+								});
+							break;
+						case 'audio':
+							if (audioTrackFeature) {
+								let counter = 0;
+								selectedAudioTrack = -1;
+								const loc = `${BASE_STATIC}/${stream.Location}`;
+								audio.src = loc;
+								audioTracks.push({
+									src: loc,
+									kind: 'audio',
+									language: languageSrcMap[stream.Language] || stream.Language
+								});
+								if (stream.Language.includes('jp')) {
+									selectedAudioTrack = counter;
+								}
+								counter++;
+								if (audioTracks.length > 0 && selectedAudioTrack < 0) {
+									selectedAudioTrack = 0;
+								}
+							}
+							break;
 					}
-				}
-			}
-			if (job.Audios && audioTrackFeature) {
-				let counter = 0;
-				selectedAudioTrack = -1;
-				for (const [, sub] of Object.entries(job.Audios)) {
-					const enc = sub.Enc;
-					if (enc) {
-						const loc = `${PUBLIC_HOST}/static/${roomId}/${enc.Location}`;
-						audio.src = loc;
-						audioTracks.push({
-							src: loc,
-							kind: 'audio',
-							language: languageSrcMap[enc.Language] || enc.Language
-						});
-						if (enc.Language.includes('jp')) {
-							selectedAudioTrack = counter;
-						}
-					}
-					counter++;
-				}
-				if (audioTracks.length > 0 && selectedAudioTrack < 0) {
-					selectedAudioTrack = 0;
 				}
 			}
 			player.controlsDelay = 1600;
@@ -450,6 +458,9 @@
 							onSeeking = () => {
 							};
 						}
+						if (jas != null) {
+							jas.destroy();
+						}
 					};
 					if (prevTrackSrc !== selectedTrack.src) {
 						dispose();
@@ -489,7 +500,8 @@
 								subUrl: selectedTrack.src,
 								offscreenRender: false,
 								workerUrl: '/scripts/jassub-worker.js',
-								wasmUrl: '/scripts/jassub-worker.wasm'
+								wasmUrl: '/scripts/jassub-worker.wasm',
+								fonts: fonts
 							});
 						}
 						prevTrackSrc = selectedTrack.src;
@@ -723,7 +735,7 @@
 				class="select media-select select-bordered flex-grow">
 				<option disabled selected>Which media?</option>
 				{#each jobs as job}
-					<option value={job.Id}>{job.FileRawName}</option>
+					<option value={job.Id}>{job.Input}</option>
 				{/each}
 			</select>
 			{#if audiosExistForCodec(job, videoSrc?.sCodec)}
@@ -733,18 +745,16 @@
 						class="btn m-1 w-44">{getAudioLocForCodec(job, videoSrc?.sCodec, selectedAudioMapping)
 						? `${(languageMap[selectedAudioMapping] || selectedAudioMapping)}` : "Audio"}</div>
 					<ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-48">
-						{#each Object.values(job.MappedAudio[videoSrc?.sCodec]) as am}
-							{#if am.Enc}
+						{#each job.MappedAudio[videoSrc?.sCodec] as am}
 								<li><a
-									class={selectedAudioMapping === am.Enc.Language? "selected-dropdown" : ""}
+									class={selectedAudioMapping === am.Language? "selected-dropdown" : ""}
 									tabindex="0" role="button" on:click={()=>{
-									selectedAudioMapping = am.Enc.Language;
+									selectedAudioMapping = am.Language;
 									localStorage.setItem('preferredAudio', selectedAudioMapping);
 									window.location.reload();
 							}}>
 									{formatPair(am)}
 								</a></li>
-							{/if}
 						{/each}
 					</ul>
 				</div>
