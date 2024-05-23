@@ -457,9 +457,15 @@
 							};
 							onSeeking = () => {
 							};
+							console.log('destroyed sup')
 						}
 						if (jas != null) {
 							jas.destroy();
+							let canvas = document.getElementById('ass-canvas') as HTMLCanvasElement;
+							if (canvas) {
+								canvas.remove()
+							}
+							console.log('destroyed jas')
 						}
 					};
 					if (prevTrackSrc !== selectedTrack.src) {
@@ -494,7 +500,7 @@
 								canvas.id = 'ass-canvas';
 								videoElement.parentNode?.appendChild(canvas);
 							}
-							new JASSUB({
+							jas = new JASSUB({
 								video: videoElement,
 								canvas: canvas,
 								subUrl: selectedTrack.src,
