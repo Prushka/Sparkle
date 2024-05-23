@@ -34,7 +34,7 @@ export async function load({ params }) {
 				}
 			}
 		}
-		title = job?.FileRawName || "UwU"
+		title = job?.Input || "UwU"
 		const infoResponse = await fetch(`${base}/info.nfo`);
 		const info = await infoResponse.text();
 		const $ = cheerio.load(info);
