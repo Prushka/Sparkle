@@ -111,11 +111,11 @@ export interface Stream {
 	SampleRate: number;
 }
 
-export function audiosExistForCodec(job :Job | undefined, codec: string){
-	return job && job.MappedAudio && job.MappedAudio[codec] && Object.entries(job.MappedAudio[codec]).length > 0
+export function audiosExistForCodec(job :Job, codec: string){
+	return job.MappedAudio && job.MappedAudio[codec] && Object.entries(job.MappedAudio[codec]).length > 0
 }
 
-export function getAudioLocForCodec(job :Job | undefined, codec: string, language: string = "") : string {
+export function getAudioLocForCodec(job :Job, codec: string, language: string = "") : string {
 	if(audiosExistForCodec(job, codec)) {
 		const audioMapping = Object.values(job!.MappedAudio[codec]).find((am) => am.Language === language);
 		if (audioMapping) {

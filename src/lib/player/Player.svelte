@@ -39,7 +39,6 @@
 	import SUPtitles from '$lib/suptitles/suptitles';
 
 	import JASSUB from 'jassub';
-	import { afterNavigate } from '$app/navigation';
 
 	let controlsShowing = false;
 	let player: MediaPlayerElement;
@@ -51,7 +50,7 @@
 	let roomPlayers: Player[] = [];
 	let roomMessages: Chat[] = [];
 	let jobs: Job[] = [];
-	export let job: Job | undefined;
+	export let job: Job;
 	let roomId = $page.params.id || '';
 	let lastTicked = 0;
 	let tickedSecsAgo = 0;
@@ -141,17 +140,16 @@
 
 	function setVideoSrc(onChange = () => {
 	}) {
-		if (job) {
 			const prevCodec = videoSrc?.sCodec;
 			let autoCodec;
 			for (const codec of supportedCodecs) {
-				if (job?.EncodedCodecs.includes(codec)) {
+				if (job.EncodedCodecs.includes(codec)) {
 					autoCodec = codec;
 					break;
 				}
 			}
 			if (!autoCodec) {
-				autoCodec = job?.EncodedCodecs[0];
+				autoCodec = job.EncodedCodecs[0];
 			}
 			const getVideoSrc = (codec: string) => {
 				console.log('codec', codec, codecMap[codec]);
@@ -170,10 +168,6 @@
 				console.log('selected codec', selectedCodec, codecMap[selectedCodec]);
 				onChange();
 			}
-
-		} else {
-			videoSrc = `${BASE_STATIC}/un.mp4`;
-		}
 	}
 
 	function nextTheme() {
@@ -193,8 +187,8 @@
 	}
 
 	$:{
-		if (selectedCodec !== 'auto' && job?.EncodedCodecs && job?.EncodedCodecs.length > 0 && !job?.EncodedCodecs.includes(selectedCodec)) {
-			console.log('setting codec - no matching codec', selectedCodec, job?.EncodedCodecs);
+		if (selectedCodec !== 'auto' && job.EncodedCodecs && job.EncodedCodecs.length > 0 && !job?.EncodedCodecs.includes(selectedCodec)) {
+			console.log('setting codec - no matching codec', selectedCodec, job.EncodedCodecs);
 			onCodecChange('auto');
 		}
 	}
@@ -319,7 +313,6 @@
 	}
 
 	function reloadPlayer() {
-		if (job) {
 			if (job.Streams) {
 				fonts = [];
 				for (const [, stream] of Object.entries(job.Streams)) {
@@ -362,18 +355,14 @@
 					}
 				}
 			}
-			player.controlsDelay = 1600;
-		}
+		player.controlsDelay = 1600;
 		console.debug('textTracks: ' + JSON.stringify(player.textTracks));
 	}
 
-	afterNavigate(() => {
-		supportedCodecs = getSupportedCodecs();
-		setVideoSrc();
-	})
-
 	onMount(() => {
 		updateList();
+		supportedCodecs = getSupportedCodecs();
+		setVideoSrc();
 		reloadPlayer();
 		const ii = setInterval(() => {
 			updateList();
@@ -772,8 +761,8 @@
 						tabindex="0" role="button" on:click={()=>{
 						onCodecChange("auto")
 					}}>Auto</a></li>
-					{#if job?.EncodedCodecs}
-						{#each job?.EncodedCodecs as codec}
+					{#if job.EncodedCodecs}
+						{#each job.EncodedCodecs as codec}
 							<li><a
 								class={selectedCodec === codec? "selected-dropdown" : ""}
 								tabindex="0" role="button" on:click={()=>{
