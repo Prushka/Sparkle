@@ -1,8 +1,0 @@
-services:
-  sparkle-fe:
-    image: meinya/sparkle-fe:latest
-    ports:
-      - "1330:3000"
-    environment:
-      - PUBLIC_HOST=https://wuw.lyu.sh
-      - PUBLIC_WS=wss://wuw.lyu.sh

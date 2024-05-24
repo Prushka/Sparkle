@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { PUBLIC_HOST } from '$env/static/public';
 	import { pfpLastFetched } from '../../store';
 	import { onDestroy } from 'svelte';
+	import { PUBLIC_STATIC } from '$env/static/public';
 
 	let pfpLast: any = {};
 	export let id: string;
@@ -11,7 +11,7 @@
 
 
 <img
-	src={(pfpLast[id] === undefined) ? `${PUBLIC_HOST}/static/pfp/${id}.png?${Date.now()}` : pfpLast[id]}
+	src={(pfpLast[id] === undefined) ? `${PUBLIC_STATIC}/pfp/${id}.png?${Date.now()}` : pfpLast[id]}
 		 on:error={() => {
 			 $pfpLastFetched = { ...pfpLast, [id]: '/icons/uwu.gif' }
 						 }}

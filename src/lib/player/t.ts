@@ -199,7 +199,7 @@ export function setGetPlayerId(): string {
 	if (lsId) {
 		return lsId;
 	}
-	const id = randomString(36);
+	const id = randomString(18);
 	localStorage.setItem('id', id);
 	return id;
 }

@@ -1,13 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { metadataStore } from '../../store';
 
 	let vidstack: any;
 
 	export let data : any;
 
 	onMount(async () => {
-		$metadataStore = data;
 		vidstack = (await import('$lib/player/Player.svelte')).default;
 	});
 
@@ -22,4 +20,4 @@
 	<meta property="og:description" content={data.plot}>
 	<meta name="description" content={data.plot} />
 </svelte:head>
-<svelte:component this={vidstack} />
+<svelte:component this={vidstack} job={data.job} />

@@ -1,13 +1,13 @@
-import { PUBLIC_HOST } from '$env/static/public';
+import { PUBLIC_STATIC, PUBLIC_SERVER } from '$env/static/public';
 import { codecsPriority, type Job, supportedCodecs } from '$lib/player/t';
 import * as cheerio from 'cheerio';
 
-/** @type {import('./$types').PageServerLoad} */
+/** @type {import('../../.svelte-kit/types/src/routes').PageServerLoad} */
 export async function load({ params }) {
 	const { id } = params;
 	let job: Job | null = null
 	let codec = 'h264'
-	const base = `${PUBLIC_HOST}/static/${id}`
+	const base = `${PUBLIC_STATIC}/${id}`
 	let episode = -1
 	let season = -1
 	let plot = ''
@@ -15,7 +15,7 @@ export async function load({ params }) {
 	let rating = -1
 	let nfoTitle = ''
 	try {
-		const jobResponse = await fetch(`${PUBLIC_HOST}/job/${id}`);
+		const jobResponse = await fetch(`${PUBLIC_SERVER}/job/${id}`);
 		job = await jobResponse.json();
 		if (!job?.EncodedCodecs?.includes('h264')) {
 			if (job?.EncodedCodecs?.includes('av1')) {

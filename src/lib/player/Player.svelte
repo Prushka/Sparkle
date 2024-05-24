@@ -23,7 +23,7 @@
 		audiosExistForCodec,
 		languageMap
 	} from './t';
-	import { PUBLIC_HOST, PUBLIC_WS } from '$env/static/public';
+	import { PUBLIC_BE, PUBLIC_STATIC, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
 	import {
 		IconAlertOctagonFilled,
@@ -35,7 +35,7 @@
 	} from '@tabler/icons-svelte';
 	import Chatbox from '$lib/player/Chatbox.svelte';
 	import Pfp from '$lib/player/Pfp.svelte';
-	import { chatFocusedStore, chatHiddenStore, metadataStore, pfpLastFetched } from '../../store';
+	import { chatFocusedStore, chatHiddenStore, pfpLastFetched } from '../../store';
 	import SUPtitles from '$lib/suptitles/suptitles';
 
 	import JASSUB from 'jassub';
@@ -50,7 +50,7 @@
 	let roomPlayers: Player[] = [];
 	let roomMessages: Chat[] = [];
 	let jobs: Job[] = [];
-	let job: Job | undefined;
+	export let job: Job | undefined;
 	let roomId = $page.params.id || '';
 	let lastTicked = 0;
 	let tickedSecsAgo = 0;
@@ -68,13 +68,8 @@
 	let lastSentTime = -100;
 	let chatFocused = false;
 	let chatDisplay: string = localStorage.getItem('chatDisplay') ? localStorage.getItem('chatDisplay')! : 'simple';
-	let metadata: any;
 	let videoSrc: any = [];
 	let fonts : string[] = [];
-	const unsubscribeMetadata = metadataStore.subscribe((value) => {
-		metadata = value;
-		job = metadata.job;
-	});
 	let sup: any;
 	let jas: any;
 	let prevTrackSrc: string = '';
@@ -98,12 +93,11 @@
 	let pausedBeforeLoading = false;
 	const unsubscribeChatHidden = chatHiddenStore.subscribe((value) => chatHidden = value);
 	const unsubscribeChatFocused = chatFocusedStore.subscribe((value) => chatFocused = value);
-	$: BASE_STATIC = `${PUBLIC_HOST}/static/${roomId}`;
+	$: BASE_STATIC = `${PUBLIC_STATIC}/${roomId}`;
 	$: thumbnailVttSrc = `${BASE_STATIC}/storyboard.vtt`;
 	$: socketCommunicating = socketConnected && (tickedSecsAgo >= 0 && tickedSecsAgo < 5);
 
 	$: {
-		console.log(metadata);
 		console.log('srcList:', videoSrc);
 	}
 
@@ -235,7 +229,7 @@
 						if (state.firedBy) {
 							$pfpLastFetched = {
 								...pfpLastFetched,
-								[state.firedBy.id]: `${PUBLIC_HOST}/static/pfp/${state.firedBy.id}.png?${Date.now()}`
+								[state.firedBy.id]: `${PUBLIC_STATIC}/pfp/${state.firedBy.id}.png?${Date.now()}`
 							};
 						}
 						break;
@@ -289,7 +283,7 @@
 
 	function updateList(onSuccess: any = () => {
 	}) {
-		fetch(`${PUBLIC_HOST}/all`)
+		fetch(`${PUBLIC_BE}/all`)
 			.then(response => response.json())
 			.then(data => {
 				jobs = data;
@@ -700,7 +694,7 @@
 										 // send POST request with form data to /pfp/{id}
 										 const formData = new FormData();
 										 formData.append('pfp', pfp);
-										 fetch(`${PUBLIC_HOST}/pfp/${playerId}`, {
+										 fetch(`${PUBLIC_BE}/pfp/${playerId}`, {
 											 method: 'POST',
 											 body: formData
 										 }).then(data => {
