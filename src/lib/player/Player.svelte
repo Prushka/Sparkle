@@ -39,6 +39,7 @@
 	import SUPtitles from '$lib/suptitles/suptitles';
 
 	import JASSUB from 'jassub';
+	import { afterNavigate } from '$app/navigation';
 
 	let controlsShowing = false;
 	let player: MediaPlayerElement;
@@ -136,7 +137,6 @@
 	onDestroy(() => {
 		unsubscribeChatHidden();
 		unsubscribeChatFocused();
-		unsubscribeMetadata();
 	});
 
 	function setVideoSrc(onChange = () => {
@@ -367,10 +367,13 @@
 		console.debug('textTracks: ' + JSON.stringify(player.textTracks));
 	}
 
-	onMount(() => {
-		updateList();
+	afterNavigate(() => {
 		supportedCodecs = getSupportedCodecs();
 		setVideoSrc();
+	})
+
+	onMount(() => {
+		updateList();
 		reloadPlayer();
 		const ii = setInterval(() => {
 			updateList();
