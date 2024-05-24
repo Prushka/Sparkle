@@ -360,6 +360,28 @@
 	}
 
 	onMount(() => {
+		const dispose = () => {
+			if (sup != null) {
+				sup.dispose();
+				onPlay = () => {
+				};
+				onPause = () => {
+				};
+				onSeeked = () => {
+				};
+				onSeeking = () => {
+				};
+				console.log('destroyed sup');
+			}
+			if (jas != null) {
+				jas.destroy();
+				let canvas = document.getElementById('ass-canvas') as HTMLCanvasElement;
+				if (canvas) {
+					canvas.remove();
+				}
+				console.log('destroyed jas');
+			}
+		};
 		updateList();
 		supportedCodecs = getSupportedCodecs();
 		setVideoSrc();
@@ -432,28 +454,6 @@
 				}
 				const selectedTrack = player.textTracks.selected;
 				if (selectedTrack?.src) {
-					const dispose = () => {
-						if (sup != null) {
-							sup.dispose();
-							onPlay = () => {
-							};
-							onPause = () => {
-							};
-							onSeeked = () => {
-							};
-							onSeeking = () => {
-							};
-							console.log('destroyed sup');
-						}
-						if (jas != null) {
-							jas.destroy();
-							let canvas = document.getElementById('ass-canvas') as HTMLCanvasElement;
-							if (canvas) {
-								canvas.remove();
-							}
-							console.log('destroyed jas');
-						}
-					};
 					if (prevTrackSrc !== selectedTrack.src) {
 						dispose();
 						const ext = selectedTrack.src.slice(-4);
@@ -518,6 +518,7 @@
 			socket?.close();
 			clearInterval(i);
 			clearInterval(ii);
+			dispose();
 			playerUnsubscribe();
 			playerAudioUnsubscribe();
 		};
