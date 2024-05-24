@@ -499,7 +499,6 @@
 								wasmUrl: '/scripts/jassub-worker.wasm',
 								fallbackFont: fallback[0],
 								availableFonts: availableFonts,
-								useLocalFonts: true,
 								fonts: [...fonts, fallback[1]]
 							});
 							console.log(fallback, selectedTrack.language);

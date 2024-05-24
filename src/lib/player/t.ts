@@ -172,10 +172,10 @@ export const languageSrcMap: { [key: string]: string } = {
 	'nor': 'no-NO'
 };
 
-export const defaultFallback: string[] = ['ZCOOL KuaiLe', 'ZCOOLKuaiLe-Regular.ttf'];
+export const defaultFallback: string[] = ['Noto Sans SC Thin', 'NotoSansSC-VariableFont_wght.ttf'];
 
 export const fallbackFontsMap: { [key: string]: string[] } = {
-	'zh-CN': ['ZCOOL KuaiLe', 'ZCOOLKuaiLe-Regular.ttf'],
+	'zh-CN': ['Noto Sans SC Thin', 'NotoSansSC-VariableFont_wght.ttf'],
 	'ja-JP': ['Noto Sans JP Thin', 'NotoSansJP-VariableFont_wght.ttf'],
 	'ko-KR': ['NanumGothicCoding', 'NanumGothicCoding-Regular.ttf']
 };
