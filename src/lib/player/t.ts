@@ -5,27 +5,27 @@ export const defaultTheme = themes[0];
 export const codecsPriority = ['av1', 'hevc', 'h264-10bit', 'h264-8bit'];
 
 export const supportedCodecs = ['av1', 'hevc', 'h264-10bit', 'h264-8bit'];
-export const audioTrackFeature = false
-export const codecMap: {[key: string]: string} = {
+export const audioTrackFeature = false;
+export const codecMap: { [key: string]: string } = {
 	'av1': 'av01.0.01M.08',
 	'hevc': 'hvc1.1.6.L93.B0',
 	'h264-8bit': 'avc1.42C01E',
-	'h264-10bit': 'avc1.6E001F',
-}
+	'h264-10bit': 'avc1.6E001F'
+};
 
 export function getSupportedCodecs() {
-	const supported = []
-	try{
+	const supported = [];
+	try {
 		for (const codec of supportedCodecs) {
-			const obj = document.createElement("video");
-			const toTest = `video/mp4; codecs="${codecMap[codec]}"`
-			const canPlayType = obj.canPlayType(toTest)
+			const obj = document.createElement('video');
+			const toTest = `video/mp4; codecs="${codecMap[codec]}"`;
+			const canPlayType = obj.canPlayType(toTest);
 			console.log(codecMap[codec], canPlayType);
-			if (canPlayType !== "") {
+			if (canPlayType !== '') {
 				supported.push(codec);
 			}
 		}
-	}catch (e) {
+	} catch (e) {
 		console.log(e);
 	}
 	return supported;
@@ -71,14 +71,14 @@ export type Chat = {
 }
 
 export function formatPair(stream: Stream, includeIndex = false, includeCodec = false): string {
-	if(stream){
-		let lang = languageMap[stream.Language] || stream.Language
+	if (stream) {
+		let lang = languageMap[stream.Language] || stream.Language;
 		if (includeIndex && includeCodec) {
-			lang = lang.split("-")[0]
+			lang = lang.split('-')[0];
 		}
-		return (includeIndex ? stream.Index + "-" : "")  + lang + (includeCodec ? ` (${stream.CodecName})` : "");
+		return (includeIndex ? stream.Index + '-' : '') + lang + (includeCodec ? ` (${stream.CodecName})` : '');
 	}
-	return ""
+	return '';
 }
 
 export interface Job {
@@ -111,12 +111,12 @@ export interface Stream {
 	SampleRate: number;
 }
 
-export function audiosExistForCodec(job :Job, codec: string){
-	return job.MappedAudio && job.MappedAudio[codec] && Object.entries(job.MappedAudio[codec]).length > 0
+export function audiosExistForCodec(job: Job, codec: string) {
+	return job.MappedAudio && job.MappedAudio[codec] && Object.entries(job.MappedAudio[codec]).length > 0;
 }
 
-export function getAudioLocForCodec(job :Job, codec: string, language: string = "") : string {
-	if(audiosExistForCodec(job, codec)) {
+export function getAudioLocForCodec(job: Job, codec: string, language: string = ''): string {
+	if (audiosExistForCodec(job, codec)) {
 		const audioMapping = Object.values(job!.MappedAudio[codec]).find((am) => am.Language === language);
 		if (audioMapping) {
 			return `${codec}-${audioMapping.Index}-${audioMapping.Language}`;
@@ -125,51 +125,59 @@ export function getAudioLocForCodec(job :Job, codec: string, language: string = 
 	return codec;
 }
 
-export const languageMap: {[key: string]:string} = {
-	"eng": "English-English",
-	"ara": "Arabic-العربية",
-	"ger": "German-Deutsch",
-	"spa": "Spanish-Español",
-	"fre": "French-Français",
-	"ita": "Italian-Italiano",
-	"por": "Portuguese-Português",
-	"rus": "Russian-Русский",
-	"chi": "Chinese-中文",
-	"jpn": "Japanese-日本語",
-	"kor": "Korean-한국어",
-	"hin": "Hindi-हिन्दी",
-	"urd": "Urdu-اردو",
-	"tur": "Turkish-Türkçe",
-	"vie": "Vietnamese-Tiếng Việt",
-	"tha": "Thai-ไทย",
-	"dut": "Dutch-Nederlands",
-	"swe": "Swedish-Svenska",
-	"dan": "Danish-Dansk",
-	"nor": "Norwegian-Norsk",
-	"ind": "Indonesian-Bahasa Indonesia",
+export const languageMap: { [key: string]: string } = {
+	'eng': 'English-English',
+	'ara': 'Arabic-العربية',
+	'ger': 'German-Deutsch',
+	'spa': 'Spanish-Español',
+	'fre': 'French-Français',
+	'ita': 'Italian-Italiano',
+	'por': 'Portuguese-Português',
+	'rus': 'Russian-Русский',
+	'chi': 'Chinese-中文',
+	'jpn': 'Japanese-日本語',
+	'kor': 'Korean-한국어',
+	'hin': 'Hindi-हिन्दी',
+	'urd': 'Urdu-اردو',
+	'tur': 'Turkish-Türkçe',
+	'vie': 'Vietnamese-Tiếng Việt',
+	'tha': 'Thai-ไทย',
+	'dut': 'Dutch-Nederlands',
+	'swe': 'Swedish-Svenska',
+	'dan': 'Danish-Dansk',
+	'nor': 'Norwegian-Norsk',
+	'ind': 'Indonesian-Bahasa Indonesia'
 };
 
-export const languageSrcMap: {[key: string]:string} = {
-	"eng": "en-US",
-	"ara": "ar-SA",
-	"ger": "de-DE",
-	"spa": "es-ES",
-	"fre": "fr-FR",
-	"ita": "it-IT",
-	"por": "pt-PT",
-	"rus": "ru-RU",
-	"chi": "zh-CN",
-	"jpn": "ja-JP",
-	"kor": "ko-KR",
-	"hin": "hi-IN",
-	"urd": "ur-PK",
-	"tur": "tr-TR",
-	"vie": "vi-VN",
-	"tha": "th-TH",
-	"dut": "nl-NL",
-	"swe": "sv-SE",
-	"dan": "da-DK",
-	"nor": "no-NO"
+export const languageSrcMap: { [key: string]: string } = {
+	'eng': 'en-US',
+	'ara': 'ar-SA',
+	'ger': 'de-DE',
+	'spa': 'es-ES',
+	'fre': 'fr-FR',
+	'ita': 'it-IT',
+	'por': 'pt-PT',
+	'rus': 'ru-RU',
+	'chi': 'zh-CN',
+	'jpn': 'ja-JP',
+	'kor': 'ko-KR',
+	'hin': 'hi-IN',
+	'urd': 'ur-PK',
+	'tur': 'tr-TR',
+	'vie': 'vi-VN',
+	'tha': 'th-TH',
+	'dut': 'nl-NL',
+	'swe': 'sv-SE',
+	'dan': 'da-DK',
+	'nor': 'no-NO'
+};
+
+export const defaultFallback: string[] = ['ZCOOL KuaiLe', 'ZCOOLKuaiLe-Regular.ttf'];
+
+export const fallbackFontsMap: { [key: string]: string[] } = {
+	'zh-CN': ['ZCOOL KuaiLe', 'ZCOOLKuaiLe-Regular.ttf'],
+	'ja-JP': ['Noto Sans JP Thin', 'NotoSansJP-VariableFont_wght.ttf'],
+	'ko-KR': ['NanumGothicCoding', 'NanumGothicCoding-Regular.ttf']
 };
 
 export function formatSeconds(seconds: number | undefined): string {
@@ -195,7 +203,7 @@ export function secondsSince(date: Date): number {
 }
 
 export function setGetPlayerId(): string {
-	const lsId = localStorage.getItem('id')
+	const lsId = localStorage.getItem('id');
 	if (lsId) {
 		return lsId;
 	}
@@ -205,10 +213,10 @@ export function setGetPlayerId(): string {
 }
 
 export function getMbps(job: Job | undefined | null, codec: string): number {
-	if (!job?.Files?.[codec + ".mp4"] || !job?.Duration) {
+	if (!job?.Files?.[codec + '.mp4'] || !job?.Duration) {
 		return 0;
 	}
-	return job?.Files[codec + ".mp4"] / 1024 / 1024 / job?.Duration / 0.125
+	return job?.Files[codec + '.mp4'] / 1024 / 1024 / job?.Duration / 0.125;
 }
 
 export function formatMbps(job: Job | undefined | null, codec: string): string {

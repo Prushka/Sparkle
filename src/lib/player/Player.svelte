@@ -21,7 +21,7 @@
 		formatPair,
 		getAudioLocForCodec,
 		audiosExistForCodec,
-		languageMap
+		languageMap, fallbackFontsMap, defaultFallback
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -69,7 +69,7 @@
 	let chatFocused = false;
 	let chatDisplay: string = localStorage.getItem('chatDisplay') ? localStorage.getItem('chatDisplay')! : 'simple';
 	let videoSrc: any = [];
-	let fonts : string[] = [];
+	let fonts: string[] = [];
 	let sup: any;
 	let jas: any;
 	let prevTrackSrc: string = '';
@@ -140,34 +140,34 @@
 
 	function setVideoSrc(onChange = () => {
 	}) {
-			const prevCodec = videoSrc?.sCodec;
-			let autoCodec;
-			for (const codec of supportedCodecs) {
-				if (job.EncodedCodecs.includes(codec)) {
-					autoCodec = codec;
-					break;
-				}
+		const prevCodec = videoSrc?.sCodec;
+		let autoCodec;
+		for (const codec of supportedCodecs) {
+			if (job.EncodedCodecs.includes(codec)) {
+				autoCodec = codec;
+				break;
 			}
-			if (!autoCodec) {
-				autoCodec = job.EncodedCodecs[0];
-			}
-			const getVideoSrc = (codec: string) => {
-				console.log('codec', codec, codecMap[codec]);
-				return {
-					src: `${BASE_STATIC}/${getAudioLocForCodec(job, codec, selectedAudioMapping)}.mp4`,
-					type: 'video/mp4',
-					codec: codecMap[codec],
-					sCodec: codec
-				};
+		}
+		if (!autoCodec) {
+			autoCodec = job.EncodedCodecs[0];
+		}
+		const getVideoSrc = (codec: string) => {
+			console.log('codec', codec, codecMap[codec]);
+			return {
+				src: `${BASE_STATIC}/${getAudioLocForCodec(job, codec, selectedAudioMapping)}.mp4`,
+				type: 'video/mp4',
+				codec: codecMap[codec],
+				sCodec: codec
 			};
-			if (selectedCodec === 'auto' && prevCodec !== autoCodec) {
-				videoSrc = getVideoSrc(autoCodec);
-				onChange();
-			} else if (selectedCodec !== 'auto' && prevCodec !== selectedCodec) {
-				videoSrc = getVideoSrc(selectedCodec);
-				console.log('selected codec', selectedCodec, codecMap[selectedCodec]);
-				onChange();
-			}
+		};
+		if (selectedCodec === 'auto' && prevCodec !== autoCodec) {
+			videoSrc = getVideoSrc(autoCodec);
+			onChange();
+		} else if (selectedCodec !== 'auto' && prevCodec !== selectedCodec) {
+			videoSrc = getVideoSrc(selectedCodec);
+			console.log('selected codec', selectedCodec, codecMap[selectedCodec]);
+			onChange();
+		}
 	}
 
 	function nextTheme() {
@@ -313,48 +313,48 @@
 	}
 
 	function reloadPlayer() {
-			if (job.Streams) {
-				fonts = [];
-				for (const [, stream] of Object.entries(job.Streams)) {
-					switch (stream.CodecType) {
-						case "attachment":
-							if (stream.Filename?.includes("otf") || stream.Filename?.includes("ttf")) {
-								fonts.push(`${BASE_STATIC}/${stream.Location}`);
+		if (job.Streams) {
+			fonts = [];
+			for (const [, stream] of Object.entries(job.Streams)) {
+				switch (stream.CodecType) {
+					case 'attachment':
+						if (stream.Filename?.includes('otf') || stream.Filename?.includes('ttf')) {
+							fonts.push(`${BASE_STATIC}/${stream.Location}`);
+						}
+						break;
+					case 'subtitle':
+						player.textTracks.add({
+							src: `${BASE_STATIC}/${stream.Location}`,
+							label: formatPair(stream, true, true),
+							kind: 'subtitles',
+							type: stream.CodecName.includes('vtt') ? 'vtt' : stream.CodecName.includes('ass') ? 'asshuh' : 'srt',
+							language: languageSrcMap[stream.Language] || stream.Language,
+							default: stream.Language.includes('eng')
+						});
+						break;
+					case 'audio':
+						if (audioTrackFeature) {
+							let counter = 0;
+							selectedAudioTrack = -1;
+							const loc = `${BASE_STATIC}/${stream.Location}`;
+							audio.src = loc;
+							audioTracks.push({
+								src: loc,
+								kind: 'audio',
+								language: languageSrcMap[stream.Language] || stream.Language
+							});
+							if (stream.Language.includes('jp')) {
+								selectedAudioTrack = counter;
 							}
-							break;
-						case 'subtitle':
-								player.textTracks.add({
-									src: `${BASE_STATIC}/${stream.Location}`,
-									label: formatPair(stream, true, true),
-									kind: 'subtitles',
-									type: stream.CodecName.includes('vtt') ? 'vtt' : stream.CodecName.includes('ass') ? 'asshuh' : 'srt',
-									language: languageSrcMap[stream.Language] || stream.Language,
-									default: stream.Language.includes('eng')
-								});
-							break;
-						case 'audio':
-							if (audioTrackFeature) {
-								let counter = 0;
-								selectedAudioTrack = -1;
-								const loc = `${BASE_STATIC}/${stream.Location}`;
-								audio.src = loc;
-								audioTracks.push({
-									src: loc,
-									kind: 'audio',
-									language: languageSrcMap[stream.Language] || stream.Language
-								});
-								if (stream.Language.includes('jp')) {
-									selectedAudioTrack = counter;
-								}
-								counter++;
-								if (audioTracks.length > 0 && selectedAudioTrack < 0) {
-									selectedAudioTrack = 0;
-								}
+							counter++;
+							if (audioTracks.length > 0 && selectedAudioTrack < 0) {
+								selectedAudioTrack = 0;
 							}
-							break;
-					}
+						}
+						break;
 				}
 			}
+		}
 		player.controlsDelay = 1600;
 		console.debug('textTracks: ' + JSON.stringify(player.textTracks));
 	}
@@ -443,15 +443,15 @@
 							};
 							onSeeking = () => {
 							};
-							console.log('destroyed sup')
+							console.log('destroyed sup');
 						}
 						if (jas != null) {
 							jas.destroy();
 							let canvas = document.getElementById('ass-canvas') as HTMLCanvasElement;
 							if (canvas) {
-								canvas.remove()
+								canvas.remove();
 							}
-							console.log('destroyed jas')
+							console.log('destroyed jas');
 						}
 					};
 					if (prevTrackSrc !== selectedTrack.src) {
@@ -486,6 +486,10 @@
 								canvas.id = 'ass-canvas';
 								videoElement.parentNode?.appendChild(canvas);
 							}
+							const fallback: string[] = fallbackFontsMap[selectedTrack.language] ? fallbackFontsMap[selectedTrack.language] : defaultFallback;
+							const availableFonts = {
+								[fallback[0]]: fallback[1]
+							}
 							jas = new JASSUB({
 								video: videoElement,
 								canvas: canvas,
@@ -493,8 +497,12 @@
 								offscreenRender: false,
 								workerUrl: '/scripts/jassub-worker.js',
 								wasmUrl: '/scripts/jassub-worker.wasm',
-								fonts: fonts
+								fallbackFont: fallback[0],
+								availableFonts: availableFonts,
+								useLocalFonts: true,
+								fonts: [...fonts, fallback[1]]
 							});
+							console.log(fallback, selectedTrack.language);
 						}
 						prevTrackSrc = selectedTrack.src;
 					}
@@ -738,15 +746,15 @@
 						? `${(languageMap[selectedAudioMapping] || selectedAudioMapping)}` : "Audio"}</div>
 					<ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-48">
 						{#each job.MappedAudio[videoSrc?.sCodec] as am}
-								<li><a
-									class={selectedAudioMapping === am.Language? "selected-dropdown" : ""}
-									tabindex="0" role="button" on:click={()=>{
+							<li><a
+								class={selectedAudioMapping === am.Language? "selected-dropdown" : ""}
+								tabindex="0" role="button" on:click={()=>{
 									selectedAudioMapping = am.Language;
 									localStorage.setItem('preferredAudio', selectedAudioMapping);
 									window.location.reload();
 							}}>
-									{formatPair(am)}
-								</a></li>
+								{formatPair(am)}
+							</a></li>
 						{/each}
 					</ul>
 				</div>
