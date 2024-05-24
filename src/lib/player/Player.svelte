@@ -17,7 +17,6 @@
 		codecMap,
 		getSupportedCodecs,
 		lightThemes,
-		audioTrackFeature,
 		formatPair,
 		getAudioLocForCodec,
 		audiosExistForCodec,
@@ -82,15 +81,6 @@
 	};
 	let onSeeking = () => {
 	};
-	let audio: HTMLAudioElement;
-	const audioTracks: any[] = [];
-	let selectedAudioTrack = -1;
-	let videoLoaded = false;
-	let audioLoaded = false;
-	$: audioVideoLoaded = videoLoaded && audioLoaded;
-	let videoListenersAttached = false;
-	let internalPaused = false;
-	let pausedBeforeLoading = false;
 	const unsubscribeChatHidden = chatHiddenStore.subscribe((value) => chatHidden = value);
 	const unsubscribeChatFocused = chatFocusedStore.subscribe((value) => chatFocused = value);
 	$: BASE_STATIC = `${PUBLIC_STATIC}/${roomId}`;
@@ -99,38 +89,6 @@
 
 	$: {
 		console.log('srcList:', videoSrc);
-	}
-
-	$: audioTrackEnabled = selectedAudioTrack >= 0;
-
-	function internalPause() {
-		if (player) {
-			audio.currentTime = player.currentTime;
-			player.pause();
-			audio.pause();
-			internalPaused = true;
-		}
-	}
-
-	function internalPlay() {
-		if (player) {
-			player.play();
-			audio.play();
-			internalPaused = false;
-		}
-	}
-
-	$: {
-		if (audioTrackEnabled) {
-			console.log('audioVideoLoaded', audioVideoLoaded, pausedBeforeLoading, internalPaused);
-			if (!pausedBeforeLoading) {
-				if (audioVideoLoaded && internalPaused) {
-					internalPlay();
-				} else if (!audioVideoLoaded && !internalPaused) {
-					internalPause();
-				}
-			}
-		}
 	}
 
 	onDestroy(() => {
@@ -332,26 +290,6 @@
 							default: stream.Language.includes('eng')
 						});
 						break;
-					case 'audio':
-						if (audioTrackFeature) {
-							let counter = 0;
-							selectedAudioTrack = -1;
-							const loc = `${BASE_STATIC}/${stream.Location}`;
-							audio.src = loc;
-							audioTracks.push({
-								src: loc,
-								kind: 'audio',
-								language: languageSrcMap[stream.Language] || stream.Language
-							});
-							if (stream.Language.includes('jp')) {
-								selectedAudioTrack = counter;
-							}
-							counter++;
-							if (audioTracks.length > 0 && selectedAudioTrack < 0) {
-								selectedAudioTrack = 0;
-							}
-						}
-						break;
 				}
 			}
 		}
@@ -399,12 +337,6 @@
 		const playerUnsubscribe = player.subscribe(({ controlsVisible }) => {
 			controlsShowing = controlsVisible;
 		});
-		const playerAudioUnsubscribe = player.subscribe(({ volume, muted }) => {
-			if (audioTrackEnabled) {
-				audio.volume = volume;
-				audio.muted = muted;
-			}
-		});
 		const i = setInterval(() => {
 			updateTime();
 			if (!document.getElementById('chat-input')) {
@@ -438,20 +370,6 @@
 			tickedSecsAgoStr = (Math.round(tickedSecsAgo * 100) / 100).toFixed(2);
 			const videoElement = document.querySelector('media-provider video') as HTMLVideoElement;
 			if (videoElement) {
-				if (!videoListenersAttached && audioTrackFeature) {
-					videoElement.addEventListener('canplay', () => {
-						console.log('Video canplay');
-						videoLoaded = true;
-					});
-					videoElement.addEventListener('waiting', () => {
-						console.log('Video waiting');
-						videoLoaded = false;
-					});
-					videoElement.addEventListener('stalled', () => {
-						console.log('Video stalled');
-						videoLoaded = false;
-					});
-				}
 				const selectedTrack = player.textTracks.selected;
 				if (selectedTrack?.src) {
 					if (prevTrackSrc !== selectedTrack.src) {
@@ -520,7 +438,6 @@
 			clearInterval(ii);
 			dispose();
 			playerUnsubscribe();
-			playerAudioUnsubscribe();
 		};
 	});
 
@@ -572,22 +489,6 @@
 			{/if}
 		</div>
 	</dialog>
-	{#if audioTrackFeature}
-		<audio
-			on:canplay={()=>{
-			console.log("Audio canplay")
-			audioLoaded = true;
-		}}
-			on:waiting={()=>{
-			console.log("Audio waiting")
-			audioLoaded = false;
-		}}
-			on:stalled={()=>{
-			console.log("Audio stalled")
-			audioLoaded = false;
-		}}
-			class="hidden" bind:this={audio} />
-	{/if}
 	<media-player
 		keyShortcuts={{
     // Space-separated list.
@@ -611,18 +512,11 @@
 		}}
 		on:seeking={()=>{
 			onSeeking()
-			if (audioTrackEnabled) {
-				audio.currentTime = player.currentTime;
-			}
 		}}
 		on:pause={
 			() => {
 				send({ paused: true, type: SyncTypes.PauseSync });
 				onPause()
-				if(audioTrackEnabled && audioVideoLoaded) {
-					audio.pause()
-					pausedBeforeLoading = true;
-				}
 			}}
 		on:play={
 			() => {
@@ -633,16 +527,11 @@
 					connect();
 				}
 				onPlay()
-				if(audioTrackEnabled && audioVideoLoaded) {
-					audio.play()
-					pausedBeforeLoading = false;
-				}
 			}}
 	>
 		<media-provider
-			class="aspect-video media-provider {(!audioVideoLoaded && audioTrackEnabled) ? 'invisible':'visible'}"></media-provider>
-		<media-video-layout class="{(!audioVideoLoaded && audioTrackEnabled) ? 'invisible':'visible'}"
-												colorScheme={lightThemes.includes(currentTheme) ? "light" : "dark"}
+			class="aspect-video media-provider"></media-provider>
+		<media-video-layout colorScheme={lightThemes.includes(currentTheme) ? "light" : "dark"}
 												thumbnails={thumbnailVttSrc}></media-video-layout>
 	</media-player>
 
