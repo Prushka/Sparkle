@@ -1,3 +1,2 @@
 Pause send when in bg until reentry, don't send previous ones - pause state won't be sent
 Show chat only when focused
-Notification sound on message when in bg
