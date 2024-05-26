@@ -17,9 +17,9 @@ export const codecDisplayMap: { [key: string]: string } = {
 	'hevc': 'HEVC',
 	'h264-8bit': 'H.264',
 	'auto': 'Auto'
-}
+};
 
-export const chatLayouts = ["simple", "extended", "hidden"]
+export const chatLayouts = ['simple', 'extended', 'hidden'];
 
 export function getSupportedCodecs() {
 	const supported = [];
@@ -49,7 +49,11 @@ export enum SyncTypes {
 	PlayersStatusSync = 'players',
 	PfpSync = 'pfp',
 	StateSync = 'state',
-	BroadcastSync = 'broadcast'
+	BroadcastSync = 'broadcast',
+	AudioSwitch = 'audio',
+	CodecSwitch = 'codec',
+	SubtitleSwitch = 'subtitle',
+	ExitSync = 'exit'
 }
 
 export enum BroadcastTypes {
@@ -65,6 +69,9 @@ export interface SendPayload {
 	players: Player[];
 	timestamp: number;
 	broadcast?: BroadcastPayload;
+	audio?: string;
+	codec?: string;
+	subtitle?: string;
 }
 
 export interface BroadcastPayload {
@@ -78,6 +85,9 @@ export type Player = {
 	name: string;
 	id: string;
 	inBg: boolean;
+	audio: string;
+	codec: string;
+	subtitle: string;
 }
 
 export type Chat = {
@@ -260,7 +270,7 @@ export function formatInput(input: string) {
 
 export function preprocessJob(job: Job) {
 	job.Input = formatInput(job.Input);
-	if(job.EncodedCodecs) {
+	if (job.EncodedCodecs) {
 		job.EncodedCodecs.sort((a, b) => {
 			return codecsPriority.indexOf(a) - codecsPriority.indexOf(b);
 		});
@@ -270,7 +280,7 @@ export function preprocessJob(job: Job) {
 			}
 		}
 	}
-	return job
+	return job;
 }
 
 export function preprocessJobs(jobs: Job[]) {
@@ -278,5 +288,5 @@ export function preprocessJobs(jobs: Job[]) {
 	jobs.sort((a, b) => {
 		return a.Input.localeCompare(b.Input);
 	});
-	return jobs
+	return jobs;
 }

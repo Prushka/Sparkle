@@ -93,6 +93,7 @@
 	let chatLayout: string;
 	const unsubscribeChatLayout = chatLayoutStore.subscribe((value) => chatLayout = value);
 	const unsubscribeChatFocused = chatFocusedStore.subscribe((value) => chatFocused = value);
+	let exited = false;
 	$: BASE_STATIC = `${PUBLIC_STATIC}/${roomId}`;
 	$: thumbnailVttSrc = `${BASE_STATIC}/storyboard.vtt`;
 	$: socketCommunicating = socketConnected && (tickedSecsAgo >= 0 && tickedSecsAgo < 5);
@@ -252,6 +253,10 @@
 								break;
 						}
 						break;
+					case SyncTypes.ExitSync:
+						exited = true;
+						$pageReloadCounterStore++;
+						break;
 				}
 			}
 		};
@@ -264,9 +269,11 @@
 		socket.onclose = () => {
 			console.log('Socket closed, reconnecting');
 			socketConnected = false;
-			setTimeout(function() {
-				connect();
-			}, 1000);
+			if(!exited){
+				setTimeout(function() {
+					connect();
+				}, 1000);
+			}
 		};
 	}
 
@@ -771,8 +778,10 @@
 						<IconPlugConnectedX size={24} stroke={2} />
 						{#if !interactedWithPlayer}
 							Connect Now
-						{:else}
+						{:else if !exited}
 							Connecting...
+						{:else}
+							Disconnected
 						{/if}
 					{/if}
 				</button>
