@@ -25,12 +25,12 @@
 	import { PUBLIC_BE, PUBLIC_STATIC, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
 	import {
-		IconAlertOctagonFilled,
+		IconAlertOctagonFilled, IconArrowBounce,
 		IconBrightnessHalf, IconCone, IconConePlus, IconEyeOff,
 		IconPlayerPauseFilled,
 		IconPlayerPlayFilled,
 		IconPlugConnected,
-		IconPlugConnectedX, IconTableExport
+		IconPlugConnectedX, IconTableExport, IconX
 	} from '@tabler/icons-svelte';
 	import Chatbox from '$lib/player/Chatbox.svelte';
 	import Pfp from '$lib/player/Pfp.svelte';
@@ -73,7 +73,7 @@
 	let jas: any;
 	let prevTrackSrc: string | null | undefined = '';
 	let footer: string = '';
-	let shiftHeld = false;
+	let syncGoto = false;
 	let notificationAudio = new Audio(`${PUBLIC_STATIC}/sound/anya_peanuts.mp3`);
 	let inBg = false;
 	let onPlay = () => {
@@ -297,7 +297,7 @@
 					username: control.firedBy.name,
 					message: control.type === SyncTypes.PauseSync ? (control.paused ? 'paused' : 'resumed') :
 						control.type === SyncTypes.TimeSync ? 'seeked to ' + formatSeconds(control.time) :
-						control.type === SyncTypes.BroadcastSync ?`Moving to [${jobs.find((job) => job.Id === control.broadcast!.moveTo)?.Input}] in 5 Seconds` : "unknown",
+							control.type === SyncTypes.BroadcastSync ? `Moving to [${jobs.find((job) => job.Id === control.broadcast!.moveTo)?.Input}] in 5 Seconds` : 'unknown',
 					timestamp: control.timestamp,
 					mediaSec: player.currentTime,
 					isStateUpdate: true
@@ -338,11 +338,6 @@
 	}
 
 	onMount(() => {
-		const keyChange = (e:any) => {
-			shiftHeld = e.shiftKey;
-		}
-		document.addEventListener('keyup', keyChange);
-		document.addEventListener('keydown', keyChange);
 		const dispose = () => {
 			if (sup != null) {
 				sup.dispose();
@@ -381,7 +376,7 @@
 				send({ state: 'fg', type: SyncTypes.StateSync });
 				inBg = false;
 			}
-		}
+		};
 		document.addEventListener('visibilitychange', visibilityChange);
 		const playerUnsubscribe = player.subscribe(({ controlsVisible }) => {
 			controlsShowing = controlsVisible;
@@ -490,9 +485,9 @@
 			clearInterval(ii);
 			dispose();
 			playerUnsubscribe();
-			document.removeEventListener('visibilitychange', () => {visibilityChange});
-			document.removeEventListener('keyup', keyChange);
-			document.removeEventListener('keydown', keyChange);
+			document.removeEventListener('visibilitychange', () => {
+				visibilityChange;
+			});
 		};
 	});
 
@@ -674,29 +669,45 @@
 			</div>
 		</div>
 
-		<div class="gap-4 w-full items-center justify-center sm:flex max-sm:grid max-sm:grid-cols-2">
-			<select
-				on:change={(e) => {
+		<div class="gap-4 w-full items-center justify-center md:flex max-md:grid max-md:grid-cols-2">
+			<div class="flex gap-2 items-center justify-center max-md:col-span-2 flex-grow">
+					<div class="tooltip tooltip-right" data-tip={!syncGoto ? "Move Users in Room on Selection" :
+					"Don't move Users in Room on Selection"}>
+						<button class="btn"
+									 on:click={()=>{
+										 syncGoto = !syncGoto;
+									 }}
+									 disabled={!socketCommunicating}>
+							{#if !syncGoto}
+								<IconArrowBounce size={24} stroke={2} />
+							{:else}
+								<IconX size={24} stroke={2} />
+							{/if}
+						</button>
+					</div>
+				<select
+					on:change={(e) => {
 				const roomId = e.currentTarget.value;
-				if(shiftHeld && socketCommunicating) {
+				if(syncGoto && socketCommunicating) {
 					send({ type: SyncTypes.BroadcastSync,
 					broadcast: { type: BroadcastTypes.MoveTo, moveTo: roomId } });
 				}else{
 					goto(`/${roomId}`)
 				}
 			}}
-				bind:value={roomId}
-				class="select media-select select-bordered flex-grow max-sm:col-span-2">
-				<option disabled selected>Which media?</option>
-				{#each jobs as job}
-					<option value={job.Id}>{job.Input}</option>
-				{/each}
-			</select>
+					bind:value={roomId}
+					class="select w-72 select-bordered flex-grow">
+					<option disabled selected>Which media?</option>
+					{#each jobs as job}
+						<option value={job.Id}>{job.Input}</option>
+					{/each}
+				</select>
+			</div>
 			{#if audiosExistForCodec(job, videoSrc?.sCodec)}
-				<div class="dropdown dropdown-top dropdown-end max-sm:w-full" id="codec-dropdown">
+				<div class="dropdown dropdown-top dropdown-end max-md:w-full" id="codec-dropdown">
 					<div
 						tabindex="0" role="button"
-						class="btn m-1 w-full sm:w-44">{getAudioLocForCodec(job, videoSrc?.sCodec, selectedAudioMapping)
+						class="btn m-1 w-full md:w-44">{getAudioLocForCodec(job, videoSrc?.sCodec, selectedAudioMapping)
 						? `${(languageMap[selectedAudioMapping] || selectedAudioMapping)}` : "Audio"}</div>
 					<ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-48">
 						{#each job.MappedAudio[videoSrc?.sCodec] as am}
@@ -712,10 +723,10 @@
 					</ul>
 				</div>
 			{/if}
-			<div class="dropdown dropdown-top dropdown-end max-sm:w-full" id="codec-dropdown">
+			<div class="dropdown dropdown-top dropdown-end max-md:w-full" id="codec-dropdown">
 				<div
 					tabindex="0" role="button"
-					class="btn m-1 sm:w-28 w-full">{selectedCodec} {(videoSrc?.sCodec && selectedCodec === "auto") ? `(${videoSrc.sCodec})` : ''}</div>
+					class="btn m-1 md:w-28 w-full">{selectedCodec} {(videoSrc?.sCodec && selectedCodec === "auto") ? `(${videoSrc.sCodec})` : ''}</div>
 				<ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-48">
 					<li><a
 						class={selectedCodec === "auto"? "selected-dropdown" : ""}
@@ -853,10 +864,6 @@
         width: auto !important;
     }
 
-    .media-select {
-        width: 20rem;
-    }
-
     .chat-history {
         margin-top: 2rem;
         margin-right: 2rem;
@@ -897,10 +904,6 @@
         .chat-history .text-sm {
             line-height: unset;
             font-size: 0.64rem;
-        }
-
-        .media-select {
-            width: 100%;
         }
     }
 
