@@ -195,14 +195,7 @@
 			if (player) {
 				console.debug('received: ' + JSON.stringify(state));
 				const initiateMoveTo = () => {
-					roomMessages.push({
-						uid: state.firedBy!.id,
-						username: state.firedBy!.name,
-						message: `Moving to ${jobs.find((job) => job.Id === broadcast!.moveTo)?.Input} in 5 Seconds`,
-						timestamp: state.timestamp,
-						mediaSec: state.firedBy!.time!,
-						isStateUpdate: true
-					});
+					controlsToDisplay.push(state);
 					updateMessages();
 					setTimeout(() => {
 						goto(`/${broadcast!.moveTo}`);
@@ -305,7 +298,9 @@
 				const message: Chat = {
 					uid: control.firedBy.id,
 					username: control.firedBy.name,
-					message: control.type === SyncTypes.PauseSync ? (control.paused ? 'paused' : 'resumed') : 'seeked to ' + formatSeconds(control.time),
+					message: control.type === SyncTypes.PauseSync ? (control.paused ? 'paused' : 'resumed') :
+						control.type === SyncTypes.TimeSync ? 'seeked to ' + formatSeconds(control.time) :
+						control.type === SyncTypes.BroadcastSync ?`Moving to ${jobs.find((job) => job.Id === control.broadcast!.moveTo)?.Input} in 5 Seconds` : "unknown",
 					timestamp: control.timestamp,
 					mediaSec: player.currentTime,
 					isStateUpdate: true
