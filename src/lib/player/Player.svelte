@@ -121,7 +121,7 @@
 		if (!autoCodec) {
 			autoCodec = job.EncodedCodecs[0];
 		}
-		const getVideoSrc = (codec: string) => {
+		const setVideoSrc = (codec: string) => {
 			const prevAudio = selectedAudioMapping;
 			const audioExists = job.MappedAudio[codec]?.find((am) => {
 				if (am.Language === selectedAudioMapping) {
@@ -132,18 +132,19 @@
 				selectedAudioMapping = job.MappedAudio[codec][0].Language;
 			}
 			console.log('codec', codec, codecMap[codec], prevAudio, selectedAudioMapping);
-			return {
+			videoSrc = {
 				src: `${BASE_STATIC}/${getAudioLocForCodec(job, codec, selectedAudioMapping)}.mp4`,
 				type: 'video/mp4',
 				codec: codecMap[codec],
 				sCodec: codec
 			};
+			sendSettings();
 		};
 		if (selectedCodec === 'auto' && prevCodec !== autoCodec) {
-			videoSrc = getVideoSrc(autoCodec);
+			setVideoSrc(autoCodec);
 			onChange();
 		} else if (selectedCodec !== 'auto' && prevCodec !== selectedCodec) {
-			videoSrc = getVideoSrc(selectedCodec);
+			setVideoSrc(selectedCodec);
 			console.log('selected codec', selectedCodec, codecMap[selectedCodec]);
 			onChange();
 		}
@@ -172,19 +173,26 @@
 		}
 	}
 
+	function sendSettings() {
+		send({ type: SyncTypes.SubtitleSwitch, subtitle: player?.textTracks?.selected?.src });
+		send({ type: SyncTypes.AudioSwitch, audio: selectedAudioMapping });
+		send({ type: SyncTypes.CodecSwitch, codec: `${selectedCodec},${videoSrc?.sCodec}` });
+	}
+
 	function connect() {
 		if (!interactedWithPlayer) {
 			return;
 		}
 		socket = new WebSocket(`${PUBLIC_WS}/sync/${roomId}/${playerId}`);
-		console.log(`Connecting to ${roomId}`);
+		console.log(`Socket, connecting to ${roomId}`);
 		socket.onopen = () => {
-			console.log(`Connected to ${roomId}`);
+			console.log(`Socket, connected to ${roomId}`);
 			socketConnected = true;
 			if (name !== '') {
 				send({ name: name, type: SyncTypes.NameSync });
 			}
 			send({ type: SyncTypes.NewPlayer });
+			sendSettings();
 		};
 
 		socket.onmessage = (event: MessageEvent) => {
@@ -271,6 +279,7 @@
 			socketConnected = false;
 			if(!exited){
 				setTimeout(function() {
+					console.log('Socket reconnecting')
 					connect();
 				}, 1000);
 			}
@@ -441,6 +450,7 @@
 				}
 				if (prevTrackSrc !== selectedTrack?.src) {
 					dispose();
+					send({ type: SyncTypes.SubtitleSwitch, subtitle: selectedTrack?.src });
 					if (selectedTrack?.src) {
 						const ext = selectedTrack.src.slice(-4);
 						if (ext.includes('sup')) {
@@ -490,6 +500,7 @@
 		const thePlayer = document.getElementById('the-player');
 		thePlayer!.appendChild(chatOverlay!);
 		return () => {
+			exited = true;
 			socket?.close();
 			clearInterval(i);
 			clearInterval(ii);
