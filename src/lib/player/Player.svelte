@@ -48,8 +48,8 @@
 	let pfpInput: HTMLInputElement;
 	let roomPlayers: Player[] = [];
 	let roomMessages: Chat[] = [];
-	let jobs: Job[] = [];
 	export let job: Job;
+	export let jobs: Job[];
 	let roomId = $page.params.id || '';
 	let lastTicked = 0;
 	let tickedSecsAgo = 0;
@@ -245,8 +245,7 @@
 		}
 	}
 
-	function updateList(onSuccess: any = () => {
-	}) {
+	function updateList() {
 		fetch(`${PUBLIC_BE}/all`)
 			.then(response => response.json())
 			.then(data => {
@@ -255,7 +254,6 @@
 					return a.Input.localeCompare(b.Input);
 				});
 				console.log(jobs);
-				onSuccess();
 			});
 	}
 
@@ -334,7 +332,6 @@
 				jas = null
 			}
 		};
-		updateList();
 		supportedCodecs = getSupportedCodecs();
 		setVideoSrc();
 		reloadPlayer();

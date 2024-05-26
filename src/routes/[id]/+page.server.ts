@@ -15,7 +15,13 @@ export async function load({ params }) {
 	let title = 'UwU'
 	let rating = -1
 	let nfoTitle = ''
+	let jobs : Job[] = []
 	try {
+		const jobsResponse = await fetch(`${env.SERVER_BE}/all`);
+		jobs = await jobsResponse.json();
+		jobs.sort((a, b) => {
+			return a.Input.localeCompare(b.Input);
+		});
 		const jobResponse = await fetch(`${env.SERVER_BE}/job/${id}`);
 		job = await jobResponse.json();
 		if (!job?.EncodedCodecs?.includes('h264')) {
@@ -60,6 +66,7 @@ export async function load({ params }) {
 		}
 	}
 	return {
+		jobs: jobs,
 		job: job,
 		video: `${base}/${codec}.mp4`,
 		preview: `${base}/poster.jpg`,
