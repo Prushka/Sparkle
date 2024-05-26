@@ -640,7 +640,7 @@
 				{/each}
 			</select>
 			{#if audiosExistForCodec(job, videoSrc?.sCodec)}
-				<div class="dropdown dropdown-left" id="codec-dropdown">
+				<div class="dropdown dropdown-top dropdown-end" id="codec-dropdown">
 					<div
 						tabindex="0" role="button"
 						class="btn m-1 w-44">{getAudioLocForCodec(job, videoSrc?.sCodec, selectedAudioMapping)
@@ -659,7 +659,7 @@
 					</ul>
 				</div>
 			{/if}
-			<div class="dropdown dropdown-left" id="codec-dropdown">
+			<div class="dropdown dropdown-top dropdown-end" id="codec-dropdown">
 				<div
 					tabindex="0" role="button"
 					class="btn m-1 w-28">{selectedCodec} {(videoSrc?.sCodec && selectedCodec === "auto") ? `(${videoSrc.sCodec})` : ''}</div>
@@ -700,7 +700,7 @@
 					{/if}
 				</button>
 			</div>
-			<div class="dropdown dropdown-left dropdown-top" id="chat-layout-dropdown">
+			<div class="dropdown dropdown-top" id="chat-layout-dropdown">
 				<div
 					tabindex="0" role="button"
 					class="btn m-1 w-40">
@@ -744,7 +744,7 @@
 			</div>
 		</div>
 
-		<div class="flex gap-4 sync-states w-full justify-center mb-16">
+		<div class="flex gap-4 sync-states w-full justify-center">
 			{#each roomPlayers as player}
 				<button
 					class="btn btn-neutral border-none h-auto pr-4 py-0 pl-0 rounded-l-full rounded-r-full shadow-md flex gap-3.5">

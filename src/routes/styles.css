@@ -162,3 +162,7 @@ input {
 .selected-dropdown {
 	font-weight: bold;
 }
+
+.dropdown {
+	z-index: 100;
+}
