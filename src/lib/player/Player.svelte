@@ -736,7 +736,11 @@
 			<div class="dropdown dropdown-top dropdown-end max-md:w-full" id="codec-dropdown">
 				<div
 					tabindex="0" role="button"
-					class="btn m-1 md:w-28 w-full">{codecDisplayMap[selectedCodec]} {(videoSrc?.sCodec && selectedCodec === "auto") ? `(${codecDisplayMap[videoSrc.sCodec]})` : ''}</div>
+					class="btn m-1 md:w-32 w-full">
+					{codecDisplayMap[selectedCodec]} {(videoSrc?.sCodec && selectedCodec === "auto") ? `(${codecDisplayMap[videoSrc.sCodec]})` : ''}
+					{#if !supportedCodecs.includes(videoSrc?.sCodec)}
+					<IconAlertOctagonFilled size={16} stroke={2} />
+				{/if}</div>
 				<ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-48">
 					<li><a
 						class={selectedCodec === "auto"? "selected-dropdown" : ""}
