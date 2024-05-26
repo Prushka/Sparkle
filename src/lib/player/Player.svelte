@@ -71,6 +71,8 @@
 	let jas: any;
 	let prevTrackSrc: string | null | undefined = '';
 	let footer: string = '';
+	let notificationAudio = new Audio(`${PUBLIC_STATIC}/sound/anya_peanuts.mp3`);
+	let inBg = false;
 	let onPlay = () => {
 	};
 	let onPause = () => {
@@ -198,6 +200,9 @@
 						}
 						break;
 					case SyncTypes.ChatSync:
+						if (inBg && roomMessages[roomMessages.length - 1]?.timestamp !== state.chats[state.chats.length - 1]?.timestamp) {
+							notificationAudio.play();
+						}
 						roomMessages = state.chats;
 						updateMessages();
 						break;
@@ -341,8 +346,10 @@
 		document.addEventListener('visibilitychange', () => {
 			if (document.hidden) {
 				send({ state: 'bg', type: SyncTypes.StateSync });
+				inBg = true;
 			} else {
 				send({ state: 'fg', type: SyncTypes.StateSync });
+				inBg = false;
 			}
 		});
 		const playerUnsubscribe = player.subscribe(({ controlsVisible }) => {
