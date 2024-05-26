@@ -20,7 +20,7 @@
 		formatPair,
 		getAudioLocForCodec,
 		audiosExistForCodec,
-		languageMap, fallbackFontsMap, defaultFallback, chatLayouts, BroadcastTypes
+		languageMap, fallbackFontsMap, defaultFallback, chatLayouts, BroadcastTypes, preprocessJobs
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -279,10 +279,7 @@
 		fetch(`${PUBLIC_BE}/all`)
 			.then(response => response.json())
 			.then(data => {
-				jobs = data;
-				jobs.sort((a, b) => {
-					return a.Input.localeCompare(b.Input);
-				});
+				jobs = preprocessJobs(data);
 				console.log(jobs);
 				onSuccess();
 			});

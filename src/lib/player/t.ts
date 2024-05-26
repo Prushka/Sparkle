@@ -246,3 +246,23 @@ export function formatMbps(job: Job | undefined | null, codec: string): string {
 	}
 	return `: ${mbps.toFixed(2)} Mbps`;
 }
+
+export function formatInput(input: string) {
+	return input.replace(/[\s-]+\S+-\S+\.\S+$/, '');
+}
+
+export function preprocessJob(job: Job) {
+	job.Input = formatInput(job.Input);
+	job.EncodedCodecs.sort((a, b) => {
+		return codecsPriority.indexOf(a) - codecsPriority.indexOf(b);
+	});
+	return job
+}
+
+export function preprocessJobs(jobs: Job[]) {
+	jobs.map(preprocessJob);
+	jobs.sort((a, b) => {
+		return a.Input.localeCompare(b.Input);
+	});
+	return jobs
+}

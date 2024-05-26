@@ -1,5 +1,5 @@
 import { PUBLIC_STATIC } from '$env/static/public';
-import { codecsPriority, type Job, supportedCodecs } from '$lib/player/t';
+import { type Job, preprocessJob, preprocessJobs, supportedCodecs } from '$lib/player/t';
 import * as cheerio from 'cheerio';
 import { env } from '$env/dynamic/private';
 
@@ -19,11 +19,12 @@ export async function load({ params }) {
 	try {
 		const jobsResponse = await fetch(`${env.SERVER_BE}/all`);
 		jobs = await jobsResponse.json();
-		jobs.sort((a, b) => {
-			return a.Input.localeCompare(b.Input);
-		});
+		jobs = preprocessJobs(jobs)
 		const jobResponse = await fetch(`${env.SERVER_BE}/job/${id}`);
 		job = await jobResponse.json();
+		if (job) {
+			job = preprocessJob(job)
+		}
 		if (!job?.EncodedCodecs?.includes('h264')) {
 			if (job?.EncodedCodecs?.includes('av1')) {
 				codec = 'av1'
@@ -32,9 +33,6 @@ export async function load({ params }) {
 			}
 		}
 		if(job?.EncodedCodecs){
-			job.EncodedCodecs.sort((a, b) => {
-				return codecsPriority.indexOf(a) - codecsPriority.indexOf(b);
-			});
 			for (const codec of job.EncodedCodecs) {
 				if (!supportedCodecs.includes(codec)) {
 					job.EncodedCodecs.splice(job.EncodedCodecs.indexOf(codec), 1);
