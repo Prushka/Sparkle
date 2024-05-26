@@ -20,7 +20,13 @@
 		formatPair,
 		getAudioLocForCodec,
 		audiosExistForCodec,
-		languageMap, fallbackFontsMap, defaultFallback, chatLayouts, BroadcastTypes, preprocessJobs
+		languageMap,
+		fallbackFontsMap,
+		defaultFallback,
+		chatLayouts,
+		BroadcastTypes,
+		preprocessJobs,
+		codecDisplayMap,
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -115,7 +121,16 @@
 			autoCodec = job.EncodedCodecs[0];
 		}
 		const getVideoSrc = (codec: string) => {
-			console.log('codec', codec, codecMap[codec]);
+			const prevAudio = selectedAudioMapping;
+			const audioExists = job.MappedAudio[codec]?.find((am) => {
+				if (am.Language === selectedAudioMapping) {
+					return true;
+				}
+			});
+			if (!audioExists && job.MappedAudio[codec] && job.MappedAudio[codec].length > 0) {
+				selectedAudioMapping = job.MappedAudio[codec][0].Language;
+			}
+			console.log('codec', codec, codecMap[codec], prevAudio, selectedAudioMapping);
 			return {
 				src: `${BASE_STATIC}/${getAudioLocForCodec(job, codec, selectedAudioMapping)}.mp4`,
 				type: 'video/mp4',
@@ -153,18 +168,6 @@
 		if (selectedCodec !== 'auto' && job.EncodedCodecs && job.EncodedCodecs.length > 0 && !job?.EncodedCodecs.includes(selectedCodec)) {
 			console.log('setting codec - no matching codec', selectedCodec, job.EncodedCodecs);
 			onCodecChange('auto');
-		}
-	}
-
-	$: {
-		console.log('selectedAudioMapping', selectedAudioMapping);
-		const audioExists = job.MappedAudio[videoSrc?.sCodec]?.find((am) => {
-			if (am.Language === selectedAudioMapping) {
-				return true;
-			}
-		});
-		if (!audioExists && job.MappedAudio[videoSrc?.sCodec] && job.MappedAudio[videoSrc?.sCodec].length > 0) {
-			selectedAudioMapping = job.MappedAudio[videoSrc?.sCodec][0].Language;
 		}
 	}
 
@@ -726,7 +729,7 @@
 			<div class="dropdown dropdown-top dropdown-end max-md:w-full" id="codec-dropdown">
 				<div
 					tabindex="0" role="button"
-					class="btn m-1 md:w-28 w-full">{selectedCodec} {(videoSrc?.sCodec && selectedCodec === "auto") ? `(${videoSrc.sCodec})` : ''}</div>
+					class="btn m-1 md:w-28 w-full">{codecDisplayMap[selectedCodec]} {(videoSrc?.sCodec && selectedCodec === "auto") ? `(${codecDisplayMap[videoSrc.sCodec]})` : ''}</div>
 				<ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-48">
 					<li><a
 						class={selectedCodec === "auto"? "selected-dropdown" : ""}
@@ -740,7 +743,7 @@
 								tabindex="0" role="button" on:click={()=>{
 							onCodecChange(codec)
 							}}>
-								{codec}{formatMbps(job, codec)}
+								{codecDisplayMap[codec]}{formatMbps(job, codec)}
 								{#if !supportedCodecs.includes(codec)}
 									<IconAlertOctagonFilled size={16} stroke={2} />
 								{/if}

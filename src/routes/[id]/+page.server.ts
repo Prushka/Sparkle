@@ -32,13 +32,6 @@ export async function load({ params }) {
 				codec = 'hevc'
 			}
 		}
-		if(job?.EncodedCodecs){
-			for (const codec of job.EncodedCodecs) {
-				if (!supportedCodecs.includes(codec)) {
-					job.EncodedCodecs.splice(job.EncodedCodecs.indexOf(codec), 1);
-				}
-			}
-		}
 		title = job?.Input || "UwU"
 		const infoResponse = await fetch(`${base}/info.nfo`);
 		const info = await infoResponse.text();

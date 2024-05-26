@@ -1,2 +1,10 @@
 Pause send when in bg until reentry, don't send previous ones - pause state won't be sent
 Show chat only when focused
+Send codec to server in player state
+Allow setting codec?
+After bounce, auto connect
+Show exclaimer mark when codec not supported when selected
+Does close not remove player properly?
+Why does unstable player disconnect me?
+Baseline profile on h264
+Multiple tabs same player errors - add a session id to both ends (connected at a different location, press to reconnect?)

@@ -4,13 +4,20 @@ export const defaultTheme = themes[0];
 
 export const codecsPriority = ['av1', 'hevc', 'h264-10bit', 'h264-8bit'];
 
-export const supportedCodecs = ['av1', 'hevc', 'h264-10bit', 'h264-8bit'];
+export const supportedCodecs = ['av1', 'hevc', 'h264-8bit'];
 export const codecMap: { [key: string]: string } = {
 	'av1': 'av01.0.01M.08',
 	'hevc': 'hvc1.1.6.L93.B0',
 	'h264-8bit': 'avc1.42C01E',
 	'h264-10bit': 'avc1.6E001F'
 };
+
+export const codecDisplayMap: { [key: string]: string } = {
+	'av1': 'AV1',
+	'hevc': 'HEVC',
+	'h264-8bit': 'H.264',
+	'auto': 'Auto'
+}
 
 export const chatLayouts = ["simple", "extended", "hidden"]
 
@@ -253,9 +260,16 @@ export function formatInput(input: string) {
 
 export function preprocessJob(job: Job) {
 	job.Input = formatInput(job.Input);
-	job.EncodedCodecs.sort((a, b) => {
-		return codecsPriority.indexOf(a) - codecsPriority.indexOf(b);
-	});
+	if(job.EncodedCodecs) {
+		job.EncodedCodecs.sort((a, b) => {
+			return codecsPriority.indexOf(a) - codecsPriority.indexOf(b);
+		});
+		for (const codec of job.EncodedCodecs) {
+			if (!supportedCodecs.includes(codec)) {
+				job.EncodedCodecs.splice(job.EncodedCodecs.indexOf(codec), 1);
+			}
+		}
+	}
 	return job
 }
 
