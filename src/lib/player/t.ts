@@ -13,6 +13,8 @@ export const codecMap: { [key: string]: string } = {
 	'h264-10bit': 'avc1.6E001F'
 };
 
+export const chatLayouts = ["simple", "extended", "hidden"]
+
 export function getSupportedCodecs() {
 	const supported = [];
 	try {

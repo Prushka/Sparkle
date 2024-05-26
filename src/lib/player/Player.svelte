@@ -20,13 +20,13 @@
 		formatPair,
 		getAudioLocForCodec,
 		audiosExistForCodec,
-		languageMap, fallbackFontsMap, defaultFallback
+		languageMap, fallbackFontsMap, defaultFallback, chatLayouts
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
 	import {
 		IconAlertOctagonFilled,
-		IconBrightnessHalf, IconCone, IconConePlus, IconEye, IconEyeOff,
+		IconBrightnessHalf, IconCone, IconConePlus, IconEyeOff,
 		IconPlayerPauseFilled,
 		IconPlayerPlayFilled,
 		IconPlugConnected,
@@ -34,7 +34,7 @@
 	} from '@tabler/icons-svelte';
 	import Chatbox from '$lib/player/Chatbox.svelte';
 	import Pfp from '$lib/player/Pfp.svelte';
-	import { chatFocusedStore, chatHiddenStore, pfpLastFetched } from '../../store';
+	import { chatFocusedStore, chatLayoutStore, pfpLastFetched } from '../../store';
 	import SUPtitles from '$lib/suptitles/suptitles';
 
 	import JASSUB from 'jassub';
@@ -63,15 +63,13 @@
 	let supportedCodecs: string[] = [];
 	let interactedWithPlayer = false;
 	let currentTheme = localStorage.getItem('theme') || defaultTheme;
-	let chatHidden = false;
 	let lastSentTime = -100;
 	let chatFocused = false;
-	let chatDisplay: string = localStorage.getItem('chatDisplay') ? localStorage.getItem('chatDisplay')! : 'simple';
 	let videoSrc: any = [];
 	let fonts: string[] = [];
 	let sup: any;
 	let jas: any;
-	let prevTrackSrc: string = '';
+	let prevTrackSrc: string | null | undefined = '';
 	let footer: string = '';
 	let onPlay = () => {
 	};
@@ -81,18 +79,20 @@
 	};
 	let onSeeking = () => {
 	};
-	const unsubscribeChatHidden = chatHiddenStore.subscribe((value) => chatHidden = value);
+	let chatLayout: string;
+	const unsubscribeChatLayout = chatLayoutStore.subscribe((value) => chatLayout = value);
 	const unsubscribeChatFocused = chatFocusedStore.subscribe((value) => chatFocused = value);
 	$: BASE_STATIC = `${PUBLIC_STATIC}/${roomId}`;
 	$: thumbnailVttSrc = `${BASE_STATIC}/storyboard.vtt`;
 	$: socketCommunicating = socketConnected && (tickedSecsAgo >= 0 && tickedSecsAgo < 5);
 
+	$: chatHidden = chatLayout === 'hidden';
 	$: {
 		console.log('srcList:', videoSrc);
 	}
 
 	onDestroy(() => {
-		unsubscribeChatHidden();
+		unsubscribeChatLayout();
 		unsubscribeChatFocused();
 	});
 
@@ -148,6 +148,18 @@
 		if (selectedCodec !== 'auto' && job.EncodedCodecs && job.EncodedCodecs.length > 0 && !job?.EncodedCodecs.includes(selectedCodec)) {
 			console.log('setting codec - no matching codec', selectedCodec, job.EncodedCodecs);
 			onCodecChange('auto');
+		}
+	}
+
+	$: {
+		console.log('selectedAudioMapping', selectedAudioMapping);
+		const audioExists = job.MappedAudio[videoSrc?.sCodec]?.find((am) => {
+			if (am.Language === selectedAudioMapping) {
+				return true;
+			}
+		});
+		if (!audioExists && job.MappedAudio[videoSrc?.sCodec] && job.MappedAudio[videoSrc?.sCodec].length > 0) {
+			selectedAudioMapping = job.MappedAudio[videoSrc?.sCodec][0].Language;
 		}
 	}
 
@@ -310,6 +322,7 @@
 				onSeeking = () => {
 				};
 				console.log('destroyed sup');
+				sup = null
 			}
 			if (jas != null) {
 				jas.destroy();
@@ -318,6 +331,7 @@
 					canvas.remove();
 				}
 				console.log('destroyed jas');
+				jas = null
 			}
 		};
 		updateList();
@@ -371,9 +385,23 @@
 			const videoElement = document.querySelector('media-provider video') as HTMLVideoElement;
 			if (videoElement) {
 				const selectedTrack = player.textTracks.selected;
-				if (selectedTrack?.src) {
-					if (prevTrackSrc !== selectedTrack.src) {
-						dispose();
+				let canvas = document.getElementById('ass-canvas') as HTMLCanvasElement;
+				if (!canvas) {
+					canvas = document.createElement('canvas');
+					canvas.height = 1080;
+					canvas.width = 1920;
+					canvas.style.width = '100%';
+					canvas.style.height = '100%';
+					canvas.style.top = '0';
+					canvas.style.left = '0';
+					canvas.style.position = 'absolute';
+					canvas.style.pointerEvents = 'none';
+					canvas.id = 'ass-canvas';
+					videoElement.parentNode?.appendChild(canvas);
+				}
+				if (prevTrackSrc !== selectedTrack?.src) {
+					dispose();
+					if (selectedTrack?.src) {
 						const ext = selectedTrack.src.slice(-4);
 						if (ext.includes('sup')) {
 							console.log('sup', selectedTrack.src);
@@ -381,33 +409,22 @@
 								.then(response => response.arrayBuffer())
 								.then(buffer => {
 									const file = new Uint8Array(buffer);
-									sup = new SUPtitles(videoElement, file, () => {
+									sup = new SUPtitles(canvas, file, () => {
 										return player.currentTime * 1000;
 									});
 									onPlay = sup.playHandler;
 									onPause = sup.pauseHandler;
 									onSeeked = sup.seekedHandler;
 									onSeeking = sup.seekingHandler;
+									if (!player.paused) {
+										sup.playHandler()
+									}
 								});
 						} else if (ext.includes('ass')) {
-							let canvas = document.getElementById('ass-canvas') as HTMLCanvasElement;
-							if (!canvas) {
-								canvas = document.createElement('canvas');
-								canvas.height = 1080;
-								canvas.width = 1920;
-								canvas.style.width = '100%';
-								canvas.style.height = '100%';
-								canvas.style.top = '0';
-								canvas.style.left = '0';
-								canvas.style.position = 'absolute';
-								canvas.style.pointerEvents = 'none';
-								canvas.id = 'ass-canvas';
-								videoElement.parentNode?.appendChild(canvas);
-							}
 							const fallback: string[] = fallbackFontsMap[selectedTrack.language] ? fallbackFontsMap[selectedTrack.language] : defaultFallback;
 							const availableFonts = {
 								[fallback[0]]: fallback[1]
-							}
+							};
 							jas = new JASSUB({
 								video: videoElement,
 								canvas: canvas,
@@ -421,8 +438,8 @@
 							});
 							console.log(fallback, selectedTrack.language);
 						}
-						prevTrackSrc = selectedTrack.src;
 					}
+					prevTrackSrc = selectedTrack?.src;
 				}
 			}
 		}, 1000);
@@ -545,16 +562,14 @@
 					class={`flex gap-1 justify-center items-center chat-line py-1 pl-2.5 pr-2 text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''}`}>
 					<p>{message.message}</p>
 					<p class="text-sm">
-						[{(message.isStateUpdate || chatDisplay !== "full") ? '' : `${formatSeconds(message.mediaSec)}, `}{new Date(message.timestamp).toLocaleTimeString('en-US', {
+						[{(message.isStateUpdate || chatLayout !== "extended") ? '' : `${formatSeconds(message.mediaSec)}, `}{new Date(message.timestamp).toLocaleTimeString('en-US', {
 						hour: '2-digit',
 						minute: '2-digit'
 					})}]
 					</p>
 
 					<p>{message.username}</p>
-					{#if chatDisplay === "full"}
-						<Pfp id={message.uid} class="avatar" />
-					{/if}
+					<Pfp id={message.uid} class="avatar" />
 				</div>
 			{/each}
 		</div>
@@ -638,8 +653,7 @@
 							<li><a
 								class={selectedAudioMapping === am.Language? "selected-dropdown" : ""}
 								tabindex="0" role="button" on:click={()=>{
-									selectedAudioMapping = am.Language;
-									localStorage.setItem('preferredAudio', selectedAudioMapping);
+									localStorage.setItem('preferredAudio', am.Language);
 									window.location.reload();
 							}}>
 								{formatPair(am)}
@@ -676,7 +690,7 @@
 			</div>
 		</div>
 
-		<div class="flex gap-2 self-center">
+		<div class="flex gap-2 self-center items-center justify-center">
 
 			<div class="tooltip tooltip-top" data-tip="Ticked: {tickedSecsAgoStr}s ago">
 				<button
@@ -689,33 +703,42 @@
 					{/if}
 				</button>
 			</div>
-			<div class="tooltip tooltip-top" data-tip={chatHidden ? "Show Chat" : "Hide Chat"}>
-				<button id="chat-hide-button" on:click={()=>{
-					$chatHiddenStore = !chatHidden;
-				}} class="btn font-bold">
-					{#if !chatHidden}
-						<IconEye size={16} stroke={2} />
-						Chat
+			<div class="dropdown dropdown-left dropdown-top" id="chat-layout-dropdown">
+				<div
+					tabindex="0" role="button"
+					class="btn m-1 w-40">
+					{#if chatLayout === "extended"}
+						<IconConePlus size={16} stroke={2} />
+						Extended Chat
+					{:else if chatLayout === "simple"}
+						<IconCone size={16} stroke={2} />
+						Simple Chat
 					{:else}
 						<IconEyeOff size={16} stroke={2} />
-						Chat
+						Chat Hidden
 					{/if}
-				</button>
-			</div>
-			<div class="tooltip tooltip-top"
-					 data-tip={chatDisplay === "full" ? "Switch to simple chat layout" : "Switch to full chat layout"}>
-				<button id="chat-hide-button" on:click={()=>{
-					chatDisplay = chatDisplay === "full" ? "simple" : "full";
-					localStorage.setItem('chatDisplay', chatDisplay);
-				}} class="btn font-bold">
-					{#if chatDisplay === "full"}
-						<IconConePlus size={16} stroke={2} />
-						Full
-					{:else}
-						<IconCone size={16} stroke={2} />
-						Simple
-					{/if}
-				</button>
+				</div>
+				<ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-48">
+					{#each chatLayouts as layout}
+						<li><a
+							class={chatLayout === layout? "selected-dropdown" : ""}
+							tabindex="0" role="button" on:click={()=>{
+								localStorage.setItem('chatLayout', layout);
+								$chatLayoutStore = layout;
+							}}>
+							{#if layout === "extended"}
+								<IconConePlus size={16} stroke={2} />
+								Extended Chat
+							{:else if layout === "simple"}
+								<IconCone size={16} stroke={2} />
+								Simple Chat
+							{:else}
+								<IconEyeOff size={16} stroke={2} />
+								Chat Hidden
+							{/if}
+						</a></li>
+					{/each}
+				</ul>
 			</div>
 			<div class="tooltip tooltip-top" data-tip={`Theme: ${currentTheme}`}>
 				<button id="theme-button" on:click={nextTheme} class="btn font-bold">

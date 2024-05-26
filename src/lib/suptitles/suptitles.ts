@@ -20,20 +20,8 @@ export default class SUPtitles {
 	canvasSizeSet = false
 	videoTime: () => number
 
-	constructor(video: HTMLVideoElement, file: Uint8Array, getTime: () => number) {
+	constructor(canvas: HTMLCanvasElement, file: Uint8Array, getTime: () => number) {
 		console.info('# SUP Starting')
-
-		const canvas = document.createElement('canvas')
-		canvas.height = 1080
-		canvas.width = 1920
-		canvas.style.width = '100%'
-		canvas.style.height = '100%'
-		canvas.style.top = '0'
-		canvas.style.left = '0'
-		canvas.style.position = 'absolute'
-		canvas.style.pointerEvents = 'none'
-
-		video.parentNode?.appendChild(canvas)
 
 		this.videoTime = getTime
 

@@ -1,1 +1,6 @@
 Pause send when in bg until reentry, don't send previous ones - pause state won't be sent
+Toggle caption (ass/sup) not work
+Show chat only when focused
+Interact with player to connect (solution?)
+Notification sound on message when in bg
+Populate jobs in server
