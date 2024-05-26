@@ -34,10 +34,11 @@
 	} from '@tabler/icons-svelte';
 	import Chatbox from '$lib/player/Chatbox.svelte';
 	import Pfp from '$lib/player/Pfp.svelte';
-	import { chatFocusedStore, chatLayoutStore, pfpLastFetched } from '../../store';
+	import { chatFocusedStore, chatLayoutStore, pageReloadCounterStore, pfpLastFetched } from '../../store';
 	import SUPtitles from '$lib/suptitles/suptitles';
 
 	import JASSUB from 'jassub';
+	import { goto } from '$app/navigation';
 
 	let controlsShowing = false;
 	let player: MediaPlayerElement;
@@ -143,7 +144,7 @@
 		selectedCodec = selected;
 		localStorage.setItem('sCodec', selectedCodec);
 		setVideoSrc(() => {
-			window.location.reload();
+			$pageReloadCounterStore++;
 		});
 	}
 
@@ -645,7 +646,7 @@
 			<select
 				on:change={(e) => {
 				const roomId = e.currentTarget.value;
-				window.location.href = `/${roomId}`;
+				goto(`/${roomId}`)
 			}}
 				bind:value={roomId}
 				class="select media-select select-bordered flex-grow max-sm:col-span-2">
@@ -666,7 +667,7 @@
 								class={selectedAudioMapping === am.Language? "selected-dropdown" : ""}
 								tabindex="0" role="button" on:click={()=>{
 									localStorage.setItem('preferredAudio', am.Language);
-									window.location.reload();
+									$pageReloadCounterStore++;
 							}}>
 								{formatPair(am)}
 							</a></li>
