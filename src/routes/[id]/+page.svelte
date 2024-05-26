@@ -21,5 +21,8 @@
 	<meta name="description" content={data.plot} />
 </svelte:head>
 {#if data.job}
-<svelte:component this={vidstack} job={data.job} jobs={data.jobs} />
+<svelte:component this={vidstack}
+									job={data.job}
+									data={data}
+									jobs={data.jobs} />
 {/if}
