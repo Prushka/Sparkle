@@ -186,11 +186,19 @@ export function formatSeconds(seconds: number | undefined): string {
 	if (seconds === undefined) {
 		return '00:00';
 	}
-	const minutes = Math.floor(seconds / 60);
+	const hours = Math.floor(seconds / 3600);
+	const minutes = Math.floor((seconds % 3600) / 60);
 	const remainingSeconds = Math.floor(seconds % 60);
+
 	const secondsStr = remainingSeconds < 10 ? `0${remainingSeconds}` : remainingSeconds;
 	const minutesStr = minutes < 10 ? `0${minutes}` : minutes;
-	return `${minutesStr}:${secondsStr}`;
+	const hoursStr = hours < 10 ? `0${hours}` : hours;
+
+	if (hours === 0) {
+		return `${minutesStr}:${secondsStr}`;
+	} else {
+		return `${hoursStr}:${minutesStr}:${secondsStr}`;
+	}
 }
 
 export function randomString(length: number): string {
