@@ -5,7 +5,6 @@ export const defaultTheme = themes[0];
 export const codecsPriority = ['av1', 'hevc', 'h264-10bit', 'h264-8bit'];
 
 export const supportedCodecs = ['av1', 'hevc', 'h264-10bit', 'h264-8bit'];
-export const audioTrackFeature = false;
 export const codecMap: { [key: string]: string } = {
 	'av1': 'av01.0.01M.08',
 	'hevc': 'hvc1.1.6.L93.B0',
@@ -42,7 +41,12 @@ export enum SyncTypes {
 	FullSync = 'full',
 	PlayersStatusSync = 'players',
 	PfpSync = 'pfp',
-	StateSync = 'state'
+	StateSync = 'state',
+	BroadcastSync = 'broadcast'
+}
+
+export enum BroadcastTypes {
+	MoveTo = 'moveTo'
 }
 
 export interface SendPayload {
@@ -53,6 +57,12 @@ export interface SendPayload {
 	chats: Chat[];
 	players: Player[];
 	timestamp: number;
+	broadcast?: BroadcastPayload;
+}
+
+export interface BroadcastPayload {
+	type: string;
+	moveTo?: string;
 }
 
 export type Player = {

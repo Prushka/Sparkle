@@ -20,7 +20,7 @@
 		formatPair,
 		getAudioLocForCodec,
 		audiosExistForCodec,
-		languageMap, fallbackFontsMap, defaultFallback, chatLayouts
+		languageMap, fallbackFontsMap, defaultFallback, chatLayouts, BroadcastTypes
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -51,7 +51,7 @@
 	let roomMessages: Chat[] = [];
 	export let job: Job;
 	export let jobs: Job[];
-	export let data:any;
+	export let data: any;
 	let roomId = $page.params.id || '';
 	let lastTicked = 0;
 	let tickedSecsAgo = 0;
@@ -73,6 +73,7 @@
 	let jas: any;
 	let prevTrackSrc: string | null | undefined = '';
 	let footer: string = '';
+	let shiftHeld = false;
 	let notificationAudio = new Audio(`${PUBLIC_STATIC}/sound/anya_peanuts.mp3`);
 	let inBg = false;
 	let onPlay = () => {
@@ -184,6 +185,7 @@
 
 		socket.onmessage = (event: MessageEvent) => {
 			const state: SendPayload = JSON.parse(event.data);
+			const broadcast = state.broadcast;
 			const persistControlState = (state: any) => {
 				if (state.firedBy !== undefined) {
 					controlsToDisplay.push(state);
@@ -192,6 +194,20 @@
 			};
 			if (player) {
 				console.debug('received: ' + JSON.stringify(state));
+				const initiateMoveTo = () => {
+					roomMessages.push({
+						uid: state.firedBy!.id,
+						username: state.firedBy!.name,
+						message: `Moving to ${jobs.find((job) => job.Id === broadcast!.moveTo)?.Input} in 5 Seconds`,
+						timestamp: state.timestamp,
+						mediaSec: state.firedBy!.time!,
+						isStateUpdate: true
+					});
+					updateMessages();
+					setTimeout(() => {
+						goto(`/${broadcast!.moveTo}`);
+					}, 5000);
+				};
 				switch (state.type) {
 					case SyncTypes.PfpSync:
 						if (state.firedBy) {
@@ -227,6 +243,19 @@
 							persistControlState(state);
 						}
 						break;
+					case SyncTypes.BroadcastSync:
+						switch (broadcast?.type) {
+							case BroadcastTypes.MoveTo:
+								if (!jobs.find((job) => job.Id === broadcast.moveTo)) {
+									updateList(() => {
+										initiateMoveTo();
+									});
+								} else {
+									initiateMoveTo();
+								}
+								break;
+						}
+						break;
 				}
 			}
 		};
@@ -252,7 +281,8 @@
 		}
 	}
 
-	function updateList() {
+	function updateList(onSuccess = () => {
+	}) {
 		fetch(`${PUBLIC_BE}/all`)
 			.then(response => response.json())
 			.then(data => {
@@ -261,6 +291,7 @@
 					return a.Input.localeCompare(b.Input);
 				});
 				console.log(jobs);
+				onSuccess();
 			});
 	}
 
@@ -315,6 +346,11 @@
 	}
 
 	onMount(() => {
+		const keyChange = (e:any) => {
+			shiftHeld = e.shiftKey;
+		}
+		document.addEventListener('keyup', keyChange);
+		document.addEventListener('keydown', keyChange);
 		const dispose = () => {
 			if (sup != null) {
 				sup.dispose();
@@ -327,7 +363,7 @@
 				onSeeking = () => {
 				};
 				console.log('destroyed sup');
-				sup = null
+				sup = null;
 			}
 			if (jas != null) {
 				jas.destroy();
@@ -336,7 +372,7 @@
 					canvas.remove();
 				}
 				console.log('destroyed jas');
-				jas = null
+				jas = null;
 			}
 		};
 		supportedCodecs = getSupportedCodecs();
@@ -345,7 +381,7 @@
 		const ii = setInterval(() => {
 			updateList();
 		}, 60000);
-		document.addEventListener('visibilitychange', () => {
+		const visibilityChange = () => {
 			if (document.hidden) {
 				send({ state: 'bg', type: SyncTypes.StateSync });
 				inBg = true;
@@ -353,7 +389,8 @@
 				send({ state: 'fg', type: SyncTypes.StateSync });
 				inBg = false;
 			}
-		});
+		}
+		document.addEventListener('visibilitychange', visibilityChange);
 		const playerUnsubscribe = player.subscribe(({ controlsVisible }) => {
 			controlsShowing = controlsVisible;
 		});
@@ -423,7 +460,7 @@
 									onSeeked = sup.seekedHandler;
 									onSeeking = sup.seekingHandler;
 									if (!player.paused) {
-										sup.playHandler()
+										sup.playHandler();
 									}
 								});
 						} else if (ext.includes('ass')) {
@@ -461,6 +498,9 @@
 			clearInterval(ii);
 			dispose();
 			playerUnsubscribe();
+			document.removeEventListener('visibilitychange', () => {visibilityChange});
+			document.removeEventListener('keyup', keyChange);
+			document.removeEventListener('keydown', keyChange);
 		};
 	});
 
@@ -646,7 +686,12 @@
 			<select
 				on:change={(e) => {
 				const roomId = e.currentTarget.value;
-				goto(`/${roomId}`)
+				if(shiftHeld) {
+					send({ type: SyncTypes.BroadcastSync,
+					broadcast: { type: BroadcastTypes.MoveTo, moveTo: roomId } });
+				}else{
+					goto(`/${roomId}`)
+				}
 			}}
 				bind:value={roomId}
 				class="select media-select select-bordered flex-grow max-sm:col-span-2">
