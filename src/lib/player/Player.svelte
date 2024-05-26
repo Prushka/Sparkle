@@ -626,24 +626,24 @@
 			</div>
 		</div>
 
-		<div class="flex gap-2 w-full items-center justify-center">
+		<div class="gap-4 w-full items-center justify-center sm:flex max-sm:grid max-sm:grid-cols-2">
 			<select
 				on:change={(e) => {
 				const roomId = e.currentTarget.value;
 				window.location.href = `/${roomId}`;
 			}}
 				bind:value={roomId}
-				class="select media-select select-bordered flex-grow">
+				class="select media-select select-bordered flex-grow max-sm:col-span-2">
 				<option disabled selected>Which media?</option>
 				{#each jobs as job}
 					<option value={job.Id}>{job.Input}</option>
 				{/each}
 			</select>
 			{#if audiosExistForCodec(job, videoSrc?.sCodec)}
-				<div class="dropdown dropdown-top dropdown-end" id="codec-dropdown">
+				<div class="dropdown dropdown-top dropdown-end max-sm:w-full" id="codec-dropdown">
 					<div
 						tabindex="0" role="button"
-						class="btn m-1 w-44">{getAudioLocForCodec(job, videoSrc?.sCodec, selectedAudioMapping)
+						class="btn m-1 w-full sm:w-44">{getAudioLocForCodec(job, videoSrc?.sCodec, selectedAudioMapping)
 						? `${(languageMap[selectedAudioMapping] || selectedAudioMapping)}` : "Audio"}</div>
 					<ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-48">
 						{#each job.MappedAudio[videoSrc?.sCodec] as am}
@@ -659,10 +659,10 @@
 					</ul>
 				</div>
 			{/if}
-			<div class="dropdown dropdown-top dropdown-end" id="codec-dropdown">
+			<div class="dropdown dropdown-top dropdown-end max-sm:w-full" id="codec-dropdown">
 				<div
 					tabindex="0" role="button"
-					class="btn m-1 w-28">{selectedCodec} {(videoSrc?.sCodec && selectedCodec === "auto") ? `(${videoSrc.sCodec})` : ''}</div>
+					class="btn m-1 sm:w-28 w-full">{selectedCodec} {(videoSrc?.sCodec && selectedCodec === "auto") ? `(${videoSrc.sCodec})` : ''}</div>
 				<ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-48">
 					<li><a
 						class={selectedCodec === "auto"? "selected-dropdown" : ""}
@@ -687,23 +687,33 @@
 			</div>
 		</div>
 
-		<div class="flex gap-2 self-center items-center justify-center">
+		<div class="max-sm:grid max-sm:grid-cols-2 sm:flex gap-4 self-center items-center justify-center w-full">
 
-			<div class="tooltip tooltip-top" data-tip="Ticked: {tickedSecsAgoStr}s ago">
+			<div class="tooltip tooltip-top max-sm:col-span-2" data-tip="Ticked: {tickedSecsAgoStr}s ago">
 				<button
 					id="sync-button"
-					class="btn font-bold {socketCommunicating ? 'text-green-600' : 'text-red-600' }">
+					on:click={() => {
+						if(!socketCommunicating && !interactedWithPlayer) {
+							player?.play()
+						}
+					}}
+					class="btn font-bold {socketCommunicating ? 'text-green-600' : 'text-red-600' } max-sm:w-full">
 					{#if socketCommunicating}
 						<IconPlugConnected size={24} stroke={2} />
 					{:else}
 						<IconPlugConnectedX size={24} stroke={2} />
+						{#if !interactedWithPlayer}
+							Connect Now
+						{:else}
+							Connecting...
+						{/if}
 					{/if}
 				</button>
 			</div>
-			<div class="dropdown dropdown-top" id="chat-layout-dropdown">
+			<div class="dropdown dropdown-top max-sm:w-full" id="chat-layout-dropdown">
 				<div
 					tabindex="0" role="button"
-					class="btn m-1 w-40">
+					class="btn m-1 w-40 max-sm:w-full">
 					{#if chatLayout === "extended"}
 						<IconConePlus size={16} stroke={2} />
 						Extended Chat
@@ -715,7 +725,7 @@
 						Chat Hidden
 					{/if}
 				</div>
-				<ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-48">
+				<ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-48 max-sm:w-full">
 					{#each chatLayouts as layout}
 						<li><a
 							class={chatLayout === layout? "selected-dropdown" : ""}
@@ -737,8 +747,8 @@
 					{/each}
 				</ul>
 			</div>
-			<div class="tooltip tooltip-top" data-tip={`Theme: ${currentTheme}`}>
-				<button id="theme-button" on:click={nextTheme} class="btn font-bold">
+			<div class="tooltip tooltip-top max-sm:w-full" data-tip={`Theme: ${currentTheme}`}>
+				<button id="theme-button" on:click={nextTheme} class="btn font-bold max-sm:w-full">
 					<IconBrightnessHalf size={24} stroke={2} />
 				</button>
 			</div>

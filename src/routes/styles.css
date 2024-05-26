@@ -166,3 +166,7 @@ input {
 .dropdown {
 	z-index: 100;
 }
+
+.tooltip:before {
+	z-index: 120;
+}
