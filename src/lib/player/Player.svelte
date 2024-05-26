@@ -297,7 +297,7 @@
 					username: control.firedBy.name,
 					message: control.type === SyncTypes.PauseSync ? (control.paused ? 'paused' : 'resumed') :
 						control.type === SyncTypes.TimeSync ? 'seeked to ' + formatSeconds(control.time) :
-						control.type === SyncTypes.BroadcastSync ?`Moving to ${jobs.find((job) => job.Id === control.broadcast!.moveTo)?.Input} in 5 Seconds` : "unknown",
+						control.type === SyncTypes.BroadcastSync ?`Moving to [${jobs.find((job) => job.Id === control.broadcast!.moveTo)?.Input}] in 5 Seconds` : "unknown",
 					timestamp: control.timestamp,
 					mediaSec: player.currentTime,
 					isStateUpdate: true
@@ -678,7 +678,7 @@
 			<select
 				on:change={(e) => {
 				const roomId = e.currentTarget.value;
-				if(shiftHeld) {
+				if(shiftHeld && socketCommunicating) {
 					send({ type: SyncTypes.BroadcastSync,
 					broadcast: { type: BroadcastTypes.MoveTo, moveTo: roomId } });
 				}else{

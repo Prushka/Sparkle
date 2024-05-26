@@ -248,7 +248,7 @@ export function formatMbps(job: Job | undefined | null, codec: string): string {
 }
 
 export function formatInput(input: string) {
-	return input.replace(/[\s-]+\S+-\S+\.\S+$/, '');
+	return input.replace(/\s+[\w-]+\d+[pi](?:\s+v\d+)?\.\w+$/i, '');
 }
 
 export function preprocessJob(job: Job) {
