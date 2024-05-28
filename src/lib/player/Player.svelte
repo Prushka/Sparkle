@@ -28,7 +28,7 @@
 	import { page } from '$app/stores';
 	import {
 		IconAlertOctagonFilled, IconArrowBounce,
-		IconCone, IconConePlus, IconEyeOff,
+		IconCone, IconConePlus, IconEyeOff, IconLayout2,
 		IconPlayerPauseFilled,
 		IconPlayerPlayFilled,
 		IconPlugConnected,
@@ -52,6 +52,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { toast } from 'svelte-sonner';
+	import { Separator } from '$lib/components/ui/separator';
 
 	let controlsShowing = false;
 	let player: MediaPlayerElement;
@@ -618,7 +619,7 @@
 			 style={chatHidden ? 'display: none' : ''}
 	>
 		<div
-			class="{controlsShowing ? 'shift-down':''} flex flex-col gap-0.5 ml-auto chat-history drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] items-end">
+			class="{controlsShowing ? 'max-md:!mt-10':''} flex flex-col gap-0.5 ml-auto chat-history drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] items-end">
 			{#each messagesToDisplay as message}
 				<div
 					class={`flex gap-1 justify-center items-center chat-line py-1 pl-2.5 pr-2 text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''}`}>
@@ -638,7 +639,8 @@
 	</div>
 
 	<div class="p-4 w-full flex flex-col gap-4 font-semibold">
-		<div class="w-full flex gap-2 input-container items-center justify-center">
+		<div class="w-full flex gap-4 items-center justify-center max-md:flex-col">
+			<div class="flex gap-3 items-center justify-center max-md:w-full">
 			<label class="custom-file-upload">
 				<Pfp id={playerId} class="w-12 h-12" />
 				<input accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
@@ -682,14 +684,13 @@
 					})
 				localStorage.setItem("name", name)
 			}}
-				bind:value={name} type="text" class="focus-visible:ring-transparent w-auto" placeholder="Who?" />
-			<div class="grow">
-				<Chatbox send={send} class="input-bordered input-md" />
+				bind:value={name} type="text" class="focus-visible:ring-transparent w-auto max-md:grow" placeholder="Who?" />
 			</div>
+			<Chatbox send={send} class="input-bordered input-md grow max-md:w-full" />
 		</div>
 
-		<div class="gap-4 w-full items-center justify-center md:flex max-md:grid max-md:grid-cols-2">
-			<div class="flex gap-2 items-center justify-center max-md:col-span-2 flex-grow">
+		<div class="gap-4 w-full items-center justify-center sm:flex max-sm:grid max-sm:grid-cols-2">
+			<div class="flex gap-2 items-center justify-center max-sm:col-span-2 flex-grow">
 					<Tooltip.Root openDelay={0}>
 						<Tooltip.Trigger asChild let:builder>
 							<Button builders={[builder]} variant={!socketCommunicating || !syncGoto ? "ghost" : "secondary"}
@@ -730,7 +731,7 @@
 
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger asChild let:builder>
-					<Button builders={[builder]} variant="outline">Video Settings</Button>
+					<Button builders={[builder]} variant="outline" class="max-sm:col-span-2">Video Settings</Button>
 				</DropdownMenu.Trigger>
 				<DropdownMenu.Content class="w-56">
 					<DropdownMenu.Label>Video Settings</DropdownMenu.Label>
@@ -769,8 +770,9 @@
 			</DropdownMenu.Root>
 		</div>
 
-		<div class="max-sm:grid max-sm:grid-cols-2 sm:flex gap-4 self-center items-center justify-center w-full">
+		<Separator/>
 
+		<div class="flex gap-3 self-center items-center justify-center w-full">
 			<Tooltip.Root openDelay={0}>
 				<Tooltip.Trigger asChild let:builder>
 					<Button builders={[builder]} variant="outline"
@@ -778,7 +780,7 @@
 						if(!socketCommunicating && !interactedWithPlayer) {
 							player?.play()
 								}}}
-									class="font-bold {socketCommunicating ? 'text-green-600 hover:text-green-600' : 'text-red-600 hover:text-red-600' } max-sm:w-full">
+									class="font-bold {socketCommunicating ? 'text-green-600 hover:text-green-600' : 'text-red-600 hover:text-red-600' }">
 						{#if socketCommunicating}
 							<IconPlugConnected size={20} stroke={2} />
 						{:else}
@@ -801,17 +803,9 @@
 
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger asChild let:builder>
-					<Button variant="outline" class="m-1 w-40 max-sm:w-full" builders={[builder]}>
-						{#if chatLayout === "extended"}
-							<IconConePlus class="mr-2" size={16} stroke={2} />
-							Extended Chat
-						{:else if chatLayout === "simple"}
-							<IconCone class="mr-2" size={16} stroke={2} />
-							Simple Chat
-						{:else}
-							<IconEyeOff class="mr-2" size={16} stroke={2} />
-							Chat Hidden
-						{/if}
+					<Button variant="outline" builders={[builder]}>
+							<IconLayout2 class="mr-2" size={16} stroke={2} />
+							Layout
 					</Button>
 				</DropdownMenu.Trigger>
 				<DropdownMenu.Content class="w-56">
@@ -907,23 +901,9 @@
     }
 
     @media (max-width: 1000px) {
-
-        .input-container {
-            flex-direction: column-reverse;
-            gap: 1rem;
-        }
-
         .sync-states {
             display: grid;
             grid-template-columns: auto auto;
-        }
-
-        .name-input {
-            flex-grow: 1;
-        }
-
-        .shift-down {
-            margin-top: 2.5rem !important;
         }
 
         .chat-history {
