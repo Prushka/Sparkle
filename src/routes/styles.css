@@ -4,6 +4,81 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+	:root {
+		--background: 0 0% 100%;
+		--foreground: 240 10% 3.9%;
+
+		--muted: 240 4.8% 95.9%;
+		--muted-foreground: 240 3.8% 46.1%;
+
+		--popover: 0 0% 100%;
+		--popover-foreground: 240 10% 3.9%;
+
+		--card: 0 0% 100%;
+		--card-foreground: 240 10% 3.9%;
+
+		--border: 240 5.9% 90%;
+		--input: 240 5.9% 90%;
+
+		--primary: 240 5.9% 10%;
+		--primary-foreground: 0 0% 98%;
+
+		--secondary: 240 4.8% 95.9%;
+		--secondary-foreground: 240 5.9% 10%;
+
+		--accent: 240 4.8% 95.9%;
+		--accent-foreground: 240 5.9% 10%;
+
+		--destructive: 0 72.2% 50.6%;
+		--destructive-foreground: 0 0% 98%;
+
+		--ring: 240 10% 3.9%;
+
+		--radius: 0.5rem;
+	}
+
+	.dark {
+		--background: 240 10% 3.9%;
+		--foreground: 0 0% 98%;
+
+		--muted: 240 3.7% 15.9%;
+		--muted-foreground: 240 5% 64.9%;
+
+		--popover: 240 10% 3.9%;
+		--popover-foreground: 0 0% 98%;
+
+		--card: 240 10% 3.9%;
+		--card-foreground: 0 0% 98%;
+
+		--border: 240 3.7% 15.9%;
+		--input: 240 3.7% 15.9%;
+
+		--primary: 0 0% 98%;
+		--primary-foreground: 240 5.9% 10%;
+
+		--secondary: 240 3.7% 15.9%;
+		--secondary-foreground: 0 0% 98%;
+
+		--accent: 240 3.7% 15.9%;
+		--accent-foreground: 0 0% 98%;
+
+		--destructive: 0 62.8% 30.6%;
+		--destructive-foreground: 0 0% 98%;
+
+		--ring: 240 4.9% 83.9%;
+	}
+}
+
+@layer base {
+	* {
+		@apply border-border;
+	}
+	body {
+		@apply bg-background text-foreground;
+	}
+}
+
 :root {
 	--font-body: 'Nunito', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, sans-serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol, Noto Color Emoji;
 	--font-mono: 'JetBrains Mono', 'Fira Mono', monospace;
@@ -39,7 +114,7 @@ body, #main-page {
 	min-height: 100vh;
 }
 
-button, div, a, pre, code, .code-wrapper, .copy-button {
+button {
 	transition: all 0.1s cubic-bezier(.32,.08,.24,1);
 }
 
@@ -84,44 +159,24 @@ input[type="file"] {
 	align-self: center;
 }
 
-.chat-box-main > form > input {
-	width: 100%;
-}
-
-@media (max-width: 1000px) {
-	#chat-input {
-		width: 16rem;
-	}
-	.chat-box {
-		display: none;
-	}
-}
-
 input {
 	font-family: 'Nunito', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica Neue, Arial, Noto Sans, sans-serif, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol, Noto Color Emoji;
 }
 
-@media(min-width: 1000px) {
+.chat-pc > input::placeholder {
+	color: rgba(233, 233, 233, 0.55);
+	opacity: 1;
+}
 
-	.chat-box {
-		display: block;
-	}
-
-	.chat-box > form > input:focus{
-		outline: none !important;
-	}
-
-	.chat-box > form > input::placeholder {
-		color: rgba(233, 233, 233, 0.55);
-		opacity: 1;
-	}
-
-	.chat-box > form > input {
-		width: 32rem;
-		background-color: hsla(0,0%,100%,.42) !important;
-		color: white;
-		font-weight: 600;
-	}
+.chat-pc > input {
+	height: 2rem;
+	outline: none;
+	border: none;
+	margin: 0 2rem;
+	width: 32rem;
+	background-color: hsla(0,0%,100%,.4) !important;
+	color: white;
+	font-weight: 600;
 }
 
 :where(.vds-captions [data-part='cue']) {

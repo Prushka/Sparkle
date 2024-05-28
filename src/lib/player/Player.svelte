@@ -9,42 +9,49 @@
 		type Player,
 		SyncTypes,
 		type SendPayload,
-		defaultTheme,
-		themes,
 		setGetPlayerId,
 		formatMbps,
 		languageSrcMap,
 		codecMap,
 		getSupportedCodecs,
-		lightThemes,
 		formatPair,
 		getAudioLocForCodec,
 		audiosExistForCodec,
-		languageMap,
 		fallbackFontsMap,
 		defaultFallback,
 		chatLayouts,
 		BroadcastTypes,
 		preprocessJobs,
-		codecDisplayMap,
+		codecDisplayMap
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
 	import {
 		IconAlertOctagonFilled, IconArrowBounce,
-		IconBrightnessHalf, IconCone, IconConePlus, IconEyeOff,
+		IconCone, IconConePlus, IconEyeOff,
 		IconPlayerPauseFilled,
 		IconPlayerPlayFilled,
 		IconPlugConnected,
-		IconPlugConnectedX, IconTableExport, IconX
+		IconPlugConnectedX, IconTableExport
 	} from '@tabler/icons-svelte';
 	import Chatbox from '$lib/player/Chatbox.svelte';
 	import Pfp from '$lib/player/Pfp.svelte';
 	import { chatFocusedStore, chatLayoutStore, pageReloadCounterStore, pfpLastFetched } from '../../store';
 	import SUPtitles from '$lib/suptitles/suptitles';
+	import { Button } from '$lib/components/ui/button/index.js';
+	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
+	import * as Select from '$lib/components/ui/select';
+	import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
+	import * as Dialog from '$lib/components/ui/dialog';
+	import * as Tooltip from "$lib/components/ui/tooltip/index.js";
 
 	import JASSUB from 'jassub';
 	import { goto } from '$app/navigation';
+	import { toggleMode, mode } from 'mode-watcher';
+	import { Moon, Reload, Rocket, Sun } from 'svelte-radix';
+	import { Input } from '$lib/components/ui/input';
+	import { Label } from '$lib/components/ui/label';
+	import { toast } from 'svelte-sonner';
 
 	let controlsShowing = false;
 	let player: MediaPlayerElement;
@@ -70,13 +77,13 @@
 	let pauseSend = false;
 	let supportedCodecs: string[] = [];
 	let interactedWithPlayer = false;
-	let currentTheme = localStorage.getItem('theme') || defaultTheme;
 	let lastSentTime = -100;
 	let chatFocused = false;
 	let videoSrc: any = [];
 	let fonts: string[] = [];
 	let sup: any;
 	let jas: any;
+	let currentTheme: 'light' | 'dark';
 	let prevTrackSrc: string | null | undefined = '';
 	let footer: string = '';
 	let syncGoto = false;
@@ -93,7 +100,14 @@
 	let chatLayout: string;
 	const unsubscribeChatLayout = chatLayoutStore.subscribe((value) => chatLayout = value);
 	const unsubscribeChatFocused = chatFocusedStore.subscribe((value) => chatFocused = value);
+	const unsubscribeMode = mode.subscribe((value) => {
+		if (!value) {
+			value = 'light';
+		}
+		currentTheme = value;
+	});
 	let exited = false;
+	let nameEmptyDialog = false;
 	$: BASE_STATIC = `${PUBLIC_STATIC}/${roomId}`;
 	$: thumbnailVttSrc = `${BASE_STATIC}/storyboard.vtt`;
 	$: socketCommunicating = socketConnected && (tickedSecsAgo >= 0 && tickedSecsAgo < 5);
@@ -106,6 +120,7 @@
 	onDestroy(() => {
 		unsubscribeChatLayout();
 		unsubscribeChatFocused();
+		unsubscribeMode();
 	});
 
 	function setVideoSrc(onChange = () => {
@@ -148,14 +163,6 @@
 			console.log('selected codec', selectedCodec, codecMap[selectedCodec]);
 			onChange();
 		}
-	}
-
-	function nextTheme() {
-		const html = document.querySelector('html');
-		const nextTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length];
-		html?.setAttribute('data-theme', nextTheme);
-		localStorage.setItem('theme', nextTheme);
-		currentTheme = nextTheme;
 	}
 
 	function onCodecChange(selected: string) {
@@ -277,9 +284,9 @@
 		socket.onclose = () => {
 			console.log('Socket closed, reconnecting');
 			socketConnected = false;
-			if(!exited){
+			if (!exited) {
 				setTimeout(function() {
-					console.log('Socket reconnecting')
+					console.log('Socket reconnecting');
 					connect();
 				}, 1000);
 			}
@@ -407,14 +414,14 @@
 				const node = document.querySelector('media-title');
 				if (node) {
 					const container = document.createElement('div');
-					container.classList.add('chat-box');
+					container.classList.add('max-md:hidden');
 					node.parentNode?.insertBefore(container, node.nextSibling);
 					new Chatbox({
 						target: container,
 						props: {
 							send: send,
 							chatFocused: chatFocused,
-							classes: 'input-sm mx-6 chat-box',
+							class: 'chat-pc',
 							id: 'chat-input',
 							onFocus: () => {
 								player.controls.pause();
@@ -494,7 +501,7 @@
 			}
 		}, 1000);
 		if (name === '') {
-			document.getElementById('name_modal')?.showModal();
+			nameEmptyDialog = true;
 		}
 		const chatOverlay = document.getElementById('chat-overlay');
 		const thePlayer = document.getElementById('the-player');
@@ -525,23 +532,18 @@
 </script>
 
 <main id="main-page" class="overflow-hidden flex flex-col items-center w-full h-full">
-	<dialog id="warning_modal" class="modal">
-		<div class="modal-box">
-			<h3 class="font-bold text-lg">Image is too large</h3>
-			<p class="py-4">Size limit: 10 MB</p>
-			<div class="modal-action">
-				<form method="dialog">
-					<button class="btn">Close</button>
-				</form>
-			</div>
-		</div>
-	</dialog>
-	<dialog id="name_modal" class="modal">
-		<div class="modal-box">
-			<h3 class="font-bold text-lg">Name is required for syncing</h3>
-			<label class="input input-bordered flex items-center gap-2 name-input mt-5 mb-2">
-				Name
-				<input
+	<Dialog.Root closeOnEscape={false} closeOnOutsideClick={false} bind:open={nameEmptyDialog}>
+		<Dialog.Trigger />
+		<Dialog.Content>
+			<Dialog.Header>
+				<Dialog.Title>Edit profile</Dialog.Title>
+				<Dialog.Description>
+					Make changes to your name. Name is REQUIRED for syncing.
+				</Dialog.Description>
+			</Dialog.Header>
+			<div class="grid w-full items-center gap-1.5">
+				<Label>Name</Label>
+				<Input
 					on:focusout={() => {
 					send({
 					  type: SyncTypes.NameSync,
@@ -549,17 +551,16 @@
 					})
 				localStorage.setItem("name", name)
 			}}
-					bind:value={name} type="text" class="grow" placeholder="Name?" />
-			</label>
-			{#if name !== ''}
-				<div class="modal-action">
-					<form method="dialog">
-						<button class="btn">Done</button>
-					</form>
-				</div>
-			{/if}
-		</div>
-	</dialog>
+					bind:value={name} type="text" class="grow focus-visible:ring-transparent" placeholder="Name?" />
+			</div>
+			<Dialog.Footer>
+				<Button type="submit" on:click={()=>{
+					nameEmptyDialog = false;
+				}} disabled={name === ""}>Save changes
+				</Button>
+			</Dialog.Footer>
+		</Dialog.Content>
+	</Dialog.Root>
 	<media-player
 		keyShortcuts={{
     // Space-separated list.
@@ -609,7 +610,7 @@
 			></media-poster>
 
 		</media-provider>
-		<media-video-layout colorScheme={lightThemes.includes(currentTheme) ? "light" : "dark"}
+		<media-video-layout colorScheme={currentTheme}
 												thumbnails={thumbnailVttSrc}></media-video-layout>
 	</media-player>
 
@@ -637,17 +638,18 @@
 	</div>
 
 	<div class="p-4 w-full flex flex-col gap-4 font-semibold">
-		<div class="w-full flex gap-2 input-container">
-			<div class="flex gap-2">
-				<label class="custom-file-upload">
-					<Pfp id={playerId} class="w-12 h-12" />
-					<input accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
-								 bind:this={pfpInput}
-								 on:change={() => {
+		<div class="w-full flex gap-2 input-container items-center justify-center">
+			<label class="custom-file-upload">
+				<Pfp id={playerId} class="w-12 h-12" />
+				<input accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
+							 bind:this={pfpInput}
+							 on:change={() => {
 							 const ppfp = pfpInput?.files;
 							 if (ppfp && ppfp[0]) {
 								 if(ppfp[0].size > 12000000) {
-									 warning_modal.showModal();
+									 toast.error("File size too large", {
+      							description: "Max file size: 10MB",
+    										})
 									 pfpInput.value = '';
 									 return;
 								 }
@@ -670,185 +672,187 @@
 								 reader.readAsDataURL(pfp);
 							 }
 						 }}
-								 type="file" />
-				</label>
-				<label class="input input-bordered flex items-center gap-2 w-48 name-input">
-					Name
-					<input
-						on:focusout={() => {
+							 type="file" />
+			</label>
+			<Input
+				on:focusout={() => {
 					send({
 					  type: SyncTypes.NameSync,
 						name: name
 					})
 				localStorage.setItem("name", name)
 			}}
-						bind:value={name} type="text" class="grow" placeholder="Who?" />
-				</label>
-			</div>
-			<div class="chat-box-main flex-grow">
+				bind:value={name} type="text" class="focus-visible:ring-transparent w-auto" placeholder="Who?" />
+			<div class="grow">
 				<Chatbox send={send} class="input-bordered input-md" />
 			</div>
 		</div>
 
 		<div class="gap-4 w-full items-center justify-center md:flex max-md:grid max-md:grid-cols-2">
 			<div class="flex gap-2 items-center justify-center max-md:col-span-2 flex-grow">
-					<div class="tooltip tooltip-right" data-tip={!syncGoto ? "Move Users in Room on Selection" :
-					"Don't move Users in Room on Selection"}>
-						<button class="btn"
-									 on:click={()=>{
+					<Tooltip.Root openDelay={0}>
+						<Tooltip.Trigger asChild let:builder>
+							<Button builders={[builder]} variant={!socketCommunicating || !syncGoto ? "ghost" : "secondary"}
+											class="w-10 h-10 p-2 {(!socketCommunicating || !syncGoto) ? 'opacity-50' :''}"
+											on:click={()=>{
 										 syncGoto = !syncGoto;
 									 }}
-									 disabled={!socketCommunicating}>
-							{#if !syncGoto}
-								<IconArrowBounce size={24} stroke={2} />
-							{:else}
-								<IconX size={24} stroke={2} />
-							{/if}
-						</button>
-					</div>
-				<select
-					on:change={(e) => {
-				const roomId = e.currentTarget.value;
+											disabled={!socketCommunicating}>
+								<IconArrowBounce size={20} stroke={2} />
+							</Button>
+						</Tooltip.Trigger>
+						<Tooltip.Content>
+							<p>Move users in room on selection</p>
+						</Tooltip.Content>
+					</Tooltip.Root>
+
+				<Select.Root>
+					<Select.Trigger class="w-72 flex-grow">
+						<Select.Value placeholder={job.Input} />
+					</Select.Trigger>
+					<Select.Content>
+						<ScrollArea class="h-[30rem] max-h-[35vh] w-full">
+							{#each jobs as job}
+								<Select.Item value={job.Id} on:click={()=>{
+				const roomId = job.Id;
 				if(syncGoto && socketCommunicating) {
 					send({ type: SyncTypes.BroadcastSync,
 					broadcast: { type: BroadcastTypes.MoveTo, moveTo: roomId } });
 				}else{
 					goto(`/${roomId}`)
 				}
-			}}
-					bind:value={roomId}
-					class="select w-72 select-bordered flex-grow">
-					<option disabled selected>Which media?</option>
-					{#each jobs as job}
-						<option value={job.Id}>{job.Input}</option>
-					{/each}
-				</select>
+						}}>{job.Input}</Select.Item>
+							{/each}
+						</ScrollArea>
+					</Select.Content>
+				</Select.Root>
 			</div>
-			{#if audiosExistForCodec(job, videoSrc?.sCodec)}
-				<div class="dropdown dropdown-top dropdown-end max-md:w-full" id="codec-dropdown">
-					<div
-						tabindex="0" role="button"
-						class="btn m-1 w-full md:w-44">{getAudioLocForCodec(job, videoSrc?.sCodec, selectedAudioMapping)
-						? `${(languageMap[selectedAudioMapping] || selectedAudioMapping)}` : "Audio"}</div>
-					<ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-48">
-						{#each job.MappedAudio[videoSrc?.sCodec] as am}
-							<li><a
-								class={selectedAudioMapping === am.Language? "selected-dropdown" : ""}
-								tabindex="0" role="button" on:click={()=>{
-									localStorage.setItem('preferredAudio', am.Language);
-									$pageReloadCounterStore++;
+
+			<DropdownMenu.Root>
+				<DropdownMenu.Trigger asChild let:builder>
+					<Button builders={[builder]} variant="outline">Video Settings</Button>
+				</DropdownMenu.Trigger>
+				<DropdownMenu.Content class="w-56">
+					<DropdownMenu.Label>Video Settings</DropdownMenu.Label>
+					<DropdownMenu.Separator />
+					<DropdownMenu.Group>
+						{#if audiosExistForCodec(job, videoSrc?.sCodec)}
+							<DropdownMenu.RadioGroup bind:value={selectedAudioMapping}>
+								{#each job.MappedAudio[videoSrc?.sCodec] as am}
+									<DropdownMenu.RadioItem value={am.Language} on:click={()=>{
+								localStorage.setItem('preferredAudio', am.Language);
+								$pageReloadCounterStore++;
+							}}>{formatPair(am)}</DropdownMenu.RadioItem>
+								{/each}
+							</DropdownMenu.RadioGroup>
+						{/if}
+					</DropdownMenu.Group>
+					<DropdownMenu.Separator />
+					<DropdownMenu.Group>
+						<DropdownMenu.RadioGroup bind:value={selectedCodec}>
+							<DropdownMenu.RadioItem value={"auto"} on:click={()=>{
+									onCodecChange("auto")
 							}}>
-								{formatPair(am)}
-							</a></li>
-						{/each}
-					</ul>
-				</div>
-			{/if}
-			<div class="dropdown dropdown-top dropdown-end max-md:w-full" id="codec-dropdown">
-				<div
-					tabindex="0" role="button"
-					class="btn m-1 md:w-32 w-full">
-					{codecDisplayMap[selectedCodec]} {(videoSrc?.sCodec && selectedCodec === "auto") ? `(${codecDisplayMap[videoSrc.sCodec]})` : ''}
-					{#if !supportedCodecs.includes(videoSrc?.sCodec)}
-					<IconAlertOctagonFilled size={16} stroke={2} />
-				{/if}</div>
-				<ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-48">
-					<li><a
-						class={selectedCodec === "auto"? "selected-dropdown" : ""}
-						tabindex="0" role="button" on:click={()=>{
-						onCodecChange("auto")
-					}}>Auto</a></li>
-					{#if job.EncodedCodecs}
-						{#each job.EncodedCodecs as codec}
-							<li><a
-								class={selectedCodec === codec? "selected-dropdown" : ""}
-								tabindex="0" role="button" on:click={()=>{
+								Auto {(videoSrc?.sCodec && selectedCodec === "auto") ? `(${codecDisplayMap[videoSrc.sCodec]})` : ''}</DropdownMenu.RadioItem>
+							{#each job.EncodedCodecs as codec}
+								<DropdownMenu.RadioItem value={codec} on:click={()=>{
 							onCodecChange(codec)
-							}}>
-								{codecDisplayMap[codec]}{formatMbps(job, codec)}
-								{#if !supportedCodecs.includes(codec)}
-									<IconAlertOctagonFilled size={16} stroke={2} />
-								{/if}
-							</a></li>
-						{/each}
-					{/if}
-				</ul>
-			</div>
+							}}>{codecDisplayMap[codec]}{formatMbps(job, codec)}
+									{#if !supportedCodecs.includes(codec)}
+										<IconAlertOctagonFilled size={16} stroke={2} />
+									{/if}
+								</DropdownMenu.RadioItem>
+							{/each}
+						</DropdownMenu.RadioGroup>
+					</DropdownMenu.Group>
+				</DropdownMenu.Content>
+			</DropdownMenu.Root>
 		</div>
 
 		<div class="max-sm:grid max-sm:grid-cols-2 sm:flex gap-4 self-center items-center justify-center w-full">
 
-			<div class="tooltip tooltip-top max-sm:col-span-2" data-tip="Ticked: {tickedSecsAgoStr}s ago">
-				<button
-					id="sync-button"
-					on:click={() => {
+			<Tooltip.Root openDelay={0}>
+				<Tooltip.Trigger asChild let:builder>
+					<Button builders={[builder]} variant="outline"
+									on:click={() => {
 						if(!socketCommunicating && !interactedWithPlayer) {
 							player?.play()
-						}
-					}}
-					class="btn font-bold {socketCommunicating ? 'text-green-600' : 'text-red-600' } max-sm:w-full">
-					{#if socketCommunicating}
-						<IconPlugConnected size={24} stroke={2} />
-					{:else}
-						<IconPlugConnectedX size={24} stroke={2} />
-						{#if !interactedWithPlayer}
-							Connect Now
-						{:else if !exited}
-							Connecting...
+								}}}
+									class="font-bold {socketCommunicating ? 'text-green-600 hover:text-green-600' : 'text-red-600 hover:text-red-600' } max-sm:w-full">
+						{#if socketCommunicating}
+							<IconPlugConnected size={20} stroke={2} />
 						{:else}
-							Disconnected
+							{#if !interactedWithPlayer}
+								<Rocket class="mr-2 h-4 w-4 animate-bounce" />
+								Connect Now
+							{:else if !exited}
+								<Reload class="mr-2 h-4 w-4 animate-spin" />
+								Connecting...
+							{:else}
+								Disconnected
+							{/if}
 						{/if}
-					{/if}
-				</button>
-			</div>
-			<div class="dropdown dropdown-top max-sm:w-full" id="chat-layout-dropdown">
-				<div
-					tabindex="0" role="button"
-					class="btn m-1 w-40 max-sm:w-full">
-					{#if chatLayout === "extended"}
-						<IconConePlus size={16} stroke={2} />
-						Extended Chat
-					{:else if chatLayout === "simple"}
-						<IconCone size={16} stroke={2} />
-						Simple Chat
-					{:else}
-						<IconEyeOff size={16} stroke={2} />
-						Chat Hidden
-					{/if}
-				</div>
-				<ul class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-48 max-sm:w-full">
-					{#each chatLayouts as layout}
-						<li><a
-							class={chatLayout === layout? "selected-dropdown" : ""}
-							tabindex="0" role="button" on:click={()=>{
+					</Button>
+				</Tooltip.Trigger>
+				<Tooltip.Content>
+					<p>Ticked: {tickedSecsAgoStr}s ago</p>
+				</Tooltip.Content>
+			</Tooltip.Root>
+
+			<DropdownMenu.Root>
+				<DropdownMenu.Trigger asChild let:builder>
+					<Button variant="outline" class="m-1 w-40 max-sm:w-full" builders={[builder]}>
+						{#if chatLayout === "extended"}
+							<IconConePlus class="mr-2" size={16} stroke={2} />
+							Extended Chat
+						{:else if chatLayout === "simple"}
+							<IconCone class="mr-2" size={16} stroke={2} />
+							Simple Chat
+						{:else}
+							<IconEyeOff class="mr-2" size={16} stroke={2} />
+							Chat Hidden
+						{/if}
+					</Button>
+				</DropdownMenu.Trigger>
+				<DropdownMenu.Content class="w-56">
+					<DropdownMenu.Label>Chat Layout</DropdownMenu.Label>
+					<DropdownMenu.Separator />
+					<DropdownMenu.RadioGroup bind:value={chatLayout}>
+						{#each chatLayouts as layout}
+							<DropdownMenu.RadioItem value={layout} on:click={()=>{
 								localStorage.setItem('chatLayout', layout);
 								$chatLayoutStore = layout;
 							}}>
-							{#if layout === "extended"}
-								<IconConePlus size={16} stroke={2} />
-								Extended Chat
-							{:else if layout === "simple"}
-								<IconCone size={16} stroke={2} />
-								Simple Chat
-							{:else}
-								<IconEyeOff size={16} stroke={2} />
-								Chat Hidden
-							{/if}
-						</a></li>
-					{/each}
-				</ul>
-			</div>
-			<div class="tooltip tooltip-top max-sm:w-full" data-tip={`Theme: ${currentTheme}`}>
-				<button id="theme-button" on:click={nextTheme} class="btn font-bold max-sm:w-full">
-					<IconBrightnessHalf size={24} stroke={2} />
-				</button>
-			</div>
+								{#if layout === "extended"}
+									<IconConePlus class="mr-2" size={16} stroke={2} />
+									Extended
+								{:else if layout === "simple"}
+									<IconCone class="mr-2" size={16} stroke={2} />
+									Simple
+								{:else}
+									<IconEyeOff class="mr-2" size={16} stroke={2} />
+									Hidden
+								{/if}
+							</DropdownMenu.RadioItem>
+						{/each}
+					</DropdownMenu.RadioGroup>
+				</DropdownMenu.Content>
+			</DropdownMenu.Root>
+			<Button on:click={toggleMode} variant="outline" size="icon">
+				<Sun
+					class="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0"
+				/>
+				<Moon
+					class="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100"
+				/>
+				<span class="sr-only">Toggle theme</span>
+			</Button>
 		</div>
 
 		<div class="flex gap-4 sync-states w-full justify-center">
 			{#each roomPlayers as player}
-				<button
-					class="btn btn-neutral border-none h-auto pr-4 py-0 pl-0 rounded-l-full rounded-r-full shadow-md flex gap-3.5">
+				<Button variant="outline"
+					class="h-auto pr-4 py-0 pl-0 rounded-l-full rounded-r-full shadow-md flex gap-3.5">
 					<Pfp class="w-12 h-12 mr-0.5" id={player.id} />
 					<span class="flex gap-1 flex-col items-center justify-center font-semibold">
 						<span class="font-bold">{player.name}</span>
@@ -864,7 +868,7 @@
 					{:else}
 						<IconPlayerPauseFilled size={18} stroke={2} />
 					{/if}
-				</button>
+				</Button>
 			{/each}
 		</div>
 	</div>

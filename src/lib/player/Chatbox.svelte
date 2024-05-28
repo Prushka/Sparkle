@@ -2,10 +2,10 @@
 	import { SyncTypes } from '$lib/player/t';
 	import { chatFocusedStore, chatLayoutStore } from '../../store';
 	import { onDestroy } from 'svelte';
+	import { Input } from '$lib/components/ui/input';
 
-	let i: any;
+	let value: string;
 	export let send: any;
-	export let classes = '';
 	export let onFocus: any = () => {};
 	export let onBlur: any = () => {};
 	export let chatFocused = false;
@@ -18,23 +18,26 @@
 		unsubscribeChatLayout();
 		unsubscribeChatFocused();
 	});
-	$: placeholder = chatHidden ? 'Chat (hidden)' : 'Chat'
+	$: placeholder = chatHidden ? 'Chat (hidden)' : 'Chat';
 </script>
 
+<svelte:options accessors/>
 <form
 	on:submit={e => {
 		e.preventDefault();
-						const message = i.value;
-						i.value = '';
-						send({ chat: message, type: SyncTypes.ChatSync });
-						i.placeholder = 'Sent!';
+		console.log(value)
+						send({ chat: value, type: SyncTypes.ChatSync });
+						value = ""
+						const oldPlaceholder = placeholder;
+						placeholder = 'Sent!';
 						setTimeout(() => {
-							i.placeholder = placeholder;
+							placeholder = oldPlaceholder;
 						}, 2000);
 	}}
+	class="{$$restProps.class}"
 	style={chatFocused ? 'visibility: visible;' : 'visibility: unset;'}
 	autocomplete="off">
-	<input
+	<Input
 		on:focus={onFocus}
 		on:blur={onBlur}
 		on:keydown={e => {
@@ -46,14 +49,8 @@
 		on:keypress={e => {
 				e.stopPropagation()
 		}}
-		bind:this={i} autocomplete="off" type="text" placeholder={placeholder}
-		class="c-box input {$$restProps.class} {classes}"
+		bind:value={value} autocomplete="off" type="text" placeholder={placeholder}
+		class="input focus-visible:ring-transparent"
 		id={$$restProps.id}
-	>
+	/>
 </form>
-
-<style>
-    .c-box {
-        font-size: 1rem !important;
-    }
-</style>
