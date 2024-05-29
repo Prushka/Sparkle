@@ -748,7 +748,7 @@
 								<CaretSort class="ml-2 h-4 w-4 shrink-0 opacity-50" />
 							</Button>
 						</Popover.Trigger>
-						<Popover.Content class="p-0 w-auto">
+						<Popover.Content align="start" class="p-0 w-auto">
 							<Command.Root>
 								<Command.Input placeholder="Search title..." class="h-9" />
 								<Command.Empty>No title found.</Command.Empty>
@@ -776,27 +776,6 @@
 							</Command.Root>
 						</Popover.Content>
 					</Popover.Root>
-<!--					<Select.Root selected={{value: selectedTitleId}}>-->
-<!--						<Select.Trigger class="flex-grow max-sm:w-full">-->
-<!--							<Select.Value placeholder={selectedTitle?.title} />-->
-<!--						</Select.Trigger>-->
-<!--						<Select.Content>-->
-<!--							<div class="max-h-[35vh] w-full overflow-y-auto">-->
-<!--								{#each Object.values(titles) as title}-->
-<!--									<Select.Item class="p-1" value={title.titleId} on:click={()=>{-->
-<!--									selectedTitleId = title.titleId;-->
-<!--									selectedSe = null;-->
-<!--									if(!title.episodes) {-->
-<!--										bounceTo(title.id)-->
-<!--									}-->
-<!--						}}><img src="{PUBLIC_STATIC}/{!title.episodes ? title.id : Object.values(title.episodes)[0].id}/poster.jpg"-->
-<!--										alt="{title.title}" class="h-8 w-12 object-cover mr-2 rounded-sm" />-->
-<!--										{title.title}</Select.Item>-->
-<!--								{/each}-->
-<!--							</div>-->
-<!--						</Select.Content>-->
-<!--					</Select.Root>-->
-
 					{#if selectedEpisodes}
 						<IconChevronRight size={20} stroke={2} />
 						<Select.Root selected={{value: selectedSe}}>
