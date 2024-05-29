@@ -240,11 +240,18 @@
 			if (player) {
 				console.debug('received: ' + JSON.stringify(state));
 				const initiateMoveTo = () => {
-					controlsToDisplay.push(state);
-					updateMessages();
+					toast.loading(`Moving to next media in 5 seconds`, {
+						duration: 7000,
+						description: `Next: ${jobs.find((job) => job.Id === broadcast!.moveTo)?.Input}`,
+						important: true,
+						action: {
+							label: `By: ${state.firedBy?.name}`,
+							onClick: () => {}
+						},
+					});
 					setTimeout(() => {
 						goto(`/${broadcast!.moveTo}`);
-					}, 5000);
+					}, 7000);
 				};
 				switch (state.type) {
 					case SyncTypes.PfpSync:
@@ -348,8 +355,7 @@
 					uid: control.firedBy.id,
 					username: control.firedBy.name,
 					message: control.type === SyncTypes.PauseSync ? (control.paused ? 'paused' : 'resumed') :
-						control.type === SyncTypes.TimeSync ? 'seeked to ' + formatSeconds(control.time) :
-							control.type === SyncTypes.BroadcastSync ? `Moving to [${jobs.find((job) => job.Id === control.broadcast!.moveTo)?.Input}] in 5 Seconds` : 'unknown',
+						control.type === SyncTypes.TimeSync ? 'seeked to ' + formatSeconds(control.time) : 'unknown',
 					timestamp: control.timestamp,
 					mediaSec: player.currentTime,
 					isStateUpdate: true

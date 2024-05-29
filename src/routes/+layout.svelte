@@ -14,7 +14,7 @@
 </script>
 
 {#key `${$page.url.pathname}${pageReloadCounter}`}
-	<Toaster />
+	<Toaster position="top-center" richColors/>
 	<ModeWatcher defaultMode={"dark"} />
 	<slot/>
 {/key}
