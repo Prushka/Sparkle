@@ -9,7 +9,6 @@
 		type Player,
 		SyncTypes,
 		type SendPayload,
-		setGetPlayerId,
 		formatMbps,
 		languageSrcMap,
 		codecMap,
@@ -22,7 +21,7 @@
 		chatLayouts,
 		BroadcastTypes,
 		preprocessJobs,
-		codecDisplayMap, getTitleComponents, type TitleComponents
+		codecDisplayMap, getTitleComponents, type TitleComponents, setGetLS, randomString
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -56,8 +55,8 @@
 	let controlsShowing = false;
 	let player: MediaPlayerElement;
 	let socket: WebSocket;
-	let name = localStorage.getItem('name') || '';
-	let playerId: string = setGetPlayerId();
+	let name = setGetLS("name", `Anon-${randomString(4)}`)
+	let playerId: string = setGetLS("id", randomString(14));
 	let pfp: File;
 	let pfpInput: HTMLInputElement;
 	let roomPlayers: Player[] = [];

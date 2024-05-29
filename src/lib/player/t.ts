@@ -239,14 +239,13 @@ export function secondsSince(date: Date): number {
 	return Math.floor((new Date().getTime() - date.getTime()) / 1000);
 }
 
-export function setGetPlayerId(): string {
-	const lsId = localStorage.getItem('id');
-	if (lsId) {
-		return lsId;
+export function setGetLS(key: string, value: string): string {
+	const v = localStorage.getItem(key);
+	if (v) {
+		return v;
 	}
-	const id = randomString(12);
-	localStorage.setItem('id', id);
-	return id;
+	localStorage.setItem(key, value);
+	return value;
 }
 
 export function getMbps(job: Job | undefined | null, codec: string): number {
