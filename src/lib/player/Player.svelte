@@ -444,6 +444,7 @@
 						props: {
 							send: send,
 							chatFocused: chatFocused,
+							focusByShortcut: true,
 							class: 'chat-pc',
 							id: 'chat-input',
 							onFocus: () => {

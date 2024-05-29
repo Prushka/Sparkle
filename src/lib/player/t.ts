@@ -1,7 +1,3 @@
-export const themes = ['sunset', 'dark', 'nord', 'emerald'];
-export const lightThemes = ['nord', 'emerald'];
-export const defaultTheme = themes[0];
-
 export const codecsPriority = ['av1', 'hevc', 'h264-10bit', 'h264-8bit'];
 
 export const supportedCodecs = ['av1', 'hevc', 'h264-8bit'];

@@ -2,4 +2,7 @@ Pause send when in bg until reentry, don't send previous ones - pause state won'
 Show chat only when focused
 Allow setting codec?
 After bounce, auto connect
-Baseline profile on h264
+
+
+Fix captions settings
+Chat shortcut
