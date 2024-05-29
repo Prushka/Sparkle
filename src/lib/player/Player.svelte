@@ -564,7 +564,7 @@
 	}
 
 	function bounceTo(id: string) {
-		if (syncGoto && socketCommunicating) {
+		if (syncGoto && socketCommunicating && roomPlayers.length > 1) {
 			send({
 				type: SyncTypes.BroadcastSync,
 				broadcast: { type: BroadcastTypes.MoveTo, moveTo: id }
@@ -999,7 +999,7 @@
         background-color: rgba(0, 0, 0, 0.2);
     }
 
-    @media (max-width: 800px) {
+    @media (max-width: 900px) {
 
         .chat-history {
             margin-top: 0.5rem;
