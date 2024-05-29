@@ -100,7 +100,6 @@
 	let jas: any;
 	let currentTheme: 'light' | 'dark';
 	let prevTrackSrc: string | null | undefined = '';
-	let footer: string = '';
 	let syncGoto = setGetLsBoolean("syncGoto", true);
 	let playerVolume = setGetLsNumber("volume", 1);
 	let notificationAudio = new Audio(`${PUBLIC_STATIC}/sound/anya_peanuts.mp3`);
@@ -992,12 +991,6 @@
 				</Button>
 			{/each}
 		</div>
-	</div>
-
-	<div class="mt-auto bottom-0 mb-4 w-full flex px-4">
-		{#if footer}
-			<div class="badge badge-outline">{footer}</div>
-		{/if}
 	</div>
 </main>
 
