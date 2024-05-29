@@ -46,7 +46,7 @@
 		chatFocusedStore,
 		chatLayoutStore,
 		interactedStore,
-		pageReloadCounterStore, pfpLastFetched
+		pageReloadCounterStore, testPfp
 	} from '../../store';
 	import SUPtitles from '$lib/suptitles/suptitles';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -254,14 +254,8 @@
 				};
 				switch (state.type) {
 					case SyncTypes.PfpSync:
-						if (state.firedBy) {
-							$pfpLastFetched = {
-								...pfpLastFetched,
-								[state.firedBy.id]: {
-									success: false,
-									tried: false
-								}
-							};
+						if (state.firedBy?.id) {
+							testPfp(state.firedBy.id)
 						}
 						break;
 					case SyncTypes.ChatSync:
@@ -717,13 +711,7 @@
 											 body: formData
 										 }).then(data => {
 												 console.log(data);
-												 $pfpLastFetched = {
-													 ...pfpLastFetched,
-													 [playerId]: {
-														 success: false,
-														 tried: false
-													 }
-												 };
+												 testPfp(playerId);
 											});
 									 }
 								 };

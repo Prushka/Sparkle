@@ -1,6 +1,6 @@
 <script lang="ts">
-	import { pfpLastFetched } from '../../store';
-	import { onDestroy } from 'svelte';
+	import { pfpLastFetched, testPfp } from '../../store';
+	import { onDestroy, onMount } from 'svelte';
 	import { PUBLIC_STATIC } from '$env/static/public';
 
 	let pfpLast: any = {};
@@ -8,49 +8,11 @@
 	const unsubscribe = pfpLastFetched.subscribe((value) => pfpLast = value);
 	onDestroy(unsubscribe);
 
-
-	function testPfp(id : string) {
-		const now = Date.now();
-		const prev = pfpLast[id];
-		if (prev?.trying) return;
-		console.log('Retrying pfp fetch')
-		$pfpLastFetched = {
-			...pfpLastFetched,
-			[id]: {
-				trying: true,
-			}
-		};
-		const img = new Image();
-		img.onload = () => {
-			$pfpLastFetched = {
-				...pfpLastFetched,
-				[id]: {
-					success: true,
-					tried: true,
-					lastSuccess: now,
-					trying: false,
-				}
-			};
-		};
-		img.onerror = () => {
-			$pfpLastFetched = {
-				...pfpLastFetched,
-				[id]: {
-					success: false,
-					tried: true,
-					lastSuccess: null,
-					trying: false,
-				}
-			};
-		};
-		img.src = `${PUBLIC_STATIC}/pfp/${id}.png?${now}`
-	}
-
-	$: {
-		if(!pfpLast[id]?.tried) {
+	onMount(() => {
+		if (!pfpLast[id]?.success) {
 			testPfp(id);
 		}
-	}
+	});
 
 </script>
 
