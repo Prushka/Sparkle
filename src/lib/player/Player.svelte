@@ -21,7 +21,7 @@
 		chatLayouts,
 		BroadcastTypes,
 		preprocessJobs,
-		codecDisplayMap, getTitleComponents, setGetLS, randomString, getTitleComponentsByJobs
+		codecDisplayMap, getTitleComponents, setGetLS, randomString, getTitleComponentsByJobs, languageMap
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -50,6 +50,7 @@
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import * as Popover from "$lib/components/ui/popover/index.js";
 	import * as Command from "$lib/components/ui/command/index.js";
+	import * as Card from "$lib/components/ui/card/index.js";
 
 
 
@@ -134,6 +135,7 @@
 	$:{
 		console.log(titles, selectedTitle);
 	}
+	$: autoCodec = (videoSrc?.sCodec && selectedCodec === "auto") ? `(${codecDisplayMap[videoSrc.sCodec]})` : ''
 
 	$: chatHidden = chatLayout === 'hidden';
 	$: {
@@ -731,46 +733,98 @@
 			<Chatbox id="chat-mobile" bind:controlsShowing send={send} class="input-bordered input-md grow max-md:w-full" />
 		</div>
 
-		<div class="gap-4 w-full items-center justify-center flex max-md:flex-col">
-			<div class="flex gap-2 items-center justify-center max-md:w-full flex-grow">
-				<Tooltip.Root openDelay={0}>
-					<Tooltip.Trigger asChild let:builder>
-						<Button builders={[builder]} variant={!socketCommunicating || !syncGoto ? "ghost" : "secondary"}
-										class="w-10 h-10 p-2 {(!socketCommunicating || !syncGoto) ? 'opacity-50' :''}"
-										on:click={()=>{
+		<Card.Root class="w-full">
+			<Card.Header>
+				<div class="flex justify-between items-center">
+					<div class="flex flex-col gap-0.5">
+						<Card.Title>Media</Card.Title>
+						<Card.Description>{selectedCodec} {autoCodec} - {languageMap[selectedAudioMapping] || selectedAudioMapping}</Card.Description>
+					</div>
+					<DropdownMenu.Root>
+						<DropdownMenu.Trigger asChild let:builder>
+							<Button builders={[builder]} variant="outline">
+								<IconSettings2 class="mr-2" size={16} stroke={2} /> Video Settings</Button>
+						</DropdownMenu.Trigger>
+						<DropdownMenu.Content class="w-56">
+							<DropdownMenu.Label>
+								Video Settings</DropdownMenu.Label>
+							<DropdownMenu.Separator />
+							<DropdownMenu.Group>
+								{#if audiosExistForCodec(job, videoSrc?.sCodec)}
+									<DropdownMenu.RadioGroup bind:value={selectedAudioMapping}>
+										{#each job.MappedAudio[videoSrc?.sCodec] as am}
+											<DropdownMenu.RadioItem value={am.Language} on:click={()=>{
+								localStorage.setItem('preferredAudio', am.Language);
+								$pageReloadCounterStore++;
+							}}>{formatPair(am)}</DropdownMenu.RadioItem>
+										{/each}
+									</DropdownMenu.RadioGroup>
+								{/if}
+							</DropdownMenu.Group>
+							<DropdownMenu.Separator />
+							<DropdownMenu.Group>
+								<DropdownMenu.RadioGroup bind:value={selectedCodec}>
+									<DropdownMenu.RadioItem value={"auto"} on:click={()=>{
+									onCodecChange("auto")
+							}}>
+										Auto {autoCodec}</DropdownMenu.RadioItem>
+									{#each job.EncodedCodecs as codec}
+										<DropdownMenu.RadioItem value={codec} on:click={()=>{
+							onCodecChange(codec)
+							}}>
+											{codecDisplayMap[codec]}{formatMbps(job, codec)}
+											{#if !supportedCodecs.includes(codec)}
+												<IconAlertOctagonFilled class="ml-2" size={16} stroke={2} />
+											{/if}
+										</DropdownMenu.RadioItem>
+									{/each}
+								</DropdownMenu.RadioGroup>
+							</DropdownMenu.Group>
+						</DropdownMenu.Content>
+					</DropdownMenu.Root>
+				</div>
+			</Card.Header>
+			<Card.Content>
+				<div class="gap-4 w-full items-center justify-center flex max-md:flex-col">
+					<div class="flex gap-2 items-center justify-center max-md:w-full flex-grow">
+						<Tooltip.Root openDelay={0}>
+							<Tooltip.Trigger asChild let:builder>
+								<Button builders={[builder]} variant={!socketCommunicating || !syncGoto ? "ghost" : "secondary"}
+												class="w-10 h-10 p-2 {(!socketCommunicating || !syncGoto) ? 'opacity-50' :''}"
+												on:click={()=>{
 										 syncGoto = !syncGoto;
 									 }}
-										disabled={!socketCommunicating}>
-							<IconArrowBounce size={20} stroke={2} />
-						</Button>
-					</Tooltip.Trigger>
-					<Tooltip.Content>
-						<p>Move users in room on selection</p>
-					</Tooltip.Content>
-				</Tooltip.Root>
+												disabled={!socketCommunicating}>
+									<IconArrowBounce size={20} stroke={2} />
+								</Button>
+							</Tooltip.Trigger>
+							<Tooltip.Content>
+								<p>Move users in room on selection</p>
+							</Tooltip.Content>
+						</Tooltip.Root>
 
 
-				<div class="flex grow gap-2 items-center justify-center max-md:flex-col max-md:w-full">
-					<Popover.Root bind:open={titleSelectionOpen}>
-						<Popover.Trigger asChild let:builder>
-							<Button
-								builders={[builder]}
-								variant="outline"
-								role="combobox"
-								aria-expanded={titleSelectionOpen}
-								class="flex-grow w-full justify-between"
-							>
-								{selectedTitle?.title}
-								<CaretSort class="ml-2 h-4 w-4 shrink-0 opacity-50" />
-							</Button>
-						</Popover.Trigger>
-						<Popover.Content align="start" class="p-0 w-auto">
-							<Command.Root>
-								<Command.Input placeholder="Search title..." class="h-9" />
-								<Command.Empty>No title found.</Command.Empty>
-								<Command.Group class="overflow-y-auto max-h-[35vh]">
-									{#each Object.values(titles) as title}
-										<Command.Item class="p-1" value={title.titleId} onSelect={()=>{
+						<div class="flex grow gap-2 items-center justify-center max-md:flex-col max-md:w-full">
+							<Popover.Root bind:open={titleSelectionOpen}>
+								<Popover.Trigger asChild let:builder>
+									<Button
+										builders={[builder]}
+										variant="outline"
+										role="combobox"
+										aria-expanded={titleSelectionOpen}
+										class="flex-grow w-full justify-between font-semibold"
+									>
+										{selectedTitle?.title}
+										<CaretSort class="ml-2 h-4 w-4 shrink-0 opacity-50" />
+									</Button>
+								</Popover.Trigger>
+								<Popover.Content align="start" class="p-0 w-auto">
+									<Command.Root>
+										<Command.Input placeholder="Search title..." class="h-9" />
+										<Command.Empty>No title found.</Command.Empty>
+										<Command.Group class="overflow-y-auto max-h-[35vh]">
+											{#each Object.values(titles) as title}
+												<Command.Item class="p-1" value={title.titleId} onSelect={()=>{
 											titleSelectionOpen = false;
 									selectedTitleId = title.titleId;
 									selectedSe = null;
@@ -783,88 +837,47 @@
 									}
 						}}><img src="{PUBLIC_STATIC}/{!title.episodes ? title.id : Object.values(title.episodes)[0].id}/poster.jpg"
 										alt="{title.title}" class="h-8 w-12 object-cover mr-2 rounded-sm" />
-											{title.title}
-											<Check
-												class='ml-auto right-0 h-4 w-4 {selectedTitleId === title.titleId ? "" : "text-transparent"}'
-											/>
-										</Command.Item>
-									{/each}
-								</Command.Group>
-							</Command.Root>
-						</Popover.Content>
-					</Popover.Root>
-					{#if selectedEpisodes}
-						<IconChevronRight size={20} stroke={2} />
-						<Select.Root bind:open={seSelectionOpen} selected={{value: selectedSe}}>
-							<Select.Trigger class="flex-grow max-md:w-full">
-								<Select.Value
-									class={selectedEpisode ? '' : 'text-red-600 font-bold'}
-									placeholder={selectedEpisode ?
+													{title.title}
+													<Check
+														class='ml-auto right-0 h-4 w-4 {selectedTitleId === title.titleId ? "" : "text-transparent"}'
+													/>
+												</Command.Item>
+											{/each}
+										</Command.Group>
+									</Command.Root>
+								</Popover.Content>
+							</Popover.Root>
+							{#if selectedEpisodes}
+								<IconChevronRight size={20} stroke={2} />
+								<Select.Root bind:open={seSelectionOpen} selected={{value: selectedSe}}>
+									<Select.Trigger class="flex-grow max-md:w-full">
+										<Select.Value
+											class={selectedEpisode ? '' : 'text-red-600 font-bold'}
+											placeholder={selectedEpisode ?
 										`${selectedSe} - ${selectedEpisode.seTitle}` : "Select episode"} />
-							</Select.Trigger>
-							<Select.Content>
-								<div class="max-h-[35vh] w-full overflow-y-auto">
-									{#each Object.values(selectedEpisodes) as es}
-										<Select.Item class="p-1" value={es.se} on:click={()=>{
+									</Select.Trigger>
+									<Select.Content>
+										<div class="max-h-[35vh] w-full overflow-y-auto">
+											{#each Object.values(selectedEpisodes) as es}
+												<Select.Item class="p-1" value={es.se} on:click={()=>{
 									bounceTo(es.id)
 									selectedSe = es.se;
 						}}>
-											<img src="{PUBLIC_STATIC}/{es.id}/poster.jpg" alt="{es.seTitle}" class="h-8 w-12 object-cover mr-2 rounded-sm" />
-											{es.se} - {es.seTitle}
-										</Select.Item>
-									{/each}
-								</div>
-							</Select.Content>
-						</Select.Root>
-					{/if}
+													<img src="{PUBLIC_STATIC}/{es.id}/poster.jpg" alt="{es.seTitle}" class="h-8 w-12 object-cover mr-2 rounded-sm" />
+													{es.se} - {es.seTitle}
+												</Select.Item>
+											{/each}
+										</div>
+									</Select.Content>
+								</Select.Root>
+							{/if}
+						</div>
+					</div>
+
+
 				</div>
-			</div>
-
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger asChild let:builder>
-					<Button builders={[builder]} variant="outline" class="max-md:w-full">
-						<IconSettings2 class="mr-2" size={16} stroke={2} /> Video Settings</Button>
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Content class="w-56">
-					<DropdownMenu.Label>
-						Video Settings</DropdownMenu.Label>
-					<DropdownMenu.Separator />
-					<DropdownMenu.Group>
-						{#if audiosExistForCodec(job, videoSrc?.sCodec)}
-							<DropdownMenu.RadioGroup bind:value={selectedAudioMapping}>
-								{#each job.MappedAudio[videoSrc?.sCodec] as am}
-									<DropdownMenu.RadioItem value={am.Language} on:click={()=>{
-								localStorage.setItem('preferredAudio', am.Language);
-								$pageReloadCounterStore++;
-							}}>{formatPair(am)}</DropdownMenu.RadioItem>
-								{/each}
-							</DropdownMenu.RadioGroup>
-						{/if}
-					</DropdownMenu.Group>
-					<DropdownMenu.Separator />
-					<DropdownMenu.Group>
-						<DropdownMenu.RadioGroup bind:value={selectedCodec}>
-							<DropdownMenu.RadioItem value={"auto"} on:click={()=>{
-									onCodecChange("auto")
-							}}>
-								Auto {(videoSrc?.sCodec && selectedCodec === "auto") ? `(${codecDisplayMap[videoSrc.sCodec]})` : ''}</DropdownMenu.RadioItem>
-							{#each job.EncodedCodecs as codec}
-								<DropdownMenu.RadioItem value={codec} on:click={()=>{
-							onCodecChange(codec)
-							}}>
-									{codecDisplayMap[codec]}{formatMbps(job, codec)}
-									{#if !supportedCodecs.includes(codec)}
-										<IconAlertOctagonFilled class="ml-2" size={16} stroke={2} />
-									{/if}
-								</DropdownMenu.RadioItem>
-							{/each}
-						</DropdownMenu.RadioGroup>
-					</DropdownMenu.Group>
-				</DropdownMenu.Content>
-			</DropdownMenu.Root>
-		</div>
-
-		<Separator />
+			</Card.Content>
+		</Card.Root>
 
 		<div class="flex gap-3 self-center items-center justify-center w-full">
 			<Tooltip.Root openDelay={0}>
