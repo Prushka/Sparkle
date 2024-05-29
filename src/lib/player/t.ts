@@ -290,3 +290,30 @@ export function preprocessJobs(jobs: Job[]) {
 	});
 	return jobs;
 }
+
+export function getTitleComponents(job: Job): TitleComponents {
+	let title = job.Input;
+	const parts = title.split(" - ");
+	let se = null
+	let seTitle = null
+	if (parts.length >= 3) {
+		title = parts.slice(0, -2).join(" - ");
+		se = parts[parts.length - 2];
+		seTitle = parts[parts.length - 1];
+	}
+	const titleId = title.toLowerCase().replace(/[^a-z0-9]/gi, '');
+	return {
+		titleId, title, id: job.Id, episodes: se && seTitle ? { [se]: { seTitle, id: job.Id, se } } : null
+	}
+}
+
+export interface TitleComponents {
+	titleId: string;
+	title: string;
+	id: string;
+	episodes: { [key: string]: {
+		seTitle: string;
+		id: string;
+		se: string;
+		} } | null;
+}

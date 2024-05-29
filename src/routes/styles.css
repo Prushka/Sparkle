@@ -105,9 +105,8 @@ html {
 	scroll-behavior: smooth;
 }
 
-html, #root, body, .app {
+html, #root {
 	max-width: 100vw;
-	overflow: auto;
 }
 
 body, #main-page {

@@ -22,17 +22,17 @@
 		chatLayouts,
 		BroadcastTypes,
 		preprocessJobs,
-		codecDisplayMap
+		codecDisplayMap, getTitleComponents, type TitleComponents
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
 	import {
-		IconAlertOctagonFilled, IconArrowBounce,
+		IconAlertOctagonFilled, IconArrowBounce, IconChevronRight,
 		IconCone, IconConePlus, IconEyeOff, IconLayout2,
 		IconPlayerPauseFilled,
 		IconPlayerPlayFilled,
 		IconPlugConnected,
-		IconPlugConnectedX, IconTableExport
+		IconTableExport
 	} from '@tabler/icons-svelte';
 	import Chatbox from '$lib/player/Chatbox.svelte';
 	import Pfp from '$lib/player/Pfp.svelte';
@@ -41,14 +41,13 @@
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import * as Select from '$lib/components/ui/select';
-	import { ScrollArea } from '$lib/components/ui/scroll-area/index.js';
 	import * as Dialog from '$lib/components/ui/dialog';
-	import * as Tooltip from "$lib/components/ui/tooltip/index.js";
+	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 
 	import JASSUB from 'jassub';
 	import { goto } from '$app/navigation';
 	import { toggleMode, mode } from 'mode-watcher';
-	import { Moon, Reload, Rocket, Sun } from 'svelte-radix';
+	import { Moon, Reload, Rocket, Slash, Sun } from 'svelte-radix';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { toast } from 'svelte-sonner';
@@ -112,6 +111,30 @@
 	$: BASE_STATIC = `${PUBLIC_STATIC}/${roomId}`;
 	$: thumbnailVttSrc = `${BASE_STATIC}/storyboard.vtt`;
 	$: socketCommunicating = socketConnected && (tickedSecsAgo >= 0 && tickedSecsAgo < 5);
+	$: titles = jobs.reduce((acc: { [key: string]: TitleComponents }, job) => {
+		const components = getTitleComponents(job);
+		if (!acc[components.titleId]) {
+			acc[components.titleId] = components;
+		} else if (components.episodes) {
+			if (!acc[components.titleId].episodes) {
+				acc[components.titleId].episodes = {};
+			}
+			acc[components.titleId].episodes = {
+				...acc[components.titleId].episodes,
+				...components.episodes
+			};
+		}
+		return acc;
+	}, {});
+	let selectedTitleId: string = getTitleComponents(job).titleId;
+	let selectedSe: string | null = getTitleComponents(job).episodes ? Object.keys(getTitleComponents(job).episodes!)[0] : null;
+
+	$: selectedTitle = titles[selectedTitleId];
+	$: selectedEpisodes = selectedTitle?.episodes;
+	$: selectedEpisode = (selectedTitle?.episodes && selectedSe) ? selectedTitle.episodes[selectedSe!] : null;
+	$:{
+		console.log(titles, selectedTitle);
+	}
 
 	$: chatHidden = chatLayout === 'hidden';
 	$: {
@@ -530,6 +553,17 @@
 			lastSentTime = timeRounded;
 		}
 	}
+
+	function bounceTo(id: string) {
+		if (syncGoto && socketCommunicating) {
+			send({
+				type: SyncTypes.BroadcastSync,
+				broadcast: { type: BroadcastTypes.MoveTo, moveTo: id }
+			});
+		} else {
+			goto(`/${id}`);
+		}
+	}
 </script>
 
 <main id="main-page" class="overflow-hidden flex flex-col items-center w-full h-full">
@@ -641,11 +675,11 @@
 	<div class="p-4 w-full flex flex-col gap-4 font-semibold">
 		<div class="w-full flex gap-4 items-center justify-center max-md:flex-col">
 			<div class="flex gap-3 items-center justify-center max-md:w-full">
-			<label class="custom-file-upload">
-				<Pfp id={playerId} class="w-12 h-12" />
-				<input accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
-							 bind:this={pfpInput}
-							 on:change={() => {
+				<label class="custom-file-upload">
+					<Pfp id={playerId} class="w-12 h-12" />
+					<input accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
+								 bind:this={pfpInput}
+								 on:change={() => {
 							 const ppfp = pfpInput?.files;
 							 if (ppfp && ppfp[0]) {
 								 if(ppfp[0].size > 12000000) {
@@ -674,59 +708,80 @@
 								 reader.readAsDataURL(pfp);
 							 }
 						 }}
-							 type="file" />
-			</label>
-			<Input
-				on:focusout={() => {
+								 type="file" />
+				</label>
+				<Input
+					on:focusout={() => {
 					send({
 					  type: SyncTypes.NameSync,
 						name: name
 					})
 				localStorage.setItem("name", name)
 			}}
-				bind:value={name} type="text" class="focus-visible:ring-transparent w-auto max-md:grow" placeholder="Who?" />
+					bind:value={name} type="text" class="focus-visible:ring-transparent w-auto max-md:grow" placeholder="Who?" />
 			</div>
 			<Chatbox send={send} class="input-bordered input-md grow max-md:w-full" />
 		</div>
 
 		<div class="gap-4 w-full items-center justify-center sm:flex max-sm:grid max-sm:grid-cols-2">
 			<div class="flex gap-2 items-center justify-center max-sm:col-span-2 flex-grow">
-					<Tooltip.Root openDelay={0}>
-						<Tooltip.Trigger asChild let:builder>
-							<Button builders={[builder]} variant={!socketCommunicating || !syncGoto ? "ghost" : "secondary"}
-											class="w-10 h-10 p-2 {(!socketCommunicating || !syncGoto) ? 'opacity-50' :''}"
-											on:click={()=>{
+				<Tooltip.Root openDelay={0}>
+					<Tooltip.Trigger asChild let:builder>
+						<Button builders={[builder]} variant={!socketCommunicating || !syncGoto ? "ghost" : "secondary"}
+										class="w-10 h-10 p-2 {(!socketCommunicating || !syncGoto) ? 'opacity-50' :''}"
+										on:click={()=>{
 										 syncGoto = !syncGoto;
 									 }}
-											disabled={!socketCommunicating}>
-								<IconArrowBounce size={20} stroke={2} />
-							</Button>
-						</Tooltip.Trigger>
-						<Tooltip.Content>
-							<p>Move users in room on selection</p>
-						</Tooltip.Content>
-					</Tooltip.Root>
+										disabled={!socketCommunicating}>
+							<IconArrowBounce size={20} stroke={2} />
+						</Button>
+					</Tooltip.Trigger>
+					<Tooltip.Content>
+						<p>Move users in room on selection</p>
+					</Tooltip.Content>
+				</Tooltip.Root>
 
-				<Select.Root>
-					<Select.Trigger class="w-72 flex-grow">
-						<Select.Value placeholder={job.Input} />
-					</Select.Trigger>
-					<Select.Content>
-						<ScrollArea class="h-[30rem] max-h-[35vh] w-full">
-							{#each jobs as job}
-								<Select.Item value={job.Id} on:click={()=>{
-				const roomId = job.Id;
-				if(syncGoto && socketCommunicating) {
-					send({ type: SyncTypes.BroadcastSync,
-					broadcast: { type: BroadcastTypes.MoveTo, moveTo: roomId } });
-				}else{
-					goto(`/${roomId}`)
-				}
-						}}>{job.Input}</Select.Item>
-							{/each}
-						</ScrollArea>
-					</Select.Content>
-				</Select.Root>
+
+				<div class="flex grow gap-2 items-center justify-center">
+					<Select.Root>
+						<Select.Trigger class="w-72 flex-grow">
+							<Select.Value placeholder={selectedTitle?.title} />
+						</Select.Trigger>
+						<Select.Content>
+							<div class="max-h-[35vh] w-full overflow-y-auto">
+								{#each Object.values(titles) as title}
+									<Select.Item value={title.titleId} on:click={()=>{
+									selectedTitleId = title.titleId;
+									selectedSe = null;
+									if(!title.episodes) {
+										bounceTo(title.id)
+									}
+						}}>{title.title}</Select.Item>
+								{/each}
+							</div>
+						</Select.Content>
+					</Select.Root>
+
+					{#if selectedEpisodes}
+						<IconChevronRight size={20} stroke={2} />
+						<Select.Root>
+							<Select.Trigger class="w-72 flex-grow">
+								<Select.Value placeholder={selectedEpisode ?
+										`${selectedSe} - ${selectedEpisode.seTitle}` : "Select episode"} />
+							</Select.Trigger>
+							<Select.Content>
+								<div class="max-h-[35vh] w-full overflow-y-auto">
+									{#each Object.values(selectedEpisodes) as es}
+										<Select.Item value={es.se} on:click={()=>{
+									bounceTo(es.id)
+									selectedSe = es.se;
+						}}>{es.se} - {es.seTitle}</Select.Item>
+									{/each}
+								</div>
+							</Select.Content>
+						</Select.Root>
+					{/if}
+				</div>
 			</div>
 
 			<DropdownMenu.Root>
@@ -758,9 +813,10 @@
 							{#each job.EncodedCodecs as codec}
 								<DropdownMenu.RadioItem value={codec} on:click={()=>{
 							onCodecChange(codec)
-							}}>{codecDisplayMap[codec]}{formatMbps(job, codec)}
+							}}>
+									{codecDisplayMap[codec]}{formatMbps(job, codec)}
 									{#if !supportedCodecs.includes(codec)}
-										<IconAlertOctagonFilled size={16} stroke={2} />
+										<IconAlertOctagonFilled class="ml-2" size={16} stroke={2} />
 									{/if}
 								</DropdownMenu.RadioItem>
 							{/each}
@@ -770,7 +826,7 @@
 			</DropdownMenu.Root>
 		</div>
 
-		<Separator/>
+		<Separator />
 
 		<div class="flex gap-3 self-center items-center justify-center w-full">
 			<Tooltip.Root openDelay={0}>
@@ -804,8 +860,8 @@
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger asChild let:builder>
 					<Button variant="outline" builders={[builder]}>
-							<IconLayout2 class="mr-2" size={16} stroke={2} />
-							Layout
+						<IconLayout2 class="mr-2" size={16} stroke={2} />
+						Layout
 					</Button>
 				</DropdownMenu.Trigger>
 				<DropdownMenu.Content class="w-56">
@@ -843,10 +899,10 @@
 			</Button>
 		</div>
 
-		<div class="flex gap-4 sync-states w-full justify-center">
+		<div class="md:flex gap-4 max-md:grid max-md:grid-cols-2 w-full justify-center mt-2">
 			{#each roomPlayers as player}
 				<Button variant="outline"
-					class="h-auto pr-4 py-0 pl-0 rounded-l-full rounded-r-full shadow-md flex gap-3.5">
+								class="h-auto pr-4 py-0 pl-0 rounded-l-full rounded-r-full shadow-md flex gap-3.5">
 					<Pfp class="w-12 h-12 mr-0.5" id={player.id} />
 					<span class="flex gap-1 flex-col items-center justify-center font-semibold">
 						<span class="font-bold">{player.name}</span>
@@ -900,11 +956,7 @@
         background-color: rgba(0, 0, 0, 0.2);
     }
 
-    @media (max-width: 1000px) {
-        .sync-states {
-            display: grid;
-            grid-template-columns: auto auto;
-        }
+    @media (max-width: 800px) {
 
         .chat-history {
             margin-top: 0.5rem;
