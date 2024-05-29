@@ -240,7 +240,7 @@
 			if (player) {
 				console.debug('received: ' + JSON.stringify(state));
 				const initiateMoveTo = () => {
-					toast.loading(`Moving to next media in 5 seconds`, {
+					toast.loading(`Moving to next media in 7 seconds`, {
 						duration: 7000,
 						description: `Next: ${jobs.find((job) => job.Id === broadcast!.moveTo)?.Input}`,
 						important: true,
