@@ -437,6 +437,7 @@
 							send: send,
 							chatFocused: chatFocused,
 							focusByShortcut: true,
+							controlsShowing: null,
 							class: 'chat-pc',
 							id: 'chat-input',
 							onFocus: () => {
@@ -712,7 +713,7 @@
 			}}
 					bind:value={name} type="text" class="focus-visible:ring-transparent w-auto max-md:grow" placeholder="Name" />
 			</div>
-			<Chatbox send={send} class="input-bordered input-md grow max-md:w-full" />
+			<Chatbox id="chat-mobile" bind:controlsShowing send={send} class="input-bordered input-md grow max-md:w-full" />
 		</div>
 
 		<div class="gap-4 w-full items-center justify-center flex max-md:flex-col">
