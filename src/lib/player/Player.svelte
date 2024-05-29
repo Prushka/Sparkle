@@ -1,7 +1,7 @@
 <script lang="ts">
 	import 'vidstack/bundle';
 	import type { MediaPlayerElement } from 'vidstack/elements';
-	import { onDestroy, onMount, tick } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import {
 		formatSeconds,
 		type Job,
@@ -52,7 +52,6 @@
 	import SUPtitles from '$lib/suptitles/suptitles';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-	import * as Select from '$lib/components/ui/select';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import * as Popover from "$lib/components/ui/popover/index.js";
@@ -149,13 +148,6 @@
 		console.log('srcList:', videoSrc);
 	}
 	let canvas: HTMLCanvasElement;
-
-	onDestroy(() => {
-		unsubscribeChatLayout();
-		unsubscribeChatFocused();
-		unsubscribeMode();
-		unsubscribeInteracted();
-	});
 
 	function setVideoSrc(onChange = () => {
 	}) {
@@ -554,6 +546,12 @@
 			document.removeEventListener('visibilitychange', () => {
 				visibilityChange;
 			});
+
+			unsubscribeChatLayout();
+			unsubscribeChatFocused();
+			unsubscribeMode();
+			unsubscribeInteracted();
+			player.destroy();
 		};
 	});
 
@@ -611,6 +609,7 @@
 		</Dialog.Content>
 	</Dialog.Root>
 	<media-player
+		keep-alive
 		keyShortcuts={{
     // Space-separated list.
     togglePaused: 'k Space',

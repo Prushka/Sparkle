@@ -1,3 +1,5 @@
 Pause send when in bg until reentry, don't send previous ones - pause state won't be sent
 Show chat only when focused
 Fix captions settings, it didn't open? Can't reproduce
+
+When there's a duplicate of languages, default to the larger file
