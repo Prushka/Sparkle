@@ -21,7 +21,7 @@
 		chatLayouts,
 		BroadcastTypes,
 		preprocessJobs,
-		codecDisplayMap, getTitleComponents, type TitleComponents, setGetLS, randomString, getTitleComponentsByJobs
+		codecDisplayMap, getTitleComponents, setGetLS, randomString, getTitleComponentsByJobs
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -35,7 +35,13 @@
 	} from '@tabler/icons-svelte';
 	import Chatbox from '$lib/player/Chatbox.svelte';
 	import Pfp from '$lib/player/Pfp.svelte';
-	import { chatFocusedStore, chatLayoutStore, pageReloadCounterStore, pfpLastFetched } from '../../store';
+	import {
+		chatFocusedStore,
+		chatLayoutStore,
+		interactedStore,
+		pageReloadCounterStore,
+		pfpLastFetched
+	} from '../../store';
 	import SUPtitles from '$lib/suptitles/suptitles';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
@@ -81,7 +87,7 @@
 	let selectedAudioMapping = localStorage.getItem('preferredAudio') || 'jpn';
 	let pauseSend = false;
 	let supportedCodecs: string[] = [];
-	let interactedWithPlayer = false;
+	let interacted = false;
 	let lastSentTime = -100;
 	let chatFocused = false;
 	let videoSrc: any = [];
@@ -111,6 +117,7 @@
 		}
 		currentTheme = value;
 	});
+	const unsubscribeInteracted = interactedStore.subscribe((value) => interacted = value);
 	let exited = false;
 	let nameEmptyDialog = false;
 	$: BASE_STATIC = `${PUBLIC_STATIC}/${roomId}`;
@@ -136,6 +143,7 @@
 		unsubscribeChatLayout();
 		unsubscribeChatFocused();
 		unsubscribeMode();
+		unsubscribeInteracted();
 	});
 
 	function setVideoSrc(onChange = () => {
@@ -202,7 +210,7 @@
 	}
 
 	function connect() {
-		if (!interactedWithPlayer) {
+		if (!interacted) {
 			return;
 		}
 		socket = new WebSocket(`${PUBLIC_WS}/sync/${roomId}/${playerId}`);
@@ -297,11 +305,11 @@
 		};
 
 		socket.onclose = () => {
-			console.log('Socket closed, reconnecting');
+			console.log(`Socket closed, ${roomId}`);
 			socketConnected = false;
 			if (!exited) {
 				setTimeout(function() {
-					console.log('Socket reconnecting');
+					console.log(`Socket reconnecting, ${roomId}`);
 					connect();
 				}, 1000);
 			}
@@ -309,7 +317,7 @@
 	}
 
 	function send(data: any) {
-		if (player && socketConnected && !pauseSend && interactedWithPlayer) {
+		if (player && socketConnected && !pauseSend && interacted) {
 			console.log('sending: ' + JSON.stringify(data));
 			socket.send(JSON.stringify(data));
 		}
@@ -422,6 +430,11 @@
 		const playerUnsubscribe = player.subscribe(({ controlsVisible }) => {
 			controlsShowing = controlsVisible;
 		});
+		const playerCanPlayUnsubscribe  = player.subscribe(({ canPlay }) => {
+			if (canPlay && interacted && !socket) {
+				connect();
+			}
+		});
 		const i = setInterval(() => {
 			updateTime();
 			if (!document.getElementById('chat-input')) {
@@ -530,6 +543,7 @@
 			clearInterval(ii);
 			dispose();
 			playerUnsubscribe();
+			playerCanPlayUnsubscribe();
 			document.removeEventListener('visibilitychange', () => {
 				visibilityChange;
 			});
@@ -620,10 +634,10 @@
 			}}
 		on:play={
 			() => {
-				if(interactedWithPlayer) {
+				if(interacted) {
 					send({ paused: false, type: SyncTypes.PauseSync });
 				}else{
-					interactedWithPlayer = true;
+					$interactedStore = true;
 					connect();
 				}
 				onPlay()
@@ -642,7 +656,7 @@
 												thumbnails={thumbnailVttSrc}></media-video-layout>
 	</media-player>
 
-	<div class="flex gap-1 w-full h-full absolute pointer-events-none" id="chat-overlay"
+	<div class="flex gap-1 w-full h-full absolute pointer-events-none z-50" id="chat-overlay"
 			 style={chatHidden ? 'display: none' : ''}
 	>
 		<div
@@ -855,14 +869,14 @@
 				<Tooltip.Trigger asChild let:builder>
 					<Button builders={[builder]} variant="outline"
 									on:click={() => {
-						if(!socketCommunicating && !interactedWithPlayer) {
+						if(!socketCommunicating && !interacted) {
 							player?.play()
 								}}}
 									class="font-bold {socketCommunicating ? 'text-green-600 hover:text-green-600' : 'text-red-600 hover:text-red-600' }">
 						{#if socketCommunicating}
 							<IconPlugConnected size={20} stroke={2} />
 						{:else}
-							{#if !interactedWithPlayer}
+							{#if !interacted}
 								<Rocket class="mr-2 h-4 w-4 animate-bounce" />
 								Connect Now
 							{:else if !exited}

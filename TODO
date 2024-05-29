@@ -1,7 +1,3 @@
 Pause send when in bg until reentry, don't send previous ones - pause state won't be sent
 Show chat only when focused
-Allow setting codec?
-After bounce, auto connect
-
-
 Fix captions settings, it didn't open? Can't reproduce
