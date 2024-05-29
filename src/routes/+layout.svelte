@@ -23,7 +23,7 @@
 	});
 </script>
 
-<ModeWatcher />
+<ModeWatcher defaultMode={"dark"} />
 <Toaster />
 {#key `${$page.url.pathname}${pageReloadCounter}`}
 
