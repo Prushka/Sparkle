@@ -192,3 +192,7 @@ input {
 .tooltip:before {
 	z-index: 120;
 }
+
+.vds-chapter-title {
+	visibility: hidden;
+}

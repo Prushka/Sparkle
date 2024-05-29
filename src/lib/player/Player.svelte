@@ -177,6 +177,8 @@
 				sCodec: codec
 			};
 			sendSettings();
+			player.title = `${job.Input}`;
+			player.artist = "Let's watch anime!";
 		};
 		if (selectedCodec === 'auto' && prevCodec !== autoCodec) {
 			setVideoSrc(autoCodec);
@@ -535,8 +537,7 @@
 			nameEmptyDialog = true;
 		}
 		const chatOverlay = document.getElementById('chat-overlay');
-		const thePlayer = document.getElementById('the-player');
-		thePlayer!.appendChild(chatOverlay!);
+		player.appendChild(chatOverlay!);
 		return () => {
 			exited = true;
 			socket?.close();
@@ -624,7 +625,6 @@
     volumeUp: 'ArrowUp',
     volumeDown: 'ArrowDown',
     }}
-		id="the-player"
 		class="media-player bg-slate-900 aspect-video relative w-full"
 		src={videoSrc}
 		crossorigin
