@@ -717,7 +717,7 @@
 					})
 				localStorage.setItem("name", name)
 			}}
-					bind:value={name} type="text" class="focus-visible:ring-transparent w-auto max-md:grow" placeholder="Who?" />
+					bind:value={name} type="text" class="focus-visible:ring-transparent w-auto max-md:grow" placeholder="Name" />
 			</div>
 			<Chatbox send={send} class="input-bordered input-md grow max-md:w-full" />
 		</div>
