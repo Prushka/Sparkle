@@ -21,7 +21,14 @@
 		chatLayouts,
 		BroadcastTypes,
 		preprocessJobs,
-		codecDisplayMap, getTitleComponents, setGetLS, randomString, getTitleComponentsByJobs, languageMap, setGetLsBoolean
+		codecDisplayMap,
+		getTitleComponents,
+		setGetLS,
+		randomString,
+		getTitleComponentsByJobs,
+		languageMap,
+		setGetLsBoolean,
+		setGetLsNumber
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -98,6 +105,7 @@
 	let prevTrackSrc: string | null | undefined = '';
 	let footer: string = '';
 	let syncGoto = setGetLsBoolean("syncGoto", true);
+	let playerVolume = setGetLsNumber("volume", 1);
 	let notificationAudio = new Audio(`${PUBLIC_STATIC}/sound/anya_peanuts.mp3`);
 	let inBg = false;
 	let onPlay = () => {
@@ -417,6 +425,7 @@
 			}
 			canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
 		};
+		player.volume = playerVolume;
 		supportedCodecs = getSupportedCodecs();
 		setVideoSrc();
 		reloadPlayer();
@@ -440,6 +449,10 @@
 			if (canPlay && interacted && !socket) {
 				connect();
 			}
+		});
+		const playerSoundUnsubscribe = player.subscribe(({ volume }) => {
+			playerVolume = volume
+			localStorage.setItem('volume', volume.toString());
 		});
 		const i = setInterval(() => {
 			updateTime();
@@ -537,6 +550,7 @@
 			dispose();
 			playerUnsubscribe();
 			playerCanPlayUnsubscribe();
+			playerSoundUnsubscribe();
 			document.removeEventListener('visibilitychange', () => {
 				visibilityChange;
 			});

@@ -253,6 +253,15 @@ export function setGetLsBoolean(key: string, value: boolean): boolean {
 	return value;
 }
 
+export function setGetLsNumber(key: string, value: number): number {
+	const v = localStorage.getItem(key);
+	if (v) {
+		return parseFloat(v);
+	}
+	localStorage.setItem(key, value.toString());
+	return value;
+}
+
 export function getMbps(job: Job | undefined | null, codec: string): number {
 	if (!job?.Files?.[codec + '.mp4'] || !job?.Duration) {
 		return 0;
