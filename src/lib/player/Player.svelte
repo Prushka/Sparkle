@@ -422,7 +422,7 @@
 			}
 			canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
 		};
-		player.remoteControl.changeVolume(playerVolume)
+		player.volume = playerVolume;
 		supportedCodecs = getSupportedCodecs();
 		setVideoSrc();
 		reloadPlayer();
