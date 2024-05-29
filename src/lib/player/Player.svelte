@@ -46,7 +46,7 @@
 		chatFocusedStore,
 		chatLayoutStore,
 		interactedStore,
-		pageReloadCounterStore, updatePfp
+		pageReloadCounterStore, playersStore, updatePfp
 	} from '../../store';
 	import SUPtitles from '$lib/suptitles/suptitles';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -144,6 +144,17 @@
 	$: {
 		console.log('srcList:', videoSrc);
 	}
+
+	function updatePlayers(players: Player[], socketCommunicating: boolean) {
+		if(!socketCommunicating) {
+			playersStore.set(-1);
+		}else{
+			playersStore.set(players.length);
+		}
+	}
+
+	$: updatePlayers(roomPlayers, socketCommunicating);
+
 	let canvas: HTMLCanvasElement;
 
 	function setVideoSrc(onChange = () => {

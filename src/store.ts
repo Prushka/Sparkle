@@ -7,7 +7,7 @@ export const chatLayoutStore = writable(browser && localStorage.getItem('chatLay
 export const chatFocusedStore = writable(false);
 export const pageReloadCounterStore = writable(0);
 export const interactedStore = writable(false);
-
+export const playersStore = writable(-1);
 export function updatePfp(id: string) {
 			pfpLastFetched.update((store) => {
 				return { ...store, [id]: Date.now() };
