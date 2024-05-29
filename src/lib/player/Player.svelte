@@ -140,6 +140,7 @@
 	$: {
 		console.log('srcList:', videoSrc);
 	}
+	let canvas: HTMLCanvasElement;
 
 	onDestroy(() => {
 		unsubscribeChatLayout();
@@ -405,13 +406,10 @@
 			}
 			if (jas != null) {
 				jas.destroy();
-				let canvas = document.getElementById('ass-canvas') as HTMLCanvasElement;
-				if (canvas) {
-					canvas.remove();
-				}
 				console.log('destroyed jas');
 				jas = null;
 			}
+			canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
 		};
 		supportedCodecs = getSupportedCodecs();
 		setVideoSrc();
@@ -472,21 +470,7 @@
 			tickedSecsAgoStr = (Math.round(tickedSecsAgo * 100) / 100).toFixed(2);
 			const videoElement = document.querySelector('media-provider video') as HTMLVideoElement;
 			if (videoElement) {
-				const selectedTrack = player.textTracks.selected;
-				let canvas = document.getElementById('ass-canvas') as HTMLCanvasElement;
-				if (!canvas) {
-					canvas = document.createElement('canvas');
-					canvas.height = 1080;
-					canvas.width = 1920;
-					canvas.style.width = '100%';
-					canvas.style.height = '100%';
-					canvas.style.top = '0';
-					canvas.style.left = '0';
-					canvas.style.position = 'absolute';
-					canvas.style.pointerEvents = 'none';
-					canvas.id = 'ass-canvas';
-					videoElement.parentNode?.appendChild(canvas);
-				}
+				const selectedTrack = player?.textTracks?.selected;
 				if (prevTrackSrc !== selectedTrack?.src) {
 					dispose();
 					send({ type: SyncTypes.SubtitleSwitch, subtitle: selectedTrack?.src });
@@ -510,6 +494,7 @@
 									}
 								});
 						} else if (ext.includes('ass')) {
+							console.log("ass", selectedTrack.src)
 							const fallback: string[] = fallbackFontsMap[selectedTrack.language] ? fallbackFontsMap[selectedTrack.language] : defaultFallback;
 							const availableFonts = {
 								[fallback[0]]: fallback[1]
@@ -518,7 +503,7 @@
 								video: videoElement,
 								canvas: canvas,
 								subUrl: selectedTrack.src,
-								offscreenRender: false,
+								offscreenRender: true,
 								workerUrl: '/scripts/jassub-worker.js',
 								wasmUrl: '/scripts/jassub-worker.wasm',
 								fallbackFont: fallback[0],
@@ -652,7 +637,7 @@
 				src={data.preview}
 				alt={data.plot}
 			></media-poster>
-
+			<canvas bind:this={canvas} id="sub-canvas" class="pointer-events-none absolute top-0 left-0 w-full h-full" width="1920" height="1080"/>
 		</media-provider>
 		<media-video-layout colorScheme={currentTheme}
 												thumbnails={thumbnailVttSrc}></media-video-layout>

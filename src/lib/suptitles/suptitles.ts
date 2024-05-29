@@ -51,7 +51,6 @@ export default class SUPtitles {
 
 	dispose(): void {
 		clearTimeout(this.timeout)
-		this.cv.map(c => (c.outerHTML = ''))
 		console.info('# SUP Disposed')
 	}
 
