@@ -743,14 +743,14 @@
 
 
 				<div class="flex grow gap-2 items-center justify-center max-sm:flex-col max-sm:w-full">
-					<Select.Root>
+					<Select.Root selected={{value: selectedTitleId}}>
 						<Select.Trigger class="flex-grow max-sm:w-full">
 							<Select.Value placeholder={selectedTitle?.title} />
 						</Select.Trigger>
 						<Select.Content>
 							<div class="max-h-[35vh] w-full overflow-y-auto">
 								{#each Object.values(titles) as title}
-									<Select.Item class="p-1"  value={title.titleId} on:click={()=>{
+									<Select.Item class="p-1" value={title.titleId} on:click={()=>{
 									selectedTitleId = title.titleId;
 									selectedSe = null;
 									if(!title.episodes) {
@@ -766,7 +766,7 @@
 
 					{#if selectedEpisodes}
 						<IconChevronRight size={20} stroke={2} />
-						<Select.Root>
+						<Select.Root selected={{value: selectedSe}}>
 							<Select.Trigger class="flex-grow max-sm:w-full">
 								<Select.Value placeholder={selectedEpisode ?
 										`${selectedSe} - ${selectedEpisode.seTitle}` : "Select episode"} />
