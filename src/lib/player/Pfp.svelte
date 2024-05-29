@@ -38,7 +38,7 @@
 				[id]: {
 					success: false,
 					tried: true,
-					lastSuccess: now,
+					lastSuccess: null,
 					trying: false,
 				}
 			};
