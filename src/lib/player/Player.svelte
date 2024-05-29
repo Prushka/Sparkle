@@ -21,7 +21,7 @@
 		chatLayouts,
 		BroadcastTypes,
 		preprocessJobs,
-		codecDisplayMap, getTitleComponents, setGetLS, randomString, getTitleComponentsByJobs, languageMap
+		codecDisplayMap, getTitleComponents, setGetLS, randomString, getTitleComponentsByJobs, languageMap, setGetLsBoolean
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -97,7 +97,7 @@
 	let currentTheme: 'light' | 'dark';
 	let prevTrackSrc: string | null | undefined = '';
 	let footer: string = '';
-	let syncGoto = false;
+	let syncGoto = setGetLsBoolean("syncGoto", true);
 	let notificationAudio = new Audio(`${PUBLIC_STATIC}/sound/anya_peanuts.mp3`);
 	let inBg = false;
 	let onPlay = () => {
@@ -682,7 +682,7 @@
 	</div>
 
 	<div class="p-4 w-full flex flex-col gap-4 font-semibold">
-		<div class="w-full flex gap-4 items-center justify-center max-md:flex-col">
+		<div class="w-full flex gap-4 items-center justify-center max-md:flex-col max-w-[90rem] self-center">
 			<div class="flex gap-3 items-center justify-center max-md:w-full">
 				<label class="custom-file-upload">
 					<Pfp id={playerId} class="w-12 h-12" />
@@ -732,13 +732,30 @@
 			<Chatbox id="chat-mobile" bind:controlsShowing send={send} class="input-bordered input-md grow max-md:w-full" />
 		</div>
 
-		<Card.Root class="w-full">
-			<Card.Header>
+		<Card.Root class="w-full max-w-[90rem] self-center">
+			<Card.Header class="max-sm:p-4">
 				<div class="flex justify-between items-center">
-					<div class="flex flex-col gap-0.5">
+					<div class="flex flex-col gap-1 mr-1">
 						<Card.Title>Media</Card.Title>
-						<Card.Description>{selectedCodec} {autoCodec} - {languageMap[selectedAudioMapping] || selectedAudioMapping}</Card.Description>
+						<Card.Description class="max-sm:hidden">Codec: {selectedCodec} {autoCodec}, Audio: {languageMap[selectedAudioMapping] || selectedAudioMapping}</Card.Description>
 					</div>
+					<div class="flex gap-3 items-center justify-center">
+						<Tooltip.Root openDelay={0}>
+							<Tooltip.Trigger asChild let:builder>
+								<Button builders={[builder]} variant={!socketCommunicating || !syncGoto ? "ghost" : "secondary"}
+												class="w-auto h-full p-2 {(!socketCommunicating || !syncGoto) ? 'opacity-50' :''}"
+												on:click={()=>{
+										 syncGoto = !syncGoto;
+										 localStorage.setItem('syncGoto', syncGoto.toString());
+									 }}
+												disabled={!socketCommunicating}>
+									<IconArrowBounce size={20} stroke={2} />
+								</Button>
+							</Tooltip.Trigger>
+							<Tooltip.Content>
+								<p>Move users in room with you (on media change)</p>
+							</Tooltip.Content>
+						</Tooltip.Root>
 					<DropdownMenu.Root>
 						<DropdownMenu.Trigger asChild let:builder>
 							<Button builders={[builder]} variant="outline">
@@ -781,29 +798,10 @@
 							</DropdownMenu.Group>
 						</DropdownMenu.Content>
 					</DropdownMenu.Root>
+					</div>
 				</div>
 			</Card.Header>
-			<Card.Content>
-				<div class="gap-4 w-full items-center justify-center flex max-md:flex-col">
-					<div class="flex gap-2 items-center justify-center max-md:w-full flex-grow">
-						<Tooltip.Root openDelay={0}>
-							<Tooltip.Trigger asChild let:builder>
-								<Button builders={[builder]} variant={!socketCommunicating || !syncGoto ? "ghost" : "secondary"}
-												class="w-10 h-10 p-2 {(!socketCommunicating || !syncGoto) ? 'opacity-50' :''}"
-												on:click={()=>{
-										 syncGoto = !syncGoto;
-									 }}
-												disabled={!socketCommunicating}>
-									<IconArrowBounce size={20} stroke={2} />
-								</Button>
-							</Tooltip.Trigger>
-							<Tooltip.Content>
-								<p>Move users in room on selection</p>
-							</Tooltip.Content>
-						</Tooltip.Root>
-
-
-						<div class="flex grow gap-2 items-center justify-center max-md:flex-col max-md:w-full">
+			<Card.Content class="max-sm:p-4 md:grid md:grid-cols-[minmax(0,1fr)_min-content_minmax(0,1fr)] max-md:flex gap-2 items-center justify-center max-md:flex-col max-md:w-full">
 							<Popover.Root bind:open={titleSelectionOpen}>
 								<Popover.Trigger asChild let:builder>
 									<Button
@@ -811,7 +809,7 @@
 										variant="outline"
 										role="combobox"
 										aria-expanded={titleSelectionOpen}
-										class="flex-grow w-full justify-between font-semibold"
+										class="max-md:w-full justify-between font-semibold {!selectedEpisodes?'col-span-3':''}"
 									>
 										{selectedTitle?.title}
 										<CaretSort class="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -849,7 +847,7 @@
 							{#if selectedEpisodes}
 								<IconChevronRight size={20} stroke={2} />
 								<Select.Root bind:open={seSelectionOpen} selected={{value: selectedSe}}>
-									<Select.Trigger class="flex-grow max-md:w-full">
+									<Select.Trigger class="max-md:w-full">
 										<Select.Value
 											class={selectedEpisode ? '' : 'text-red-600 font-bold'}
 											placeholder={selectedEpisode ?
@@ -870,11 +868,6 @@
 									</Select.Content>
 								</Select.Root>
 							{/if}
-						</div>
-					</div>
-
-
-				</div>
 			</Card.Content>
 		</Card.Root>
 

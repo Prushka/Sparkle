@@ -244,6 +244,15 @@ export function setGetLS(key: string, value: string): string {
 	return value;
 }
 
+export function setGetLsBoolean(key: string, value: boolean): boolean {
+	const v = localStorage.getItem(key);
+	if (v) {
+		return v === 'true';
+	}
+	localStorage.setItem(key, value.toString());
+	return value;
+}
+
 export function getMbps(job: Job | undefined | null, codec: string): number {
 	if (!job?.Files?.[codec + '.mp4'] || !job?.Duration) {
 		return 0;
@@ -342,4 +351,12 @@ export function getTitleComponentsByJobs(jobs: Job[]): { [key: string]: TitleCom
 		acc[key] = _titles[key];
 		return acc;
 	}, {});
+}
+
+export function truncate( str : string, n= 60, useWordBoundary = true ){
+	if (str.length <= n) { return str; }
+	const subString = str.slice(0, n-1); // the original check
+	return (useWordBoundary
+		? subString.slice(0, subString.lastIndexOf(" "))
+		: subString) + "...";
 }
