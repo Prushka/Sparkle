@@ -127,6 +127,7 @@
 	let selectedTitleId: string = getTitleComponents(job).titleId;
 	let selectedSe: string | null = getTitleComponents(job).episodes ? Object.keys(getTitleComponents(job).episodes!)[0] : null;
 	let titleSelectionOpen = false;
+	let seSelectionOpen = false;
 	$: selectedTitle = titles[selectedTitleId];
 	$: selectedEpisodes = selectedTitle?.episodes;
 	$: selectedEpisode = (selectedTitle?.episodes && selectedSe) ? selectedTitle.episodes[selectedSe!] : null;
@@ -750,7 +751,7 @@
 
 
 				<div class="flex grow gap-2 items-center justify-center max-md:flex-col max-md:w-full">
-					<Popover.Root bind:open={titleSelectionOpen} let:ids>
+					<Popover.Root bind:open={titleSelectionOpen}>
 						<Popover.Trigger asChild let:builder>
 							<Button
 								builders={[builder]}
@@ -771,13 +772,14 @@
 									{#each Object.values(titles) as title}
 										<Command.Item class="p-1" value={title.titleId} onSelect={()=>{
 											titleSelectionOpen = false;
-    									tick().then(() => {
-    									  document.getElementById(ids.trigger)?.focus();
-    									});
 									selectedTitleId = title.titleId;
 									selectedSe = null;
 									if(!title.episodes) {
 										bounceTo(title.id)
+									}else{
+										tick().then(() => {
+    							  seSelectionOpen = true;
+    								});
 									}
 						}}><img src="{PUBLIC_STATIC}/{!title.episodes ? title.id : Object.values(title.episodes)[0].id}/poster.jpg"
 										alt="{title.title}" class="h-8 w-12 object-cover mr-2 rounded-sm" />
@@ -793,7 +795,7 @@
 					</Popover.Root>
 					{#if selectedEpisodes}
 						<IconChevronRight size={20} stroke={2} />
-						<Select.Root selected={{value: selectedSe}}>
+						<Select.Root bind:open={seSelectionOpen} selected={{value: selectedSe}}>
 							<Select.Trigger class="flex-grow max-md:w-full">
 								<Select.Value
 									class={selectedEpisode ? '' : 'text-red-600 font-bold'}
