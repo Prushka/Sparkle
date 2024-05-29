@@ -34,10 +34,10 @@
 	import { page } from '$app/stores';
 	import {
 		IconAlertOctagonFilled, IconArrowBounce, IconCheck, IconChevronRight,
-		IconCone, IconConePlus, IconEyeOff, IconLayout2,
+		IconCone, IconConePlus, IconEyeOff, IconLayout2, IconMoonFilled,
 		IconPlayerPauseFilled,
 		IconPlayerPlayFilled,
-		IconPlugConnected, IconSettings2,
+		IconSettings2, IconSunFilled,
 		IconTableExport
 	} from '@tabler/icons-svelte';
 	import Chatbox from '$lib/player/Chatbox.svelte';
@@ -61,12 +61,12 @@
 
 	import JASSUB from 'jassub';
 	import { goto } from '$app/navigation';
-	import { toggleMode, mode } from 'mode-watcher';
-	import { Moon, Reload, Rocket, Sun } from 'svelte-radix';
+	import { mode, setMode } from 'mode-watcher';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { toast } from 'svelte-sonner';
 	import CaretSort from 'svelte-radix/CaretSort.svelte';
+	import ConnectButton from '$lib/player/ConnectButton.svelte';
 
 	let controlsShowing = false;
 	let player: MediaPlayerElement;
@@ -746,32 +746,87 @@
 
 		<Card.Root class="w-full max-w-[90rem] self-center">
 			<Card.Header class="max-sm:p-4">
-				<div class="flex justify-between items-center">
-					<div class="flex flex-col gap-1 mr-1">
+				<div class="flex gap-3 justify-center items-center">
+					<div class="flex flex-col gap-1 max-sm:mr-4 flex-1">
 						<Card.Title>Media</Card.Title>
 						<Card.Description class="max-sm:hidden">Codec: {selectedCodec} {autoCodec}, Audio: {languageMap[selectedAudioMapping] || selectedAudioMapping}</Card.Description>
 					</div>
-					<div class="flex gap-3 items-center justify-center">
+					<ConnectButton bind:socketCommunicating bind:interacted bind:exited bind:tickedSecsAgoStr
+												 class="max-md:hidden"
+												 onClick={() => {
+						if(!socketCommunicating && !interacted) {
+							player?.play()
+								}}}
+					/>
+					<div class="flex gap-3 items-center justify-end flex-1">
 						<Tooltip.Root openDelay={0}>
 							<Tooltip.Trigger asChild let:builder>
-								<Button builders={[builder]} variant={!socketCommunicating || !syncGoto ? "ghost" : "secondary"}
-												class="w-auto h-full p-2 {(!socketCommunicating || !syncGoto) ? 'opacity-50' :''}"
+								<Button builders={[builder]} variant={!socketCommunicating || !syncGoto ? "ghost" : "outline"}
+												class="w-9 h-9 p-1 {(!socketCommunicating || !syncGoto) ? 'opacity-50' :''}"
 												on:click={()=>{
 										 syncGoto = !syncGoto;
 										 localStorage.setItem('syncGoto', syncGoto.toString());
 									 }}
 												disabled={!socketCommunicating}>
-									<IconArrowBounce size={20} stroke={2} />
+									<IconArrowBounce size={syncGoto ? 20 : 18} stroke={2} />
 								</Button>
 							</Tooltip.Trigger>
 							<Tooltip.Content>
 								<p>Move users in room with you (on media change)</p>
 							</Tooltip.Content>
 						</Tooltip.Root>
+						<DropdownMenu.Root>
+							<DropdownMenu.Trigger asChild let:builder>
+								<Button variant="outline" builders={[builder]}>
+									<IconLayout2 class="sm:mr-2" size={20} stroke={2} />
+									<span class="max-sm:hidden">Layout</span>
+								</Button>
+							</DropdownMenu.Trigger>
+							<DropdownMenu.Content class="w-56">
+								<DropdownMenu.Label>Theme</DropdownMenu.Label>
+								<DropdownMenu.RadioGroup bind:value={currentTheme}>
+									<DropdownMenu.RadioItem value={"light"} on:click={()=>{
+								setMode("light")
+							}}>
+										<IconSunFilled class="mr-2" size={16} stroke={2} />
+										Light
+									</DropdownMenu.RadioItem>
+									<DropdownMenu.RadioItem value={"dark"} on:click={()=>{
+								setMode("dark")
+							}}>
+										<IconMoonFilled class="mr-2" size={16} stroke={2} />
+										Dark
+									</DropdownMenu.RadioItem>
+								</DropdownMenu.RadioGroup>
+
+								<DropdownMenu.Separator />
+
+								<DropdownMenu.Label>Chat Layout</DropdownMenu.Label>
+								<DropdownMenu.RadioGroup bind:value={chatLayout}>
+									{#each chatLayouts as layout}
+										<DropdownMenu.RadioItem value={layout} on:click={()=>{
+								localStorage.setItem('chatLayout', layout);
+								$chatLayoutStore = layout;
+							}}>
+											{#if layout === "extended"}
+												<IconConePlus class="mr-2" size={16} stroke={2} />
+												Extended
+											{:else if layout === "simple"}
+												<IconCone class="mr-2" size={16} stroke={2} />
+												Simple
+											{:else}
+												<IconEyeOff class="mr-2" size={16} stroke={2} />
+												Hidden
+											{/if}
+										</DropdownMenu.RadioItem>
+									{/each}
+								</DropdownMenu.RadioGroup>
+							</DropdownMenu.Content>
+						</DropdownMenu.Root>
 					<DropdownMenu.Root>
 						<DropdownMenu.Trigger asChild let:builder>
 							<Button builders={[builder]} variant={currentTheme === "dark" ? "outline" : "default"}>
-								<IconSettings2 class="mr-2" size={16} stroke={2} /> Video Settings</Button>
+								<IconSettings2 class="mr-2" size={16} stroke={2} /> Video <span class="max-sm:hidden">&nbsp;Settings</span></Button>
 						</DropdownMenu.Trigger>
 						<DropdownMenu.Content class="w-56">
 							<DropdownMenu.Label>
@@ -897,75 +952,13 @@
 			</Card.Content>
 		</Card.Root>
 
-		<div class="flex gap-3 self-center items-center justify-center w-full">
-			<Tooltip.Root openDelay={0}>
-				<Tooltip.Trigger asChild let:builder>
-					<Button builders={[builder]} variant="outline"
-									on:click={() => {
+		<div class="flex gap-3 self-center items-center justify-center w-full md:hidden">
+			<ConnectButton bind:socketCommunicating bind:interacted bind:exited bind:tickedSecsAgoStr
+			onClick={() => {
 						if(!socketCommunicating && !interacted) {
 							player?.play()
 								}}}
-									class="font-bold {socketCommunicating ? 'text-green-600 hover:text-green-600' : 'text-red-600 hover:text-red-600' }">
-						{#if socketCommunicating}
-							<IconPlugConnected size={20} stroke={2} />
-						{:else}
-							{#if !interacted}
-								<Rocket class="mr-2 h-4 w-4 animate-bounce" />
-								Connect Now
-							{:else if !exited}
-								<Reload class="mr-2 h-4 w-4 animate-spin" />
-								Connecting...
-							{:else}
-								Disconnected
-							{/if}
-						{/if}
-					</Button>
-				</Tooltip.Trigger>
-				<Tooltip.Content>
-					<p>Ticked: {tickedSecsAgoStr}s ago</p>
-				</Tooltip.Content>
-			</Tooltip.Root>
-
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger asChild let:builder>
-					<Button variant="outline" builders={[builder]}>
-						<IconLayout2 class="mr-2" size={16} stroke={2} />
-						Layout
-					</Button>
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Content class="w-56">
-					<DropdownMenu.Label>Chat Layout</DropdownMenu.Label>
-					<DropdownMenu.Separator />
-					<DropdownMenu.RadioGroup bind:value={chatLayout}>
-						{#each chatLayouts as layout}
-							<DropdownMenu.RadioItem value={layout} on:click={()=>{
-								localStorage.setItem('chatLayout', layout);
-								$chatLayoutStore = layout;
-							}}>
-								{#if layout === "extended"}
-									<IconConePlus class="mr-2" size={16} stroke={2} />
-									Extended
-								{:else if layout === "simple"}
-									<IconCone class="mr-2" size={16} stroke={2} />
-									Simple
-								{:else}
-									<IconEyeOff class="mr-2" size={16} stroke={2} />
-									Hidden
-								{/if}
-							</DropdownMenu.RadioItem>
-						{/each}
-					</DropdownMenu.RadioGroup>
-				</DropdownMenu.Content>
-			</DropdownMenu.Root>
-			<Button on:click={toggleMode} variant="outline" size="icon">
-				<Sun
-					class="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0"
-				/>
-				<Moon
-					class="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100"
-				/>
-				<span class="sr-only">Toggle theme</span>
-			</Button>
+			/>
 		</div>
 
 		<div class="flex gap-4 flex-wrap justify-center mt-2">
