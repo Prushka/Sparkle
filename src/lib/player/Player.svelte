@@ -815,10 +815,9 @@
 										variant="outline"
 										role="combobox"
 										aria-expanded={titleSelectionOpen}
-										class="max-md:w-full justify-between font-semibold {!selectedEpisodes?'col-span-3':''}"
-									>
-										{selectedTitle?.title}
-										<CaretSort class="ml-2 h-4 w-4 shrink-0 opacity-50" />
+										class="max-md:w-full justify-between font-semibold {!selectedEpisodes?'col-span-3':''}">
+										<span class="max-w-[calc(100%-2rem)] text-ellipsis overflow-hidden">{selectedTitle?.title}</span>
+											<CaretSort class="ml-2 h-4 w-4 shrink-0 opacity-50" />
 									</Button>
 								</Popover.Trigger>
 								<Popover.Content align="start" class="p-0 w-auto">
@@ -862,8 +861,8 @@
 											aria-expanded={titleSelectionOpen}
 											class="max-md:w-full justify-between font-semibold {selectedEpisode ? '' : 'text-red-600 font-bold'}"
 										>
-											{selectedEpisode ?
-												`${selectedSe} - ${selectedEpisode.seTitle}` : "Select episode"}
+										<span class="max-w-[calc(100%-2rem)] text-ellipsis overflow-hidden">{selectedEpisode ?
+												`${selectedSe} - ${selectedEpisode.seTitle}` : "Select episode"}</span>
 											<CaretSort class="ml-2 h-4 w-4 shrink-0 opacity-50" />
 										</Button>
 									</Popover.Trigger>
