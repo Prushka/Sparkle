@@ -810,9 +810,9 @@
 									<Command.Root>
 										<Command.Input placeholder="Search title..." class="h-9" />
 										<Command.Empty>No title found.</Command.Empty>
-										<Command.Group class="overflow-y-auto max-h-[35vh]">
+										<Command.Group class="overflow-y-auto max-h-[37vh]">
 											{#each Object.values(titles) as title}
-												<Command.Item class="p-1" value={title.titleId} onSelect={()=>{
+												<Command.Item class="p-1" value={title.title} onSelect={()=>{
 											titleSelectionOpen = false;
 									selectedTitleId = title.titleId;
 									selectedSe = null;
@@ -837,27 +837,42 @@
 							</Popover.Root>
 							{#if selectedEpisodes}
 								<IconChevronRight size={20} stroke={2} />
-								<Select.Root bind:open={seSelectionOpen} selected={{value: selectedSe}}>
-									<Select.Trigger class="max-md:w-full">
-										<Select.Value
-											class={selectedEpisode ? '' : 'text-red-600 font-bold'}
-											placeholder={selectedEpisode ?
-										`${selectedSe} - ${selectedEpisode.seTitle}` : "Select episode"} />
-									</Select.Trigger>
-									<Select.Content>
-										<div class="max-h-[35vh] w-full overflow-y-auto">
-											{#each Object.values(selectedEpisodes) as es}
-												<Select.Item class="p-1" value={es.se} on:click={()=>{
+
+								<Popover.Root bind:open={seSelectionOpen}>
+									<Popover.Trigger asChild let:builder>
+										<Button
+											builders={[builder]}
+											variant="outline"
+											role="combobox"
+											aria-expanded={titleSelectionOpen}
+											class="max-md:w-full justify-between font-semibold {selectedEpisode ? '' : 'text-red-600 font-bold'}"
+										>
+											{selectedEpisode ?
+												`${selectedSe} - ${selectedEpisode.seTitle}` : "Select episode"}
+											<CaretSort class="ml-2 h-4 w-4 shrink-0 opacity-50" />
+										</Button>
+									</Popover.Trigger>
+									<Popover.Content align="start" class="p-0 w-auto">
+										<Command.Root>
+											<Command.Input placeholder="Search episode..." class="h-9" />
+											<Command.Empty>No episode found.</Command.Empty>
+											<Command.Group class="overflow-y-auto max-h-[37vh]">
+												{#each Object.values(selectedEpisodes) as es}
+													<Command.Item class="p-1" value={es.se + "-" + es.seTitle} onSelect={()=>{
+									seSelectionOpen = false;
 									bounceTo(es.id)
 									selectedSe = es.se;
-						}}>
-													<img src="{PUBLIC_STATIC}/{es.id}/poster.jpg" alt="{es.seTitle}" class="h-8 w-12 object-cover mr-2 rounded-sm" />
-													{es.se} - {es.seTitle}
-												</Select.Item>
-											{/each}
-										</div>
-									</Select.Content>
-								</Select.Root>
+						}}><img src="{PUBLIC_STATIC}/{es.id}/poster.jpg" alt="{es.seTitle}" class="h-8 w-12 object-cover mr-2 rounded-sm" />
+														{es.se} - {es.seTitle}
+														<Check
+															class='ml-auto right-0 h-4 w-4 {selectedSe === es.se ? "" : "text-transparent"}'
+														/>
+													</Command.Item>
+												{/each}
+											</Command.Group>
+										</Command.Root>
+									</Popover.Content>
+								</Popover.Root>
 							{/if}
 			</Card.Content>
 		</Card.Root>
