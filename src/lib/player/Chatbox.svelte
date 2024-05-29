@@ -30,7 +30,6 @@
 				if (e.altKey && e.keyCode == 83) {
 					e.preventDefault();
 					if (controlsShowing === false || controlsShowing === null) {
-						console.log('triggered!');
 						document.getElementById($$restProps.id)?.focus();
 					}
 				}
@@ -46,7 +45,6 @@
 <form
 	on:submit={e => {
 		e.preventDefault();
-		console.log(value)
 						send({ chat: value, type: SyncTypes.ChatSync });
 						value = ""
 						const oldPlaceholder = placeholder;

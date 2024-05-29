@@ -10,8 +10,17 @@
 
 
 	function testPfp(id : string) {
-		const img = new Image();
 		const now = Date.now();
+		const prev = pfpLast[id];
+		if (prev?.trying) return;
+		console.log('Retrying pfp fetch')
+		$pfpLastFetched = {
+			...pfpLastFetched,
+			[id]: {
+				trying: true,
+			}
+		};
+		const img = new Image();
 		img.onload = () => {
 			$pfpLastFetched = {
 				...pfpLastFetched,
@@ -19,6 +28,7 @@
 					success: true,
 					tried: true,
 					lastSuccess: now,
+					trying: false,
 				}
 			};
 		};
@@ -29,6 +39,7 @@
 					success: false,
 					tried: true,
 					lastSuccess: now,
+					trying: false,
 				}
 			};
 		};
@@ -37,7 +48,6 @@
 
 	$: {
 		if(!pfpLast[id]?.tried) {
-			console.log('Retrying pfp fetch')
 			testPfp(id);
 		}
 	}
