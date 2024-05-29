@@ -46,8 +46,7 @@
 		chatFocusedStore,
 		chatLayoutStore,
 		interactedStore,
-		pageReloadCounterStore,
-		pfpLastFetched
+		pageReloadCounterStore, pfpLastFetched
 	} from '../../store';
 	import SUPtitles from '$lib/suptitles/suptitles';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -257,7 +256,10 @@
 						if (state.firedBy) {
 							$pfpLastFetched = {
 								...pfpLastFetched,
-								[state.firedBy.id]: `${PUBLIC_STATIC}/pfp/${state.firedBy.id}.png?${Date.now()}`
+								[state.firedBy.id]: {
+									success: false,
+									tried: false
+								}
 							};
 						}
 						break;

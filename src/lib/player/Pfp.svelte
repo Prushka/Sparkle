@@ -7,12 +7,44 @@
 	export let id: string;
 	const unsubscribe = pfpLastFetched.subscribe((value) => pfpLast = value);
 	onDestroy(unsubscribe);
+
+
+	function testPfp(id : string) {
+		const img = new Image();
+		const now = Date.now();
+		img.onload = () => {
+			$pfpLastFetched = {
+				...pfpLastFetched,
+				[id]: {
+					success: true,
+					tried: true,
+					lastSuccess: now,
+				}
+			};
+		};
+		img.onerror = () => {
+			$pfpLastFetched = {
+				...pfpLastFetched,
+				[id]: {
+					success: false,
+					tried: true,
+					lastSuccess: now,
+				}
+			};
+		};
+		img.src = `${PUBLIC_STATIC}/pfp/${id}.png?${now}`
+	}
+
+	$: {
+		if(!pfpLast[id]?.tried) {
+			console.log('Retrying pfp fetch')
+			testPfp(id);
+		}
+	}
+
 </script>
 
 
 <img
-	src={(pfpLast[id] === undefined) ? `${PUBLIC_STATIC}/pfp/${id}.png?${Date.now()}` : pfpLast[id]}
-		 on:error={() => {
-			 $pfpLastFetched = { ...pfpLast, [id]: '/icons/uwu.gif' }
-						 }}
+	src={pfpLast[id]?.success ? `${PUBLIC_STATIC}/pfp/${id}.png?${pfpLast[id]?.lastSuccess}`:`/icons/uwu.gif`}
 		 alt="pfp" class="rounded-full object-cover {$$restProps.class}" />
