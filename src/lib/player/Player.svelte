@@ -768,7 +768,9 @@
 						<IconChevronRight size={20} stroke={2} />
 						<Select.Root selected={{value: selectedSe}}>
 							<Select.Trigger class="flex-grow max-sm:w-full">
-								<Select.Value placeholder={selectedEpisode ?
+								<Select.Value
+									class={selectedEpisode ? '' : 'text-red-600 font-bold'}
+									placeholder={selectedEpisode ?
 										`${selectedSe} - ${selectedEpisode.seTitle}` : "Select episode"} />
 							</Select.Trigger>
 							<Select.Content>
