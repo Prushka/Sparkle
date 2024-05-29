@@ -68,7 +68,6 @@
 	import { Label } from '$lib/components/ui/label';
 	import { toast } from 'svelte-sonner';
 	import CaretSort from 'svelte-radix/CaretSort.svelte';
-	import Check from 'svelte-radix/Check.svelte';
 
 	let controlsShowing = false;
 	let player: MediaPlayerElement;
@@ -840,7 +839,7 @@
 						}}><img src="{PUBLIC_STATIC}/{!title.episodes ? title.id : Object.values(title.episodes)[0].id}/poster.jpg"
 										alt="{title.title}" class="h-8 w-12 object-cover mr-2 rounded-sm" />
 													{title.title}
-													<IconCheck size={18} stroke={3}
+													<IconCheck size={18} stroke={2}
 																		 class='ml-auto right-0 {selectedTitleId === title.titleId ? "" : "text-transparent"}'
 													/>
 												</Command.Item>
@@ -878,7 +877,7 @@
 									selectedSe = es.se;
 						}}><img src="{PUBLIC_STATIC}/{es.id}/poster.jpg" alt="{es.seTitle}" class="h-8 w-12 object-cover mr-2 rounded-sm" />
 														{es.se} - {es.seTitle}
-														<IconCheck size={18} stroke={3}
+														<IconCheck size={18} stroke={2}
 															class='ml-auto right-0 {selectedSe === es.se ? "" : "text-transparent"}'
 														/>
 													</Command.Item>
