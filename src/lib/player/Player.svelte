@@ -750,13 +750,15 @@
 						<Select.Content>
 							<div class="max-h-[35vh] w-full overflow-y-auto">
 								{#each Object.values(titles) as title}
-									<Select.Item value={title.titleId} on:click={()=>{
+									<Select.Item class="p-1"  value={title.titleId} on:click={()=>{
 									selectedTitleId = title.titleId;
 									selectedSe = null;
 									if(!title.episodes) {
 										bounceTo(title.id)
 									}
-						}}>{title.title}</Select.Item>
+						}}><img src="{PUBLIC_STATIC}/{!title.episodes ? title.id : Object.values(title.episodes)[0].id}/poster.jpg"
+										alt="{title.title}" class="h-8 w-12 object-cover mr-2 rounded-sm" />
+										{title.title}</Select.Item>
 								{/each}
 							</div>
 						</Select.Content>
@@ -776,8 +778,8 @@
 									bounceTo(es.id)
 									selectedSe = es.se;
 						}}>
-											<img src="{PUBLIC_STATIC}/{es.id}/poster.jpg" alt="{es.seTitle}" class="h-8 w-12 object-cover mr-2 rounded-sm" />{es.se}
-											- {es.seTitle}
+											<img src="{PUBLIC_STATIC}/{es.id}/poster.jpg" alt="{es.seTitle}" class="h-8 w-12 object-cover mr-2 rounded-sm" />
+											{es.se} - {es.seTitle}
 										</Select.Item>
 									{/each}
 								</div>
