@@ -28,7 +28,7 @@
 		getTitleComponentsByJobs,
 		languageMap,
 		setGetLsBoolean,
-		setGetLsNumber
+		setGetLsNumber, sortTracks
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -371,6 +371,8 @@
 	function reloadPlayer() {
 		if (job.Streams) {
 			fonts = [];
+			job.Streams = sortTracks(job)
+			let defaulted = false;
 			for (const [, stream] of Object.entries(job.Streams)) {
 				switch (stream.CodecType) {
 					case 'attachment':
@@ -385,8 +387,9 @@
 							kind: 'subtitles',
 							type: stream.CodecName.includes('vtt') ? 'vtt' : stream.CodecName.includes('ass') ? 'asshuh' : 'srt',
 							language: languageSrcMap[stream.Language] || stream.Language,
-							default: stream.Language.includes('eng')
+							default: !defaulted,
 						});
+						defaulted = true
 						break;
 				}
 			}
@@ -417,7 +420,7 @@
 			}
 			canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
 		};
-		player.volume = playerVolume;
+		player.remoteControl.changeVolume(playerVolume)
 		supportedCodecs = getSupportedCodecs();
 		setVideoSrc();
 		reloadPlayer();
@@ -654,7 +657,6 @@
 			<media-poster
 				class="vds-poster"
 				src={data.preview}
-				alt={data.plot}
 			></media-poster>
 			<canvas bind:this={canvas} id="sub-canvas" class="pointer-events-none absolute top-0 left-0 w-full h-full" width="1920" height="1080"/>
 		</media-provider>

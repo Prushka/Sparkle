@@ -15,6 +15,8 @@ export const codecDisplayMap: { [key: string]: string } = {
 	'auto': 'Auto'
 };
 
+const subtitlePriority = ['ass', 'vtt', 'sup']
+
 export const chatLayouts = ['simple', 'extended', 'hidden'];
 
 export function getSupportedCodecs() {
@@ -41,7 +43,6 @@ export enum SyncTypes {
 	TimeSync = 'time',
 	PauseSync = 'pause',
 	ChatSync = 'chat',
-	FullSync = 'full',
 	PlayersStatusSync = 'players',
 	PfpSync = 'pfp',
 	StateSync = 'state',
@@ -101,7 +102,7 @@ export function formatPair(stream: Stream, includeIndex = false, includeCodec = 
 		if (includeIndex && includeCodec) {
 			lang = lang.split('-')[0];
 		}
-		return (includeIndex ? stream.Index + '-' : '') + lang + (includeCodec ? ` (${stream.CodecName})` : '');
+		return (includeIndex ? stream.Index + '-' : '') + lang + (includeCodec ? ` (${stream.CodecName})` : '') + ((stream.Title && stream.Title !== lang) ? ` - ${stream.Title}` : '');
 	}
 	return '';
 }
@@ -171,7 +172,22 @@ export const languageMap: { [key: string]: string } = {
 	'swe': 'Swedish-Svenska',
 	'dan': 'Danish-Dansk',
 	'nor': 'Norwegian-Norsk',
-	'ind': 'Indonesian-Bahasa Indonesia'
+	'ind': 'Indonesian-Bahasa Indonesia',
+	'baq': 'Basque-Euskara',
+	'cat': 'Catalan-Català',
+	'hrv': 'Croatian-Hrvatski',
+	'cze': 'Czech-Čeština',
+	'fin': 'Finnish-Suomi',
+	'glg': 'Galician-Galego',
+	'gre': 'Greek-Ελληνικά',
+	'heb': 'Hebrew-עברית',
+	'hun': 'Hungarian-Magyar',
+	'may': 'Malay-Bahasa Melayu',
+	'nob': 'Norwegian Bokmål-Norsk Bokmål',
+	'pol': 'Polish-Polski',
+	'rum': 'Romanian-Română',
+	'ukr': 'Ukrainian-Українська',
+	'fil': 'Filipino-Filipino',
 };
 
 export const languageSrcMap: { [key: string]: string } = {
@@ -194,7 +210,22 @@ export const languageSrcMap: { [key: string]: string } = {
 	'dut': 'nl-NL',
 	'swe': 'sv-SE',
 	'dan': 'da-DK',
-	'nor': 'no-NO'
+	'nor': 'no-NO',
+	'baq': 'eu-ES',
+	'cat': 'ca-ES',
+	'hrv': 'hr-HR',
+	'cze': 'cs-CZ',
+	'fin': 'fi-FI',
+	'glg': 'gl-ES',
+	'gre': 'el-GR',
+	'heb': 'he-IL',
+	'hun': 'hu-HU',
+	'may': 'ms-MY',
+	'nob': 'nb-NO',
+	'pol': 'pl-PL',
+	'rum': 'ro-RO',
+	'ukr': 'uk-UA',
+	'fil': 'fil-PH'
 };
 
 export const defaultFallback: string[] = ['Noto Sans SC Thin', 'NotoSansSC-VariableFont_wght.ttf'];
@@ -362,10 +393,46 @@ export function getTitleComponentsByJobs(jobs: Job[]): { [key: string]: TitleCom
 	}, {});
 }
 
-export function truncate( str : string, n= 60, useWordBoundary = true ){
-	if (str.length <= n) { return str; }
-	const subString = str.slice(0, n-1); // the original check
-	return (useWordBoundary
-		? subString.slice(0, subString.lastIndexOf(" "))
-		: subString) + "...";
+
+export function sortTracks(job: Job) {
+	const streams = job.Streams
+	const files = job.Files
+	let aExt, bExt, aMapped, bMapped : string;
+	const languagePriority = [navigator.language]
+	if (navigator.language !== "en-US") {
+		languagePriority.push("en-US")
+	}
+	if (navigator.language !== "zh-CN") {
+		languagePriority.push("zh-CN")
+	}
+	const compare = (a: Stream, b: Stream) => {
+		aMapped = languageSrcMap[a.Language]
+		bMapped = languageSrcMap[b.Language]
+		aExt = a.Location.slice(-3)
+		bExt = b.Location.slice(-3)
+
+		const aInPriority = languagePriority.includes(aMapped);
+		const bInPriority = languagePriority.includes(bMapped);
+		if (aInPriority && !bInPriority) {
+			return -1;
+		} else if (!aInPriority && bInPriority) {
+			return 1;
+		} else if (aInPriority && bInPriority) {
+			const index = languagePriority.indexOf(aMapped) - languagePriority.indexOf(bMapped);
+			if (index !== 0) {
+				return index;
+			}
+			const extCompare = subtitlePriority.indexOf(aExt) - subtitlePriority.indexOf(bExt);
+			if (extCompare !== 0) {
+				return extCompare;
+			} else {
+				return files[b.Location] - files[a.Location];
+			}
+		} else {
+			return a.Language.localeCompare(b.Language);
+		}
+	}
+	streams.sort(compare)
+	console.log(streams)
+	return streams
 }
