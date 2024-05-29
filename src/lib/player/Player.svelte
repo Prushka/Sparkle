@@ -46,7 +46,7 @@
 		chatFocusedStore,
 		chatLayoutStore,
 		interactedStore,
-		pageReloadCounterStore, testPfp
+		pageReloadCounterStore, updatePfp
 	} from '../../store';
 	import SUPtitles from '$lib/suptitles/suptitles';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -255,7 +255,7 @@
 				switch (state.type) {
 					case SyncTypes.PfpSync:
 						if (state.firedBy?.id) {
-							testPfp(state.firedBy.id)
+							updatePfp(state.firedBy.id)
 						}
 						break;
 					case SyncTypes.ChatSync:
@@ -711,7 +711,7 @@
 											 body: formData
 										 }).then(data => {
 												 console.log(data);
-												 testPfp(playerId);
+												 updatePfp(playerId);
 											});
 									 }
 								 };

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { pfpLastFetched, testPfp } from '../../store';
+	import { pfpLastFetched } from '../../store';
 	import { onDestroy, onMount } from 'svelte';
 	import { PUBLIC_STATIC } from '$env/static/public';
 
@@ -9,8 +9,10 @@
 	onDestroy(unsubscribe);
 
 	onMount(() => {
-		if (!pfpLast[id]?.success) {
-			testPfp(id);
+		if(!pfpLast[id]){
+			pfpLastFetched.update((value) => {
+				return {...value, [id]: Date.now()};
+			});
 		}
 	});
 
@@ -18,5 +20,5 @@
 
 
 <img
-	src={pfpLast[id]?.success ? `${PUBLIC_STATIC}/pfp/${id}.png?${pfpLast[id]?.lastSuccess}`:`/icons/uwu.gif`}
+	src={`${PUBLIC_STATIC}/pfp/${id}.png?${pfpLast[id]}`}
 		 alt="pfp" class="rounded-full object-cover {$$restProps.class}" />
