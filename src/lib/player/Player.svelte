@@ -772,10 +772,13 @@
 							<Select.Content>
 								<div class="max-h-[35vh] w-full overflow-y-auto">
 									{#each Object.values(selectedEpisodes) as es}
-										<Select.Item value={es.se} on:click={()=>{
+										<Select.Item class="p-1" value={es.se} on:click={()=>{
 									bounceTo(es.id)
 									selectedSe = es.se;
-						}}>{es.se} - {es.seTitle}</Select.Item>
+						}}>
+											<img src="{PUBLIC_STATIC}/{es.id}/poster.jpg" alt="{es.seTitle}" class="h-8 w-12 object-cover mr-2 rounded-sm" />{es.se}
+											- {es.seTitle}
+										</Select.Item>
 									{/each}
 								</div>
 							</Select.Content>
