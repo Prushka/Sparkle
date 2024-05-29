@@ -838,7 +838,7 @@
 									}
 						}}><img src="{PUBLIC_STATIC}/{!title.episodes ? title.id : Object.values(title.episodes)[0].id}/poster.jpg"
 										alt="{title.title}" class="h-8 w-12 object-cover mr-2 rounded-sm" />
-													{title.title}
+													<span class="mr-4">{title.title}</span>
 													<IconCheck size={18} stroke={2}
 																		 class='ml-auto right-0 {selectedTitleId === title.titleId ? "" : "text-transparent"}'
 													/>
@@ -876,8 +876,8 @@
 									bounceTo(es.id)
 									selectedSe = es.se;
 						}}><img src="{PUBLIC_STATIC}/{es.id}/poster.jpg" alt="{es.seTitle}" class="h-8 w-12 object-cover mr-2 rounded-sm" />
-														{es.se} - {es.seTitle}
-														<IconCheck size={18} stroke={2}
+														<span class="mr-4">{es.se} - {es.seTitle}</span>
+															<IconCheck size={18} stroke={2}
 															class='ml-auto right-0 {selectedSe === es.se ? "" : "text-transparent"}'
 														/>
 													</Command.Item>
