@@ -33,7 +33,7 @@
 	import { PUBLIC_BE, PUBLIC_STATIC, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
 	import {
-		IconAlertOctagonFilled, IconArrowBounce, IconChevronRight,
+		IconAlertOctagonFilled, IconArrowBounce, IconCheck, IconChevronRight,
 		IconCone, IconConePlus, IconEyeOff, IconLayout2,
 		IconPlayerPauseFilled,
 		IconPlayerPlayFilled,
@@ -826,7 +826,7 @@
 										<Command.Empty>No title found.</Command.Empty>
 										<Command.Group class="overflow-y-auto max-h-[37vh]">
 											{#each Object.values(titles) as title}
-												<Command.Item class="p-1" value={title.title} onSelect={()=>{
+												<Command.Item class="p-1 {selectedTitleId === title.titleId ? 'font-bold' : ''}" value={title.title} onSelect={()=>{
 											titleSelectionOpen = false;
 									selectedTitleId = title.titleId;
 									selectedSe = null;
@@ -840,8 +840,8 @@
 						}}><img src="{PUBLIC_STATIC}/{!title.episodes ? title.id : Object.values(title.episodes)[0].id}/poster.jpg"
 										alt="{title.title}" class="h-8 w-12 object-cover mr-2 rounded-sm" />
 													{title.title}
-													<Check
-														class='ml-auto right-0 h-4 w-4 {selectedTitleId === title.titleId ? "" : "text-transparent"}'
+													<IconCheck size={18} stroke={3}
+																		 class='ml-auto right-0 {selectedTitleId === title.titleId ? "" : "text-transparent"}'
 													/>
 												</Command.Item>
 											{/each}
@@ -872,14 +872,14 @@
 											<Command.Empty>No episode found.</Command.Empty>
 											<Command.Group class="overflow-y-auto max-h-[37vh]">
 												{#each Object.values(selectedEpisodes) as es}
-													<Command.Item class="p-1" value={es.se + "-" + es.seTitle} onSelect={()=>{
+													<Command.Item class="p-1 {selectedSe === es.se ? 'font-bold' : ''}" value={es.se + "-" + es.seTitle} onSelect={()=>{
 									seSelectionOpen = false;
 									bounceTo(es.id)
 									selectedSe = es.se;
 						}}><img src="{PUBLIC_STATIC}/{es.id}/poster.jpg" alt="{es.seTitle}" class="h-8 w-12 object-cover mr-2 rounded-sm" />
 														{es.se} - {es.seTitle}
-														<Check
-															class='ml-auto right-0 h-4 w-4 {selectedSe === es.se ? "" : "text-transparent"}'
+														<IconCheck size={18} stroke={3}
+															class='ml-auto right-0 {selectedSe === es.se ? "" : "text-transparent"}'
 														/>
 													</Command.Item>
 												{/each}
