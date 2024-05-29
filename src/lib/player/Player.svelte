@@ -61,7 +61,6 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { toast } from 'svelte-sonner';
-	import { Separator } from '$lib/components/ui/separator';
 	import CaretSort from 'svelte-radix/CaretSort.svelte';
 	import Check from 'svelte-radix/Check.svelte';
 
