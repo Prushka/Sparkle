@@ -31,7 +31,7 @@
 		IconCone, IconConePlus, IconEyeOff, IconLayout2,
 		IconPlayerPauseFilled,
 		IconPlayerPlayFilled,
-		IconPlugConnected,
+		IconPlugConnected, IconSettings2,
 		IconTableExport
 	} from '@tabler/icons-svelte';
 	import Chatbox from '$lib/player/Chatbox.svelte';
@@ -723,8 +723,8 @@
 			<Chatbox send={send} class="input-bordered input-md grow max-md:w-full" />
 		</div>
 
-		<div class="gap-4 w-full items-center justify-center sm:flex max-sm:grid max-sm:grid-cols-2">
-			<div class="flex gap-2 items-center justify-center max-sm:col-span-2 flex-grow">
+		<div class="gap-4 w-full items-center justify-center flex max-md:flex-col">
+			<div class="flex gap-2 items-center justify-center max-md:w-full flex-grow">
 				<Tooltip.Root openDelay={0}>
 					<Tooltip.Trigger asChild let:builder>
 						<Button builders={[builder]} variant={!socketCommunicating || !syncGoto ? "ghost" : "secondary"}
@@ -742,9 +742,9 @@
 				</Tooltip.Root>
 
 
-				<div class="flex grow gap-2 items-center justify-center">
+				<div class="flex grow gap-2 items-center justify-center max-sm:flex-col max-sm:w-full">
 					<Select.Root>
-						<Select.Trigger class="w-72 flex-grow">
+						<Select.Trigger class="flex-grow max-sm:w-full">
 							<Select.Value placeholder={selectedTitle?.title} />
 						</Select.Trigger>
 						<Select.Content>
@@ -765,7 +765,7 @@
 					{#if selectedEpisodes}
 						<IconChevronRight size={20} stroke={2} />
 						<Select.Root>
-							<Select.Trigger class="w-72 flex-grow">
+							<Select.Trigger class="flex-grow max-sm:w-full">
 								<Select.Value placeholder={selectedEpisode ?
 										`${selectedSe} - ${selectedEpisode.seTitle}` : "Select episode"} />
 							</Select.Trigger>
@@ -786,10 +786,12 @@
 
 			<DropdownMenu.Root>
 				<DropdownMenu.Trigger asChild let:builder>
-					<Button builders={[builder]} variant="outline" class="max-sm:col-span-2">Video Settings</Button>
+					<Button builders={[builder]} variant="outline" class="max-md:w-full">
+						<IconSettings2 class="mr-2" size={16} stroke={2} /> Video Settings</Button>
 				</DropdownMenu.Trigger>
 				<DropdownMenu.Content class="w-56">
-					<DropdownMenu.Label>Video Settings</DropdownMenu.Label>
+					<DropdownMenu.Label>
+						Video Settings</DropdownMenu.Label>
 					<DropdownMenu.Separator />
 					<DropdownMenu.Group>
 						{#if audiosExistForCodec(job, videoSrc?.sCodec)}
@@ -902,7 +904,7 @@
 		<div class="md:flex gap-4 max-md:grid max-md:grid-cols-2 w-full justify-center mt-2">
 			{#each roomPlayers as player}
 				<Button variant="outline"
-								class="h-auto pr-4 py-0 pl-0 rounded-l-full rounded-r-full shadow-md flex gap-3.5">
+								class="h-auto pr-4 py-0 pl-0 rounded-l-full rounded-r-full flex gap-3.5">
 					<Pfp class="w-12 h-12 mr-0.5" id={player.id} />
 					<span class="flex gap-1 flex-col items-center justify-center font-semibold">
 						<span class="font-bold">{player.name}</span>
