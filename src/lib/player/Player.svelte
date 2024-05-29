@@ -735,7 +735,7 @@
 				</Tooltip.Root>
 
 
-				<div class="flex grow gap-2 items-center justify-center max-sm:flex-col max-sm:w-full">
+				<div class="flex grow gap-2 items-center justify-center max-md:flex-col max-md:w-full">
 					<Popover.Root bind:open={titleSelectionOpen} let:ids>
 						<Popover.Trigger asChild let:builder>
 							<Button
@@ -780,7 +780,7 @@
 					{#if selectedEpisodes}
 						<IconChevronRight size={20} stroke={2} />
 						<Select.Root selected={{value: selectedSe}}>
-							<Select.Trigger class="flex-grow max-sm:w-full">
+							<Select.Trigger class="flex-grow max-md:w-full">
 								<Select.Value
 									class={selectedEpisode ? '' : 'text-red-600 font-bold'}
 									placeholder={selectedEpisode ?
