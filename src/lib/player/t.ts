@@ -1,6 +1,3 @@
-import { PUBLIC_STATIC } from '$env/static/public';
-import { pfpLastFetched } from '../../store';
-
 export const codecsPriority = ['av1', 'hevc', 'h264-10bit', 'h264-8bit'];
 
 export const supportedCodecs = ['av1', 'hevc', 'h264-8bit'];

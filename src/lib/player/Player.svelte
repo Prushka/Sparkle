@@ -718,6 +718,13 @@
 											 body: formData
 										 }).then(data => {
 												 console.log(data);
+												 $pfpLastFetched = {
+													 ...pfpLastFetched,
+													 [playerId]: {
+														 success: false,
+														 tried: false
+													 }
+												 };
 											});
 									 }
 								 };
