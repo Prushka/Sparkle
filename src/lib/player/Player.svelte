@@ -47,7 +47,7 @@
 	import JASSUB from 'jassub';
 	import { goto } from '$app/navigation';
 	import { toggleMode, mode } from 'mode-watcher';
-	import { Moon, Reload, Rocket, Slash, Sun } from 'svelte-radix';
+	import { Moon, Reload, Rocket, Sun } from 'svelte-radix';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { toast } from 'svelte-sonner';
@@ -102,7 +102,7 @@
 	const unsubscribeChatFocused = chatFocusedStore.subscribe((value) => chatFocused = value);
 	const unsubscribeMode = mode.subscribe((value) => {
 		if (!value) {
-			value = 'light';
+			value = 'dark';
 		}
 		currentTheme = value;
 	});
