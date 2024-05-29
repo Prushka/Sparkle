@@ -99,10 +99,6 @@ html, #root {
 	max-width: 100vw;
 }
 
-body, #main-page {
-	min-height: 100vh;
-}
-
 button {
 	transition: all 0.1s cubic-bezier(.32,.08,.24,1);
 }

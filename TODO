@@ -3,3 +3,5 @@ Show chat only when focused
 Fix captions settings, it didn't open? Can't reproduce
 
 When there's a duplicate of languages, default to the larger file
+
+Display player number on chat-pc

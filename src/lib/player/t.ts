@@ -340,10 +340,13 @@ export function getTitleComponents(job: Job): TitleComponents {
 	const parts = title.split(" - ");
 	let se = null
 	let seTitle = null
-	if (parts.length >= 3) {
-		title = parts.slice(0, -2).join(" - ");
-		se = parts[parts.length - 2];
-		seTitle = parts[parts.length - 1];
+	for (let i = 0; i < parts.length; i++) {
+		if (parts[i].match(/S\d{2}E\d{2}/i)) {
+			se = parts[i];
+			seTitle = parts.slice(i + 1).join(" - ");
+			title = parts.slice(0, i).join(" - ");
+			break;
+		}
 	}
 	const titleId = title.toLowerCase().replace(/[^a-z0-9]/gi, '');
 	return {
