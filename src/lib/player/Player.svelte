@@ -904,7 +904,7 @@
 			</Button>
 		</div>
 
-		<div class="md:flex gap-4 max-md:grid max-md:grid-cols-2 w-full justify-center mt-2">
+		<div class="flex gap-4 flex-wrap justify-center mt-2">
 			{#each roomPlayers as player}
 				<Button variant="outline"
 								class="h-auto pr-4 py-0 pl-0 rounded-l-full rounded-r-full flex gap-3.5">
