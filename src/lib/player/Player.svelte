@@ -749,7 +749,7 @@
 						</Tooltip.Root>
 					<DropdownMenu.Root>
 						<DropdownMenu.Trigger asChild let:builder>
-							<Button builders={[builder]} variant="outline">
+							<Button builders={[builder]} variant={currentTheme === "dark" ? "outline" : "default"}>
 								<IconSettings2 class="mr-2" size={16} stroke={2} /> Video Settings</Button>
 						</DropdownMenu.Trigger>
 						<DropdownMenu.Content class="w-56">
