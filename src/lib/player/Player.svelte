@@ -1,7 +1,7 @@
 <script lang="ts">
 	import 'vidstack/bundle';
 	import type { MediaPlayerElement } from 'vidstack/elements';
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, onMount, tick } from 'svelte';
 	import {
 		formatSeconds,
 		type Job,
@@ -21,7 +21,7 @@
 		chatLayouts,
 		BroadcastTypes,
 		preprocessJobs,
-		codecDisplayMap, getTitleComponents, type TitleComponents, setGetLS, randomString
+		codecDisplayMap, getTitleComponents, type TitleComponents, setGetLS, randomString, getTitleComponentsByJobs
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -42,6 +42,10 @@
 	import * as Select from '$lib/components/ui/select';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
+	import * as Popover from "$lib/components/ui/popover/index.js";
+	import * as Command from "$lib/components/ui/command/index.js";
+
+
 
 	import JASSUB from 'jassub';
 	import { goto } from '$app/navigation';
@@ -51,6 +55,8 @@
 	import { Label } from '$lib/components/ui/label';
 	import { toast } from 'svelte-sonner';
 	import { Separator } from '$lib/components/ui/separator';
+	import CaretSort from 'svelte-radix/CaretSort.svelte';
+	import Check from 'svelte-radix/Check.svelte';
 
 	let controlsShowing = false;
 	let player: MediaPlayerElement;
@@ -110,24 +116,10 @@
 	$: BASE_STATIC = `${PUBLIC_STATIC}/${roomId}`;
 	$: thumbnailVttSrc = `${BASE_STATIC}/storyboard.vtt`;
 	$: socketCommunicating = socketConnected && (tickedSecsAgo >= 0 && tickedSecsAgo < 5);
-	$: titles = jobs.reduce((acc: { [key: string]: TitleComponents }, job) => {
-		const components = getTitleComponents(job);
-		if (!acc[components.titleId]) {
-			acc[components.titleId] = components;
-		} else if (components.episodes) {
-			if (!acc[components.titleId].episodes) {
-				acc[components.titleId].episodes = {};
-			}
-			acc[components.titleId].episodes = {
-				...acc[components.titleId].episodes,
-				...components.episodes
-			};
-		}
-		return acc;
-	}, {});
+	$: titles = getTitleComponentsByJobs(jobs);
 	let selectedTitleId: string = getTitleComponents(job).titleId;
 	let selectedSe: string | null = getTitleComponents(job).episodes ? Object.keys(getTitleComponents(job).episodes!)[0] : null;
-
+	let titleSelectionOpen = false;
 	$: selectedTitle = titles[selectedTitleId];
 	$: selectedEpisodes = selectedTitle?.episodes;
 	$: selectedEpisode = (selectedTitle?.episodes && selectedSe) ? selectedTitle.episodes[selectedSe!] : null;
@@ -743,14 +735,30 @@
 
 
 				<div class="flex grow gap-2 items-center justify-center max-sm:flex-col max-sm:w-full">
-					<Select.Root selected={{value: selectedTitleId}}>
-						<Select.Trigger class="flex-grow max-sm:w-full">
-							<Select.Value placeholder={selectedTitle?.title} />
-						</Select.Trigger>
-						<Select.Content>
-							<div class="max-h-[35vh] w-full overflow-y-auto">
-								{#each Object.values(titles) as title}
-									<Select.Item class="p-1" value={title.titleId} on:click={()=>{
+					<Popover.Root bind:open={titleSelectionOpen} let:ids>
+						<Popover.Trigger asChild let:builder>
+							<Button
+								builders={[builder]}
+								variant="outline"
+								role="combobox"
+								aria-expanded={titleSelectionOpen}
+								class="flex-grow w-full justify-between"
+							>
+								{selectedTitle?.title}
+								<CaretSort class="ml-2 h-4 w-4 shrink-0 opacity-50" />
+							</Button>
+						</Popover.Trigger>
+						<Popover.Content class="p-0 w-auto">
+							<Command.Root>
+								<Command.Input placeholder="Search title..." class="h-9" />
+								<Command.Empty>No title found.</Command.Empty>
+								<Command.Group class="overflow-y-auto max-h-[35vh]">
+									{#each Object.values(titles) as title}
+										<Command.Item class="p-1" value={title.titleId} onSelect={()=>{
+											titleSelectionOpen = false;
+    									tick().then(() => {
+    									  document.getElementById(ids.trigger)?.focus();
+    									});
 									selectedTitleId = title.titleId;
 									selectedSe = null;
 									if(!title.episodes) {
@@ -758,11 +766,36 @@
 									}
 						}}><img src="{PUBLIC_STATIC}/{!title.episodes ? title.id : Object.values(title.episodes)[0].id}/poster.jpg"
 										alt="{title.title}" class="h-8 w-12 object-cover mr-2 rounded-sm" />
-										{title.title}</Select.Item>
-								{/each}
-							</div>
-						</Select.Content>
-					</Select.Root>
+											{title.title}
+											<Check
+												class='ml-auto right-0 h-4 w-4 {selectedTitleId === title.titleId ? "" : "text-transparent"}'
+											/>
+										</Command.Item>
+									{/each}
+								</Command.Group>
+							</Command.Root>
+						</Popover.Content>
+					</Popover.Root>
+<!--					<Select.Root selected={{value: selectedTitleId}}>-->
+<!--						<Select.Trigger class="flex-grow max-sm:w-full">-->
+<!--							<Select.Value placeholder={selectedTitle?.title} />-->
+<!--						</Select.Trigger>-->
+<!--						<Select.Content>-->
+<!--							<div class="max-h-[35vh] w-full overflow-y-auto">-->
+<!--								{#each Object.values(titles) as title}-->
+<!--									<Select.Item class="p-1" value={title.titleId} on:click={()=>{-->
+<!--									selectedTitleId = title.titleId;-->
+<!--									selectedSe = null;-->
+<!--									if(!title.episodes) {-->
+<!--										bounceTo(title.id)-->
+<!--									}-->
+<!--						}}><img src="{PUBLIC_STATIC}/{!title.episodes ? title.id : Object.values(title.episodes)[0].id}/poster.jpg"-->
+<!--										alt="{title.title}" class="h-8 w-12 object-cover mr-2 rounded-sm" />-->
+<!--										{title.title}</Select.Item>-->
+<!--								{/each}-->
+<!--							</div>-->
+<!--						</Select.Content>-->
+<!--					</Select.Root>-->
 
 					{#if selectedEpisodes}
 						<IconChevronRight size={20} stroke={2} />

@@ -312,3 +312,34 @@ export interface TitleComponents {
 		se: string;
 		} } | null;
 }
+
+export function getTitleComponentsByJobs(jobs: Job[]): { [key: string]: TitleComponents } {
+	const _titles = jobs.reduce((acc: { [key: string]: TitleComponents }, job) => {
+		const components = getTitleComponents(job);
+		if (!acc[components.titleId]) {
+			acc[components.titleId] = components;
+		} else if (components.episodes) {
+			if (!acc[components.titleId].episodes) {
+				acc[components.titleId].episodes = {};
+			}
+			acc[components.titleId].episodes = {
+				...acc[components.titleId].episodes,
+				...components.episodes
+			};
+		}
+		return acc;
+	}, {});
+	// set titles to sorted _titles with same structure, first sort by episodes is null, then by title
+	return Object.keys(_titles).sort((a, b) => {
+		if (!_titles[a].episodes && _titles[b].episodes) {
+			return 1;
+		} else if (_titles[a].episodes && !_titles[b].episodes) {
+			return -1;
+		} else {
+			return _titles[a].title.localeCompare(_titles[b].title);
+		}
+	}).reduce((acc: any, key) => {
+		acc[key] = _titles[key];
+		return acc;
+	}, {});
+}
