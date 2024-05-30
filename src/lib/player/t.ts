@@ -269,11 +269,12 @@ export function secondsSince(date: Date): number {
 	return Math.floor((new Date().getTime() - date.getTime()) / 1000);
 }
 
-export function setGetLS(key: string, value: string): string {
+export function setGetLS(key: string, value: string, onNotExist=(_v:string)=>{}): string {
 	const v = localStorage.getItem(key);
 	if (v) {
 		return v;
 	}
+	onNotExist(value);
 	localStorage.setItem(key, value);
 	return value;
 }

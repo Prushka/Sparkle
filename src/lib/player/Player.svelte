@@ -28,7 +28,6 @@
 		setGetLsNumber, sortTracks, type ServerData, getLeftAndJoined
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC, PUBLIC_WS } from '$env/static/public';
-	import { page } from '$app/stores';
 	import {
 		IconAlertOctagonFilled, IconArrowBounce,
 		IconCone, IconConePlus, IconEyeOff, IconLayout2, IconMoonFilled,
@@ -67,7 +66,13 @@
 	let controlsShowing = false;
 	let player: MediaPlayerElement;
 	let socket: WebSocket;
-	let name = setGetLS('name', `Anon-${randomString(4)}`);
+	let name = setGetLS('name', `Anon-${randomString(4)}`, (v: string) => {
+		toast.message(`Using placeholder name: ${v}`, {
+			description: `Change your name using the input next to your avatar`,
+			duration: 8000,
+			position: "top-left"
+		});
+	});
 	let playerId: string = setGetLS('id', randomString(14));
 	let pfp: File;
 	let pfpInput: HTMLInputElement;
@@ -106,7 +111,7 @@
 	let onSeeking = () => {
 	};
 	let chatLayout: string;
-	let mediaSelection : any;
+	let mediaSelection: any;
 	let canvas: HTMLCanvasElement;
 	const unsubscribeChatLayout = chatLayoutStore.subscribe((value) => chatLayout = value);
 	const unsubscribeChatFocused = chatFocusedStore.subscribe((value) => chatFocused = value);
@@ -241,7 +246,7 @@
 							seconds: 7,
 							job: jobs.find((job: Job) => job.Id === broadcast!.moveTo),
 							firedBy: state.firedBy
-						},
+						}
 					});
 					state.moveToText = jobs.find((job) => job.Id === state.broadcast!.moveTo)?.Input;
 					controlsToDisplay.push(state);
@@ -262,8 +267,8 @@
 						updateMessages();
 						break;
 					case SyncTypes.PlayersStatusSync:
-					  if(roomPlayers.length > 0) {
-							({left, joined} = getLeftAndJoined(roomPlayers, state.players, playerId));
+						if (roomPlayers.length > 0) {
+							({ left, joined } = getLeftAndJoined(roomPlayers, state.players, playerId));
 							for (const player of left) {
 								controlsToDisplay.push({
 									...state,
@@ -279,7 +284,7 @@
 								});
 							}
 							if (left.length > 0 || joined.length > 0) {
-								updateMessages()
+								updateMessages();
 							}
 						}
 						roomPlayers = state.players;
@@ -351,7 +356,7 @@
 				return roomMessages[i].timestamp;
 			}
 		}
-		return 0
+		return 0;
 	}
 
 	function updateMessages() {
