@@ -231,13 +231,15 @@
 			if (player) {
 				console.debug('received: ' + JSON.stringify(state));
 				const initiateMoveTo = (jobs: Job[]) => {
-					toast.custom(MoveToast, {
+					toast.loading(MoveToast, {
 						duration: 20000,
 						unstyled: true,
-						class: '!bg-transparent',
+						class: '!bg-transparent !w-full',
+						position: 'bottom-center',
+						important: true,
+						dismissable: false,
 						componentProps: {
 							seconds: 7,
-							action: ()=>{goto(`/${broadcast!.moveTo}`)},
 							by: `By: ${state.firedBy?.name}`,
 							job: jobs.find((job: Job) => job.Id === broadcast!.moveTo)
 						},

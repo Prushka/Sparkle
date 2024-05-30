@@ -4,9 +4,9 @@
 	import { Button } from '$lib/components/ui/button';
 	import TitlePoster from '$lib/player/TitlePoster.svelte';
 	import { getTitleComponents, type Job } from '$lib/player/t';
+	import { goto } from '$app/navigation';
 
 	export let seconds:number;
-	export let action: () => void;
 	export let by: string;
 	export let job: Job | undefined;
 	let closed = false;
@@ -17,7 +17,9 @@
 			seconds--;
 			if (seconds === 0) {
 				clearInterval(interval);
-				action();
+				if(job?.Id){
+					goto(`/${job?.Id}`)
+				}
 			}
 		}, 1000);
 		return () => clearInterval(interval);
@@ -26,7 +28,7 @@
 
 
 {#if !closed}
-	<Card.Root>
+	<Card.Root class="w-full">
 		<Card.Header>
 			<Card.Title>{#if seconds > 0}
 				<span>Moving in {seconds} second{seconds > 1 ? "s" : ""}</span>
@@ -35,11 +37,11 @@
 			{/if}</Card.Title>
 		</Card.Header>
 		<Card.Content>
-			<Card.Description class="flex gap-1 justify-center items-center w-full">
+			<div class="flex gap-1 items-center w-full text-sm font-normal">
 				{#if title}
 					<TitlePoster title={title}/>
 				{/if}
-				To: {job?.Input}</Card.Description>
+				To: {job?.Input}</div>
 		</Card.Content>
 		<Card.Footer class="flex justify-between">
 			<Button variant="outline">{by}</Button>

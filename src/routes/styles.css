@@ -192,3 +192,7 @@ input {
 .vds-chapter-title {
 	visibility: hidden;
 }
+
+.sonner-loading-wrapper {
+	display: none !important;
+}

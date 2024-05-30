@@ -2,7 +2,7 @@ import { PUBLIC_STATIC } from '$env/static/public';
 import { getTitleComponents, type Job, preprocessJob, preprocessJobs, type TitleComponents } from '$lib/player/t';
 import * as cheerio from 'cheerio';
 import { env } from '$env/dynamic/private';
-import { error, redirect } from '@sveltejs/kit';
+import { redirect } from '@sveltejs/kit';
 
 /** @type {import('../../.svelte-kit/types/src/routes').PageServerLoad} */
 export async function load({ params }) {
