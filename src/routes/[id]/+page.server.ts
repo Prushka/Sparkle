@@ -6,10 +6,10 @@ import { redirect } from '@sveltejs/kit';
 
 /** @type {import('../../.svelte-kit/types/src/routes').PageServerLoad} */
 export async function load({ params }) {
-	const { id } = params;
-	let job: Job | null = null
+	let { id } = params;
+	let job: Job | undefined = undefined
 	let codec = 'h264'
-	const base = `${PUBLIC_STATIC}/${id}`
+	let base = `${PUBLIC_STATIC}/${id}`
 	let plot = ''
 	let title: TitleComponents
 	let rating = -1
@@ -19,10 +19,17 @@ export async function load({ params }) {
 		const jobsResponse = await fetch(`${env.SERVER_BE}/all`);
 		jobs = await jobsResponse.json();
 		jobs = preprocessJobs(jobs)
-		const jobResponse = await fetch(`${env.SERVER_BE}/job/${id}`);
-		job = await jobResponse.json();
+		job = jobs.find(j => j.Id === id)
+		if (!job && id.length >= 5) {
+			const prefixJobs = jobs.filter(j => j.Id.startsWith(id))
+			if (prefixJobs.length === 1) {
+				job = prefixJobs[0]
+			}
+		}
 		if (job) {
 			job = preprocessJob(job)
+			id = job.Id
+			base = `${PUBLIC_STATIC}/${id}`
 		}else{
 			redirect(302, '/');
 		}

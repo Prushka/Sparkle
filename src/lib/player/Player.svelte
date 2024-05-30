@@ -73,7 +73,7 @@
 	let pfpInput: HTMLInputElement;
 	let roomPlayers: Player[] = [];
 	let roomMessages: Chat[] = [];
-	let roomId = $page.params.id || '';
+	let roomId = job.Id;
 	let lastTicked = 0;
 	let tickedSecsAgo = 0;
 	let tickedSecsAgoStr = '0';
