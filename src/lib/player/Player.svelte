@@ -25,7 +25,7 @@
 		randomString,
 		languageMap,
 		setGetLsBoolean,
-		setGetLsNumber, sortTracks, type ServerData
+		setGetLsNumber, sortTracks, type ServerData, getLeftAndJoined
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -247,6 +247,7 @@
 					controlsToDisplay.push(state);
 					updateMessages();
 				};
+				let left, joined: Player[];
 				switch (state.type) {
 					case SyncTypes.PfpSync:
 						if (state.firedBy?.id) {
@@ -261,6 +262,26 @@
 						updateMessages();
 						break;
 					case SyncTypes.PlayersStatusSync:
+					  if(roomPlayers.length > 0) {
+							({left, joined} = getLeftAndJoined(roomPlayers, state.players, playerId));
+							for (const player of left) {
+								controlsToDisplay.push({
+									...state,
+									type: SyncTypes.PlayerLeft,
+									firedBy: player
+								});
+							}
+							for (const player of joined) {
+								controlsToDisplay.push({
+									...state,
+									type: SyncTypes.PlayerJoined,
+									firedBy: player
+								});
+							}
+							if (left.length > 0 || joined.length > 0) {
+								updateMessages()
+							}
+						}
 						roomPlayers = state.players;
 						lastTicked = Date.now();
 						break;
@@ -343,9 +364,11 @@
 				const message: Chat = {
 					uid: control.firedBy.id,
 					username: control.firedBy.name,
-					message: control.type === SyncTypes.PauseSync ? (control.paused ? 'paused' : 'resumed') :
-						control.type === SyncTypes.TimeSync ? 'seeked to ' + formatSeconds(control.time) :
-							control.type === SyncTypes.BroadcastSync ? `Moving to [${control.moveToText}] in 7 Seconds` : 'unknown',
+					message: control.type === SyncTypes.PauseSync ? (control.paused ? 'Paused' : 'Resumed') :
+						control.type === SyncTypes.TimeSync ? 'Seeked to ' + formatSeconds(control.time) :
+							control.type === SyncTypes.BroadcastSync ? `Moving to [${control.moveToText}] in 7 Seconds` :
+								control.type === SyncTypes.PlayerLeft ? 'Left' :
+									control.type === SyncTypes.PlayerJoined ? 'Joined' : '',
 					timestamp: control.timestamp,
 					mediaSec: player.currentTime,
 					isStateUpdate: true

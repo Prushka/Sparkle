@@ -50,7 +50,9 @@ export enum SyncTypes {
 	AudioSwitch = 'audio',
 	CodecSwitch = 'codec',
 	SubtitleSwitch = 'subtitle',
-	ExitSync = 'exit'
+	ExitSync = 'exit',
+	PlayerLeft = 'left',
+	PlayerJoined = 'joined'
 }
 
 export enum BroadcastTypes {
@@ -456,4 +458,10 @@ export interface ServerData {
 	rating: number;
 	title: string;
 	plot: string;
+}
+
+export function getLeftAndJoined(old: Player[], n: Player[], ignoreId: string){
+	const left = old.filter((o) => o.id !== ignoreId && !n.find((p) => p.id === o.id));
+	const joined = n.filter((p) => p.id !== ignoreId && !old.find((o) => o.id === p.id));
+	return { left, joined };
 }
