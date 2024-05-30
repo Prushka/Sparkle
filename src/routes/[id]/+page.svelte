@@ -21,6 +21,4 @@
 	<meta name="description" content={data.plot} />
 </svelte:head>
 <svelte:component this={vidstack}
-									job={data.job}
-									data={data}
-									jobs={data.jobs} />
+									data={data} />

@@ -69,6 +69,7 @@ export interface SendPayload {
 	audio?: string;
 	codec?: string;
 	subtitle?: string;
+	moveToText?: string;
 }
 
 export interface BroadcastPayload {
@@ -444,4 +445,15 @@ export function sortTracks(job: Job) {
 	streams.sort(compare);
 	console.log(streams);
 	return streams;
+}
+
+export interface ServerData {
+	jobs: Job[];
+	job: Job,
+	video: string;
+	preview: string;
+	icon: string;
+	rating: number;
+	title: string;
+	plot: string;
 }

@@ -25,7 +25,7 @@
 		randomString,
 		languageMap,
 		setGetLsBoolean,
-		setGetLsNumber, sortTracks,
+		setGetLsNumber, sortTracks, type ServerData
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
@@ -62,9 +62,8 @@
 	import MediaSelection from '$lib/player/MediaSelection.svelte';
 	import MoveToast from '$lib/player/MoveToast.svelte';
 
-	export let job: Job;
-	export let jobs: Job[];
-	export let data: any;
+	export let data: ServerData;
+	const { jobs, job } = data;
 	let controlsShowing = false;
 	let player: MediaPlayerElement;
 	let socket: WebSocket;
@@ -244,6 +243,7 @@
 							firedBy: state.firedBy
 						},
 					});
+					state.moveToText = jobs.find((job) => job.Id === state.broadcast!.moveTo)?.Input;
 					controlsToDisplay.push(state);
 					updateMessages();
 				};
@@ -345,7 +345,7 @@
 					username: control.firedBy.name,
 					message: control.type === SyncTypes.PauseSync ? (control.paused ? 'paused' : 'resumed') :
 						control.type === SyncTypes.TimeSync ? 'seeked to ' + formatSeconds(control.time) :
-							control.type === SyncTypes.BroadcastSync ? `Moving to [${jobs.find((job) => job.Id === control.broadcast!.moveTo)?.Input}] in 7 Seconds` : 'unknown',
+							control.type === SyncTypes.BroadcastSync ? `Moving to [${control.moveToText}] in 7 Seconds` : 'unknown',
 					timestamp: control.timestamp,
 					mediaSec: player.currentTime,
 					isStateUpdate: true
@@ -842,8 +842,8 @@
 				</div>
 			</Card.Header>
 			<Card.Content
-				class="max-sm:p-4 md:grid md:grid-cols-[minmax(0,1fr)_min-content_minmax(0,1fr)] max-md:flex gap-2 items-center justify-center max-md:flex-col max-md:w-full">
-				<MediaSelection bind:this={mediaSelection} bind:job bind:jobs bounceToOverride={(id)=>{
+				class="max-sm:p-4">
+				<MediaSelection data={data} bind:this={mediaSelection} bounceToOverride={(id)=>{
 								if (syncGoto && socketCommunicating && roomPlayers.length > 1) {
 										send({
 											type: SyncTypes.BroadcastSync,
