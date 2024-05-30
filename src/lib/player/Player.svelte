@@ -745,7 +745,7 @@
 		</div>
 
 		<Card.Root class="w-full max-w-[90rem] self-center">
-			<Card.Header class="max-sm:p-4">
+			<Card.Header class="max-sm:px-4 max-sm:pt-4 max-sm:pb-0">
 				<div class="flex gap-3 justify-center items-center">
 					<div class="flex flex-col gap-1 max-sm:mr-4 flex-1">
 						<Card.Title>Media</Card.Title>
@@ -911,7 +911,9 @@
 								</Popover.Content>
 							</Popover.Root>
 							{#if selectedEpisodes}
-								<IconChevronRight size={20} stroke={2} />
+								<IconChevronRight
+									class="max-md:hidden"
+									size={20} stroke={2} />
 
 								<Popover.Root bind:open={seSelectionOpen}>
 									<Popover.Trigger asChild let:builder>
