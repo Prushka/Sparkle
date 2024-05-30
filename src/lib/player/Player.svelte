@@ -963,7 +963,7 @@
 			/>
 		</div>
 
-		<div class="flex gap-4 flex-wrap justify-center mt-2 mb-3">
+		<div class="flex gap-4 flex-wrap justify-center mb-3">
 			{#each roomPlayers as player}
 				<Button variant="outline"
 								class="h-auto pr-4 py-0 pl-0 rounded-l-full rounded-r-full flex gap-3.5">
