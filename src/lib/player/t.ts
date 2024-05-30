@@ -15,7 +15,7 @@ export const codecDisplayMap: { [key: string]: string } = {
 	'auto': 'Auto'
 };
 
-const subtitlePriority = ['ass', 'vtt', 'sup']
+const subtitlePriority = ['ass', 'vtt', 'sup'];
 
 export const chatLayouts = ['simple', 'extended', 'hidden'];
 
@@ -187,7 +187,7 @@ export const languageMap: { [key: string]: string } = {
 	'pol': 'Polish-Polski',
 	'rum': 'Romanian-Română',
 	'ukr': 'Ukrainian-Українська',
-	'fil': 'Filipino-Filipino',
+	'fil': 'Filipino-Filipino'
 };
 
 export const languageSrcMap: { [key: string]: string } = {
@@ -337,35 +337,41 @@ export function preprocessJobs(jobs: Job[]) {
 
 export function getTitleComponents(job: Job): TitleComponents {
 	let title = job.Input;
-	const parts = title.split(" - ");
-	let se = null
-	let seTitle = null
+	const parts = title.split(' - ');
+	let se = null;
+	let seTitle = null;
 	for (let i = 0; i < parts.length; i++) {
 		if (parts[i].match(/S\d{2}E\d{2}/i)) {
 			se = parts[i];
-			seTitle = parts.slice(i + 1).join(" - ");
-			title = parts.slice(0, i).join(" - ");
+			seTitle = parts.slice(i + 1).join(' - ');
+			title = parts.slice(0, i).join(' - ');
 			break;
 		}
 	}
 	const titleId = title.toLowerCase().replace(/[^a-z0-9]/gi, '');
 	return {
 		titleId, title, id: job.Id, episodes: se && seTitle ? { [se]: { seTitle, id: job.Id, se } } : null
-	}
+	};
 }
 
 export interface TitleComponents {
 	titleId: string;
 	title: string;
 	id: string;
-	episodes: { [key: string]: {
+	episodes: TitleEpisodes | null;
+}
+
+export interface TitleEpisodes {
+	[key: string]: {
 		seTitle: string;
 		id: string;
 		se: string;
-		} } | null;
+	};
 }
 
-export function getTitleComponentsByJobs(jobs: Job[]): { [key: string]: TitleComponents } {
+export interface Titles { [key: string]: TitleComponents }
+
+export function getTitleComponentsByJobs(jobs: Job[]): Titles {
 	const _titles = jobs.reduce((acc: { [key: string]: TitleComponents }, job) => {
 		const components = getTitleComponents(job);
 		if (!acc[components.titleId]) {
@@ -398,21 +404,21 @@ export function getTitleComponentsByJobs(jobs: Job[]): { [key: string]: TitleCom
 
 
 export function sortTracks(job: Job) {
-	const streams = job.Streams
-	const files = job.Files
-	let aExt, bExt, aMapped, bMapped : string;
-	const languagePriority = [navigator.language]
-	if (navigator.language !== "en-US") {
-		languagePriority.push("en-US")
+	const streams = job.Streams;
+	const files = job.Files;
+	let aExt, bExt, aMapped, bMapped: string;
+	const languagePriority = [navigator.language];
+	if (navigator.language !== 'en-US') {
+		languagePriority.push('en-US');
 	}
-	if (navigator.language !== "zh-CN") {
-		languagePriority.push("zh-CN")
+	if (navigator.language !== 'zh-CN') {
+		languagePriority.push('zh-CN');
 	}
 	const compare = (a: Stream, b: Stream) => {
-		aMapped = languageSrcMap[a.Language]
-		bMapped = languageSrcMap[b.Language]
-		aExt = a.Location.slice(-3)
-		bExt = b.Location.slice(-3)
+		aMapped = languageSrcMap[a.Language];
+		bMapped = languageSrcMap[b.Language];
+		aExt = a.Location.slice(-3);
+		bExt = b.Location.slice(-3);
 
 		const aInPriority = languagePriority.includes(aMapped);
 		const bInPriority = languagePriority.includes(bMapped);
@@ -434,8 +440,8 @@ export function sortTracks(job: Job) {
 		} else {
 			return a.Language.localeCompare(b.Language);
 		}
-	}
-	streams.sort(compare)
-	console.log(streams)
-	return streams
+	};
+	streams.sort(compare);
+	console.log(streams);
+	return streams;
 }
