@@ -20,7 +20,7 @@ export async function load({ params }) {
 		jobs = await jobsResponse.json();
 		jobs = preprocessJobs(jobs)
 		job = jobs.find(j => j.Id === id)
-		if (!job && id.length >= 5) {
+		if (!job && id.length >= 4) {
 			const prefixJobs = jobs.filter(j => j.Id.startsWith(id))
 			if (prefixJobs.length === 1) {
 				job = prefixJobs[0]
