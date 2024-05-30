@@ -69,8 +69,8 @@
 	let name = setGetLS('name', `Anon-${randomString(4)}`, (v: string) => {
 		toast.message(`Using placeholder name: ${v}`, {
 			description: `Change your name using the input next to your avatar`,
-			duration: 8000,
-			position: "top-left"
+			duration: 9000,
+			position: "bottom-left"
 		});
 	});
 	let playerId: string = setGetLS('id', randomString(14));
