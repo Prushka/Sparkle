@@ -240,10 +240,12 @@
 						dismissable: false,
 						componentProps: {
 							seconds: 7,
-							by: `By: ${state.firedBy?.name}`,
-							job: jobs.find((job: Job) => job.Id === broadcast!.moveTo)
+							job: jobs.find((job: Job) => job.Id === broadcast!.moveTo),
+							firedBy: state.firedBy
 						},
 					});
+					controlsToDisplay.push(state);
+					updateMessages();
 				};
 				switch (state.type) {
 					case SyncTypes.PfpSync:
@@ -252,7 +254,7 @@
 						}
 						break;
 					case SyncTypes.ChatSync:
-						if (inBg && roomMessages[roomMessages.length - 1]?.timestamp !== state.chats[state.chats.length - 1]?.timestamp) {
+						if (inBg && getLatestMessageTimestamp() !== state.chats[state.chats.length - 1]?.timestamp) {
 							notificationAudio.play();
 						}
 						roomMessages = state.chats;
@@ -322,6 +324,15 @@
 		}
 	}
 
+	function getLatestMessageTimestamp() {
+		for (let i = roomMessages.length - 1; i >= 0; i--) {
+			if (!roomMessages[i].isStateUpdate) {
+				return roomMessages[i].timestamp;
+			}
+		}
+		return 0
+	}
+
 	function updateMessages() {
 		messagesToDisplay = roomMessages.filter((message) => {
 			return (Date.now() - message.timestamp) < 200000;
@@ -333,7 +344,8 @@
 					uid: control.firedBy.id,
 					username: control.firedBy.name,
 					message: control.type === SyncTypes.PauseSync ? (control.paused ? 'paused' : 'resumed') :
-						control.type === SyncTypes.TimeSync ? 'seeked to ' + formatSeconds(control.time) : 'unknown',
+						control.type === SyncTypes.TimeSync ? 'seeked to ' + formatSeconds(control.time) :
+							control.type === SyncTypes.BroadcastSync ? `Moving to [${jobs.find((job) => job.Id === control.broadcast!.moveTo)?.Input}] in 5 Seconds` : 'unknown',
 					timestamp: control.timestamp,
 					mediaSec: player.currentTime,
 					isStateUpdate: true
@@ -662,6 +674,7 @@
 								 if(ppfp[0].size > 12000000) {
 									 toast.error("File size too large", {
       							description: "Max file size: 10MB",
+      							duration: 5000,
     										})
 									 pfpInput.value = '';
 									 return;
