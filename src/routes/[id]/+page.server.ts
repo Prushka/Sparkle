@@ -1,7 +1,8 @@
 import { PUBLIC_STATIC } from '$env/static/public';
-import { type Job, preprocessJob, preprocessJobs, supportedCodecs } from '$lib/player/t';
+import { type Job, preprocessJob, preprocessJobs } from '$lib/player/t';
 import * as cheerio from 'cheerio';
 import { env } from '$env/dynamic/private';
+import { error } from '@sveltejs/kit';
 
 /** @type {import('../../.svelte-kit/types/src/routes').PageServerLoad} */
 export async function load({ params }) {
@@ -24,6 +25,10 @@ export async function load({ params }) {
 		job = await jobResponse.json();
 		if (job) {
 			job = preprocessJob(job)
+		}else{
+			error(404, {
+				message: 'Media not found'
+			});
 		}
 		if (!job?.EncodedCodecs?.includes('h264')) {
 			if (job?.EncodedCodecs?.includes('av1')) {
@@ -47,6 +52,9 @@ export async function load({ params }) {
 		}
 	} catch (e) {
 		console.log(params, e);
+		error(404, {
+			message: 'Media not found'
+		});
 	}
 	if (episode >=0 && season >=0) {
 		const seasonEpisode = `S${season.toString().padStart(2, '0')}E${episode.toString().padStart(2, '0')}`

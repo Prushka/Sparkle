@@ -1,7 +1,7 @@
 <script lang="ts">
 	import 'vidstack/bundle';
 	import type { MediaPlayerElement } from 'vidstack/elements';
-	import { onMount, tick } from 'svelte';
+	import { onMount } from 'svelte';
 	import {
 		formatSeconds,
 		type Job,
@@ -20,20 +20,17 @@
 		defaultFallback,
 		chatLayouts,
 		BroadcastTypes,
-		preprocessJobs,
 		codecDisplayMap,
-		getTitleComponents,
 		setGetLS,
 		randomString,
-		getTitleComponentsByJobs,
 		languageMap,
 		setGetLsBoolean,
-		setGetLsNumber, sortTracks
+		setGetLsNumber, sortTracks,
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC, PUBLIC_WS } from '$env/static/public';
 	import { page } from '$app/stores';
 	import {
-		IconAlertOctagonFilled, IconArrowBounce, IconCheck, IconChevronRight,
+		IconAlertOctagonFilled, IconArrowBounce,
 		IconCone, IconConePlus, IconEyeOff, IconLayout2, IconMoonFilled,
 		IconPlayerPauseFilled,
 		IconPlayerPlayFilled,
@@ -53,11 +50,7 @@
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
-	import * as Popover from "$lib/components/ui/popover/index.js";
-	import * as Command from "$lib/components/ui/command/index.js";
-	import * as Card from "$lib/components/ui/card/index.js";
-
-
+	import * as Card from '$lib/components/ui/card/index.js';
 
 	import JASSUB from 'jassub';
 	import { goto } from '$app/navigation';
@@ -65,21 +58,22 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import { toast } from 'svelte-sonner';
-	import CaretSort from 'svelte-radix/CaretSort.svelte';
 	import ConnectButton from '$lib/player/ConnectButton.svelte';
+	import MediaSelection from '$lib/player/MediaSelection.svelte';
+	import MoveToast from '$lib/player/MoveToast.svelte';
 
+	export let job: Job;
+	export let jobs: Job[];
+	export let data: any;
 	let controlsShowing = false;
 	let player: MediaPlayerElement;
 	let socket: WebSocket;
-	let name = setGetLS("name", `Anon-${randomString(4)}`)
-	let playerId: string = setGetLS("id", randomString(14));
+	let name = setGetLS('name', `Anon-${randomString(4)}`);
+	let playerId: string = setGetLS('id', randomString(14));
 	let pfp: File;
 	let pfpInput: HTMLInputElement;
 	let roomPlayers: Player[] = [];
 	let roomMessages: Chat[] = [];
-	export let job: Job;
-	export let jobs: Job[];
-	export let data: any;
 	let roomId = $page.params.id || '';
 	let lastTicked = 0;
 	let tickedSecsAgo = 0;
@@ -100,8 +94,8 @@
 	let jas: any;
 	let currentTheme: 'light' | 'dark';
 	let prevTrackSrc: string | null | undefined = '';
-	let syncGoto = setGetLsBoolean("syncGoto", true);
-	let playerVolume = setGetLsNumber("volume", 1);
+	let syncGoto = setGetLsBoolean('syncGoto', true);
+	let playerVolume = setGetLsNumber('volume', 1);
 	let notificationAudio = new Audio(`${PUBLIC_STATIC}/sound/anya_peanuts.mp3`);
 	let inBg = false;
 	let onPlay = () => {
@@ -113,6 +107,8 @@
 	let onSeeking = () => {
 	};
 	let chatLayout: string;
+	let mediaSelection : any;
+	let canvas: HTMLCanvasElement;
 	const unsubscribeChatLayout = chatLayoutStore.subscribe((value) => chatLayout = value);
 	const unsubscribeChatFocused = chatFocusedStore.subscribe((value) => chatFocused = value);
 	const unsubscribeMode = mode.subscribe((value) => {
@@ -127,35 +123,27 @@
 	$: BASE_STATIC = `${PUBLIC_STATIC}/${roomId}`;
 	$: thumbnailVttSrc = `${BASE_STATIC}/storyboard.vtt`;
 	$: socketCommunicating = socketConnected && (tickedSecsAgo >= 0 && tickedSecsAgo < 5);
-	$: titles = getTitleComponentsByJobs(jobs);
-	let selectedTitleId: string = getTitleComponents(job).titleId;
-	let selectedSe: string | null = getTitleComponents(job).episodes ? Object.keys(getTitleComponents(job).episodes!)[0] : null;
-	let titleSelectionOpen = false;
-	let seSelectionOpen = false;
-	$: selectedTitle = titles[selectedTitleId];
-	$: selectedEpisodes = selectedTitle?.episodes;
-	$: selectedEpisode = (selectedTitle?.episodes && selectedSe) ? selectedTitle.episodes[selectedSe!] : null;
-	$:{
-		console.log(titles, selectedTitle);
-	}
-	$: autoCodec = (videoSrc?.sCodec && selectedCodec === "auto") ? `(${codecDisplayMap[videoSrc.sCodec]})` : ''
+	$: autoCodec = (videoSrc?.sCodec && selectedCodec === 'auto') ? `(${codecDisplayMap[videoSrc.sCodec]})` : '';
 
 	$: chatHidden = chatLayout === 'hidden';
 	$: {
 		console.log('srcList:', videoSrc);
 	}
-
-	function updatePlayers(players: Player[], socketCommunicating: boolean) {
-		if(!socketCommunicating) {
-			playersStore.set(-1);
-		}else{
-			playersStore.set(players.length);
+	$: updatePlayers(roomPlayers, socketCommunicating);
+	$:{
+		if (selectedCodec !== 'auto' && job.EncodedCodecs && job.EncodedCodecs.length > 0 && !job?.EncodedCodecs.includes(selectedCodec)) {
+			console.log('setting codec - no matching codec', selectedCodec, job.EncodedCodecs);
+			onCodecChange('auto');
 		}
 	}
 
-	$: updatePlayers(roomPlayers, socketCommunicating);
-
-	let canvas: HTMLCanvasElement;
+	function updatePlayers(players: Player[], socketCommunicating: boolean) {
+		if (!socketCommunicating) {
+			playersStore.set(-1);
+		} else {
+			playersStore.set(players.length);
+		}
+	}
 
 	function setVideoSrc(onChange = () => {
 	}) {
@@ -189,7 +177,7 @@
 			};
 			sendSettings();
 			player.title = `${job.Input}`;
-			player.artist = "Let's watch anime!";
+			player.artist = 'Let\'s watch anime!';
 		};
 		if (selectedCodec === 'auto' && prevCodec !== autoCodec) {
 			setVideoSrc(autoCodec);
@@ -207,13 +195,6 @@
 		setVideoSrc(() => {
 			$pageReloadCounterStore++;
 		});
-	}
-
-	$:{
-		if (selectedCodec !== 'auto' && job.EncodedCodecs && job.EncodedCodecs.length > 0 && !job?.EncodedCodecs.includes(selectedCodec)) {
-			console.log('setting codec - no matching codec', selectedCodec, job.EncodedCodecs);
-			onCodecChange('auto');
-		}
 	}
 
 	function sendSettings() {
@@ -249,24 +230,23 @@
 			};
 			if (player) {
 				console.debug('received: ' + JSON.stringify(state));
-				const initiateMoveTo = () => {
-					toast.loading(`Moving to next media in 7 seconds`, {
-						duration: 7000,
-						description: `Next: ${jobs.find((job) => job.Id === broadcast!.moveTo)?.Input}`,
-						important: true,
-						action: {
-							label: `By: ${state.firedBy?.name}`,
-							onClick: () => {}
+				const initiateMoveTo = (jobs: Job[]) => {
+					toast.custom(MoveToast, {
+						duration: 20000,
+						unstyled: true,
+						class: '!bg-transparent',
+						componentProps: {
+							seconds: 7,
+							action: ()=>{goto(`/${broadcast!.moveTo}`)},
+							by: `By: ${state.firedBy?.name}`,
+							job: jobs.find((job: Job) => job.Id === broadcast!.moveTo)
 						},
 					});
-					setTimeout(() => {
-						goto(`/${broadcast!.moveTo}`);
-					}, 7000);
 				};
 				switch (state.type) {
 					case SyncTypes.PfpSync:
 						if (state.firedBy?.id) {
-							updatePfp(state.firedBy.id)
+							updatePfp(state.firedBy.id);
 						}
 						break;
 					case SyncTypes.ChatSync:
@@ -299,11 +279,11 @@
 						switch (broadcast?.type) {
 							case BroadcastTypes.MoveTo:
 								if (!jobs.find((job) => job.Id === broadcast.moveTo)) {
-									updateList(() => {
-										initiateMoveTo();
+									mediaSelection.updateList((jobs: Job[]) => {
+										initiateMoveTo(jobs);
 									});
 								} else {
-									initiateMoveTo();
+									initiateMoveTo(jobs);
 								}
 								break;
 						}
@@ -340,17 +320,6 @@
 		}
 	}
 
-	function updateList(onSuccess = () => {
-	}) {
-		fetch(`${PUBLIC_BE}/all`)
-			.then(response => response.json())
-			.then(data => {
-				jobs = preprocessJobs(data);
-				console.log(jobs);
-				onSuccess();
-			});
-	}
-
 	function updateMessages() {
 		messagesToDisplay = roomMessages.filter((message) => {
 			return (Date.now() - message.timestamp) < 200000;
@@ -378,7 +347,7 @@
 	function reloadPlayer() {
 		if (job.Streams) {
 			fonts = [];
-			job.Streams = sortTracks(job)
+			job.Streams = sortTracks(job);
 			let defaulted = false;
 			for (const [, stream] of Object.entries(job.Streams)) {
 				switch (stream.CodecType) {
@@ -394,9 +363,9 @@
 							kind: 'subtitles',
 							type: stream.CodecName.includes('vtt') ? 'vtt' : stream.CodecName.includes('ass') ? 'asshuh' : 'srt',
 							language: languageSrcMap[stream.Language] || stream.Language,
-							default: !defaulted,
+							default: !defaulted
 						});
-						defaulted = true
+						defaulted = true;
 						break;
 				}
 			}
@@ -431,9 +400,6 @@
 		supportedCodecs = getSupportedCodecs();
 		setVideoSrc();
 		reloadPlayer();
-		const ii = setInterval(() => {
-			updateList();
-		}, 60000);
 		const visibilityChange = () => {
 			if (document.hidden) {
 				send({ state: 'bg', type: SyncTypes.StateSync });
@@ -447,13 +413,13 @@
 		const playerUnsubscribe = player.subscribe(({ controlsVisible }) => {
 			controlsShowing = controlsVisible;
 		});
-		const playerCanPlayUnsubscribe  = player.subscribe(({ canPlay }) => {
+		const playerCanPlayUnsubscribe = player.subscribe(({ canPlay }) => {
 			if (canPlay && interacted && !socket) {
 				connect();
 			}
 		});
 		const playerSoundUnsubscribe = player.subscribe(({ volume }) => {
-			playerVolume = volume
+			playerVolume = volume;
 			localStorage.setItem('volume', volume.toString());
 		});
 		const i = setInterval(() => {
@@ -515,7 +481,7 @@
 									}
 								});
 						} else if (ext.includes('ass')) {
-							console.log("ass", selectedTrack.src)
+							console.log('ass', selectedTrack.src);
 							const fallback: string[] = fallbackFontsMap[selectedTrack.language] ? fallbackFontsMap[selectedTrack.language] : defaultFallback;
 							const availableFonts = {
 								[fallback[0]]: fallback[1]
@@ -547,7 +513,6 @@
 			exited = true;
 			socket?.close();
 			clearInterval(i);
-			clearInterval(ii);
 			dispose();
 			playerUnsubscribe();
 			playerCanPlayUnsubscribe();
@@ -572,17 +537,6 @@
 				time: timeRounded
 			});
 			lastSentTime = timeRounded;
-		}
-	}
-
-	function bounceTo(id: string) {
-		if (syncGoto && socketCommunicating && roomPlayers.length > 1) {
-			send({
-				type: SyncTypes.BroadcastSync,
-				broadcast: { type: BroadcastTypes.MoveTo, moveTo: id }
-			});
-		} else {
-			goto(`/${id}`);
 		}
 	}
 </script>
@@ -663,7 +617,8 @@
 				class="vds-poster"
 				src={data.preview}
 			></media-poster>
-			<canvas bind:this={canvas} id="sub-canvas" class="pointer-events-none absolute top-0 left-0 w-full h-full" width="1920" height="1080"/>
+			<canvas bind:this={canvas} id="sub-canvas" class="pointer-events-none absolute top-0 left-0 w-full h-full"
+							width="1920" height="1080" />
 		</media-provider>
 		<media-video-layout colorScheme={currentTheme}
 												thumbnails={thumbnailVttSrc}></media-video-layout>
@@ -749,7 +704,8 @@
 				<div class="flex gap-3 justify-center items-center">
 					<div class="flex flex-col gap-1 max-sm:mr-4 flex-1">
 						<Card.Title>Media</Card.Title>
-						<Card.Description class="max-sm:hidden">Codec: {selectedCodec} {autoCodec}, Audio: {languageMap[selectedAudioMapping] || selectedAudioMapping}</Card.Description>
+						<Card.Description class="max-sm:hidden">Codec: {selectedCodec} {autoCodec},
+							Audio: {languageMap[selectedAudioMapping] || selectedAudioMapping}</Card.Description>
 					</div>
 					<ConnectButton bind:socketCommunicating bind:interacted bind:exited bind:tickedSecsAgoStr
 												 class="max-md:hidden"
@@ -823,140 +779,72 @@
 								</DropdownMenu.RadioGroup>
 							</DropdownMenu.Content>
 						</DropdownMenu.Root>
-					<DropdownMenu.Root>
-						<DropdownMenu.Trigger asChild let:builder>
-							<Button builders={[builder]} variant={currentTheme === "dark" ? "outline" : "default"}>
-								<IconSettings2 class="mr-2" size={16} stroke={2} /> Video <span class="max-sm:hidden">&nbsp;Settings</span></Button>
-						</DropdownMenu.Trigger>
-						<DropdownMenu.Content class="w-56">
-							<DropdownMenu.Label>
-								Video Settings</DropdownMenu.Label>
-							<DropdownMenu.Separator />
-							<DropdownMenu.Group>
-								{#if audiosExistForCodec(job, videoSrc?.sCodec)}
-									<DropdownMenu.RadioGroup bind:value={selectedAudioMapping}>
-										{#each job.MappedAudio[videoSrc?.sCodec] as am}
-											<DropdownMenu.RadioItem value={am.Language} on:click={()=>{
+						<DropdownMenu.Root>
+							<DropdownMenu.Trigger asChild let:builder>
+								<Button builders={[builder]} variant={currentTheme === "dark" ? "outline" : "default"}>
+									<IconSettings2 class="mr-2" size={16} stroke={2} />
+									Video <span class="max-sm:hidden">&nbsp;Settings</span></Button>
+							</DropdownMenu.Trigger>
+							<DropdownMenu.Content class="w-56">
+								<DropdownMenu.Label>
+									Video Settings
+								</DropdownMenu.Label>
+								<DropdownMenu.Separator />
+								<DropdownMenu.Group>
+									{#if audiosExistForCodec(job, videoSrc?.sCodec)}
+										<DropdownMenu.RadioGroup bind:value={selectedAudioMapping}>
+											{#each job.MappedAudio[videoSrc?.sCodec] as am}
+												<DropdownMenu.RadioItem value={am.Language} on:click={()=>{
 								localStorage.setItem('preferredAudio', am.Language);
 								$pageReloadCounterStore++;
 							}}>{formatPair(am)}</DropdownMenu.RadioItem>
-										{/each}
-									</DropdownMenu.RadioGroup>
-								{/if}
-							</DropdownMenu.Group>
-							<DropdownMenu.Separator />
-							<DropdownMenu.Group>
-								<DropdownMenu.RadioGroup bind:value={selectedCodec}>
-									<DropdownMenu.RadioItem value={"auto"} on:click={()=>{
+											{/each}
+										</DropdownMenu.RadioGroup>
+									{/if}
+								</DropdownMenu.Group>
+								<DropdownMenu.Separator />
+								<DropdownMenu.Group>
+									<DropdownMenu.RadioGroup bind:value={selectedCodec}>
+										<DropdownMenu.RadioItem value={"auto"} on:click={()=>{
 									onCodecChange("auto")
 							}}>
-										Auto {autoCodec}</DropdownMenu.RadioItem>
-									{#each job.EncodedCodecs as codec}
-										<DropdownMenu.RadioItem value={codec} on:click={()=>{
+											Auto {autoCodec}</DropdownMenu.RadioItem>
+										{#each job.EncodedCodecs as codec}
+											<DropdownMenu.RadioItem value={codec} on:click={()=>{
 							onCodecChange(codec)
 							}}>
-											{codecDisplayMap[codec]}{formatMbps(job, codec)}
-											{#if !supportedCodecs.includes(codec)}
-												<IconAlertOctagonFilled class="ml-2" size={16} stroke={2} />
-											{/if}
-										</DropdownMenu.RadioItem>
-									{/each}
-								</DropdownMenu.RadioGroup>
-							</DropdownMenu.Group>
-						</DropdownMenu.Content>
-					</DropdownMenu.Root>
+												{codecDisplayMap[codec]}{formatMbps(job, codec)}
+												{#if !supportedCodecs.includes(codec)}
+													<IconAlertOctagonFilled class="ml-2" size={16} stroke={2} />
+												{/if}
+											</DropdownMenu.RadioItem>
+										{/each}
+									</DropdownMenu.RadioGroup>
+								</DropdownMenu.Group>
+							</DropdownMenu.Content>
+						</DropdownMenu.Root>
 					</div>
 				</div>
 			</Card.Header>
-			<Card.Content class="max-sm:p-4 md:grid md:grid-cols-[minmax(0,1fr)_min-content_minmax(0,1fr)] max-md:flex gap-2 items-center justify-center max-md:flex-col max-md:w-full">
-							<Popover.Root bind:open={titleSelectionOpen}>
-								<Popover.Trigger asChild let:builder>
-									<Button
-										builders={[builder]}
-										variant="outline"
-										role="combobox"
-										aria-expanded={titleSelectionOpen}
-										class="max-md:w-full justify-between font-semibold {!selectedEpisodes?'col-span-3':''}">
-										<span class="max-w-[calc(100%-2rem)] text-ellipsis overflow-hidden">{selectedTitle?.title}</span>
-											<CaretSort class="ml-2 h-4 w-4 shrink-0 opacity-50" />
-									</Button>
-								</Popover.Trigger>
-								<Popover.Content align="start" class="p-0 w-auto">
-									<Command.Root>
-										<Command.Input placeholder="Search title..." class="h-9" />
-										<Command.Empty>No title found.</Command.Empty>
-										<Command.Group class="overflow-y-auto max-h-[37vh]">
-											{#each Object.values(titles) as title}
-												<Command.Item class="p-1 {selectedTitleId === title.titleId ? 'font-bold' : ''}" value={title.title} onSelect={()=>{
-											titleSelectionOpen = false;
-									selectedTitleId = title.titleId;
-									selectedSe = null;
-									if(!title.episodes) {
-										bounceTo(title.id)
-									}else{
-										tick().then(() => {
-    							  seSelectionOpen = true;
-    								});
+			<Card.Content
+				class="max-sm:p-4 md:grid md:grid-cols-[minmax(0,1fr)_min-content_minmax(0,1fr)] max-md:flex gap-2 items-center justify-center max-md:flex-col max-md:w-full">
+				<MediaSelection bind:this={mediaSelection} bind:job bind:jobs bounceToOverride={(id)=>{
+								if (syncGoto && socketCommunicating && roomPlayers.length > 1) {
+										send({
+											type: SyncTypes.BroadcastSync,
+											broadcast: { type: BroadcastTypes.MoveTo, moveTo: id }
+										});
+									} else {
+										goto(`/${id}`);
 									}
-						}}><img src="{PUBLIC_STATIC}/{!title.episodes ? title.id : Object.values(title.episodes)[0].id}/poster.jpg"
-										alt="{title.title}" class="h-8 w-12 object-cover mr-2 rounded-sm" />
-													<span class="mr-4">{title.title}</span>
-													<IconCheck size={18} stroke={2}
-																		 class='ml-auto right-0 {selectedTitleId === title.titleId ? "" : "text-transparent"}'
-													/>
-												</Command.Item>
-											{/each}
-										</Command.Group>
-									</Command.Root>
-								</Popover.Content>
-							</Popover.Root>
-							{#if selectedEpisodes}
-								<IconChevronRight
-									class="max-md:hidden"
-									size={20} stroke={2} />
+							}} />
 
-								<Popover.Root bind:open={seSelectionOpen}>
-									<Popover.Trigger asChild let:builder>
-										<Button
-											builders={[builder]}
-											variant="outline"
-											role="combobox"
-											aria-expanded={titleSelectionOpen}
-											class="max-md:w-full justify-between font-semibold {selectedEpisode ? '' : 'text-red-600 font-bold'}"
-										>
-										<span class="max-w-[calc(100%-2rem)] text-ellipsis overflow-hidden">{selectedEpisode ?
-												`${selectedSe} - ${selectedEpisode.seTitle}` : "Select episode"}</span>
-											<CaretSort class="ml-2 h-4 w-4 shrink-0 opacity-50" />
-										</Button>
-									</Popover.Trigger>
-									<Popover.Content align="start" class="p-0 w-auto">
-										<Command.Root>
-											<Command.Input placeholder="Search episode..." class="h-9" />
-											<Command.Empty>No episode found.</Command.Empty>
-											<Command.Group class="overflow-y-auto max-h-[37vh]">
-												{#each Object.values(selectedEpisodes) as es}
-													<Command.Item class="p-1 {selectedSe === es.se ? 'font-bold' : ''}" value={es.se + "-" + es.seTitle} onSelect={()=>{
-									seSelectionOpen = false;
-									bounceTo(es.id)
-									selectedSe = es.se;
-						}}><img src="{PUBLIC_STATIC}/{es.id}/poster.jpg" alt="{es.seTitle}" class="h-8 w-12 object-cover mr-2 rounded-sm" />
-														<span class="mr-4">{es.se} - {es.seTitle}</span>
-															<IconCheck size={18} stroke={2}
-															class='ml-auto right-0 {selectedSe === es.se ? "" : "text-transparent"}'
-														/>
-													</Command.Item>
-												{/each}
-											</Command.Group>
-										</Command.Root>
-									</Popover.Content>
-								</Popover.Root>
-							{/if}
 			</Card.Content>
 		</Card.Root>
 
 		<div class="flex gap-3 self-center items-center justify-center w-full md:hidden">
 			<ConnectButton bind:socketCommunicating bind:interacted bind:exited bind:tickedSecsAgoStr
-			onClick={() => {
+										 onClick={() => {
 						if(!socketCommunicating && !interacted) {
 							player?.play()
 								}}}
