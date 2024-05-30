@@ -15,15 +15,15 @@ import * as Command from "$lib/components/ui/command/index.js";
 	import { goto } from '$app/navigation';
 	import TitlePoster from '$lib/player/TitlePoster.svelte';
 
-export let job: Job;
+export let job: Job | undefined;
 export let jobs : any;
 export let bounceToOverride: (_id: string) => void;
-let selectedTitleId: string = getTitleComponents(job).titleId;
-let selectedSe: string | null = getTitleComponents(job).episodes ? Object.keys(getTitleComponents(job).episodes!)[0] : null;
+let selectedTitleId: string | null = job ? getTitleComponents(job).titleId : null;
+let selectedSe: string | null = job && getTitleComponents(job).episodes ? Object.keys(getTitleComponents(job).episodes!)[0] : null;
 let titleSelectionOpen = false;
 let seSelectionOpen = false;
 $: titles = getTitleComponentsByJobs(jobs);
-$: selectedTitle = titles[selectedTitleId];
+$: selectedTitle = selectedTitleId ? titles[selectedTitleId] : null;
 $: selectedEpisodes = selectedTitle?.episodes;
 $: selectedEpisode = (selectedTitle?.episodes && selectedSe) ? selectedTitle.episodes[selectedSe!] : null;
 $:{
