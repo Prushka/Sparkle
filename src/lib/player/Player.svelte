@@ -221,6 +221,7 @@
 			}
 			send({ type: SyncTypes.NewPlayer });
 			sendSettings();
+			updateLastTicked(true);
 		};
 
 		socket.onmessage = (event: MessageEvent) => {
@@ -288,7 +289,7 @@
 							}
 						}
 						roomPlayers = state.players;
-						lastTicked = Date.now();
+						updateLastTicked(true);
 						break;
 					case SyncTypes.PauseSync:
 						if (state.paused === true && player.paused === false) {
@@ -384,6 +385,14 @@
 		messagesToDisplay.sort((a, b) => {
 			return a.timestamp - b.timestamp;
 		});
+	}
+
+	function updateLastTicked(resetTimer: boolean = false) {
+		if (resetTimer) {
+			lastTicked = Date.now();
+		}
+		tickedSecsAgo = (socketConnected && roomPlayers.length > 0) ? (Date.now() - lastTicked) / 1000 : -1;
+		tickedSecsAgoStr = (Math.round(tickedSecsAgo * 100) / 100).toFixed(2);
 	}
 
 	function reloadPlayer() {
@@ -495,8 +504,7 @@
 				}
 			}
 			updateMessages();
-			tickedSecsAgo = (socketConnected && roomPlayers.length > 0) ? (Date.now() - lastTicked) / 1000 : -1;
-			tickedSecsAgoStr = (Math.round(tickedSecsAgo * 100) / 100).toFixed(2);
+			updateLastTicked();
 			const videoElement = document.querySelector('media-provider video') as HTMLVideoElement;
 			if (videoElement) {
 				const selectedTrack = player?.textTracks?.selected;
