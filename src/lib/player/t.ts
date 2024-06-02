@@ -332,6 +332,22 @@ export function preprocessJob(job: Job) {
 			}
 		}
 	}
+	if (job.MappedAudio && Object.keys(job.MappedAudio).length > 1) {
+		const duplicateLanguages: any = {};
+		const first = Object.values(job.MappedAudio)[0];
+		first.forEach((stream) => {
+			if (first.filter((s) => s.Language === stream.Language).length > 1) {
+				duplicateLanguages[stream.Language] = true;
+			}
+		})
+		Object.values(job.MappedAudio).forEach((streams) => {
+			streams.forEach((stream) => {
+				if (duplicateLanguages[stream.Language]) {
+					stream.Language = `${formatPair(stream)} (${stream.Index})` ;
+				}
+			});
+		});
+	}
 	return job;
 }
 
