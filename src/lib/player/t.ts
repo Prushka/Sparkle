@@ -305,7 +305,11 @@ export function getMbps(job: Job | undefined | null, codec: string): number {
 }
 
 export function formatMbps(job: Job | undefined | null, codec: string): string {
-	const mbps = getMbps(job, codec);
+	let suffix = '';
+	if (job?.MappedAudio[codec]?.[0]) {
+		suffix = `-${job.MappedAudio[codec][0].Index}-${job.MappedAudio[codec][0].Language}`;
+	}
+	const mbps = getMbps(job, codec+suffix);
 	if (mbps === 0) {
 		return '';
 	}
