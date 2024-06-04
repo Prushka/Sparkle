@@ -14,7 +14,6 @@
 		codecMap,
 		getSupportedCodecs,
 		formatPair,
-		getAudioLocForCodec,
 		audiosExistForCodec,
 		fallbackFontsMap,
 		defaultFallback,
@@ -70,7 +69,7 @@
 		toast.message(`Using placeholder name: ${v}`, {
 			description: `Change your name using the input next to your avatar`,
 			duration: 9000,
-			position: "bottom-left"
+			position: 'bottom-left'
 		});
 	});
 	let playerId: string = setGetLS('id', randomString(14));
@@ -86,7 +85,7 @@
 	let messagesToDisplay: Chat[] = [];
 	let controlsToDisplay: SendPayload[] = [];
 	let selectedCodec = localStorage.getItem('sCodec') || 'auto';
-	let selectedAudioMapping = localStorage.getItem('preferredAudio') || 'jpn';
+	let selectedAudio = localStorage.getItem('sAudio') || '1-jpn';
 	let pauseSend = false;
 	let supportedCodecs: string[] = [];
 	let interacted = false;
@@ -163,18 +162,23 @@
 			autoCodec = job.EncodedCodecs[0];
 		}
 		const setVideoSrc = (codec: string) => {
-			const prevAudio = selectedAudioMapping;
-			const audioExists = job.MappedAudio[codec]?.find((am) => {
-				if (am.Language === selectedAudioMapping) {
-					return true;
+			let stream = job.MappedAudio[codec]?.find((am) => {
+				return `${am.Index}-${am.Language}` === selectedAudio
+			})
+			if (!stream) {
+				stream = job.MappedAudio[codec]?.find((am) => {
+					return selectedAudio.split('-').length > 1 && am.Language === selectedAudio.split('-')[1]
+				});
+				if(!stream){
+					if (job.MappedAudio[codec] && job.MappedAudio[codec].length > 0) {
+						stream = job.MappedAudio[codec][0];
+					}
 				}
-			});
-			if (!audioExists && job.MappedAudio[codec] && job.MappedAudio[codec].length > 0) {
-				selectedAudioMapping = job.MappedAudio[codec][0].Language;
 			}
-			console.log('codec', codec, codecMap[codec], prevAudio, selectedAudioMapping);
+			selectedAudio = `${stream?.Index}-${stream?.Language}`;
+			console.log('codec', codec, codecMap[codec], selectedAudio);
 			videoSrc = {
-				src: `${BASE_STATIC}/${getAudioLocForCodec(job, codec, selectedAudioMapping)}.mp4`,
+				src: `${BASE_STATIC}/${codec}-${selectedAudio}.mp4`,
 				type: 'video/mp4',
 				codec: codecMap[codec],
 				sCodec: codec
@@ -203,7 +207,7 @@
 
 	function sendSettings() {
 		send({ type: SyncTypes.SubtitleSwitch, subtitle: player?.textTracks?.selected?.src });
-		send({ type: SyncTypes.AudioSwitch, audio: selectedAudioMapping });
+		send({ type: SyncTypes.AudioSwitch, audio: selectedAudio });
 		send({ type: SyncTypes.CodecSwitch, codec: `${selectedCodec},${videoSrc?.sCodec}` });
 	}
 
@@ -756,7 +760,7 @@
 					<div class="flex flex-col gap-1 max-sm:mr-4 flex-1">
 						<Card.Title>Media</Card.Title>
 						<Card.Description class="max-sm:hidden">Codec: {selectedCodec} {autoCodec},
-							Audio: {languageMap[selectedAudioMapping] || selectedAudioMapping}</Card.Description>
+							Audio: {selectedAudio}</Card.Description>
 					</div>
 					<ConnectButton bind:socketCommunicating bind:interacted bind:exited bind:tickedSecsAgoStr
 												 class="max-md:hidden"
@@ -843,12 +847,12 @@
 								<DropdownMenu.Separator />
 								<DropdownMenu.Group>
 									{#if audiosExistForCodec(job, videoSrc?.sCodec)}
-										<DropdownMenu.RadioGroup bind:value={selectedAudioMapping}>
+										<DropdownMenu.RadioGroup bind:value={selectedAudio}>
 											{#each job.MappedAudio[videoSrc?.sCodec] as am}
-												<DropdownMenu.RadioItem value={am.Language} on:click={()=>{
-								localStorage.setItem('preferredAudio', am.Language);
-								$pageReloadCounterStore++;
-							}}>{formatPair(am)}</DropdownMenu.RadioItem>
+												<DropdownMenu.RadioItem value={`${am.Index}-${am.Language}`} on:click={()=>{
+												localStorage.setItem('sAudio', `${am.Index}-${am.Language}`);
+												$pageReloadCounterStore++;
+							}}>{formatPair(am)} ({am.Index})</DropdownMenu.RadioItem>
 											{/each}
 										</DropdownMenu.RadioGroup>
 									{/if}

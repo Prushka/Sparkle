@@ -144,16 +144,6 @@ export function audiosExistForCodec(job: Job, codec: string) {
 	return job.MappedAudio && job.MappedAudio[codec] && Object.entries(job.MappedAudio[codec]).length > 0;
 }
 
-export function getAudioLocForCodec(job: Job, codec: string, language: string = ''): string {
-	if (audiosExistForCodec(job, codec)) {
-		const audioMapping = Object.values(job!.MappedAudio[codec]).find((am) => am.Language === language);
-		if (audioMapping) {
-			return `${codec}-${audioMapping.Index}-${audioMapping.Language}`;
-		}
-	}
-	return codec;
-}
-
 export const languageMap: { [key: string]: string } = {
 	'eng': 'English-English',
 	'ara': 'Arabic-العربية',
@@ -331,22 +321,6 @@ export function preprocessJob(job: Job) {
 				job.EncodedCodecs.splice(job.EncodedCodecs.indexOf(codec), 1);
 			}
 		}
-	}
-	if (job.MappedAudio && Object.keys(job.MappedAudio).length > 1) {
-		const duplicateLanguages: any = {};
-		const first = Object.values(job.MappedAudio)[0];
-		first.forEach((stream) => {
-			if (first.filter((s) => s.Language === stream.Language).length > 1) {
-				duplicateLanguages[stream.Language] = true;
-			}
-		})
-		Object.values(job.MappedAudio).forEach((streams) => {
-			streams.forEach((stream) => {
-				if (duplicateLanguages[stream.Language]) {
-					stream.Language = `${formatPair(stream)} (${stream.Index})` ;
-				}
-			});
-		});
 	}
 	return job;
 }
