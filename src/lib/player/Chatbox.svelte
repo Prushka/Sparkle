@@ -51,10 +51,9 @@
 		e.preventDefault();
 						send({ chat: value, type: SyncTypes.ChatSync });
 						value = ""
-						const oldPlaceholder = placeholder;
 						placeholder = 'Sent!';
 						setTimeout(() => {
-							placeholder = oldPlaceholder;
+							placeholder = chatHidden ? 'Chat (hidden)' : 'Chat';
 						}, 2000);
 	}}
 	class="{$$restProps.class}"
