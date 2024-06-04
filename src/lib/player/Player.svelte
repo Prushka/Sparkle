@@ -439,7 +439,6 @@
 				}
 			}
 			player.textTracks.add(track);
-
 		}
 		player.controlsDelay = 1600;
 		console.debug('textTracks: ' + JSON.stringify(player.textTracks));
