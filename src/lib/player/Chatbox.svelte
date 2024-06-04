@@ -15,6 +15,8 @@
 	export let chatFocused = false;
 	export let focusByShortcut = false;
 	export let controlsShowing: boolean | null = null;
+	export let formId: string;
+	export let inputId: string;
 	let players : number;
 	let chatHidden: boolean;
 	const unsubscribeChatLayout = chatLayoutStore.subscribe((value) =>
@@ -47,6 +49,7 @@
 </script>
 
 <form
+	id={formId}
 	on:submit={e => {
 		e.preventDefault();
 						send({ chat: value, type: SyncTypes.ChatSync });
@@ -81,7 +84,7 @@
 		}}
 			bind:value={value} autocomplete="off" type="text" placeholder={placeholder}
 			class="input focus-visible:ring-transparent"
-			id={$$restProps.id}
+			id={inputId}
 		/>
 	</div>
 </form>

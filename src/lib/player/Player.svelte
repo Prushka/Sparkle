@@ -22,7 +22,6 @@
 		codecDisplayMap,
 		setGetLS,
 		randomString,
-		languageMap,
 		setGetLsBoolean,
 		setGetLsNumber, sortTracks, type ServerData, getLeftAndJoined
 	} from './t';
@@ -479,7 +478,7 @@
 		});
 		const i = setInterval(() => {
 			updateTime();
-			if (!document.getElementById('chat-input')) {
+			if (!document.getElementById('chat-pc-form')) {
 				console.log('mounting chat');
 				const node = document.querySelector('media-title');
 				if (node) {
@@ -494,7 +493,8 @@
 							focusByShortcut: true,
 							controlsShowing: null,
 							class: 'chat-pc',
-							id: 'chat-input',
+							inputId: 'chat-pc-input',
+							formId: 'chat-pc-form',
 							onFocus: () => {
 								player.controls.pause();
 								$chatFocusedStore = true;
@@ -751,7 +751,11 @@
 			}}
 					bind:value={name} type="text" class="focus-visible:ring-transparent w-auto max-md:grow" placeholder="Name" />
 			</div>
-			<Chatbox id="chat-mobile" bind:controlsShowing send={send} class="input-bordered input-md grow max-md:w-full" />
+			<Chatbox
+				formId="chat-mobile-form"
+				inputId="chat-mobile-input"
+				bind:controlsShowing send={send}
+				class="input-bordered input-md grow max-md:w-full" />
 		</div>
 
 		<Card.Root class="w-full max-w-[90rem] self-center">
