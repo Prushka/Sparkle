@@ -48,6 +48,8 @@
 	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
+	import { TextTrack } from 'vidstack';
+
 
 	import JASSUB from 'jassub';
 	import { goto } from '$app/navigation';
@@ -423,6 +425,21 @@
 						break;
 				}
 			}
+		}
+		if (job.Chapters && job.Chapters.length > 0) {
+			const track = new TextTrack({
+				kind: 'chapters',
+				language: 'en-US',
+				type: 'vtt',
+				default: true,
+			});
+			for (const chapter of job.Chapters) {
+				if (chapter.tags?.title) {
+					track.addCue(new VTTCue(chapter.start, chapter.end, chapter.tags?.title));
+				}
+			}
+			player.textTracks.add(track);
+
 		}
 		player.controlsDelay = 1600;
 		console.debug('textTracks: ' + JSON.stringify(player.textTracks));

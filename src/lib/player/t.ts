@@ -124,6 +124,17 @@ export interface Job {
 	Width: number;
 	Height: number;
 	EncodedExt: string;
+	Chapters: Chapter[];
+}
+
+export interface Chapter {
+	id: number;
+	start_time: string;
+	end_time: string;
+	start: number;
+	end: number;
+	time_base: string;
+	tags: { [key: string]: any };
 }
 
 export interface Stream {
