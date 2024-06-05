@@ -496,7 +496,7 @@
 			updateTime();
 			if (!document.getElementById('chat-pc-form')) {
 				console.log('mounting chat');
-				const node = document.querySelector('media-title');
+				const node = document.querySelector('media-title') || document.querySelector('media-chapter-title');
 				if (node) {
 					const container = document.createElement('div');
 					container.classList.add('max-md:hidden');

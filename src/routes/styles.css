@@ -200,3 +200,7 @@ input {
 .group.toaster .group-\[\.toaster\]\:shadow-lg {
 	box-shadow: none !important;
 }
+
+.vds-chapters-menu {
+	display: none !important;
+}
