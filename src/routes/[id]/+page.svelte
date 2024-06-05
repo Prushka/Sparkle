@@ -9,7 +9,7 @@
 		vidstack = (await import('$lib/player/Player.svelte')).default;
 	});
 
-	$: title = "Watch anime with Hmph! - " + data.title;
+	$: title = "Watch with Hmph! - " + data.title;
 </script>
 
 <svelte:head>
