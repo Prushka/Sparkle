@@ -65,5 +65,6 @@ export async function load({ params }) {
 		rating,
 		title: titleStr,
 		plot,
+		dominantColor: job?.DominantColors?.[0] ? job?.DominantColors?.[0] : "#EC275F"
 	};
 }

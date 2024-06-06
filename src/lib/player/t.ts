@@ -125,6 +125,7 @@ export interface Job {
 	Height: number;
 	EncodedExt: string;
 	Chapters: Chapter[];
+	DominantColors: string[];
 }
 
 export interface Chapter {
@@ -464,6 +465,7 @@ export interface ServerData {
 	rating: number;
 	title: string;
 	plot: string;
+	dominantColor: string;
 }
 
 export function getLeftAndJoined(old: Player[], n: Player[], ignoreId: string){

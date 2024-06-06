@@ -15,7 +15,7 @@
 
 <svelte:head>
 	<title>{title}</title>
-	<meta name="theme-color" content="#EC275F">
+	<meta name="theme-color" content={data.dominantColor}>
 	<meta property="og:title" content={title}>
 	<meta property="og:image" content={data.preview}>
 	<meta property="og:video" content={data.video}>
