@@ -1,9 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { PUBLIC_ROOT } from '$env/static/public';
 
 	let vidstack: any;
 
-	export let data : any;
+	export let data: any;
 
 	onMount(async () => {
 		vidstack = (await import('$lib/player/Player.svelte')).default;
@@ -25,7 +26,7 @@
 	<meta property="og:image:type" content="image/jpeg">
 	<meta property="og:description" content={data.plot}>
 	<meta name="description" content={data.plot} />
-	<link type="application/json+oembed" href="./json/{data.job?.Id}" />
+	<link type="application/json+oembed" href="{PUBLIC_ROOT}/json/{data.job?.Id}" />
 </svelte:head>
 <svelte:component this={vidstack}
 									data={data} />
