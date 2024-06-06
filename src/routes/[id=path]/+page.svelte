@@ -9,7 +9,7 @@
 		vidstack = (await import('$lib/player/Player.svelte')).default;
 	});
 
-	$: title = "Watch with Hmph! - " + data.title;
+	$: title = data.title;
 </script>
 
 <svelte:head>
@@ -25,6 +25,7 @@
 	<meta property="og:image:type" content="image/jpeg">
 	<meta property="og:description" content={data.plot}>
 	<meta name="description" content={data.plot} />
+	<link type="application/json+oembed" href="./json/{data.job?.Id}" />
 </svelte:head>
 <svelte:component this={vidstack}
 									data={data} />

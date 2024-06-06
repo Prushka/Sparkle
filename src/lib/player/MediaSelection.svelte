@@ -27,9 +27,6 @@
 	$: selectedTitle = selectedTitleId ? titles[selectedTitleId] : null;
 	$: selectedEpisodes = selectedTitle?.episodes;
 	$: selectedEpisode = (selectedTitle?.episodes && selectedSe) ? selectedTitle.episodes[selectedSe!] : null;
-	$:{
-		console.log(titles, selectedTitle);
-	}
 
 	function bounceTo(id: string) {
 		if (bounceToOverride) {
