@@ -25,7 +25,7 @@
 		setGetLsBoolean,
 		setGetLsNumber, sortTracks, type ServerData, getLeftAndJoined
 	} from './t';
-	import { PUBLIC_BE, PUBLIC_STATIC, PUBLIC_WS } from '$env/static/public';
+	import { PUBLIC_BE, PUBLIC_STATIC } from '$env/static/public';
 	import {
 		IconAlertOctagonFilled, IconArrowBounce,
 		IconCone, IconConePlus, IconEyeOff, IconLayout2, IconMoonFilled,
@@ -125,7 +125,7 @@
 	let exited = false;
 	let nameEmptyDialog = false;
 	$: BASE_STATIC = `${PUBLIC_STATIC}/${roomId}`;
-	$: thumbnailVttSrc = `${BASE_STATIC}/storyboard.vtt`;
+	$: thumbnailVttSrc = location.origin+`${BASE_STATIC}/storyboard.vtt`;
 	$: socketCommunicating = socketConnected && (tickedSecsAgo >= 0 && tickedSecsAgo < 5);
 	$: autoCodec = (videoSrc?.sCodec && selectedCodec === 'auto') ? `(${codecDisplayMap[videoSrc.sCodec]})` : '';
 
@@ -216,7 +216,7 @@
 		if (!interacted) {
 			return;
 		}
-		socket = new WebSocket(`${PUBLIC_WS}/sync/${roomId}/${playerId}`);
+		socket = new WebSocket(`${PUBLIC_BE}/sync/${roomId}/${playerId}`);
 		console.log(`Socket, connecting to ${roomId}`);
 		socket.onopen = () => {
 			console.log(`Socket, connected to ${roomId}`);

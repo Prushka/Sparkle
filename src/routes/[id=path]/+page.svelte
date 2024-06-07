@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { PUBLIC_ROOT } from '$env/static/public';
 
 	let vidstack: any;
 
@@ -26,7 +25,7 @@
 	<meta property="og:image:type" content="image/jpeg">
 	<meta property="og:description" content={data.plot}>
 	<meta name="description" content={data.plot} />
-	<link type="application/json+oembed" href="{PUBLIC_ROOT}/json/{data.job?.Id}" />
+	<link type="application/json+oembed" href="{data.oembedJson}" />
 </svelte:head>
 <svelte:component this={vidstack}
 									data={data} />

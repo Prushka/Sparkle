@@ -5,7 +5,7 @@ import { env } from '$env/dynamic/private';
 import { redirect } from '@sveltejs/kit';
 
 /** @type {import('../../.svelte-kit/types/src/routes').PageServerLoad} */
-export async function load({ params }) {
+export async function load({ params, url, fetch }) {
 	let { id } = params;
 	let job: Job | undefined = undefined
 	let codec = 'h264'
@@ -65,6 +65,7 @@ export async function load({ params }) {
 		rating,
 		title: titleStr,
 		plot,
+		oembedJson: `${url.origin}/json/${job?.Id}`,
 		dominantColor: job?.DominantColors?.[0] ? job?.DominantColors?.[0] : "#EC275F"
 	};
 }

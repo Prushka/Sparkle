@@ -466,6 +466,7 @@ export interface ServerData {
 	title: string;
 	plot: string;
 	dominantColor: string;
+	oembedJson: string;
 }
 
 export function getLeftAndJoined(old: Player[], n: Player[], ignoreId: string){
