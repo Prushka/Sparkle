@@ -65,7 +65,7 @@ export async function load({ params, url, fetch }) {
 		rating,
 		title: titleStr,
 		plot,
-		oembedJson: `${url.origin}/json/${job?.Id}`,
+		oembedJson: `https://${url.host}/json/${job?.Id}`,
 		dominantColor: job?.DominantColors?.[0] ? job?.DominantColors?.[0] : "#EC275F"
 	};
 }

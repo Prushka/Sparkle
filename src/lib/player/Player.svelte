@@ -125,7 +125,7 @@
 	let exited = false;
 	let nameEmptyDialog = false;
 	$: BASE_STATIC = `${PUBLIC_STATIC}/${roomId}`;
-	$: thumbnailVttSrc = location.origin+`${BASE_STATIC}/storyboard.vtt`;
+	$: thumbnailVttSrc = `https://${location.host}${BASE_STATIC}/storyboard.vtt`;
 	$: socketCommunicating = socketConnected && (tickedSecsAgo >= 0 && tickedSecsAgo < 5);
 	$: autoCodec = (videoSrc?.sCodec && selectedCodec === 'auto') ? `(${codecDisplayMap[videoSrc.sCodec]})` : '';
 

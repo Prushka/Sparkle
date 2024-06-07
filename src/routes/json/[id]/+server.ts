@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 
 export function GET({url,params}) {
 	const { id } = params;
-	const to = `${url.origin}/${id}`
+	const to = `https://${url.host}/${id}`
 	return json({
 		"provider_name": "Let's watch anime!",
 		"provider_url": to,
