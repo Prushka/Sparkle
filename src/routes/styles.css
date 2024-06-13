@@ -138,7 +138,7 @@ input {
 	width: 28rem;
 	background-color: hsla(0,0%,100%,.4) !important;
 	color: white;
-	font-weight: 600;
+	font-weight: 700;
 	padding-right: 4rem;
 }
 
@@ -221,7 +221,6 @@ input {
 		opacity: 0;
 	}
 	input {
-		font-weight: 700;
 		background-color: hsla(0,0%,10%,.16) !important;
 	}
 }
