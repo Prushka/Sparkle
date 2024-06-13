@@ -10,7 +10,6 @@
 	});
 
 	$: title = data.title;
-	$: console.log("DATA", data)
 </script>
 
 <svelte:head>
