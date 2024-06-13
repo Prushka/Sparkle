@@ -220,4 +220,8 @@ input {
 	.vds-slider-chapters {
 		opacity: 0;
 	}
+	input {
+		font-weight: 700;
+		background-color: hsla(0,0%,10%,.17) !important;
+	}
 }
