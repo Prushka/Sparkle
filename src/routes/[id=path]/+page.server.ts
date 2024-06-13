@@ -43,7 +43,9 @@ export async function load({ params, url, fetch }) {
 		title = getTitleComponents(job)
 		const infoResponse = await fetch(`${base}/info.nfo`);
 		const info = await infoResponse.text();
-		const $ = cheerio.load(info);
+		const $ = cheerio.load(info, {
+			xmlMode: true,
+		});
 		rating = parseFloat($('rating').text());
 		plot = $('plot').text();
 	} catch (e) {
