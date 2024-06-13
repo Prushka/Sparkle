@@ -204,3 +204,19 @@ input {
 .vds-chapters-menu {
 	display: none !important;
 }
+
+
+.chat-controls-hidden {
+	.vds-button {
+		opacity: 0;
+	}
+	:where(.vds-video-layout .vds-controls[data-visible]) {
+		background-image: none !important;
+	}
+	.vds-time-group {
+		opacity: 0;
+	}
+	.vds-slider-chapters {
+		opacity: 0;
+	}
+}

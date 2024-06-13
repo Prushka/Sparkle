@@ -1,5 +1,5 @@
 export const codecsPriority = ['av1', 'hevc', 'h264-10bit', 'h264-8bit'];
-
+export const hideControlsOnChatFocused = 2;
 export const supportedCodecs = ['av1', 'hevc', 'h264-8bit'];
 export const codecMap: { [key: string]: string } = {
 	'av1': 'av01.0.01M.08',

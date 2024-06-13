@@ -23,7 +23,7 @@
 		setGetLS,
 		randomString,
 		setGetLsBoolean,
-		setGetLsNumber, sortTracks, type ServerData, getLeftAndJoined
+		setGetLsNumber, sortTracks, type ServerData, getLeftAndJoined, hideControlsOnChatFocused
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC } from '$env/static/public';
 	import {
@@ -102,6 +102,7 @@
 	let playerVolume = setGetLsNumber('volume', 1);
 	let notificationAudio = new Audio(`${PUBLIC_STATIC}/sound/anya_peanuts.mp3`);
 	let inBg = false;
+	let chatFocusedSecs = 0;
 	let onPlay = () => {
 	};
 	let onPause = () => {
@@ -518,6 +519,7 @@
 							onBlur: () => {
 								player.controls.resume();
 								$chatFocusedStore = false;
+								chatFocusedSecs = 0;
 							}
 						}
 					});
@@ -573,12 +575,21 @@
 					prevTrackSrc = selectedTrack?.src;
 				}
 			}
+			if (chatFocused) {
+				chatFocusedSecs++
+			} else{
+				chatFocusedSecs=0
+			}
 		}, 1000);
 		if (name === '') {
 			nameEmptyDialog = true;
 		}
 		const chatOverlay = document.getElementById('chat-overlay');
 		player.appendChild(chatOverlay!);
+		const mouseMove = () => {
+			chatFocusedSecs = 0;
+		}
+		document.addEventListener('mousemove', mouseMove);
 		return () => {
 			exited = true;
 			socket?.close();
@@ -587,9 +598,8 @@
 			playerUnsubscribe();
 			playerCanPlayUnsubscribe();
 			playerSoundUnsubscribe();
-			document.removeEventListener('visibilitychange', () => {
-				visibilityChange;
-			});
+			document.removeEventListener('visibilitychange', visibilityChange);
+			document.removeEventListener('mousemove', mouseMove);
 
 			unsubscribeChatLayout();
 			unsubscribeChatFocused();
@@ -654,7 +664,7 @@
     volumeUp: 'ArrowUp',
     volumeDown: 'ArrowDown',
     }}
-		class="media-player bg-slate-900 aspect-video relative w-full"
+		class="media-player bg-slate-900 aspect-video relative w-full {chatFocusedSecs > hideControlsOnChatFocused ? 'chat-controls-hidden':''}"
 		src={videoSrc}
 		crossorigin
 		bind:this={player}
