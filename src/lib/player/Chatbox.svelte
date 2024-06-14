@@ -24,12 +24,13 @@
 	);
 	const unsubscribeChatFocused = chatFocusedStore.subscribe((value) => chatFocused = value);
 	const unsubscribePlayersStore = playersStore.subscribe((value) => players = value);
+	let showShortcut = true;
 	onDestroy(() => {
 		unsubscribeChatLayout();
 		unsubscribeChatFocused();
 		unsubscribePlayersStore();
 	});
-	$: chatTxt = chatHidden ? 'Chat (hidden)' : `Chat ${controlsShowing===null ? '[Alt S]' : ''}`;
+	$: chatTxt = chatHidden ? 'Chat (hidden)' : `Chat ${controlsShowing===null && showShortcut ? '[Alt S]' : ''}`;
 	$: placeholder = chatTxt;
 	onMount(
 		() => {
@@ -42,8 +43,12 @@
 				}
 			};
 			document.addEventListener('keydown', f);
+			const shortcut = setTimeout(() => {
+				showShortcut = false;
+			}, 5000);
 			return () => {
 				document.removeEventListener('keydown', f);
+				clearTimeout(shortcut);
 			};
 		}
 	);
