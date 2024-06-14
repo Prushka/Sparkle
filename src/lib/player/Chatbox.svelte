@@ -29,7 +29,8 @@
 		unsubscribeChatFocused();
 		unsubscribePlayersStore();
 	});
-	$: placeholder = chatHidden ? 'Chat (hidden)' : 'Chat [Alt S]';
+	$: chatTxt = chatHidden ? 'Chat (hidden)' : `Chat ${controlsShowing===null ? '[Alt S]' : ''}`;
+	$: placeholder = chatTxt;
 	onMount(
 		() => {
 			const f = (e: any) => {
@@ -56,7 +57,7 @@
 						value = ""
 						placeholder = 'Sent!';
 						setTimeout(() => {
-							placeholder = chatHidden ? 'Chat (hidden)' : 'Chat [Alt S]';
+							placeholder = chatTxt;
 						}, 2000);
 	}}
 	class="{$$restProps.class}"
