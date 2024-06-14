@@ -36,7 +36,7 @@
 				if (e.altKey && e.keyCode == 83) {
 					e.preventDefault();
 					if (controlsShowing === false || controlsShowing === null) {
-						document.getElementById($$restProps.id)?.focus();
+						document.getElementById($$restProps.inputId)?.focus();
 					}
 				}
 			};
