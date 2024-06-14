@@ -29,14 +29,14 @@
 		unsubscribeChatFocused();
 		unsubscribePlayersStore();
 	});
-	$: placeholder = chatHidden ? 'Chat (hidden)' : 'Chat';
+	$: placeholder = chatHidden ? 'Chat (hidden)' : 'Chat [Alt S]';
 	onMount(
 		() => {
 			const f = (e: any) => {
 				if (e.altKey && e.keyCode == 83) {
 					e.preventDefault();
 					if (controlsShowing === false || controlsShowing === null) {
-						document.getElementById($$restProps.inputId)?.focus();
+						document.getElementById(inputId)?.focus();
 					}
 				}
 			};
@@ -56,7 +56,7 @@
 						value = ""
 						placeholder = 'Sent!';
 						setTimeout(() => {
-							placeholder = chatHidden ? 'Chat (hidden)' : 'Chat';
+							placeholder = chatHidden ? 'Chat (hidden)' : 'Chat [Alt S]';
 						}, 2000);
 	}}
 	class="{$$restProps.class}"
@@ -64,9 +64,9 @@
 	autocomplete="off">
 	<div class="relative flex items-center justify-end">
 		{#if focusByShortcut}
-			<Shortcut class="absolute pointer-events-none m-12 flex gap-0.5 justify-center items-center text-xs">
+			<Shortcut class="absolute pointer-events-none m-12 flex gap-0.5 justify-center items-center text-xs font-bold">
 				{#if players > 0}
-					<IconUsers stroke={2} size={14}/> {players}
+					<IconUsers stroke={3} size={14}/> {players}
 				{/if}
 				</Shortcut>
 		{/if}
