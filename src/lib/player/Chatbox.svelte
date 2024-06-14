@@ -45,7 +45,7 @@
 			document.addEventListener('keydown', f);
 			const shortcut = setTimeout(() => {
 				showShortcut = false;
-			}, 5000);
+			}, 10000);
 			return () => {
 				document.removeEventListener('keydown', f);
 				clearTimeout(shortcut);
