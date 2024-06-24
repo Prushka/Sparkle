@@ -9,7 +9,7 @@
 		vidstack = (await import('$lib/player/Player.svelte')).default;
 	});
 
-	$: title = data.title;
+	$: title = data.displayTitle;
 </script>
 
 <svelte:head>

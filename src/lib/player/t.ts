@@ -390,7 +390,7 @@ const replaceKeywordsAtEnd = (str: string, replacement: string) => {
 	return { result, replacedWord };
 };
 
-function preprocessJob(job: Job) {
+export function preprocessJob(job: Job) {
 	const i = job.Input.replace(/\.[^/.]+$/, '');
 	const vs = replaceLastVersionAtEnd(i, '')
 	const ks = replaceKeywordsAtEnd(vs.result, '');

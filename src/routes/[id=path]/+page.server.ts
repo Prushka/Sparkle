@@ -1,5 +1,5 @@
 import { PUBLIC_STATIC } from '$env/static/public';
-import { getTitleComponents, type Job, preprocessJob, preprocessJobs, type TitleComponents } from '$lib/player/t';
+import { getTitleComponents, type Job, preprocessJobs, type TitleComponents } from '$lib/player/t';
 import * as cheerio from 'cheerio';
 import { env } from '$env/dynamic/private';
 import { redirect } from '@sveltejs/kit';
@@ -51,11 +51,14 @@ export async function load({ params, url, fetch }) {
 		console.log(params, e);
 		redirect(302, '/');
 	}
+	let displayTitle = ''
 	if (title.episodes) {
 		const se = Object.values(title.episodes)[0]
 		titleStr = `${title.title} - ${se.se} - ${se.seTitle}`
+		displayTitle = `${se.se} - ${se.seTitle}`
 	}else{
 		titleStr = title.title
+		displayTitle = title.title
 	}
 	return {
 		jobs: jobs,
@@ -65,6 +68,7 @@ export async function load({ params, url, fetch }) {
 		icon: `${base}/poster.jpg`,
 		rating,
 		title: titleStr,
+		displayTitle,
 		plot,
 		oembedJson: `https://${url.host}/json/${job?.Id}`,
 		dominantColor: job?.DominantColors?.[0] ? job?.DominantColors?.[0] : "#EC275F"
