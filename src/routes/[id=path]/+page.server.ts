@@ -1,8 +1,8 @@
 import { PUBLIC_STATIC } from '$env/static/public';
-import { getTitleComponents, type Job, preprocessJobs, type TitleComponents } from '$lib/player/t';
+import { getTitleComponents, type Job, type TitleComponents } from '$lib/player/t';
 import * as cheerio from 'cheerio';
-import { env } from '$env/dynamic/private';
 import { redirect } from '@sveltejs/kit';
+import { getJobs } from '../../cache';
 
 /** @type {import('../../.svelte-kit/types/src/routes').PageServerLoad} */
 export async function load({ params, url, fetch }) {
@@ -16,9 +16,7 @@ export async function load({ params, url, fetch }) {
 	let jobs : Job[] = []
 	let titleStr = 'UwU'
 	try {
-		const jobsResponse = await fetch(`${env.SERVER_BE}/all`);
-		jobs = await jobsResponse.json();
-		jobs = preprocessJobs(jobs)
+		jobs = await getJobs(fetch)
 		job = jobs.find(j => j.Id === id)
 		if (!job && id.length >= 4) {
 			const prefixJobs = jobs.filter(j => j.Id.startsWith(id))
