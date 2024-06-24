@@ -1,12 +1,10 @@
-import { type Job, preprocessJobs } from '$lib/player/t';
-import { env } from '$env/dynamic/private';
+import { type Job } from '$lib/player/t';
+import { getJobs } from '../cache';
 
 export async function load({ params }) {
 	let jobs : Job[] = []
 	try {
-		const jobsResponse = await fetch(`${env.SERVER_BE}/all`);
-		jobs = await jobsResponse.json();
-		jobs = preprocessJobs(jobs)
+		jobs = await getJobs(fetch)
 	}catch (e) {
 		console.log(params, e);
 	}
