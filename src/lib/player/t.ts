@@ -126,6 +126,7 @@ export interface Job {
 	EncodedExt: string;
 	Chapters: Chapter[];
 	DominantColors: string[];
+	ExtractedQuality: string;
 }
 
 export interface Chapter {
@@ -318,12 +319,83 @@ export function formatMbps(job: Job | undefined | null, codec: string): string {
 	return `: ${mbps.toFixed(2)} Mbps`;
 }
 
-export function formatInput(input: string) {
-	return input.replace(/\s+[\w-]+\d+[pi](?:\s+v\d+)?\.\w+$/i, '');
-}
+export const profiles = [
+	"Bluray-2160p Remux",
+	"Bluray-2160p",
+	"WEBDL-2160p",
+	"WEBRip-2160p",
+	"Remux-2160p",
+	"HDTV-2160p",
 
-export function preprocessJob(job: Job) {
-	job.Input = formatInput(job.Input);
+	"Bluray-1080p Remux",
+	"Bluray-1080p",
+	"WEBDL-1080p",
+	"WEBRip-1080p",
+	"Remux-1080p",
+	"HDTV-1080p",
+
+	"Bluray-720p Remux",
+	"Bluray-720p",
+	"WEBDL-720p",
+	"WEBRip-720p",
+	"Remux-720p",
+	"HDTV-720p",
+
+	"Bluray-576p Remux",
+	"Bluray-576p",
+	"WEBDL-576p",
+	"WEBRip-576p",
+	"Remux-576p",
+	"HDTV-576p",
+
+	"Bluray-480p Remux",
+	"Bluray-480p",
+	"WEBDL-480p",
+	"WEBRip-480p",
+	"Remux-480p",
+	"HDTV-480p",
+
+	"Raw-HD",
+	"BR-DISK",
+	"DVD",
+	"DVD-R",
+	"DVDSCR",
+	"REGIONAL",
+	"TELECINE",
+	"TELESYNC",
+	"CAM",
+	"WORKPRINT",
+	"SDTV",
+	"Unknown"
+]
+
+const replaceLastVersionAtEnd = (str: string, replacement: string) => {
+	const pattern = /v\d*$/i;
+	let replacedWord = null;
+	const result = str.replace(pattern, (match) => {
+		replacedWord = match;
+		return replacement;
+	});
+
+	return { result, replacedWord };
+};
+
+const replaceKeywordsAtEnd = (str: string, replacement: string) => {
+	const pattern = new RegExp(`(${profiles.join('|')})$`, 'i');
+	let replacedWord = null;
+	const result = str.replace(pattern, (match) => {
+		replacedWord = match;
+		return replacement;
+	});
+	return { result, replacedWord };
+};
+
+function preprocessJob(job: Job) {
+	const i = job.Input.replace(/\.[^/.]+$/, '');
+	const vs = replaceLastVersionAtEnd(i, '')
+	const ks = replaceKeywordsAtEnd(vs.result, '');
+	job.Input = ks.result;
+	job.ExtractedQuality = `${ks.replacedWord || vs.replacedWord || ''}`;
 	if (job.EncodedCodecs) {
 		job.EncodedCodecs.sort((a, b) => {
 			return codecsPriority.indexOf(a) - codecsPriority.indexOf(b);

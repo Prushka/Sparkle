@@ -27,7 +27,6 @@ export async function load({ params, url, fetch }) {
 			}
 		}
 		if (job) {
-			job = preprocessJob(job)
 			id = job.Id
 			base = `${PUBLIC_STATIC}/${id}`
 		}else{
