@@ -23,7 +23,7 @@
 		setGetLS,
 		randomString,
 		setGetLsBoolean,
-		setGetLsNumber, sortTracks, type ServerData, getLeftAndJoined, hideControlsOnChatFocused
+		setGetLsNumber, sortTracks, type ServerData, getLeftAndJoined, hideControlsOnChatFocused, moveSeconds
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC } from '$env/static/public';
 	import {
@@ -250,7 +250,7 @@
 						important: true,
 						dismissable: false,
 						componentProps: {
-							seconds: 7,
+							seconds: moveSeconds,
 							job: jobs.find((job: Job) => job.Id === broadcast!.moveTo),
 							firedBy: state.firedBy
 						}
@@ -378,7 +378,7 @@
 					username: control.firedBy.name,
 					message: control.type === SyncTypes.PauseSync ? (control.paused ? 'Paused' : 'Resumed') :
 						control.type === SyncTypes.TimeSync ? 'Seeked to ' + formatSeconds(control.time) :
-							control.type === SyncTypes.BroadcastSync ? `Moving to [${control.moveToText}] in 7 Seconds` :
+							control.type === SyncTypes.BroadcastSync ? `Moving to [${control.moveToText}] in ${moveSeconds} Seconds` :
 								control.type === SyncTypes.PlayerLeft ? 'Left' :
 									control.type === SyncTypes.PlayerJoined ? 'Joined' : '',
 					timestamp: control.timestamp,
@@ -409,7 +409,7 @@
 			for (const [, stream] of Object.entries(job.Streams)) {
 				switch (stream.CodecType) {
 					case 'attachment':
-						if (stream.Filename?.includes('otf') || stream.Filename?.includes('ttf')) {
+						if (stream.Location?.includes('otf') || stream.Location?.includes('ttf')) {
 							fonts.push(`${BASE_STATIC}/${stream.Location}`);
 						}
 						break;
@@ -418,7 +418,7 @@
 							src: `${BASE_STATIC}/${stream.Location}`,
 							label: formatPair(stream, true, true),
 							kind: 'subtitles',
-							type: stream.CodecName.includes('vtt') ? 'vtt' : stream.CodecName.includes('ass') ? 'asshuh' : 'srt',
+							type: stream.Location.slice(-3) === 'vtt' ? 'vtt' : stream.Location.slice(-3) === 'ass' ? 'asshuh' : 'srt',
 							language: languageSrcMap[stream.Language] || stream.Language,
 							default: !defaulted
 						});

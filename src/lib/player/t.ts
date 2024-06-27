@@ -7,6 +7,7 @@ export const codecMap: { [key: string]: string } = {
 	'h264-8bit': 'avc1.42C01E',
 	'h264-10bit': 'avc1.6E001F'
 };
+export const moveSeconds = 5;
 
 export const codecDisplayMap: { [key: string]: string } = {
 	'av1': 'AV1',
@@ -105,52 +106,53 @@ export function formatPair(stream: Stream, includeIndex = false, includeCodec = 
 		if (includeIndex && includeCodec) {
 			lang = lang.split('-')[0];
 		}
-		return (includeIndex ? stream.Index + '-' : '') + lang + (includeCodec ? ` (${stream.CodecName})` : '') + ((stream.Title && stream.Title !== lang) ? ` - ${stream.Title}` : '');
+		const extension = stream.Location.split('.').pop();
+		return (includeIndex ? stream.Index + '-' : '') + lang + (includeCodec ? ` (${extension})` : '') + ((stream.Title && stream.Title !== lang) ? ` - ${stream.Title}` : '');
 	}
 	return '';
 }
 
 export interface Job {
 	Id: string;
-	InputParent: string;
+	// InputParent: string;
 	Input: string;
-	State: string;
-	SHA256: string;
+	// State: string;
+	// SHA256: string;
 	EncodedCodecs: string[];
 	MappedAudio: { [key: string]: Stream[] };
 	Files: { [key: string]: number };
 	Streams: Stream[];
 	Duration: number;
-	Width: number;
-	Height: number;
-	EncodedExt: string;
+	// Width: number;
+	// Height: number;
+	// EncodedExt: string;
 	Chapters: Chapter[];
 	DominantColors: string[];
 	ExtractedQuality: string;
 }
 
 export interface Chapter {
-	id: number;
-	start_time: string;
-	end_time: string;
+	// id: number;
+	// start_time: string;
+	// end_time: string;
 	start: number;
 	end: number;
-	time_base: string;
+	// time_base: string;
 	tags: { [key: string]: any };
 }
 
 export interface Stream {
-	Bitrate: number;
-	CodecName: string;
+	// Bitrate: number;
+	// CodecName: string;
 	CodecType: string;
 	Index: number;
 	Location: string;
 	Language: string;
 	Title: string;
-	Filename: string;
-	MimeType: string;
-	Channels: number;
-	SampleRate: number;
+	// Filename: string;
+	// MimeType: string;
+	// Channels: number;
+	// SampleRate: number;
 }
 
 export function audiosExistForCodec(job: Job, codec: string) {

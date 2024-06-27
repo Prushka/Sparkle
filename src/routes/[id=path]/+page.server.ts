@@ -15,6 +15,7 @@ export async function load({ params, url, fetch }) {
 	let rating = -1
 	let jobs : Job[] = []
 	let titleStr = 'UwU'
+	const start = Date.now()
 	try {
 		jobs = await getJobs(fetch)
 		job = jobs.find(j => j.Id === id)
@@ -58,6 +59,7 @@ export async function load({ params, url, fetch }) {
 		titleStr = title.title
 		displayTitle = title.title
 	}
+	console.log(`load ${id} in ${Date.now() - start}ms`)
 	return {
 		jobs: jobs,
 		job: job,
