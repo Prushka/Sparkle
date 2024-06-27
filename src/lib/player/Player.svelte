@@ -62,7 +62,7 @@
 	import MoveToast from '$lib/player/MoveToast.svelte';
 
 	export let data: ServerData;
-	const { jobs, job } = data;
+	const { job } = data;
 	let controlsShowing = false;
 	let player: MediaPlayerElement;
 	let socket: WebSocket;
@@ -315,13 +315,9 @@
 					case SyncTypes.BroadcastSync:
 						switch (broadcast?.type) {
 							case BroadcastTypes.MoveTo:
-								if (!jobs.find((job) => job.Id === broadcast.moveTo)) {
-									mediaSelection.updateList((jobs: Job[]) => {
-										initiateMoveTo(jobs);
-									});
-								} else {
+								mediaSelection.updateList(broadcast.moveTo, (jobs: Job[]) => {
 									initiateMoveTo(jobs);
-								}
+								});
 								break;
 						}
 						break;

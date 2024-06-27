@@ -36,9 +36,12 @@
 		}
 	}
 
-	export function updateList(onSuccess =
+	export function updateList(untilId: string | null = null, onSuccess =
 															 (_1: Job[]) => {
 															 }) {
+		if (untilId !== null && jobs.find((job) => job.Id === untilId)) {
+			return;
+		}
 		fetch(`${PUBLIC_BE}/all`)
 			.then(response => response.json())
 			.then(data => {
