@@ -689,7 +689,7 @@
 			}}
 	>
 		<media-provider
-			class="aspect-video media-provider">
+			class="!aspect-video media-provider">
 			<media-poster
 				class="vds-poster"
 				src={data.preview}
