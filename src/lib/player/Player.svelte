@@ -509,11 +509,11 @@
 							inputId: 'chat-pc-input',
 							formId: 'chat-pc-form',
 							onFocus: () => {
-								player.controls.pause();
+								player.controls?.pause();
 								$chatFocusedStore = true;
 							},
 							onBlur: () => {
-								player.controls.resume();
+								player.controls?.resume();
 								$chatFocusedStore = false;
 								chatFocusedSecs = 0;
 							}
