@@ -13,8 +13,8 @@
 	});
 </script>
 
-<Toaster position="top-center" richColors/>
 <ModeWatcher defaultMode={"dark"} />
 {#key `${$page.url.pathname}${pageReloadCounter}`}
+	<Toaster position="top-center" richColors/>
 	<slot/>
 {/key}

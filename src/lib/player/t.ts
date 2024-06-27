@@ -408,6 +408,12 @@ export function preprocessJob(job: Job) {
 			}
 		}
 	}
+	for (const stream of job.Streams) {
+		stream.Language = stream.Language ?? '';
+		stream.Location = stream.Location ?? '';
+		stream.Title = stream.Title ?? '';
+		stream.CodecType = stream.CodecType ?? '';
+	}
 	return job;
 }
 

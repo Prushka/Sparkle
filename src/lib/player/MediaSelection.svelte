@@ -40,6 +40,7 @@
 															 (_1: Job[]) => {
 															 }) {
 		if (untilId !== null && jobs.find((job) => job.Id === untilId)) {
+			onSuccess(jobs);
 			return;
 		}
 		fetch(`${PUBLIC_BE}/all`)
