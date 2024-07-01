@@ -217,7 +217,7 @@
 		if (!interacted) {
 			return;
 		}
-		socket = new WebSocket(`${PUBLIC_BE}/sync/${roomId}/${playerId}`);
+		socket = new WebSocket(`wss://${location.host}${PUBLIC_BE}/sync/${roomId}/${playerId}`);
 		console.log(`Socket, connecting to ${roomId}`);
 		socket.onopen = () => {
 			console.log(`Socket, connected to ${roomId}`);
