@@ -364,7 +364,7 @@
 
 	function updateMessages() {
 		messagesToDisplay = roomMessages.filter((message) => {
-			return (Date.now() - message.timestamp) < 120000;
+			return (Date.now() - message.timestamp) < 140000;
 		});
 		messagesToDisplay = messagesToDisplay.slice(-10);
 		for (const control of controlsToDisplay) {
