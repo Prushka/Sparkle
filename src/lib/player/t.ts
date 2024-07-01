@@ -372,7 +372,7 @@ export const profiles = [
 ]
 
 const replaceLastVersionAtEnd = (str: string, replacement: string) => {
-	const pattern = /v\d*$/i;
+	const pattern = /\s?v\d*$/i;
 	let replacedWord = null;
 	const result = str.replace(pattern, (match) => {
 		replacedWord = match;

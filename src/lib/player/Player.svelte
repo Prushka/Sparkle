@@ -787,7 +787,7 @@
 					<div class="flex flex-col gap-1 max-sm:mr-4 flex-1">
 						<Card.Title>Media</Card.Title>
 						<Card.Description class="max-sm:hidden">
-							Codec: {selectedCodec} {autoCodec}, {job.ExtractedQuality}; Audio: {selectedAudio}</Card.Description>
+							Codec: {selectedCodec} {autoCodec ?? ''} {job.ExtractedQuality}; Audio: {selectedAudio}</Card.Description>
 					</div>
 					<ConnectButton bind:socketCommunicating bind:interacted bind:exited bind:tickedSecsAgoStr
 												 class="max-md:hidden"

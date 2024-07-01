@@ -21,7 +21,7 @@ export let onClick:()=>void;
 			{:else}
 				{#if !interacted}
 					<Rocket class="mr-2 h-4 w-4 animate-bounce" />
-					Connect Now
+					Connect Now!
 				{:else if !exited}
 					<Reload class="mr-2 h-4 w-4 animate-spin" />
 					Connecting...
