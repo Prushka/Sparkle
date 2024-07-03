@@ -371,19 +371,8 @@ export const profiles = [
 	"Unknown"
 ]
 
-const replaceLastVersionAtEnd = (str: string, replacement: string) => {
-	const pattern = /\s?v\d*$/i;
-	let replacedWord = null;
-	const result = str.replace(pattern, (match) => {
-		replacedWord = match;
-		return replacement;
-	});
-
-	return { result, replacedWord };
-};
-
 const replaceKeywordsAtEnd = (str: string, replacement: string) => {
-	const pattern = new RegExp(`(${profiles.join('|')})$`, 'i');
+	const pattern = new RegExp(`(${profiles.join('|')}).*$`, 'i');
 	let replacedWord = null;
 	const result = str.replace(pattern, (match) => {
 		replacedWord = match;
@@ -394,10 +383,9 @@ const replaceKeywordsAtEnd = (str: string, replacement: string) => {
 
 export function preprocessJob(job: Job) {
 	const i = job.Input.replace(/\.[^/.]+$/, '');
-	const vs = replaceLastVersionAtEnd(i, '')
-	const ks = replaceKeywordsAtEnd(vs.result, '');
+	const ks = replaceKeywordsAtEnd(i, '');
 	job.Input = ks.result;
-	job.ExtractedQuality = `${ks.replacedWord || vs.replacedWord || ''}`;
+	job.ExtractedQuality = `${ks.replacedWord || ''}`;
 	if (job.EncodedCodecs) {
 		job.EncodedCodecs.sort((a, b) => {
 			return codecsPriority.indexOf(a) - codecsPriority.indexOf(b);
