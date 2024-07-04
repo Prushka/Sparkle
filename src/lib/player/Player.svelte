@@ -27,11 +27,11 @@
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC } from '$env/static/public';
 	import {
-		IconAlertOctagonFilled, IconArrowBounce,
+		IconAlertOctagonFilled, IconArrowBounce, IconCheck,
 		IconCone, IconConePlus, IconEyeOff, IconLayout2, IconMoonFilled,
 		IconPlayerPauseFilled,
 		IconPlayerPlayFilled,
-		IconSettings2, IconSunFilled,
+		IconSettings2, IconShare3, IconSunFilled,
 		IconTableExport
 	} from '@tabler/icons-svelte';
 	import Chatbox from '$lib/player/Chatbox.svelte';
@@ -103,6 +103,7 @@
 	let notificationAudio = new Audio(`${PUBLIC_STATIC}/sound/anya_peanuts.mp3`);
 	let inBg = false;
 	let chatFocusedSecs = 0;
+	let copiedRoomLink = false;
 	let onPlay = () => {
 	};
 	let onPause = () => {
@@ -165,13 +166,13 @@
 		}
 		const setVideoSrc = (codec: string) => {
 			let stream = job.MappedAudio[codec]?.find((am) => {
-				return `${am.Index}-${am.Language}` === selectedAudio
-			})
+				return `${am.Index}-${am.Language}` === selectedAudio;
+			});
 			if (!stream) {
 				stream = job.MappedAudio[codec]?.find((am) => {
-					return selectedAudio.split('-').length > 1 && am.Language === selectedAudio.split('-')[1]
+					return selectedAudio.split('-').length > 1 && am.Language === selectedAudio.split('-')[1];
 				});
-				if(!stream){
+				if (!stream) {
 					if (job.MappedAudio[codec] && job.MappedAudio[codec].length > 0) {
 						stream = job.MappedAudio[codec][0];
 					}
@@ -417,7 +418,7 @@
 							type: stream.Location.slice(-3) === 'vtt' ?
 								'vtt' : stream.Location.slice(-3) === 'ass' ?
 									'asshuh' : stream.Location.slice(-3) === 'sup' ?
-										'sup' : "srt",
+										'sup' : 'srt',
 							language: languageSrcMap[stream.Language] || stream.Language,
 							default: !defaulted
 						});
@@ -431,7 +432,7 @@
 				kind: 'chapters',
 				language: 'en-US',
 				type: 'vtt',
-				default: true,
+				default: true
 			});
 			for (const chapter of job.Chapters) {
 				if (chapter.tags?.title) {
@@ -445,7 +446,7 @@
 	}
 
 	onMount(() => {
-		console.log(job)
+		console.log(job);
 		const dispose = () => {
 			if (sup != null) {
 				sup.dispose();
@@ -576,9 +577,9 @@
 				}
 			}
 			if (chatFocused) {
-				chatFocusedSecs++
-			} else{
-				chatFocusedSecs=0
+				chatFocusedSecs++;
+			} else {
+				chatFocusedSecs = 0;
 			}
 		}, 1000);
 		if (name === '') {
@@ -588,7 +589,7 @@
 		player.appendChild(chatOverlay!);
 		const mouseMove = () => {
 			chatFocusedSecs = 0;
-		}
+		};
 		document.addEventListener('mousemove', mouseMove);
 		return () => {
 			exited = true;
@@ -817,6 +818,36 @@
 								<p>Move users in room with you (on media change)</p>
 							</Tooltip.Content>
 						</Tooltip.Root>
+
+						<Tooltip.Root openDelay={0}>
+							<Tooltip.Trigger asChild let:builder>
+								<Button builders={[builder]} variant="outline"
+												class="w-9 h-9 p-1"
+												on:click={()=>{
+													navigator.clipboard.writeText(window.location.href).then(() => {
+														copiedRoomLink = true;
+														setTimeout(() => {
+															copiedRoomLink = false;
+														}, 1500);
+													});
+									 }}>
+									{#if copiedRoomLink}
+										<IconCheck size={18} stroke={2} />
+									{:else}
+										<IconShare3 size={18} stroke={2} />
+									{/if}
+								</Button>
+							</Tooltip.Trigger>
+							<Tooltip.Content>
+								{#if copiedRoomLink}
+									<p>Copied!</p>
+								{:else}
+									<p>Copy room link to clipboard!</p>
+								{/if}
+							</Tooltip.Content>
+						</Tooltip.Root>
+
+
 						<DropdownMenu.Root>
 							<DropdownMenu.Trigger asChild let:builder>
 								<Button variant="outline" builders={[builder]}>
@@ -883,7 +914,8 @@
 												<DropdownMenu.RadioItem value={`${am.Index}-${am.Language}`} on:click={()=>{
 												localStorage.setItem('sAudio', `${am.Index}-${am.Language}`);
 												$pageReloadCounterStore++;
-							}}>{formatPair(am)} ({am.Index})</DropdownMenu.RadioItem>
+							}}>{formatPair(am)} ({am.Index})
+												</DropdownMenu.RadioItem>
 											{/each}
 										</DropdownMenu.RadioGroup>
 									{/if}
