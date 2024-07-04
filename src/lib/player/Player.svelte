@@ -29,7 +29,7 @@
 		getLeftAndJoined,
 		hideControlsOnChatFocused,
 		moveSeconds,
-		findName,
+		findName, getTitleComponents
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC } from '$env/static/public';
 	import {
@@ -44,7 +44,7 @@
 	import Pfp from '$lib/player/Pfp.svelte';
 	import {
 		chatFocusedStore,
-		chatLayoutStore, type Discord, getName,
+		chatLayoutStore, currentlyWatching, type Discord, getName,
 		interactedStore,
 		pageReloadCounterStore, playersStore, updatePfp
 	} from '../../store';
@@ -302,6 +302,13 @@
 						}
 						roomPlayers = state.players;
 						updateLastTicked(true);
+						currentlyWatching.update((value) => {
+							if(value) {
+								value.roomPlayers = roomPlayers.length;
+								return value;
+							}
+							return null;
+						});
 						break;
 					case SyncTypes.PauseSync:
 						if (state.paused === true && player.paused === false) {
@@ -451,6 +458,20 @@
 
 	onMount(() => {
 		console.log(job);
+		currentlyWatching.update(() => {
+			const components = getTitleComponents(job);
+			return {
+				id: job.Id,
+				title: components.title,
+				se: components.episodes ? Object.values(components.episodes)[0].se : '',
+				seTitle: components.episodes ? Object.values(components.episodes)[0].seTitle : '',
+				thumbnail: data.preview,
+				timeEntered: Date.now(),
+				paused: true,
+				duration: 0,
+				roomPlayers: 1
+			};
+		});
 		if (discord) {
 			$interactedStore = true;
 		}
@@ -622,6 +643,14 @@
 				time: timeRounded
 			});
 			lastSentTime = timeRounded;
+			currentlyWatching.update((value) => {
+				if(value) {
+					value.duration = timeRounded;
+					value.totalDuration = job.Duration;
+					return value;
+				}
+				return null
+			});
 		}
 	}
 </script>
@@ -655,12 +684,26 @@
 		on:pause={
 			() => {
 				send({ paused: true, type: SyncTypes.PauseSync });
-				onPause()
+				onPause();
+				currentlyWatching.update((value) => {
+					if(value) {
+						value.paused = true;
+						return value;
+					}
+					return null
+				});
 			}}
 		on:play={
 			() => {
 				if(interacted) {
 					send({ paused: false, type: SyncTypes.PauseSync });
+					currentlyWatching.update((value) => {
+						if(value) {
+							value.paused = false;
+							return value;
+						}
+						return null
+					});
 				}else{
 					$interactedStore = true;
 					connect();
@@ -745,17 +788,17 @@
 						 }}
 								 type="file" />
 				</label>
-					<Input
-						disabled={getName(discord?.user) !== undefined}
-						on:focusout={() => {
+				<Input
+					disabled={getName(discord?.user) !== undefined}
+					on:focusout={() => {
 					send({
 					  type: SyncTypes.ProfileSync,
 						name: name
 					})
 				localStorage.setItem("name", name)
 			}}
-						bind:value={name} type="text" class="focus-visible:ring-transparent w-auto max-md:grow"
-						placeholder="Name" />
+					bind:value={name} type="text" class="focus-visible:ring-transparent w-auto max-md:grow"
+					placeholder="Name" />
 			</div>
 			<Chatbox
 				formId="chat-mobile-form"
@@ -951,7 +994,8 @@
 			{#each roomPlayers as player}
 				<Button variant="outline"
 								class="h-auto pr-4 py-0 pl-0 rounded-l-full rounded-r-full flex gap-2">
-					<Pfp class="w-12 h-12 mr-0.5" id={player.id} discordUser={roomPlayers.find((p) => p.id === player.id)?.discordUser} />
+					<Pfp class="w-12 h-12 mr-0.5" id={player.id}
+							 discordUser={roomPlayers.find((p) => p.id === player.id)?.discordUser} />
 					<span class="flex gap-0.5 flex-col items-center justify-center font-semibold player-status-text">
 						<span class="font-bold w-16 text-ellipsis overflow-hidden">{player.name}</span>
 						{#if player.inBg}

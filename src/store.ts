@@ -53,6 +53,20 @@ export function isExpired(datetimeString: string): boolean {
 	return givenDateTime < currentDateTime;
 }
 
+export interface Watching {
+	id: string;
+	title: string;
+	se: string;
+	seTitle: string;
+	duration: number;
+	totalDuration: number;
+	roomPlayers: number;
+	thumbnail: string;
+	paused: boolean;
+	timeEntered: number;
+}
+
+export const currentlyWatching: Writable<Watching | null> = writable(null);
 export const pfpLastFetched : Writable<{[key:string]:number}> = writable({});
 export const chatLayoutStore = writable(browser && localStorage.getItem('chatLayout') || 'simple');
 export const chatFocusedStore = writable(false);
