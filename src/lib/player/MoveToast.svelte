@@ -6,7 +6,7 @@
 	import { getTitleComponents, type Job, type Player } from '$lib/player/t';
 	import { goto } from '$app/navigation';
 	import Pfp from '$lib/player/Pfp.svelte';
-
+	export let roomPlayers: Player[] = [];
 	export let seconds:number;
 	export let firedBy: Player;
 	export let job: Job | undefined;
@@ -33,7 +33,8 @@
 		<Card.Header>
 			<Card.Title class="flex items-center">
 				{#if firedBy?.id}
-					<Pfp id={firedBy?.id} class="avatar mr-2"/>
+					<Pfp id={firedBy?.id} class="avatar mr-2"
+							 discordUser={roomPlayers.find((p) => p.id === firedBy?.id)?.discordUser}/>
 				{/if}
 				{#if seconds > 0}
 				<span>Moving in {seconds} second{seconds > 1 ? "s" : ""}</span>

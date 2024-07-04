@@ -256,6 +256,7 @@
 						dismissable: false,
 						componentProps: {
 							seconds: moveSeconds,
+							roomPlayers: roomPlayers,
 							job: jobs.find((job: Job) => job.Id === broadcast!.moveTo),
 							firedBy: state.firedBy
 						}
@@ -950,7 +951,7 @@
 			{#each roomPlayers as player}
 				<Button variant="outline"
 								class="h-auto pr-4 py-0 pl-0 rounded-l-full rounded-r-full flex gap-3.5">
-					<Pfp class="w-12 h-12 mr-0.5" id={player.id} />
+					<Pfp class="w-12 h-12 mr-0.5" id={player.id} discordUser={roomPlayers.find((p) => p.id === player.id)?.discordUser} />
 					<span class="flex gap-1 flex-col items-center justify-center font-semibold">
 						<span class="font-bold">{player.name}</span>
 						{#if player.inBg}
