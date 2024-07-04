@@ -114,7 +114,7 @@
 					},
 				});
 				const res = await response.json();
-				if(res?.jobId) {
+				if(res?.jobId && (!$currentlyWatching?.id || $currentlyWatching?.id !== res.jobId)) {
 					await goto(`/${res.jobId}`)
 				}
 			}
