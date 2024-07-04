@@ -77,8 +77,11 @@
 		auth = await discordSdk.commands.authenticate({
 			access_token
 		});
-		auth.channelId = discordSdk.channelId;
-		sessionStorage.setItem('discord', JSON.stringify(auth));
+		if (auth) {
+			auth.channelId = discordSdk.channelId;
+			sessionStorage.setItem('discord', JSON.stringify(auth));
+			$pageReloadCounterStore++;
+		}
 	}
 
 	beforeNavigate(({to, cancel}) => {
