@@ -74,13 +74,16 @@
 			})
 		});
 		const { access_token } = await response.json();
+		const prevAuth = auth;
 		auth = await discordSdk.commands.authenticate({
 			access_token
 		});
 		if (auth) {
 			auth.channelId = discordSdk.channelId;
 			sessionStorage.setItem('discord', JSON.stringify(auth));
-			$pageReloadCounterStore++;
+			if(!prevAuth) {
+				$pageReloadCounterStore++;
+			}
 		}
 	}
 
