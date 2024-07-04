@@ -224,3 +224,7 @@ input {
 		background-color: hsla(0,0%,10%,.16) !important;
 	}
 }
+
+.player-status-name {
+	font-size: 0.84rem;
+}

@@ -950,10 +950,10 @@
 		<div class="flex gap-4 flex-wrap justify-center mb-3">
 			{#each roomPlayers as player}
 				<Button variant="outline"
-								class="h-auto pr-4 py-0 pl-0 rounded-l-full rounded-r-full flex gap-3.5">
+								class="h-auto pr-4 py-0 pl-0 rounded-l-full rounded-r-full flex gap-2">
 					<Pfp class="w-12 h-12 mr-0.5" id={player.id} discordUser={roomPlayers.find((p) => p.id === player.id)?.discordUser} />
-					<span class="flex gap-1 flex-col items-center justify-center font-semibold">
-						<span class="font-bold">{player.name}</span>
+					<span class="flex gap-0.5 flex-col items-center justify-center font-semibold">
+						<span class="font-bold player-status-name w-16 text-ellipsis overflow-hidden">{player.name}</span>
 						{#if player.inBg}
 							<div class="flex gap-1 items-center justify-center"><IconTableExport size={14}
 																																									 stroke={2} /><span>BG</span></div>
