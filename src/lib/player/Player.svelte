@@ -23,7 +23,13 @@
 		setGetLS,
 		randomString,
 		setGetLsBoolean,
-		setGetLsNumber, sortTracks, type ServerData, getLeftAndJoined, hideControlsOnChatFocused, moveSeconds
+		setGetLsNumber,
+		sortTracks,
+		type ServerData,
+		getLeftAndJoined,
+		hideControlsOnChatFocused,
+		moveSeconds,
+		findName,
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC } from '$env/static/public';
 	import {
@@ -38,14 +44,13 @@
 	import Pfp from '$lib/player/Pfp.svelte';
 	import {
 		chatFocusedStore,
-		chatLayoutStore,
+		chatLayoutStore, type Discord, getName,
 		interactedStore,
 		pageReloadCounterStore, playersStore, updatePfp
 	} from '../../store';
 	import SUPtitles from '$lib/suptitles/suptitles';
 	import { Button } from '$lib/components/ui/button/index.js';
 	import * as DropdownMenu from '$lib/components/ui/dropdown-menu/index.js';
-	import * as Dialog from '$lib/components/ui/dialog';
 	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { TextTrack } from 'vidstack';
@@ -55,7 +60,6 @@
 	import { goto } from '$app/navigation';
 	import { mode, setMode } from 'mode-watcher';
 	import { Input } from '$lib/components/ui/input';
-	import { Label } from '$lib/components/ui/label';
 	import { toast } from 'svelte-sonner';
 	import ConnectButton from '$lib/player/ConnectButton.svelte';
 	import MediaSelection from '$lib/player/MediaSelection.svelte';
@@ -63,10 +67,11 @@
 
 	export let data: ServerData;
 	const { job } = data;
+	const discord: Discord | null = sessionStorage.getItem('discord') ? JSON.parse(sessionStorage.getItem('discord')!) : null;
 	let controlsShowing = false;
 	let player: MediaPlayerElement;
 	let socket: WebSocket;
-	let name = setGetLS('name', `Anon-${randomString(4)}`, (v: string) => {
+	let name = getName(discord?.user) ?? setGetLS('name', `Anon-${randomString(4)}`, (v: string) => {
 		toast.message(`Using placeholder name: ${v}`, {
 			description: `Change your name using the input next to your avatar`,
 			duration: 9000,
@@ -125,7 +130,6 @@
 	});
 	const unsubscribeInteracted = interactedStore.subscribe((value) => interacted = value);
 	let exited = false;
-	let nameEmptyDialog = false;
 	$: BASE_STATIC = `${PUBLIC_STATIC}/${roomId}`;
 	$: thumbnailVttSrc = `https://${location.host}${BASE_STATIC}/storyboard.vtt`;
 	$: socketCommunicating = socketConnected && (tickedSecsAgo >= 0 && tickedSecsAgo < 5);
@@ -224,7 +228,7 @@
 			console.log(`Socket, connected to ${roomId}`);
 			socketConnected = true;
 			if (name !== '') {
-				send({ name: name, type: SyncTypes.NameSync });
+				send({ name: name, type: SyncTypes.ProfileSync, discordUser: discord?.user });
 			}
 			send({ type: SyncTypes.NewPlayer });
 			sendSettings();
@@ -372,7 +376,6 @@
 			if (control.firedBy && (Date.now() - control.timestamp) < 8000) {
 				const message: Chat = {
 					uid: control.firedBy.id,
-					username: control.firedBy.name,
 					message: control.type === SyncTypes.PauseSync ? (control.paused ? 'Paused' : 'Resumed') :
 						control.type === SyncTypes.TimeSync ? 'Seeked to ' + formatSeconds(control.time) :
 							control.type === SyncTypes.BroadcastSync ? `Moving to [${control.moveToText}] in ${moveSeconds} Seconds` :
@@ -447,6 +450,9 @@
 
 	onMount(() => {
 		console.log(job);
+		if (discord) {
+			$interactedStore = true;
+		}
 		const dispose = () => {
 			if (sup != null) {
 				sup.dispose();
@@ -582,9 +588,6 @@
 				chatFocusedSecs = 0;
 			}
 		}, 1000);
-		if (name === '') {
-			nameEmptyDialog = true;
-		}
 		const chatOverlay = document.getElementById('chat-overlay');
 		player.appendChild(chatOverlay!);
 		const mouseMove = () => {
@@ -623,35 +626,6 @@
 </script>
 
 <main id="main-page" class="overflow-hidden flex flex-col items-center w-full h-full">
-	<Dialog.Root closeOnEscape={false} closeOnOutsideClick={false} bind:open={nameEmptyDialog}>
-		<Dialog.Trigger />
-		<Dialog.Content>
-			<Dialog.Header>
-				<Dialog.Title>Edit profile</Dialog.Title>
-				<Dialog.Description>
-					Make changes to your name. Name is REQUIRED for syncing.
-				</Dialog.Description>
-			</Dialog.Header>
-			<div class="grid w-full items-center gap-1.5">
-				<Label>Name</Label>
-				<Input
-					on:focusout={() => {
-					send({
-					  type: SyncTypes.NameSync,
-						name: name
-					})
-				localStorage.setItem("name", name)
-			}}
-					bind:value={name} type="text" class="grow focus-visible:ring-transparent" placeholder="Name?" />
-			</div>
-			<Dialog.Footer>
-				<Button type="submit" on:click={()=>{
-					nameEmptyDialog = false;
-				}} disabled={name === ""}>Save changes
-				</Button>
-			</Dialog.Footer>
-		</Dialog.Content>
-	</Dialog.Root>
 	<media-player
 		keep-alive
 		keyShortcuts={{
@@ -722,8 +696,9 @@
 					})}]
 					</p>
 
-					<p>{message.username}</p>
-					<Pfp id={message.uid} class="avatar" />
+					<p>{findName(roomPlayers, message.uid)}</p>
+					<Pfp id={message.uid} class="avatar"
+							 discordUser={roomPlayers.find((p) => p.id === message.uid)?.discordUser} />
 				</div>
 			{/each}
 		</div>
@@ -733,7 +708,7 @@
 		<div class="w-full flex gap-4 items-center justify-center max-md:flex-col max-w-[90rem] self-center">
 			<div class="flex gap-3 items-center justify-center max-md:w-full">
 				<label class="custom-file-upload">
-					<Pfp id={playerId} class="w-12 h-12" />
+					<Pfp id={playerId} class="w-12 h-12" discordUser={discord?.user} />
 					<input accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
 								 bind:this={pfpInput}
 								 on:change={() => {
@@ -769,15 +744,17 @@
 						 }}
 								 type="file" />
 				</label>
-				<Input
-					on:focusout={() => {
+					<Input
+						disabled={getName(discord?.user) !== undefined}
+						on:focusout={() => {
 					send({
-					  type: SyncTypes.NameSync,
+					  type: SyncTypes.ProfileSync,
 						name: name
 					})
 				localStorage.setItem("name", name)
 			}}
-					bind:value={name} type="text" class="focus-visible:ring-transparent w-auto max-md:grow" placeholder="Name" />
+						bind:value={name} type="text" class="focus-visible:ring-transparent w-auto max-md:grow"
+						placeholder="Name" />
 			</div>
 			<Chatbox
 				formId="chat-mobile-form"

@@ -1,3 +1,5 @@
+import { type DiscordUser, getName } from '../../store';
+
 export const codecsPriority = ['av1', 'hevc', 'h264-10bit', 'h264-8bit'];
 export const hideControlsOnChatFocused = 1.5;
 export const supportedCodecs = ['av1', 'hevc', 'h264-8bit'];
@@ -40,7 +42,7 @@ export function getSupportedCodecs() {
 
 export enum SyncTypes {
 	NewPlayer = 'new player',
-	NameSync = 'name',
+	ProfileSync = 'profile',
 	TimeSync = 'time',
 	PauseSync = 'pause',
 	ChatSync = 'chat',
@@ -89,15 +91,21 @@ export type Player = {
 	audio: string;
 	codec: string;
 	subtitle: string;
+	discordUser: DiscordUser | null | undefined;
 }
 
 export type Chat = {
-	username: string;
 	message: string;
 	timestamp: number;
 	mediaSec: number;
 	uid: string;
 	isStateUpdate: boolean;
+}
+
+export function findName(players: Player[], uid: string) : string {
+	const player = players.find((p) => p.id === uid);
+	const discordName = getName(player?.discordUser);
+	return discordName ? discordName : (player?.name ?? "Unknown");
 }
 
 export function formatPair(stream: Stream, includeIndex = false, includeCodec = false): string {
