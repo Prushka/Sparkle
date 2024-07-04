@@ -1,6 +1,6 @@
-
 import { env } from '$env/dynamic/private';
 import { type Job, preprocessJobs } from '$lib/player/t';
+
 let cachedJobs: Job[] = [];
 let jobsLastFetched = 0;
 
@@ -14,3 +14,5 @@ export async function getJobs(fetch: any, target: string | null = null): Promise
 	}
 	return cachedJobs;
 }
+
+export const channelMapping: { [key: string]: string } = {};

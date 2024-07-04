@@ -13,6 +13,7 @@ export interface Discord {
 		icon?: string | null | undefined;
 		rpc_origins?: string[] | undefined;
 	};
+	channelId: string;
 }
 
 export interface DiscordUser {

@@ -8,6 +8,7 @@
 	import { DiscordSDK } from '@discord/embedded-app-sdk';
 	import { PUBLIC_DISCORD_CLIENT_ID } from '$env/static/public';
 	import { formatSeconds } from '$lib/player/t';
+	import { beforeNavigate, goto } from '$app/navigation';
 
 	let pageReloadCounter: number;
 	let discordSdk : undefined | null | DiscordSDK;
@@ -37,7 +38,7 @@
 					}
 				},
 			}).then(() => {
-				console.log('Activity set', value);
+				console.debug('Activity set', value);
 			}).catch((error : any) => {
 				console.error('Error setting activity', error, value);
 			});
@@ -76,8 +77,16 @@
 		auth = await discordSdk.commands.authenticate({
 			access_token
 		});
+		auth.channelId = discordSdk.channelId;
 		sessionStorage.setItem('discord', JSON.stringify(auth));
 	}
+
+	beforeNavigate(({to, cancel}) => {
+		if (auth?.channelId && to && !to.url.searchParams.has("channel_id")) {
+			cancel();
+			goto(to.url.pathname + `?channel_id=${auth.channelId}`);
+		}
+	});
 
 	onMount(async () => {
 		if (sessionStorage.getItem('discord')) {

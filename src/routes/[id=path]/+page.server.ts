@@ -2,7 +2,7 @@ import { PUBLIC_STATIC } from '$env/static/public';
 import { getTitleComponents, type Job, type TitleComponents } from '$lib/player/t';
 import * as cheerio from 'cheerio';
 import { redirect } from '@sveltejs/kit';
-import { getJobs } from '../../cache';
+import { channelMapping, getJobs } from '../../cache';
 
 /** @type {import('../../.svelte-kit/types/src/routes').PageServerLoad} */
 export async function load({ params, url, fetch }) {
@@ -15,6 +15,11 @@ export async function load({ params, url, fetch }) {
 	let rating = -1
 	let jobs : Job[] = []
 	let titleStr = 'UwU'
+	const channelId = url.searchParams.get('channel_id')
+	if (channelId) {
+		channelMapping[channelId] = id
+		console.log("Channel mapping", channelMapping)
+	}
 	try {
 		jobs = await getJobs(fetch, id)
 		job = jobs.find(j => j.Id === id)
