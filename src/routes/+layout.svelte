@@ -11,7 +11,7 @@
 	import { beforeNavigate, goto } from '$app/navigation';
 
 	let pageReloadCounter: number;
-	let discordSdk : undefined | null | DiscordSDK;
+	let discordSdk: undefined | null | DiscordSDK;
 
 	const pageReloadCounterUnsubscribe = pageReloadCounterStore.subscribe((value) => pageReloadCounter = value);
 	const currentlyWatchingUnsubscribe = currentlyWatching.subscribe((value) => {
@@ -31,27 +31,27 @@
 					instance: true,
 					assets: {
 						large_image: `https://${location.host}${value.thumbnail}`,
-						large_text: value.se ? `${value.se}: ${formatSeconds(value.duration)}` : "It's a movie!",
+						large_text: value.se ? `${value.se}: ${formatSeconds(value.duration)}` : 'It\'s a movie!',
 						small_image: value.paused ? `https://${location.host}/icons/pause.png` :
 							`https://${location.host}/icons/play.png`,
 						small_text: value.paused ? 'Paused' : 'Playing'
 					}
-				},
+				}
 			}).then(() => {
 				console.debug('Activity set', value);
-			}).catch((error : any) => {
+			}).catch((error: any) => {
 				console.error('Error setting activity', error, value);
 			});
 		}
 	});
-	let auth : any = null;
+	let auth: any = null;
 	onDestroy(() => {
 		pageReloadCounterUnsubscribe();
 		currentlyWatchingUnsubscribe();
 	});
 
 	async function setupDiscordSdk() {
-		discordSdk = new DiscordSDK(PUBLIC_DISCORD_CLIENT_ID)
+		discordSdk = new DiscordSDK(PUBLIC_DISCORD_CLIENT_ID);
 		await discordSdk.ready();
 		console.log('Discord SDK is ready');
 		const { code } = await discordSdk.commands.authorize({
@@ -81,14 +81,14 @@
 		if (auth) {
 			auth.channelId = discordSdk.channelId;
 			sessionStorage.setItem('discord', JSON.stringify(auth));
-			if(!prevAuth) {
+			if (!prevAuth) {
 				$pageReloadCounterStore++;
 			}
 		}
 	}
 
-	beforeNavigate(({to, cancel}) => {
-		if (auth?.channelId && to && !to.url.searchParams.has("channel_id")) {
+	beforeNavigate(({ to, cancel }) => {
+		if (auth?.channelId && to && !to.url.searchParams.has('channel_id')) {
 			cancel();
 			goto(to.url.pathname + `?channel_id=${auth.channelId}`);
 		}
@@ -98,11 +98,30 @@
 		if (sessionStorage.getItem('discord')) {
 			auth = JSON.parse(sessionStorage.getItem('discord')!);
 		}
-		if ($page.url.searchParams.has("frame_id") || auth) {
-			console.log("Initializing Discord SDK")
+		if ($page.url.searchParams.has('frame_id') || auth) {
+			console.log('Initializing Discord SDK');
 			await setupDiscordSdk();
 		}
 	});
+
+	onMount(() => {
+		const i = setInterval(async () => {
+			if(auth?.channelId) {
+				const response = await fetch(`/api/cm?channel_id=${auth.channelId}`, {
+					method: 'GET',
+					headers: {
+						'Content-Type': 'application/json'
+					},
+				});
+				const res = await response.json();
+				if(res?.jobId) {
+					await goto(`/${res.jobId}`)
+				}
+			}
+		}, 3000);
+		return () => {
+			clearInterval(i);
+		}});
 </script>
 
 <ModeWatcher defaultMode={"dark"} />
