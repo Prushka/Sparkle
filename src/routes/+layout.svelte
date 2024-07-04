@@ -59,9 +59,6 @@
 
 <ModeWatcher defaultMode={"dark"} />
 {#key `${$page.url.pathname}${pageReloadCounter}`}
-	<!--frame_id-->
-	<h1>{JSON.stringify(auth)}</h1>
-	<h1>test6</h1>
 	<Toaster position="top-center" richColors />
 	<slot />
 {/key}
