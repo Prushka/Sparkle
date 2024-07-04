@@ -5,7 +5,7 @@ import { getJobs } from '../../../cache';
 export async function GET({url,params,fetch}) {
 	const { id } = params;
 	const to = `https://${url.host}/${id}`;
-	const jobs = await getJobs(fetch)
+	const jobs = await getJobs(fetch, id)
 	const job = jobs.find(j => j.Id === id)
 	if (job) {
 		const titleComponents = getTitleComponents(job)

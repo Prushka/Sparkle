@@ -16,7 +16,7 @@ export async function load({ params, url, fetch }) {
 	let jobs : Job[] = []
 	let titleStr = 'UwU'
 	try {
-		jobs = await getJobs(fetch)
+		jobs = await getJobs(fetch, id)
 		job = jobs.find(j => j.Id === id)
 		if (!job && id.length >= 4) {
 			const prefixJobs = jobs.filter(j => j.Id.startsWith(id))
