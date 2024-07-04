@@ -18,7 +18,7 @@
 			discordSdk.commands.setActivity({
 				activity: {
 					details: `${value.title}`,
-					state: value.se ? `${value.seTitle}` : `${formatSeconds(value.duration)}/${formatSeconds(value.totalDuration)}`,
+					state: value.se ? `${value.seTitle}` : `${formatSeconds(value.duration)}`,
 					type: 3,
 					timestamps: {
 						start: value.timeEntered,
