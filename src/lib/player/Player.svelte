@@ -468,6 +468,7 @@
 				thumbnail: data.preview,
 				timeEntered: Date.now(),
 				paused: true,
+				totalDuration: 0,
 				duration: 0,
 				roomPlayers: 1
 			};

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import './styles.css';
-	import { currentlyWatching, isExpired, pageReloadCounterStore } from '../store';
+	import { currentlyWatching, pageReloadCounterStore } from '../store';
 	import { onDestroy, onMount } from 'svelte';
 	import { ModeWatcher } from 'mode-watcher';
 	import { Toaster } from '$lib/components/ui/sonner';
