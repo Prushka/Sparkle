@@ -801,7 +801,7 @@
 							player?.play()
 								}}}
 					/>
-					<div class="flex gap-3 items-center justify-end flex-1">
+					<div class="flex gap-3 max-sm:gap-2 items-center justify-end flex-1">
 						<Tooltip.Root openDelay={0}>
 							<Tooltip.Trigger asChild let:builder>
 								<Button builders={[builder]} variant={!socketCommunicating || !syncGoto ? "ghost" : "outline"}
@@ -851,8 +851,8 @@
 						<DropdownMenu.Root>
 							<DropdownMenu.Trigger asChild let:builder>
 								<Button variant="outline" builders={[builder]}>
-									<IconLayout2 class="sm:mr-2" size={20} stroke={2} />
-									<span class="max-sm:hidden">Layout</span>
+									<IconLayout2 class="sm:mr-2 max-sm:hidden" size={20} stroke={2} />
+									<span>Layout</span>
 								</Button>
 							</DropdownMenu.Trigger>
 							<DropdownMenu.Content class="w-56">
@@ -899,7 +899,7 @@
 						<DropdownMenu.Root>
 							<DropdownMenu.Trigger asChild let:builder>
 								<Button builders={[builder]} variant={currentTheme === "dark" ? "outline" : "default"}>
-									<IconSettings2 class="mr-2" size={16} stroke={2} />
+									<IconSettings2 class="mr-2 max-sm:hidden" size={16} stroke={2} />
 									Video <span class="max-sm:hidden">&nbsp;Settings</span></Button>
 							</DropdownMenu.Trigger>
 							<DropdownMenu.Content class="w-56">
