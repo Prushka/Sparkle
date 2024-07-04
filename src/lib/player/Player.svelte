@@ -414,7 +414,10 @@
 							src: `${BASE_STATIC}/${stream.Location}`,
 							label: formatPair(stream, true, true),
 							kind: 'subtitles',
-							type: stream.Location.slice(-3) === 'vtt' ? 'vtt' : stream.Location.slice(-3) === 'ass' ? 'asshuh' : 'srt',
+							type: stream.Location.slice(-3) === 'vtt' ?
+								'vtt' : stream.Location.slice(-3) === 'ass' ?
+									'asshuh' : stream.Location.slice(-3) === 'sup' ?
+										'sup' : "srt",
 							language: languageSrcMap[stream.Language] || stream.Language,
 							default: !defaulted
 						});
@@ -442,6 +445,7 @@
 	}
 
 	onMount(() => {
+		console.log(job)
 		const dispose = () => {
 			if (sup != null) {
 				sup.dispose();

@@ -402,6 +402,24 @@ export function preprocessJob(job: Job) {
 		stream.Title = stream.Title ?? '';
 		stream.CodecType = stream.CodecType ?? '';
 	}
+	const existingSubtitles = job.Streams.filter((s) => s.CodecType === 'subtitle').map((s) => s.Location);
+	let largestIndex = job.Streams.reduce((acc, stream) => {
+		return Math.max(acc, stream.Index);
+	}, 0);
+	for (const file in job.Files) {
+		if(!existingSubtitles.includes(file) && !file.includes("storyboard")){
+			if (file.endsWith('.ass') || file.endsWith('.vtt') || file.endsWith('.srt') || file.endsWith(".sup")) {
+				largestIndex++
+				job.Streams.push({
+					Index: largestIndex,
+					CodecType: "subtitle",
+					Location: file,
+					Title: file.split(".")[0],
+					Language: "External",
+				})
+			}
+		}
+	}
 	return job;
 }
 
