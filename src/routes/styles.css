@@ -88,6 +88,7 @@
 	--video-controls-color: rgba(255, 255, 255, 0.88) !important;
 	--media-slider-track-fill-bg: rgba(255, 255, 255, 0.85) !important;
 	-webkit-font-smoothing: antialiased;
+	--video-border-radius: 0rem;
 
 }
 

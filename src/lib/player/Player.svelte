@@ -1059,7 +1059,7 @@
     .chat-line {
         width: fit-content;
         border-radius: 0.5rem;
-        background-color: rgba(0, 0, 0, 0.2);
+        background-color: rgba(0, 0, 0, 0.24);
     }
 
     @media (max-width: 1050px) {
