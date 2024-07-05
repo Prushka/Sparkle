@@ -27,7 +27,11 @@
 						end: Date.now() + (value.totalDuration - value.duration) * 1000
 					},
 					party: {
-						size: [value.roomPlayers, 99]
+						size: [value.roomPlayers, 99],
+						id: "job-"+value.id,
+					},
+					secrets: {
+						join: "join"+value.id,
 					},
 					instance: true,
 					assets: {
