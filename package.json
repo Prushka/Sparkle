@@ -12,7 +12,6 @@
 		"deploy": "vite build && echo 'uwu.lyu.sh' > ./build/CNAME && echo '' > ./build/.nojekyll && cp 404.html build/404.html && npx gh-pages -d build -t true"
 	},
 	"devDependencies": {
-		"@fontsource/fira-mono": "^4.5.10",
 		"@sveltejs/adapter-auto": "^3.0.0",
 		"@sveltejs/adapter-node": "^5.0.1",
 		"@sveltejs/kit": "^2.0.0",
