@@ -134,8 +134,7 @@
 	$: thumbnailVttSrc = `https://${location.host}${BASE_STATIC}/storyboard.vtt`;
 	$: socketCommunicating = socketConnected && (tickedSecsAgo >= 0 && tickedSecsAgo < 5);
 	$: autoCodec = (videoSrc?.sCodec && selectedCodec === 'auto') ? `(${codecDisplayMap[videoSrc.sCodec]})` : '';
-
-	$: chatHidden = chatLayout === 'hidden';
+	$: chatHidden = chatLayout === 'hide';
 	$: {
 		console.log('srcList:', videoSrc);
 	}
@@ -399,7 +398,8 @@
 									control.type === SyncTypes.PlayerJoined ? 'Joined' : '',
 					timestamp: control.timestamp,
 					mediaSec: player.currentTime,
-					isStateUpdate: true
+					isStateUpdate: true,
+					timeStr: "",
 				};
 				messagesToDisplay.push(message);
 			}
@@ -922,18 +922,15 @@
 								<DropdownMenu.RadioGroup bind:value={chatLayout}>
 									{#each chatLayouts as layout}
 										<DropdownMenu.RadioItem value={layout} on:click={()=>{
-								localStorage.setItem('chatLayout', layout);
+								localStorage.setItem('chatLayout2', layout);
 								$chatLayoutStore = layout;
 							}}>
-											{#if layout === "extended"}
-												<IconConePlus class="mr-2" size={16} stroke={2} />
-												Extended
-											{:else if layout === "simple"}
+											{#if layout === "show"}
 												<IconCone class="mr-2" size={16} stroke={2} />
-												Simple
+												Show
 											{:else}
 												<IconEyeOff class="mr-2" size={16} stroke={2} />
-												Hidden
+												Hide
 											{/if}
 										</DropdownMenu.RadioItem>
 									{/each}

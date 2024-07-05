@@ -22,7 +22,7 @@
 	let players : number;
 	let chatHidden: boolean;
 	const unsubscribeChatLayout = chatLayoutStore.subscribe((value) =>
-		chatHidden = value === 'hidden'
+		chatHidden = value === 'hide'
 	);
 	const unsubscribeChatFocused = chatFocusedStore.subscribe((value) => chatFocused = value);
 	const unsubscribePlayersStore = playersStore.subscribe((value) => players = value);

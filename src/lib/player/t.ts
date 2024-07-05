@@ -20,7 +20,7 @@ export const codecDisplayMap: { [key: string]: string } = {
 
 const subtitlePriority = ['ass', 'vtt', 'sup'];
 
-export const chatLayouts = ['simple', 'extended', 'hidden'];
+export const chatLayouts = ['show', 'hide'];
 
 export function getSupportedCodecs() {
 	const supported = [];

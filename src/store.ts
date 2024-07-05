@@ -69,7 +69,7 @@ export interface Watching {
 
 export const currentlyWatching: Writable<Watching | null> = writable(null);
 export const pfpLastFetched : Writable<{[key:string]:number}> = writable({});
-export const chatLayoutStore = writable(browser && localStorage.getItem('chatLayout') || 'simple');
+export const chatLayoutStore = writable(browser && localStorage.getItem('chatLayout2') || 'show');
 export const chatFocusedStore = writable(false);
 export const pageReloadCounterStore = writable(0);
 export const interactedStore = writable(false);
