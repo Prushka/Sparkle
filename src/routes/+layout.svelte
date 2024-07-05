@@ -16,6 +16,7 @@
 	const pageReloadCounterUnsubscribe = pageReloadCounterStore.subscribe((value) => pageReloadCounter = value);
 	const currentlyWatchingUnsubscribe = currentlyWatching.subscribe((value) => {
 		if (discordSdk && value) {
+			const remaining = `(${formatSeconds(value.totalDuration - value.duration)} Remaining)`;
 			discordSdk.commands.setActivity({
 				activity: {
 					details: `${value.title}`,
@@ -34,7 +35,7 @@
 						large_text: value.se ? `${value.se}: ${formatSeconds(value.duration)}` : 'It\'s a movie!',
 						small_image: value.paused ? `https://${location.host}/icons/pause.png` :
 							`https://${location.host}/icons/play.png`,
-						small_text: value.paused ? 'Paused' : 'Playing'
+						small_text: value.paused ? `Paused ${remaining}` : `Playing ${remaining}`
 					},
 				}
 			}).then(() => {
