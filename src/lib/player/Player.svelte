@@ -693,9 +693,9 @@
     volumeUp: 'ArrowUp',
     volumeDown: 'ArrowDown',
     }}
-		class="media-player bg-slate-900 aspect-video relative w-full
+		class="media-player bg-slate-900 relative w-full
 {player && !player.paused && chatFocusedSecs > hideControlsOnChatFocused ? 'chat-controls-hidden':''}
-{discord ? 'h-screen' : ''}"
+{discord ? 'h-screen' : 'h-screen'}"
 		src={videoSrc}
 		crossorigin
 		bind:this={player}
@@ -737,13 +737,12 @@
 			}}
 	>
 		<media-provider
-			class="!aspect-video media-provider">
+			class="media-provider w-full h-full">
 			<media-poster
 				class="vds-poster"
 				src={data.preview}
 			></media-poster>
-			<canvas bind:this={canvas} id="sub-canvas" class="pointer-events-none absolute top-0 left-0 w-full h-full"
-							width="1920" height="1080" />
+			<canvas bind:this={canvas} id="sub-canvas" class="pointer-events-none absolute"/>
 		</media-provider>
 		<media-video-layout colorScheme={currentTheme}
 												thumbnails={thumbnailVttSrc}></media-video-layout>
@@ -1046,10 +1045,6 @@
         display: flex;
         justify-content: center;
         flex-direction: column;
-    }
-
-    .media-provider {
-        width: auto !important;
     }
 
     .chat-history {
