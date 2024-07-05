@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import './fonts.css';
 	import './styles.css';
 	import { currentlyWatching, pageReloadCounterStore } from '../store';
 	import { onDestroy, onMount } from 'svelte';
