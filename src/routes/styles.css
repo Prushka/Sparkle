@@ -85,8 +85,8 @@
 	--color-pink-light: rgba(236, 1, 139, 0.75);
 	--color-sub-pink: #ee2e63;
 	--code-bg: #fff;
-	--video-controls-color: rgba(255, 255, 255, 0.88) !important;
-	--media-slider-track-fill-bg: rgba(255, 255, 255, 0.85) !important;
+	--video-controls-color: rgba(255, 255, 255, 0.85) !important;
+	--media-slider-track-fill-bg: rgba(255, 255, 255, 0.8) !important;
 	-webkit-font-smoothing: antialiased;
 	--video-border-radius: 0rem;
 
