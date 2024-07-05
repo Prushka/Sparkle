@@ -30,9 +30,6 @@
 						size: [value.roomPlayers, 99],
 						id: "job-"+value.id,
 					},
-					secrets: {
-						join: "join"+value.id,
-					},
 					instance: true,
 					assets: {
 						large_image: `https://${location.host}${value.thumbnail}`,
