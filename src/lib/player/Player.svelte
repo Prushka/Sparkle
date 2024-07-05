@@ -256,7 +256,7 @@
 						dismissable: false,
 						componentProps: {
 							seconds: moveSeconds,
-							roomPlayers: roomPlayers,
+							historicalPlayers: Object.values(historicalPlayers),
 							job: jobs.find((job: Job) => job.Id === broadcast!.moveTo),
 							firedBy: state.firedBy
 						}
