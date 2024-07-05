@@ -34,7 +34,7 @@
 	import { PUBLIC_BE, PUBLIC_STATIC } from '$env/static/public';
 	import {
 		IconAlertOctagonFilled, IconArrowBounce, IconCheck,
-		IconCone, IconConePlus, IconEyeOff, IconLayout2, IconMoonFilled,
+		IconCone, IconEyeOff, IconLayout2, IconMoonFilled,
 		IconPlayerPauseFilled,
 		IconPlayerPlayFilled,
 		IconSettings2, IconShare3, IconSunFilled,
@@ -82,6 +82,7 @@
 	let pfp: File;
 	let pfpInput: HTMLInputElement;
 	let roomPlayers: Player[] = [];
+	let historicalPlayers: { [key: string]: Player } = {};
 	let roomMessages: Chat[] = [];
 	let roomId = job.Id;
 	let lastTicked = 0;
@@ -300,6 +301,9 @@
 							}
 						}
 						roomPlayers = state.players;
+						for (const player of roomPlayers) {
+							historicalPlayers[player.id] = player;
+						}
 						updateLastTicked(true);
 						currentlyWatching.update((value) => {
 							if(value) {
@@ -695,7 +699,7 @@
     }}
 		class="media-player bg-slate-900 relative w-full
 {player && !player.paused && chatFocusedSecs > hideControlsOnChatFocused ? 'chat-controls-hidden':''}
-{discord ? 'h-screen' : 'h-screen'}"
+{discord ? 'h-screen' : ''}"
 		src={videoSrc}
 		crossorigin
 		bind:this={player}
@@ -762,9 +766,9 @@
 						{message.timeStr ? `[${message.timeStr}]` : ''}
 					</p>
 
-					<p>{findName(roomPlayers, message.uid)}</p>
+					<p>{findName(Object.values(historicalPlayers), message.uid)}</p>
 					<Pfp id={message.uid} class="avatar"
-							 discordUser={roomPlayers.find((p) => p.id === message.uid)?.discordUser} />
+							 discordUser={Object.values(historicalPlayers).find((p) => p.id === message.uid)?.discordUser} />
 				</div>
 			{/each}
 		</div>
@@ -1015,7 +1019,7 @@
 				<Button variant="outline"
 								class="h-auto pr-4 py-0 pl-0 rounded-l-full rounded-r-full flex gap-2">
 					<Pfp class="w-12 h-12 mr-0.5" id={player.id}
-							 discordUser={roomPlayers.find((p) => p.id === player.id)?.discordUser} />
+							 discordUser={Object.values(historicalPlayers).find((p) => p.id === player.id)?.discordUser} />
 					<span class="flex gap-0.5 flex-col items-center justify-center font-semibold player-status-text">
 						<span class="font-bold w-16 text-ellipsis overflow-hidden">{player.name}</span>
 						{#if player.inBg}
