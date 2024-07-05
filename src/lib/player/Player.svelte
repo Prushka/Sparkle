@@ -694,7 +694,8 @@
     volumeDown: 'ArrowDown',
     }}
 		class="media-player bg-slate-900 aspect-video relative w-full
-{player && !player.paused && chatFocusedSecs > hideControlsOnChatFocused ? 'chat-controls-hidden':''}"
+{player && !player.paused && chatFocusedSecs > hideControlsOnChatFocused ? 'chat-controls-hidden':''}
+{discord ? 'h-screen' : ''}"
 		src={videoSrc}
 		crossorigin
 		bind:this={player}
