@@ -141,7 +141,7 @@
 	}
 	$: updatePlayers(roomPlayers, socketCommunicating);
 	$:{
-		if (selectedCodec !== 'auto' && job.EncodedCodecs && job.EncodedCodecs.length > 0 && !job?.EncodedCodecs.includes(selectedCodec)) {
+		if (selectedCodec !== 'auto' && job.EncodedCodecs && job.EncodedCodecs.length > 0 && !job.EncodedCodecs.includes(selectedCodec)) {
 			console.log('setting codec - no matching codec', selectedCodec, job.EncodedCodecs);
 			onCodecChange('auto');
 		}
@@ -555,10 +555,10 @@
 			if (!document.getElementById('chat-pc-form')) {
 				console.log('mounting chat');
 				const node = document.querySelector('media-title') || document.querySelector('media-chapter-title');
-				if (node) {
+				if (node && node.parentNode && node.nextSibling) {
 					const container = document.createElement('div');
 					container.classList.add('max-md:hidden');
-					node.parentNode?.insertBefore(container, node.nextSibling);
+					node.parentNode.insertBefore(container, node.nextSibling);
 					new Chatbox({
 						target: container,
 						props: {
@@ -957,8 +957,11 @@
 										<DropdownMenu.RadioGroup bind:value={selectedAudio}>
 											{#each job.MappedAudio[videoSrc?.sCodec] as am}
 												<DropdownMenu.RadioItem value={`${am.Index}-${am.Language}`} on:click={()=>{
-												localStorage.setItem('sAudio', `${am.Index}-${am.Language}`);
-												$pageReloadCounterStore++;
+													const curr = `${am.Index}-${am.Language}`
+													if (selectedAudio !== curr) {
+														localStorage.setItem('sAudio', curr);
+														$pageReloadCounterStore++;
+													}
 							}}>{formatPair(am)} ({am.Index})
 												</DropdownMenu.RadioItem>
 											{/each}
