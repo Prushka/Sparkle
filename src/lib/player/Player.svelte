@@ -379,7 +379,15 @@
 		messagesToDisplay = roomMessages.filter((message) => {
 			return (Date.now() - message.timestamp) < 140000;
 		});
-		messagesToDisplay = messagesToDisplay.slice(-10);
+		if (player.clientHeight < 250) {
+			messagesToDisplay = messagesToDisplay.slice(-4);
+		} else if (player.clientHeight < 450) {
+			messagesToDisplay = messagesToDisplay.slice(-6);
+		} else if (player.clientHeight < 620) {
+			messagesToDisplay = messagesToDisplay.slice(-8);
+		} else {
+			messagesToDisplay = messagesToDisplay.slice(-10);
+		}
 		for (const control of controlsToDisplay) {
 			if (control.firedBy && (Date.now() - control.timestamp) < 8000) {
 				const message: Chat = {
@@ -399,6 +407,21 @@
 		messagesToDisplay.sort((a, b) => {
 			return a.timestamp - b.timestamp;
 		});
+		for (let i = 0; i < messagesToDisplay.length; i++) {
+			let prevTimeStr = '';
+			for (let j = i - 1; j >= 0; j--) {
+				if (messagesToDisplay[j].timeStr) {
+					prevTimeStr = messagesToDisplay[j].timeStr;
+					break;
+				}
+			}
+			const currTimeStr = new Date(messagesToDisplay[i].timestamp).toLocaleTimeString('en-US', {
+				hour: '2-digit',
+				minute: '2-digit',
+				hour12: false
+			})
+			messagesToDisplay[i].timeStr = prevTimeStr === currTimeStr ? '' : currTimeStr;
+		}
 	}
 
 	function updateLastTicked(resetTimer: boolean = false) {
@@ -729,16 +752,14 @@
 			 style={chatHidden ? 'display: none' : ''}
 	>
 		<div
-			class="{controlsShowing ? 'max-md:!mt-10':''} flex flex-col gap-0.5 ml-auto chat-history drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] items-end">
+			class="{controlsShowing ? 'max-md:!mt-10':''} flex flex-col gap-0.5 ml-auto chat-history items-end">
 			{#each messagesToDisplay as message}
 				<div
-					class={`flex gap-1 justify-center items-center chat-line py-1 pl-2.5 pr-2 text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''}`}>
+					class={`flex gap-1 justify-center items-center chat-line
+					py-1 pl-2.5 pr-2 text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''}`}>
 					<p>{message.message}</p>
-					<p class="text-sm">
-						[{(message.isStateUpdate || chatLayout !== "extended") ? '' : `${formatSeconds(message.mediaSec)}, `}{new Date(message.timestamp).toLocaleTimeString('en-US', {
-						hour: '2-digit',
-						minute: '2-digit'
-					})}]
+					<p>
+						{message.timeStr ? `[${message.timeStr}]` : ''}
 					</p>
 
 					<p>{findName(roomPlayers, message.uid)}</p>
@@ -802,6 +823,7 @@
 					placeholder="Name" />
 			</div>
 			<Chatbox
+				useButton={true}
 				formId="chat-mobile-form"
 				inputId="chat-mobile-input"
 				bind:controlsShowing send={send}
@@ -1043,17 +1065,30 @@
         background-color: rgba(0, 0, 0, 0.2);
     }
 
-    @media (max-width: 900px) {
-
+    @media (max-width: 1050px) {
         .chat-history {
             margin-top: 0.5rem;
             margin-right: 0.5rem;
-            font-size: 0.64rem;
+            font-size: 0.825rem;
         }
 
         .chat-history .text-sm {
             line-height: unset;
-            font-size: 0.64rem;
+            font-size: 0.825rem;
+        }
+    }
+
+    @media (max-width: 700px) {
+
+        .chat-history {
+            margin-top: 0.5rem;
+            margin-right: 0.5rem;
+            font-size: 0.66rem;
+        }
+
+        .chat-history .text-sm {
+            line-height: unset;
+            font-size: 0.66rem;
         }
     }
 

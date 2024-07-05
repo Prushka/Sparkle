@@ -5,6 +5,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Shortcut } from '$lib/components/ui/command';
 	import { IconUsers } from '@tabler/icons-svelte';
+	import { Button } from '$lib/components/ui/button';
 
 	let value: string;
 	export let send: any;
@@ -17,6 +18,7 @@
 	export let controlsShowing: boolean | null = null;
 	export let formId: string;
 	export let inputId: string;
+	export let useButton : boolean = false;
 	let players : number;
 	let chatHidden: boolean;
 	const unsubscribeChatLayout = chatLayoutStore.subscribe((value) =>
@@ -52,18 +54,21 @@
 			};
 		}
 	);
+	function sendMessage() {
+		send({ chat: value, type: SyncTypes.ChatSync });
+		value = ""
+		placeholder = 'Sent!';
+		setTimeout(() => {
+			placeholder = chatTxt;
+		}, 2000);
+	}
 </script>
 
 <form
 	id={formId}
 	on:submit={e => {
 		e.preventDefault();
-						send({ chat: value, type: SyncTypes.ChatSync });
-						value = ""
-						placeholder = 'Sent!';
-						setTimeout(() => {
-							placeholder = chatTxt;
-						}, 2000);
+		sendMessage();
 	}}
 	class="{$$restProps.class}"
 	style={chatFocused ? 'visibility: visible;' : 'visibility: unset;'}
@@ -75,6 +80,12 @@
 					<IconUsers stroke={3} size={14}/> {players}
 				{/if}
 				</Shortcut>
+		{/if}
+
+		{#if useButton}
+			<Button variant="outline" class="absolute" on:click={()=>{
+				sendMessage();
+			}}>Send</Button>
 		{/if}
 		<Input
 			on:focus={onFocus}

@@ -35,7 +35,7 @@
 						small_image: value.paused ? `https://${location.host}/icons/pause.png` :
 							`https://${location.host}/icons/play.png`,
 						small_text: value.paused ? 'Paused' : 'Playing'
-					}
+					},
 				}
 			}).then(() => {
 				console.debug('Activity set', value);

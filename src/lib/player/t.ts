@@ -100,6 +100,7 @@ export type Chat = {
 	mediaSec: number;
 	uid: string;
 	isStateUpdate: boolean;
+	timeStr: string;
 }
 
 export function findName(players: Player[], uid: string) : string {
