@@ -23,7 +23,7 @@
 					type: 3,
 					timestamps: {
 						start: value.timeEntered,
-						end: Date.now() + (value.totalDuration - value.duration)
+						end: Date.now() + (value.totalDuration - value.duration) * 1000
 					},
 					party: {
 						size: [value.roomPlayers, 99]
