@@ -14,7 +14,7 @@ export async function load({ params, url, fetch }) {
 	let title: TitleComponents
 	let rating = -1
 	let jobs : Job[] = []
-	let titleStr = 'UwU'
+	let titleStr: string
 	const channelId = url.searchParams.get('channel_id')
 	if (channelId) {
 		channelMapping[channelId] = id
@@ -54,7 +54,7 @@ export async function load({ params, url, fetch }) {
 		console.log(params, e);
 		redirect(302, '/');
 	}
-	let displayTitle = ''
+	let displayTitle: string
 	if (title.episodes) {
 		const se = Object.values(title.episodes)[0]
 		titleStr = `${title.title} - ${se.se} - ${se.seTitle}`
