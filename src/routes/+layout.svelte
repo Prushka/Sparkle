@@ -13,10 +13,11 @@
 
 	let pageReloadCounter: number;
 	let discordSdk: undefined | null | DiscordSDK;
+	let discordAuthenticated = false;
 
 	const pageReloadCounterUnsubscribe = pageReloadCounterStore.subscribe((value) => pageReloadCounter = value);
 	const currentlyWatchingUnsubscribe = currentlyWatching.subscribe((value) => {
-		if (discordSdk && value) {
+		if (discordSdk && value && discordAuthenticated) {
 			const remaining = `(${formatSeconds(value.totalDuration - value.duration)} Remaining)`;
 			discordSdk.commands.setActivity({
 				activity: {
@@ -29,7 +30,6 @@
 					},
 					party: {
 						size: [value.roomPlayers, 99],
-						id: "job-"+value.id,
 					},
 					instance: true,
 					assets: {
@@ -87,6 +87,7 @@
 			if (!prevAuth) {
 				$pageReloadCounterStore++;
 			}
+			discordAuthenticated = true;
 		}
 	}
 

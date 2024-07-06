@@ -345,8 +345,8 @@
 			}
 		};
 
-		socket.onerror = function() {
-			console.error('Socket encountered error');
+		socket.onerror = function(event) {
+			console.error('Socket encountered error: ', event);
 			socket.close();
 		};
 
