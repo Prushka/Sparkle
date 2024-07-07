@@ -165,7 +165,7 @@ input {
 }
 
 :where(.vds-video-layout .vds-controls[data-visible]) {
-	background-image: linear-gradient(to top, rgba(0, 0, 0, 0.48) 0%, rgba(0, 0, 0, 0) 12%) !important;
+	background-image: linear-gradient(to top, rgba(0, 0, 0, 0.46) 0%, rgba(0, 0, 0, 0) 12%) !important;
 }
 
 :where([data-preview] .vds-video-layout .vds-captions) {
