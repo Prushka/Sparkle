@@ -95,15 +95,18 @@
 	}
 
 	beforeNavigate(({ to, cancel, from }) => {
-		if (auth?.channelId && to && !to.url.searchParams.has('channel_id')) {
+		if ((auth?.channelId || (from && from.url.searchParams.has('channel_id')))
+			&& to && !to.url.searchParams.has('channel_id')) {
 			cancel();
-			goto(to.url.pathname + `?channel_id=${auth.channelId}`);
-		} else if (to && !to.url.searchParams.has('room') && from && from.url.searchParams.has('room')) {
-			cancel();
-			goto(to.url.pathname + `?room=${from.url.searchParams.get('room')}`);
-		} else if (to && !to.url.searchParams.has('room')) {
-			cancel();
-			goto(to.url.pathname + `?room=${randomString(6)}`);
+			goto(to.url.pathname + `?channel_id=${auth.channelId ?? from!.url.searchParams.get('channel_id')}`);
+		} else if(!to?.url.searchParams.has('channel_id')) {
+			if (to && !to.url.searchParams.has('room') && from && from.url.searchParams.has('room')) {
+				cancel();
+				goto(to.url.pathname + `?room=${from.url.searchParams.get('room')}`);
+			} else if (to && !to.url.searchParams.has('room')) {
+				cancel();
+				goto(to.url.pathname + `?room=${randomString(6)}`);
+			}
 		}
 	});
 
