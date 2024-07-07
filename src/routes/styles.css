@@ -120,11 +120,11 @@ input {
 }
 
 .chat-pc span {
-	color: rgba(233, 233, 233, 0.62);
+	color: rgba(233, 233, 233, 0.64);
 }
 
 .chat-pc input::placeholder {
-	color: rgba(233, 233, 233, 0.57);
+	color: rgba(233, 233, 233, 0.58);
 	opacity: 1;
 }
 
