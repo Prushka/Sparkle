@@ -121,12 +121,12 @@ input {
 
 .chat-pc span {
 	font-weight: 700;
-	color: rgba(225, 225, 225, 0.64);
+	color: hsla(0,0%,100%,.54);
 }
 
 .chat-pc input::placeholder {
 	font-weight: 700;
-	color: rgba(225, 225, 225, 0.6);
+	color: hsla(0,0%,100%,.54);
 	opacity: 1;
 }
 
@@ -136,7 +136,7 @@ input {
 	border: none;
 	margin: 0 2rem;
 	width: 25rem;
-	background-color: hsla(0,0%,100%,.4) !important;
+	background-color: hsla(0,0%,100%,.3) !important;
 	color: white;
 	font-weight: 800;
 	padding-right: 4rem;
@@ -165,7 +165,7 @@ input {
 }
 
 :where(.vds-video-layout .vds-controls[data-visible]) {
-	background-image: linear-gradient(to top, rgba(0, 0, 0, 0.38) 0%, rgba(0, 0, 0, 0) 12%) !important;
+	background-image: linear-gradient(to top, rgba(0, 0, 0, 0.5) 0%, rgba(0, 0, 0, 0) 12%) !important;
 }
 
 :where([data-preview] .vds-video-layout .vds-captions) {
