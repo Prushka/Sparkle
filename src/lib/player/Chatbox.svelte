@@ -1,11 +1,13 @@
 <script lang="ts">
-	import { SyncTypes } from '$lib/player/t';
+	import { type Chat, findName, SyncTypes } from '$lib/player/t';
 	import { chatFocusedStore, chatLayoutStore, playersStore } from '../../store';
 	import { onDestroy, onMount, tick } from 'svelte';
 	import { Input } from '$lib/components/ui/input';
 	import { Shortcut } from '$lib/components/ui/command';
 	import { IconUsers } from '@tabler/icons-svelte';
-	import { Button } from '$lib/components/ui/button';
+	import { Button, buttonVariants } from '$lib/components/ui/button';
+	import * as Dialog from '$lib/components/ui/dialog/index.js';
+	import Pfp from '$lib/player/Pfp.svelte';
 
 	let value: string;
 	export let send: any;
@@ -19,6 +21,8 @@
 	export let formId: string;
 	export let inputId: string;
 	export let useButton: boolean = false;
+	export let messages: Chat[];
+	export let historicalPlayers: { [key: string]: any };
 	let players: number;
 	let chatHidden: boolean;
 	const unsubscribeChatLayout = chatLayoutStore.subscribe((value) =>
@@ -83,26 +87,19 @@
 				{/if}
 			</Shortcut>
 
-<!--			<Popover.Root>-->
-<!--				<Popover.Trigger asChild let:builder>-->
-<!--					<Button disabled builders={[builder]} variant="ghost" class="absolute left-8 p-1 w-8 h-8 confetti-button"><IconConfetti stroke={3} size={14} /></Button>-->
-<!--				</Popover.Trigger>-->
-<!--				<Popover.Content class="w-80">-->
-<!--					<div class="grid gap-4">-->
-<!--						<div class="space-y-2">-->
-<!--							<h4 class="font-medium leading-none">Reactions</h4>-->
-<!--						</div>-->
-<!--						<EmojiPicker/>-->
-<!--					</div>-->
-<!--				</Popover.Content>-->
-<!--			</Popover.Root>-->
-		{/if}
-
-		{#if useButton}
-			<Button variant="outline" class="absolute" on:click={()=>{
-				sendMessage();
-			}}>Send
-			</Button>
+			<!--			<Popover.Root>-->
+			<!--				<Popover.Trigger asChild let:builder>-->
+			<!--					<Button disabled builders={[builder]} variant="ghost" class="absolute left-8 p-1 w-8 h-8 confetti-button"><IconConfetti stroke={3} size={14} /></Button>-->
+			<!--				</Popover.Trigger>-->
+			<!--				<Popover.Content class="w-80">-->
+			<!--					<div class="grid gap-4">-->
+			<!--						<div class="space-y-2">-->
+			<!--							<h4 class="font-medium leading-none">Reactions</h4>-->
+			<!--						</div>-->
+			<!--						<EmojiPicker/>-->
+			<!--					</div>-->
+			<!--				</Popover.Content>-->
+			<!--			</Popover.Root>-->
 		{/if}
 		<Input
 			on:focus={()=>{
@@ -131,8 +128,48 @@
 				e.stopPropagation()
 		}}
 			bind:value={value} autocomplete="off" type="text" placeholder={placeholder}
-			class="input focus-visible:ring-transparent"
+			class="input focus-visible:ring-transparent {useButton ? 'rounded-r-none':''}"
 			id={inputId}
 		/>
+
+		{#if useButton}
+			<div class="flex">
+				<Dialog.Root>
+					<Dialog.Trigger
+						class={`${buttonVariants({ variant: "outline" })} border-l-0 rounded-l-none rounded-r-none border-r-0`}
+					>History
+					</Dialog.Trigger>
+					<Dialog.Content class="pr-1 max-sm:pl-2 gap-3">
+							<div class="text-lg self-start font-bold">Chat History (Session)</div>
+							<div
+								class="flex flex-col gap-2.5 items-center overflow-y-auto overflow-x-hidden max-h-[85vh]">
+							{#each messages.reverse() as message}
+								<div
+									class={`w-full flex flex-wrap gap-1.5 items-center
+									text-center ${message.isStateUpdate ? 'font-semibold' : ''}`}>
+									<Pfp id={message.uid} class="avatar shrink-0 !w-6 !h-6"
+											 discordUser={Object.values(historicalPlayers).find((p) => p.id === message.uid)?.discordUser} />
+
+									<span class="font-bold shrink-0">
+										{new Date(message.timestamp).toLocaleTimeString('en-US', {
+											hour: '2-digit',
+											minute: '2-digit',
+											hour12: false
+										})}
+									</span>
+									<span class="shrink-0">{findName(Object.values(historicalPlayers), message.uid)}:</span>
+
+									<span class="block break-words overflow-x-hidden text-justify pr-3">{message.message}</span>
+								</div>
+							{/each}
+						</div>
+					</Dialog.Content>
+				</Dialog.Root>
+				<Button variant="outline" class="rounded-l-none" on:click={()=>{
+				sendMessage();
+			}}>Send
+				</Button>
+			</div>
+		{/if}
 	</div>
 </form>

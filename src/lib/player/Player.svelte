@@ -28,7 +28,7 @@
 		getLeftAndJoined,
 		hideControlsOnChatFocused,
 		moveSeconds,
-		findName, getTitleComponents
+		getTitleComponents
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC } from '$env/static/public';
 	import {
@@ -63,6 +63,7 @@
 	import ConnectButton from '$lib/player/ConnectButton.svelte';
 	import MediaSelection from '$lib/player/MediaSelection.svelte';
 	import MoveToast from '$lib/player/MoveToast.svelte';
+	import Chats from '$lib/player/Chats.svelte';
 
 	export let data: ServerData;
 	const { job } = data;
@@ -304,7 +305,7 @@
 						}
 						updateLastTicked(true);
 						currentlyWatching.update((value) => {
-							if(value) {
+							if (value) {
 								value.roomPlayers = roomPlayers.length;
 								return value;
 							}
@@ -401,7 +402,7 @@
 					timestamp: control.timestamp,
 					mediaSec: player.currentTime,
 					isStateUpdate: true,
-					timeStr: "",
+					timeStr: ''
 				};
 				messagesToDisplay.push(message);
 			}
@@ -421,7 +422,7 @@
 				hour: '2-digit',
 				minute: '2-digit',
 				hour12: false
-			})
+			});
 			messagesToDisplay[i].timeStr = prevTimeStr === currTimeStr ? '' : currTimeStr;
 		}
 	}
@@ -548,9 +549,9 @@
 			if (!volumeInitialized) {
 				volumeInitialized = true;
 			} else {
-				localStorage.setItem("volume", volume.toString());
+				localStorage.setItem('volume', volume.toString());
 				if (muted) {
-					localStorage.setItem("volume", "0");
+					localStorage.setItem('volume', '0');
 				}
 			}
 		});
@@ -573,6 +574,8 @@
 							class: 'chat-pc',
 							inputId: 'chat-pc-input',
 							formId: 'chat-pc-form',
+							messages: [],
+							historicalPlayers: [],
 							onFocus: () => {
 								player.controls?.pause();
 								$chatFocusedStore = true;
@@ -642,14 +645,15 @@
 				chatFocusedSecs = 0;
 			}
 		}, 1000);
-		if(localStorage.getItem("volume")) {
-			const v = parseFloat(localStorage.getItem("volume")!)
+		if (localStorage.getItem('volume')) {
+			const v = parseFloat(localStorage.getItem('volume')!);
 			if (v >= 0 && v <= 1) {
 				player.volume = v;
 			}
 		}
 		const chatOverlay = document.getElementById('chat-overlay');
 		player.appendChild(chatOverlay!);
+		player.hideControlsOnMouseLeave = true;
 		const mouseMove = () => {
 			chatFocusedSecs = 0;
 		};
@@ -682,12 +686,12 @@
 			});
 			lastSentTime = timeRounded;
 			currentlyWatching.update((value) => {
-				if(value) {
+				if (value) {
 					value.duration = timeRounded;
 					value.totalDuration = job.Duration;
 					return value;
 				}
-				return null
+				return null;
 			});
 		}
 	}
@@ -756,7 +760,7 @@
 				class="vds-poster"
 				src={data.preview}
 			></media-poster>
-			<canvas bind:this={canvas} id="sub-canvas" class="pointer-events-none absolute"/>
+			<canvas bind:this={canvas} id="sub-canvas" class="pointer-events-none absolute" />
 		</media-provider>
 		<media-video-layout colorScheme={currentTheme}
 												thumbnails={thumbnailVttSrc}></media-video-layout>
@@ -765,23 +769,7 @@
 	<div class="flex gap-1 w-full h-full absolute pointer-events-none z-50" id="chat-overlay"
 			 style={chatHidden ? 'display: none' : ''}
 	>
-		<div
-			class="{controlsShowing ? 'max-md:!mt-10':''} flex flex-col gap-0.5 ml-auto chat-history items-end">
-			{#each messagesToDisplay as message}
-				<button
-					class={`flex gap-1 justify-center items-center chat-line
-					py-1 pl-2.5 pr-2 text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''}`}>
-					<span>{message.message}</span>
-					<span>
-						{message.timeStr ? `[${message.timeStr}]` : ''}
-					</span>
-
-					<span>{findName(Object.values(historicalPlayers), message.uid)}</span>
-					<Pfp id={message.uid} class="avatar"
-							 discordUser={Object.values(historicalPlayers).find((p) => p.id === message.uid)?.discordUser} />
-				</button>
-			{/each}
-		</div>
+		<Chats bind:controlsShowing bind:messagesToDisplay bind:historicalPlayers />
 	</div>
 
 	<div class="p-4 w-full flex flex-col gap-4 font-semibold">
@@ -841,6 +829,8 @@
 				formId="chat-mobile-form"
 				inputId="chat-mobile-input"
 				bind:controlsShowing send={send}
+				bind:messages={roomMessages}
+				bind:historicalPlayers
 				class="input-bordered input-md grow max-md:w-full" />
 		</div>
 
@@ -1063,38 +1053,4 @@
         justify-content: center;
         flex-direction: column;
     }
-
-    .chat-history {
-        margin-top: 2rem;
-        margin-right: 2rem;
-        font-size: 0.94rem;
-    }
-
-    @media (max-width: 1050px) {
-        .chat-history {
-            margin-top: 0.5rem;
-            margin-right: 0.5rem;
-            font-size: 0.825rem;
-        }
-
-        .chat-history .text-sm {
-            line-height: unset;
-            font-size: 0.825rem;
-        }
-    }
-
-    @media (max-width: 700px) {
-
-        .chat-history {
-            margin-top: 0.5rem;
-            margin-right: 0.5rem;
-            font-size: 0.66rem;
-        }
-
-        .chat-history .text-sm {
-            line-height: unset;
-            font-size: 0.66rem;
-        }
-    }
-
 </style>
