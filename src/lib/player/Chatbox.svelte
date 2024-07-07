@@ -85,19 +85,19 @@
 				{/if}
 			</Shortcut>
 
-			<Popover.Root>
-				<Popover.Trigger asChild let:builder>
-					<Button disabled builders={[builder]} variant="ghost" class="absolute left-8 p-1 w-8 h-8 confetti-button"><IconConfetti stroke={3} size={14} /></Button>
-				</Popover.Trigger>
-				<Popover.Content class="w-80">
-					<div class="grid gap-4">
-						<div class="space-y-2">
-							<h4 class="font-medium leading-none">Reactions</h4>
-						</div>
-						<EmojiPicker/>
-					</div>
-				</Popover.Content>
-			</Popover.Root>
+<!--			<Popover.Root>-->
+<!--				<Popover.Trigger asChild let:builder>-->
+<!--					<Button disabled builders={[builder]} variant="ghost" class="absolute left-8 p-1 w-8 h-8 confetti-button"><IconConfetti stroke={3} size={14} /></Button>-->
+<!--				</Popover.Trigger>-->
+<!--				<Popover.Content class="w-80">-->
+<!--					<div class="grid gap-4">-->
+<!--						<div class="space-y-2">-->
+<!--							<h4 class="font-medium leading-none">Reactions</h4>-->
+<!--						</div>-->
+<!--						<EmojiPicker/>-->
+<!--					</div>-->
+<!--				</Popover.Content>-->
+<!--			</Popover.Root>-->
 		{/if}
 
 		{#if useButton}
