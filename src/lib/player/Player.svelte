@@ -84,7 +84,7 @@
 	let roomPlayers: Player[] = [];
 	let historicalPlayers: { [key: string]: Player } = {};
 	let roomMessages: Chat[] = [];
-	let roomId = job.Id;
+	let roomId = discord?.channelId ? discord.channelId : job.Id;
 	let lastTicked = 0;
 	let tickedSecsAgo = 0;
 	let tickedSecsAgoStr = '0';
@@ -130,7 +130,7 @@
 	});
 	const unsubscribeInteracted = interactedStore.subscribe((value) => interacted = value);
 	let exited = false;
-	$: BASE_STATIC = `${PUBLIC_STATIC}/${roomId}`;
+	$: BASE_STATIC = `${PUBLIC_STATIC}/${job.Id}`;
 	$: thumbnailVttSrc = `https://${location.host}${BASE_STATIC}/storyboard.vtt`;
 	$: socketCommunicating = socketConnected && (tickedSecsAgo >= 0 && tickedSecsAgo < 5);
 	$: autoCodec = (videoSrc?.sCodec && selectedCodec === 'auto') ? `(${codecDisplayMap[videoSrc.sCodec]})` : '';
