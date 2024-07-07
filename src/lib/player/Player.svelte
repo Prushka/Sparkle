@@ -64,6 +64,7 @@
 	import MediaSelection from '$lib/player/MediaSelection.svelte';
 	import MoveToast from '$lib/player/MoveToast.svelte';
 	import Chats from '$lib/player/Chats.svelte';
+	import { page } from '$app/stores';
 
 	export let data: ServerData;
 	const { job } = data;
@@ -84,7 +85,8 @@
 	let roomPlayers: Player[] = [];
 	let historicalPlayers: { [key: string]: Player } = {};
 	let roomMessages: Chat[] = [];
-	let roomId = discord?.channelId ? discord.channelId : job.Id;
+	let roomId = $page.url.searchParams.has("room") ? $page.url.searchParams.get("room") :
+		discord?.channelId ? discord.channelId : job.Id;
 	let lastTicked = 0;
 	let tickedSecsAgo = 0;
 	let tickedSecsAgoStr = '0';

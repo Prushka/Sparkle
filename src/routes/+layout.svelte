@@ -94,10 +94,13 @@
 		}
 	}
 
-	beforeNavigate(({ to, cancel }) => {
+	beforeNavigate(({ to, cancel, from }) => {
 		if (auth?.channelId && to && !to.url.searchParams.has('channel_id')) {
 			cancel();
 			goto(to.url.pathname + `?channel_id=${auth.channelId}`);
+		} else if (to && !to.url.searchParams.has('room') && from && from.url.searchParams.has('room')) {
+			cancel();
+			goto(to.url.pathname + `?room=${from.url.searchParams.get('room')}`);
 		}
 	});
 
