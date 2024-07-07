@@ -8,7 +8,7 @@
 	import { Toaster } from '$lib/components/ui/sonner';
 	import { DiscordSDK } from '@discord/embedded-app-sdk';
 	import { PUBLIC_DISCORD_CLIENT_ID } from '$env/static/public';
-	import { formatSeconds } from '$lib/player/t';
+	import { formatSeconds, randomString } from '$lib/player/t';
 	import { beforeNavigate, goto } from '$app/navigation';
 
 	let pageReloadCounter: number;
@@ -101,6 +101,9 @@
 		} else if (to && !to.url.searchParams.has('room') && from && from.url.searchParams.has('room')) {
 			cancel();
 			goto(to.url.pathname + `?room=${from.url.searchParams.get('room')}`);
+		} else if (to && !to.url.searchParams.has('room')) {
+			cancel();
+			goto(to.url.pathname + `?room=${randomString(6)}`);
 		}
 	});
 
