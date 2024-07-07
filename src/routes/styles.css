@@ -121,12 +121,12 @@ input {
 
 .chat-pc span {
 	font-weight: 700;
-	color: hsla(0,0%,100%,.54);
+	color: hsla(0,0%,100%,.56);
 }
 
 .chat-pc input::placeholder {
 	font-weight: 700;
-	color: hsla(0,0%,100%,.54);
+	color: hsla(0,0%,100%,.56);
 	opacity: 1;
 }
 
@@ -236,7 +236,7 @@ input {
 		opacity: 0;
 	}
 	input {
-		background-color: hsla(0,0%,10%,.16) !important;
+		background-color: hsla(0,0%,10%,.18) !important;
 	}
 }
 
