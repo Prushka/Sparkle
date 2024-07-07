@@ -4,10 +4,8 @@
 	import { onDestroy, onMount, tick } from 'svelte';
 	import { Input } from '$lib/components/ui/input';
 	import { Shortcut } from '$lib/components/ui/command';
-	import { IconConfetti, IconUsers } from '@tabler/icons-svelte';
+	import { IconUsers } from '@tabler/icons-svelte';
 	import { Button } from '$lib/components/ui/button';
-	import * as Popover from "$lib/components/ui/popover/index.js";
-	import EmojiPicker from '$lib/player/EmojiPicker.svelte';
 
 	let value: string;
 	export let send: any;
