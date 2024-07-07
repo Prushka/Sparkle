@@ -120,11 +120,13 @@ input {
 }
 
 .chat-pc span {
-	color: rgba(233, 233, 233, 0.64);
+	font-weight: 800;
+	color: rgba(225, 225, 225, 0.64);
 }
 
 .chat-pc input::placeholder {
-	color: rgba(233, 233, 233, 0.6);
+	font-weight: 800;
+	color: rgba(225, 225, 225, 0.6);
 	opacity: 1;
 }
 
@@ -136,7 +138,7 @@ input {
 	width: 25rem;
 	background-color: hsla(0,0%,100%,.4) !important;
 	color: white;
-	font-weight: 700;
+	font-weight: 800;
 	padding-right: 4rem;
 	padding-left: 2.25rem;
 }
