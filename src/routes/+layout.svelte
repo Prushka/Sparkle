@@ -88,6 +88,9 @@
 				$pageReloadCounterStore++;
 			}
 			discordAuthenticated = true;
+			await discordSdk.commands.setConfig({
+				use_interactive_pip: true
+			});
 		}
 	}
 

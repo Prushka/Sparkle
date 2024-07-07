@@ -4,8 +4,10 @@
 	import { onDestroy, onMount, tick } from 'svelte';
 	import { Input } from '$lib/components/ui/input';
 	import { Shortcut } from '$lib/components/ui/command';
-	import { IconUsers } from '@tabler/icons-svelte';
+	import { IconConfetti, IconUsers } from '@tabler/icons-svelte';
 	import { Button } from '$lib/components/ui/button';
+	import * as Popover from "$lib/components/ui/popover/index.js";
+	import EmojiPicker from '$lib/player/EmojiPicker.svelte';
 
 	let value: string;
 	export let send: any;
@@ -34,6 +36,7 @@
 	});
 	$: chatTxt = chatHidden ? 'Chat (hidden)' : `Chat ${controlsShowing === null && showShortcut ? '[Alt S]' : ''}`;
 	$: placeholder = chatTxt;
+	$: connected = players > 0;
 	onMount(
 		() => {
 			const f = (e: any) => {
@@ -76,11 +79,25 @@
 	autocomplete="off">
 	<div class="relative flex items-center justify-end">
 		{#if focusByShortcut}
-			<Shortcut class="absolute pointer-events-none m-12 flex gap-0.5 justify-center items-center text-xs font-bold">
+			<Shortcut class="absolute pointer-events-none mr-12 flex gap-0.5 justify-center items-center text-xs font-bold">
 				{#if players > 0}
 					<IconUsers stroke={3} size={14} /> {players}
 				{/if}
 			</Shortcut>
+
+			<Popover.Root>
+				<Popover.Trigger asChild let:builder>
+					<Button disabled builders={[builder]} variant="ghost" class="absolute left-8 p-1 w-8 h-8 confetti-button"><IconConfetti stroke={3} size={14} /></Button>
+				</Popover.Trigger>
+				<Popover.Content class="w-80">
+					<div class="grid gap-4">
+						<div class="space-y-2">
+							<h4 class="font-medium leading-none">Reactions</h4>
+						</div>
+						<EmojiPicker/>
+					</div>
+				</Popover.Content>
+			</Popover.Root>
 		{/if}
 
 		{#if useButton}
@@ -100,9 +117,14 @@
 				});
 				}
 			}}
+			disabled={!connected}
 			on:blur={onBlur}
 			on:keydown={e => {
-				e.stopPropagation()
+				e.stopPropagation();
+				if (e.key === 'Escape') {
+					e.preventDefault();
+					document.getElementById(inputId)?.blur();
+				}
 		}}
 			on:keyup={e => {
 				e.stopPropagation()

@@ -3,7 +3,7 @@
 	export let data: any;
 </script>
 
-<main class="w-full h-full p-10 flex items-center justify-center mt-24">
+<main class="w-full h-full p-10 gap-2 flex items-center flex-col justify-center mt-24">
 
 <MediaSelection data={data}/>
 

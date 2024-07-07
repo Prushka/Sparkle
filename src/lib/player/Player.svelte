@@ -23,7 +23,6 @@
 		setGetLS,
 		randomString,
 		setGetLsBoolean,
-		setGetLsNumber,
 		sortTracks,
 		type ServerData,
 		getLeftAndJoined,
@@ -105,7 +104,6 @@
 	let currentTheme: 'light' | 'dark';
 	let prevTrackSrc: string | null | undefined = '';
 	let syncGoto = setGetLsBoolean('syncGoto', true);
-	let playerVolume = setGetLsNumber('volume', 1);
 	let notificationAudio = new Audio(`${PUBLIC_STATIC}/sound/anya_peanuts.mp3`);
 	let inBg = false;
 	let chatFocusedSecs = 0;
@@ -524,7 +522,6 @@
 			}
 			canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
 		};
-		player.volume = playerVolume;
 		supportedCodecs = getSupportedCodecs();
 		setVideoSrc();
 		reloadPlayer();
@@ -546,9 +543,16 @@
 				connect();
 			}
 		});
-		const playerSoundUnsubscribe = player.subscribe(({ volume }) => {
-			playerVolume = volume;
-			localStorage.setItem('volume', volume.toString());
+		let volumeInitialized = false;
+		const playerSoundUnsubscribe = player.subscribe(({ volume, muted }) => {
+			if (!volumeInitialized) {
+				volumeInitialized = true;
+			} else {
+				localStorage.setItem("volume", volume.toString());
+				if (muted) {
+					localStorage.setItem("volume", "0");
+				}
+			}
 		});
 		const i = setInterval(() => {
 			updateTime();
@@ -638,6 +642,12 @@
 				chatFocusedSecs = 0;
 			}
 		}, 1000);
+		if(localStorage.getItem("volume")) {
+			const v = parseFloat(localStorage.getItem("volume")!)
+			if (v >= 0 && v <= 1) {
+				player.volume = v;
+			}
+		}
 		const chatOverlay = document.getElementById('chat-overlay');
 		player.appendChild(chatOverlay!);
 		const mouseMove = () => {
@@ -758,18 +768,18 @@
 		<div
 			class="{controlsShowing ? 'max-md:!mt-10':''} flex flex-col gap-0.5 ml-auto chat-history items-end">
 			{#each messagesToDisplay as message}
-				<div
+				<button
 					class={`flex gap-1 justify-center items-center chat-line
 					py-1 pl-2.5 pr-2 text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''}`}>
-					<p>{message.message}</p>
-					<p>
+					<span>{message.message}</span>
+					<span>
 						{message.timeStr ? `[${message.timeStr}]` : ''}
-					</p>
+					</span>
 
-					<p>{findName(Object.values(historicalPlayers), message.uid)}</p>
+					<span>{findName(Object.values(historicalPlayers), message.uid)}</span>
 					<Pfp id={message.uid} class="avatar"
 							 discordUser={Object.values(historicalPlayers).find((p) => p.id === message.uid)?.discordUser} />
-				</div>
+				</button>
 			{/each}
 		</div>
 	</div>
@@ -1057,12 +1067,7 @@
     .chat-history {
         margin-top: 2rem;
         margin-right: 2rem;
-    }
-
-    .chat-line {
-        width: fit-content;
-        border-radius: 0.5rem;
-        background-color: rgba(0, 0, 0, 0.24);
+        font-size: 0.94rem;
     }
 
     @media (max-width: 1050px) {

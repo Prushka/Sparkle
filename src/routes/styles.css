@@ -120,11 +120,11 @@ input {
 }
 
 .chat-pc span {
-	color: rgba(233, 233, 233, 0.6);
+	color: rgba(233, 233, 233, 0.62);
 }
 
 .chat-pc input::placeholder {
-	color: rgba(233, 233, 233, 0.55);
+	color: rgba(233, 233, 233, 0.57);
 	opacity: 1;
 }
 
@@ -138,6 +138,21 @@ input {
 	color: white;
 	font-weight: 700;
 	padding-right: 4rem;
+	padding-left: 2.25rem;
+}
+
+.confetti-button {
+	svg {
+	 color: rgba(255, 255, 255, 0.6)
+	}
+
+	transition: all 0.1s cubic-bezier(.32,.08,.24,1);
+}
+.confetti-button:hover {
+	svg {
+		color: rgba(70, 70, 70, 0.8) !important;
+	}
+	background-color: hsla(0,0%,100%,.42) !important;
 }
 
 :where(.vds-captions [data-part='cue']) {
@@ -242,4 +257,16 @@ input {
 	bottom: 0;
 	margin: auto;
 	object-fit: contain;
+}
+
+.chat-line {
+	width: fit-content;
+	border-radius: 0.5rem;
+	background-color: rgba(0, 0, 0, 0.28);
+	pointer-events: auto;
+	cursor: pointer;
+}
+
+.chat-line:hover {
+	background-color: rgba(0, 0, 0, 0.54) !important;
 }
