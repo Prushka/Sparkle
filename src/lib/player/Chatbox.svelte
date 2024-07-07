@@ -143,6 +143,9 @@
 							<div class="text-lg self-start font-bold">Chat History (Session)</div>
 							<div
 								class="flex flex-col gap-2.5 items-center overflow-y-auto overflow-x-hidden max-h-[85vh]">
+								{#if messages.length === 0}
+									<div class="self-start">There's nothing here yet ┬─┬ノ( º _ ºノ)</div>
+									{/if}
 							{#each messages.reverse() as message}
 								<div
 									class={`w-full flex flex-wrap gap-1.5 items-center
