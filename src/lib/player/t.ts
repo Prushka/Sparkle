@@ -106,7 +106,7 @@ export type Chat = {
 export function findName(players: Player[], uid: string) : string {
 	const player = players.find((p) => p.id === uid);
 	const discordName = getName(player?.discordUser);
-	return discordName ? discordName : (player?.name ?? "Unknown");
+	return discordName ? discordName : (player?.name || "Unknown");
 }
 
 export function formatPair(stream: Stream, includeIndex = false, includeCodec = false): string {

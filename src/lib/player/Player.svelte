@@ -1,7 +1,7 @@
 <script lang="ts">
 	import 'vidstack/bundle';
 	import type { MediaPlayerElement } from 'vidstack/elements';
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import {
 		formatSeconds,
 		type Job,
@@ -72,7 +72,7 @@
 	let controlsShowing = false;
 	let player: MediaPlayerElement;
 	let socket: WebSocket;
-	let name = getName(discord?.user) ?? setGetLS('name', `Anon-${randomString(4)}`, (v: string) => {
+	let name = getName(discord?.user) || setGetLS('name', `Anon-${randomString(4)}`, (v: string) => {
 		toast.message(`Using placeholder name: ${v}`, {
 			description: `Change your name using the input next to your avatar`,
 			duration: 9000,
@@ -86,6 +86,7 @@
 	let historicalPlayers: { [key: string]: Player } = {};
 	let roomMessages: Chat[] = [];
 	let roomId = $page.url.searchParams.has("room") ? $page.url.searchParams.get("room") :
+		$page.url.searchParams.has("channel_id") ? $page.url.searchParams.get("channel_id") :
 		discord?.channelId ? discord.channelId : job.Id;
 	let lastTicked = 0;
 	let tickedSecsAgo = 0;
@@ -340,7 +341,10 @@
 						break;
 					case SyncTypes.ExitSync:
 						exited = true;
-						$pageReloadCounterStore++;
+						$interactedStore = false;
+						tick().then(() => {
+							$pageReloadCounterStore++;
+						})
 						break;
 				}
 			}
@@ -874,7 +878,11 @@
 								<Button builders={[builder]} variant="outline"
 												class="w-9 h-9 p-1"
 												on:click={()=>{
-													navigator.clipboard.writeText(window.location.href).then(() => {
+													let link = window.location.href;
+													if (discord?.channelId || $page.url.searchParams.has("channel_id")) {
+														link = `${window.location.href.split('?')[0]}?channel_id=${discord?.channelId || $page.url.searchParams.get("channel_id")}`;
+													}
+													navigator.clipboard.writeText(link).then(() => {
 														copiedRoomLink = true;
 														setTimeout(() => {
 															copiedRoomLink = false;

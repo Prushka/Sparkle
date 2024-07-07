@@ -98,7 +98,7 @@
 		if ((auth?.channelId || (from && from.url.searchParams.has('channel_id')))
 			&& to && !to.url.searchParams.has('channel_id')) {
 			cancel();
-			goto(to.url.pathname + `?channel_id=${auth.channelId ?? from!.url.searchParams.get('channel_id')}`);
+			goto(to.url.pathname + `?channel_id=${auth?.channelId || from!.url.searchParams.get('channel_id')}`);
 		} else if(!to?.url.searchParams.has('channel_id')) {
 			if (to && !to.url.searchParams.has('room') && from && from.url.searchParams.has('room')) {
 				cancel();
