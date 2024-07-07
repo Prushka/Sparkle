@@ -120,12 +120,12 @@ input {
 }
 
 .chat-pc span {
-	font-weight: 800;
+	font-weight: 700;
 	color: rgba(225, 225, 225, 0.64);
 }
 
 .chat-pc input::placeholder {
-	font-weight: 800;
+	font-weight: 700;
 	color: rgba(225, 225, 225, 0.6);
 	opacity: 1;
 }
