@@ -61,6 +61,7 @@
 	);
 
 	function sendMessage() {
+		if(!value) return;
 		send({ chat: value, type: SyncTypes.ChatSync });
 		value = '';
 		placeholder = 'Sent!';
@@ -135,7 +136,7 @@
 		{#if useButton}
 			<div class="flex">
 				<Dialog.Root>
-					<Dialog.Trigger
+					<Dialog.Trigger disabled={!connected}
 						class={`${buttonVariants({ variant: "outline" })} border-l-0 rounded-l-none rounded-r-none border-r-0`}
 					>History
 					</Dialog.Trigger>
@@ -168,7 +169,7 @@
 						</div>
 					</Dialog.Content>
 				</Dialog.Root>
-				<Button variant="outline" class="rounded-l-none" on:click={()=>{
+				<Button disabled={!connected} variant="outline" class="rounded-l-none" on:click={()=>{
 				sendMessage();
 			}}>Send
 				</Button>
