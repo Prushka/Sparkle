@@ -151,3 +151,9 @@
 		</footer>
 	</main>
 {/key}
+
+<style>
+	footer div {
+			color: hsl(var(--muted-foreground));
+	}
+</style>
