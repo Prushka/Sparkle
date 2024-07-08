@@ -265,8 +265,8 @@ input {
 	width: fit-content;
 	border-radius: 0.5rem;
 	background-color: rgba(0, 0, 0, 0.28);
-	pointer-events: auto;
-	cursor: pointer;
+	/*pointer-events: auto;*/
+	/*cursor: pointer;*/
 }
 
 .chat-line:hover {

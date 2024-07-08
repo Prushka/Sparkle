@@ -11,7 +11,7 @@ export let controlsShowing: boolean | null;
 <div
 	class="{controlsShowing ? 'max-md:!mt-10':''} flex flex-col gap-0.5 ml-auto chat-history items-end">
 	{#each messagesToDisplay as message}
-		<button
+		<div
 			class={`flex gap-1 justify-center items-center chat-line
 				py-1 pl-2.5 pr-2 text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''}`}>
 			<span>{message.message}</span>
@@ -22,7 +22,7 @@ export let controlsShowing: boolean | null;
 			<span>{findName(Object.values(historicalPlayers), message.uid)}</span>
 			<Pfp id={message.uid} class="avatar"
 					 discordUser={Object.values(historicalPlayers).find((p) => p.id === message.uid)?.discordUser} />
-		</button>
+		</div>
 	{/each}
 </div>
 
