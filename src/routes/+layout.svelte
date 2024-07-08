@@ -122,8 +122,8 @@
 
 	onMount(() => {
 		const i = setInterval(async () => {
-			if (auth?.channelId) {
-				const response = await fetch(`/api/cm?channel_id=${auth.channelId}`, {
+			if (auth?.channelId || $page.url.searchParams.has('channel_id')) {
+				const response = await fetch(`/api/cm?channel_id=${auth?.channelId || $page.url.searchParams.get('channel_id')}`, {
 					method: 'GET',
 					headers: {
 						'Content-Type': 'application/json'
