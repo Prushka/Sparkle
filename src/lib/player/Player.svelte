@@ -658,8 +658,13 @@
 			}
 		}
 		const chatOverlay = document.getElementById('chat-overlay');
+		const mouseLeave = () => {
+			if(!player.paused && controlsShowing) {
+				player.remoteControl.toggleControls()
+			}
+		}
 		player.appendChild(chatOverlay!);
-		player.hideControlsOnMouseLeave = true;
+		player.addEventListener("mouseleave", mouseLeave)
 		const mouseMove = () => {
 			chatFocusedSecs = 0;
 		};
@@ -674,6 +679,7 @@
 			playerSoundUnsubscribe();
 			document.removeEventListener('visibilitychange', visibilityChange);
 			document.removeEventListener('mousemove', mouseMove);
+			player.removeEventListener("mouseleave", mouseLeave);
 
 			unsubscribeChatLayout();
 			unsubscribeChatFocused();
