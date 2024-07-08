@@ -85,9 +85,9 @@
 	let roomPlayers: Player[] = [];
 	let historicalPlayers: { [key: string]: Player } = {};
 	let roomMessages: Chat[] = [];
-	let roomId = $page.url.searchParams.has("room") ? $page.url.searchParams.get("room") :
-		$page.url.searchParams.has("channel_id") ? $page.url.searchParams.get("channel_id") :
-		discord?.channelId ? discord.channelId : job.Id;
+	let roomId = $page.url.searchParams.has("room") ? $page.url.searchParams.get("room")+job.Id :
+		$page.url.searchParams.has("channel_id") ? $page.url.searchParams.get("channel_id")+job.Id :
+		discord?.channelId ? discord.channelId+job.Id : job.Id;
 	let lastTicked = 0;
 	let tickedSecsAgo = 0;
 	let tickedSecsAgoStr = '0';
