@@ -3,8 +3,8 @@
 	export let data: any;
 </script>
 
-<main class="w-full h-full p-10 gap-2 flex items-center flex-col justify-center mt-24">
+<div class="p-10 gap-2 w-full flex items-center flex-col justify-center mt-20">
 
 <MediaSelection data={data}/>
 
-</main>
+</div>

@@ -29,7 +29,7 @@
 						end: Date.now() + (value.totalDuration - value.duration) * 1000
 					},
 					party: {
-						size: [value.roomPlayers, 99],
+						size: [value.roomPlayers, 99]
 					},
 					instance: true,
 					assets: {
@@ -38,7 +38,7 @@
 						small_image: value.paused ? `https://${location.host}/icons/coffee.png` :
 							`https://${location.host}/icons/broom.png`,
 						small_text: value.paused ? `Paused ${remaining}` : `Playing ${remaining}`
-					},
+					}
 				}
 			}).then(() => {
 				console.debug('Activity set', value);
@@ -99,7 +99,7 @@
 			&& to && !to.url.searchParams.has('channel_id')) {
 			cancel();
 			goto(to.url.pathname + `?channel_id=${auth?.channelId || from!.url.searchParams.get('channel_id')}`);
-		} else if(!to?.url.searchParams.has('channel_id')) {
+		} else if (!to?.url.searchParams.has('channel_id')) {
 			if (to && !to.url.searchParams.has('room') && from && from.url.searchParams.has('room')) {
 				cancel();
 				goto(to.url.pathname + `?room=${from.url.searchParams.get('room')}`);
@@ -122,26 +122,32 @@
 
 	onMount(() => {
 		const i = setInterval(async () => {
-			if(auth?.channelId) {
+			if (auth?.channelId) {
 				const response = await fetch(`/api/cm?channel_id=${auth.channelId}`, {
 					method: 'GET',
 					headers: {
 						'Content-Type': 'application/json'
-					},
+					}
 				});
 				const res = await response.json();
-				if(res?.jobId && (!$currentlyWatching?.id || $currentlyWatching?.id !== res.jobId)) {
-					await goto(`/${res.jobId}`)
+				if (res?.jobId && (!$currentlyWatching?.id || $currentlyWatching?.id !== res.jobId)) {
+					await goto(`/${res.jobId}`);
 				}
 			}
 		}, 3000);
 		return () => {
 			clearInterval(i);
-		}});
+		};
+	});
 </script>
 
 <ModeWatcher defaultMode={"dark"} />
 {#key `${$page.url.pathname}${pageReloadCounter}`}
 	<Toaster position="top-center" richColors />
-	<slot />
+	<main id="main-page" class="flex flex-col gap-1 min-h-full items-center w-full">
+		<slot />
+		<footer class="mt-auto w-full flex items-center justify-center p-2">
+			<div class="text-xs">Copyright © 2024 hmph. This site does not store any files on its server.</div>
+		</footer>
+	</main>
 {/key}

@@ -703,7 +703,6 @@
 	}
 </script>
 
-<main id="main-page" class="overflow-hidden flex flex-col items-center w-full h-full">
 	<media-player
 		keep-alive
 		keyShortcuts={{
@@ -1051,7 +1050,6 @@
 			{/each}
 		</div>
 	</div>
-</main>
 
 <style>
     .media-player {

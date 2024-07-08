@@ -89,8 +89,10 @@
 
 }
 
-html {
+html, body {
 	scroll-behavior: smooth;
+	height: 100%;
+	overflow-x: hidden;
 }
 
 html, #root {
