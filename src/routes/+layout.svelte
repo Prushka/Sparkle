@@ -36,7 +36,7 @@
 						large_image: `https://${location.host}${value.thumbnail}`,
 						large_text: value.se ? `${value.se}: ${formatSeconds(value.duration)}` : 'It\'s a movie!',
 						small_image: value.paused ? `https://${location.host}/icons/coffee.png` :
-							`https://${location.host}/icons/broom.png`,
+							`https://${location.host}/icons/magic-ball.png`,
 						small_text: value.paused ? `Paused ${remaining}` : `Playing ${remaining}`
 					}
 				}
