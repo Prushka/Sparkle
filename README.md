@@ -2,7 +2,7 @@
 
 A fully synced web-based watch party that supports (both on desktop & mobile):
 
-1. Chat, Profile Picture, Pause, Play, Seek, Media Switch real-time sync base on room
+1. `chat`, `profile picture`, `pause/play`, `seek`, `media switch` real-time syncing base on room
 2. HDR with `AV1`, `HEVC`, `H.264` codec switching (if browser supports)
 3. All main stream subtitles & language selection (note: iOS only supports WebVTT in fullscreen):
     - `SSA/ASS`
@@ -15,6 +15,7 @@ A fully synced web-based watch party that supports (both on desktop & mobile):
 7. Media selection with season and episode support
 8. Auto Reconnect
 9. In background (tabbed out) notifications
+10. Automated video transcoding, stream extraction, and metadata generation in backend
 
 ![Main Page](assets/main.png)
 
@@ -49,7 +50,9 @@ Video files are first processed and transcoded by the backend to:
 1. Encode the video files to `AV1`, `HEVC`, `H.264` codecs
 2. Generate thumbnails (video storyboards for preview) and posters
 3. Extract subtitles and audio tracks
-4. Generate the necessary metadata for the frontend (nfo files, dominant theme color, chapter timestamps & titles, etc.)
+4. Locate and extract nfo files
+5. Extract dominant theme color from poster
+6. Extract and populate chapter timestamps & titles
 
 # Setup
 
