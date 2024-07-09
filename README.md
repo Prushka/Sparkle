@@ -1,38 +1,51 @@
-# create-svelte
+# Discord / Website Watch Party
 
-Everything you need to build a Svelte project, powered by [`create-svelte`](https://github.com/sveltejs/kit/tree/main/packages/create-svelte).
+A fully synced web-based watch party that supports (both on desktop & mobile):
+1. Chat, Profile Picture, Pause, Play, Seek, Media Switch real-time sync base on room
+2. HDR with `AV1`, `HEVC`, `H.264` codec switching (if browser supports)
+3. All main stream subtitles & language selection (note: iOS only supports WebVTT in fullscreen):
+   - `SSA/ASS`
+   - `WebVTT`
+   - `SUP` (the image subtitle format)
+   - `SRT` 
+4. Thumbnail (Video Storyboard/Preview) | Poster (Video Cover)
+5. HTML embed headers with dominant color based on show/episode
+6. Multiple audio selection
+7. Media selection with season and episode support
+8. Auto Reconnect
+9. In background (tabbed out) notifications
 
-## Creating a project
 
-If you're seeing this, you've probably already done this step. Congrats!
+![Main Page](readme/main.png)
 
-```bash
-# create a new project in the current directory
-npm create svelte@latest
+# Discord Activity Support
 
-# create a new project in my-app
-npm create svelte@latest my-app
-```
+Discord recently introduced public developer preview activities. 
+This site can be added into your custom discord activity in developer portal.
+Doing so will use discord OAuth2 for username and profile picture syncing.
+Channel id will be used as the room id. All functionalities mentioned above are supported in discord activity.
 
-## Developing
+![Discord App](readme/app.png)
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+### Discord Status
+![Discord App](readme/status.png)
 
-```bash
-npm run dev
+### Discord Embed
 
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
+<img src="readme/embed.png" width="300">
 
-## Building
 
-To create a production version of your app:
+# This repository contains only the frontend & SSR part
 
-```bash
-npm run build
-```
+The backend part is still a work-in-progress.
 
-You can preview the production build with `npm run preview`.
+Currently, this project is intended to be used as an extension to
+[Sonarr](https://github.com/Sonarr/Sonarr)/[Radarr](https://github.com/Radarr/Radarr) and your local media library.
 
-> To deploy your app, you may need to install an [adapter](https://kit.svelte.dev/docs/adapters) for your target environment.
+It needs to be self-hosted like certain media players (_e.g.,_ Plex).
+
+Video files are first processed and transcoded by the backend to:
+1. Encode the video files to `AV1`, `HEVC`, `H.264` codecs
+2. Generate thumbnails (video storyboards for preview) and posters
+3. Extract subtitles and audio tracks
+4. Generate the necessary metadata for the frontend (nfo files, dominant theme color, chapter timestamps & titles, etc.)

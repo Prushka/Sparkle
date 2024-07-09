@@ -18,11 +18,11 @@ export async function GET({url,params,fetch}) {
 			res.author_name = titleComponents.title
 			res.author_url = to
 		}
-		res.provider_name = `It's time to watch ${showType} with Hmph!`
+		res.provider_name = `It's time to watch ${showType}!`
 		return json(res);
 	}
 	return json({
-		author_name: `It's time to watch anime with Hmph!`,
+		author_name: `It's time to watch anime!`,
 		author_url: to,
 		provider_url: to,
 		provider_name: `Let's watch anime!`
