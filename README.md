@@ -22,9 +22,9 @@ A fully synced web-based watch party that supports (both on desktop & mobile):
 # Discord Activity Support
 
 Discord recently introduced public developer preview activities.
-This site can be added into your custom discord activity in developer portal.
-Doing so will use discord OAuth2 for username and profile picture syncing.
-Channel id will be used as the room id. All functionalities mentioned above are supported in discord activity.
+This site can be added into your custom Discord activity in developer portal.
+Doing so will use Discord OAuth2 for username and profile picture syncing.
+Channel id will be used as the room id. All functionalities mentioned above are supported in Discord activity.
 
 ### Desktop Activity
 ![Discord App](assets/app.png)
