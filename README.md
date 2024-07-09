@@ -37,7 +37,7 @@ Channel id will be used as the room id. All functionalities mentioned above are 
 
 # This repository contains only the frontend & SSR part
 
-The backend part is still a work-in-progress.
+The [backend](https://github.com/Prushka/discord-watch-party-backend) part is still a work-in-progress.
 
 Currently, this project is intended to be used as an extension to
 [Sonarr](https://github.com/Sonarr/Sonarr)/[Radarr](https://github.com/Radarr/Radarr) and your local media library.
