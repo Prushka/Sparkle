@@ -2,7 +2,7 @@
 
 A fully synced web-based watch party that supports (both on desktop & mobile):
 
-1. `chat`, `profile picture`, `pause/play`, `seek`, `media switch` real-time syncing base on room
+1. `chat`, `profile picture`, `pause/play`, `seek`, `media switch` real-time syncing base on rooms
 2. HDR with `AV1`, `HEVC`, `H.264` codec switching (if browser supports)
 3. All main stream subtitles & language selection (note: iOS only supports WebVTT in fullscreen):
     - `SSA/ASS`
@@ -26,7 +26,11 @@ This site can be added into your custom discord activity in developer portal.
 Doing so will use discord OAuth2 for username and profile picture syncing.
 Channel id will be used as the room id. All functionalities mentioned above are supported in discord activity.
 
+### Desktop Activity
 ![Discord App](assets/app.png)
+
+### Mobile Activity
+![Discord App](assets/mobile.jpeg)
 
 ### Discord Status
 
