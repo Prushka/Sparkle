@@ -16,7 +16,7 @@ A fully synced web-based watch party that supports (both on desktop & mobile):
 9. In background (tabbed out) notifications
 
 
-![Main Page](readme/main.png)
+![Main Page](assets/main.png)
 
 # Discord Activity Support
 
@@ -25,14 +25,14 @@ This site can be added into your custom discord activity in developer portal.
 Doing so will use discord OAuth2 for username and profile picture syncing.
 Channel id will be used as the room id. All functionalities mentioned above are supported in discord activity.
 
-![Discord App](readme/app.png)
+![Discord App](assets/app.png)
 
 ### Discord Status
-![Discord App](readme/status.png)
+![Discord App](assets/status.png)
 
 ### Discord Embed
 
-<img src="readme/embed.png" width="300">
+<img src="assets/embed.png" width="300">
 
 
 # This repository contains only the frontend & SSR part
