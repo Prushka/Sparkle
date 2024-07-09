@@ -26,6 +26,14 @@ This site can be added into your custom Discord activity in developer portal.
 Doing so will use Discord OAuth2 for username and profile picture syncing.
 Channel id will be used as the room id. All functionalities mentioned above are supported in Discord activity.
 
+### Activity Setup
+
+- Create a new application in [Discord Developer Portal](https://discord.com/developers/applications)
+- Enable activities
+- Add the site url as the redirect url and root url
+- Add Discord users to Application Testers (they do not need to accept invites)
+- Users will be prompted to authorize with `identify` and `rpc.activities.write` scope on joining the activity
+
 ### Desktop Activity
 ![Discord App](assets/app.png)
 
