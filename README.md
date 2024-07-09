@@ -14,7 +14,7 @@ A fully synced web-based watch party that supports (both on desktop & mobile):
 6. Multiple audio selection
 7. Media selection with season and episode support
 8. Auto Reconnect
-9. In background (tabbed out) notifications
+9. In-background (_i.e.,_ tabbed out) notifications
 10. Automated video transcoding, stream extraction, and metadata generation in backend
 
 ![Main Page](assets/main.png)
