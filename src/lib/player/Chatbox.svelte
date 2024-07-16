@@ -103,6 +103,7 @@
 			<!--			</Popover.Root>-->
 		{/if}
 		<Input
+			maxlength={300}
 			on:focus={()=>{
 				onFocus();
 				if(useButton) {

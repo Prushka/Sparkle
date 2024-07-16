@@ -269,6 +269,7 @@ input {
 	background-color: rgba(0, 0, 0, 0.28);
 	/*pointer-events: auto;*/
 	/*cursor: pointer;*/
+	text-align: right;
 }
 
 .chat-line:hover {
