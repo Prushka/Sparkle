@@ -17,7 +17,6 @@ export async function load({ params, url, fetch }) {
 	const room = url.searchParams.get('room') || url.searchParams.get('channel_id')
 	if (room) {
 		roomMapping[room] = id
-		console.log("Channel mapping", roomMapping)
 	}
 	try {
 		jobs = await getJobs(fetch, id)
