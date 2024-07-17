@@ -13,6 +13,7 @@
 	} from '$lib/player/t';
 	import { goto } from '$app/navigation';
 	import TitlePoster from '$lib/player/TitlePoster.svelte';
+	import { page } from '$app/stores';
 
 	export let data: { jobs: Job[], job: Job | undefined };
 	let { jobs, job } = data;
@@ -75,7 +76,22 @@
 		const ii = setInterval(() => {
 			updateList();
 		}, 60000);
+		const i = setInterval(async () => {
+			if ($page.url.searchParams.has('room') || $page.url.searchParams.has('channel_id')) {
+				const response = await fetch(`/api/cm?room=${$page.url.searchParams.get('room') || $page.url.searchParams.get('channel_id')}`, {
+					method: 'GET',
+					headers: {
+						'Content-Type': 'application/json'
+					}
+				});
+				const res = await response.json();
+				if (res?.jobId && (!job || job.Id !== res.jobId)) {
+					await goto(`/${res.jobId}`);
+				}
+			}
+		}, 3000);
 		return () => {
+			clearInterval(i);
 			clearInterval(ii);
 		};
 	});

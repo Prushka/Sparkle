@@ -10,7 +10,6 @@
 	import { PUBLIC_DISCORD_CLIENT_ID } from '$env/static/public';
 	import { formatSeconds, randomString } from '$lib/player/t';
 	import { beforeNavigate, goto } from '$app/navigation';
-	import { browser } from '$app/environment';
 
 	let pageReloadCounter: number;
 	let discordSdk: undefined | null | DiscordSDK;
@@ -112,26 +111,6 @@
 			await setupDiscordSdk();
 		}
 	});
-
-	onMount(() => {
-		const i = setInterval(async () => {
-			if ($page.url.searchParams.has('room') || $page.url.searchParams.has('channel_id')) {
-				const response = await fetch(`/api/cm?room=${$page.url.searchParams.get('room') || $page.url.searchParams.get('channel_id')}`, {
-					method: 'GET',
-					headers: {
-						'Content-Type': 'application/json'
-					}
-				});
-				const res = await response.json();
-				if (res?.jobId && (!$currentlyWatching?.id || $currentlyWatching?.id !== res.jobId)) {
-					await goto(`/${res.jobId}`);
-				}
-			}
-		}, 3000);
-		return () => {
-			clearInterval(i);
-		};
-	});
 </script>
 
 <ModeWatcher defaultMode={"dark"} />
@@ -141,7 +120,6 @@
 		<slot />
 		<footer class="mt-auto w-full flex flex-col items-center justify-center p-2">
 			<div class="text-xs">Copyright © 2024 hmph. This site does not store any files on its server.</div>
-			<div>{browser && window?.location?.href}</div>
 		</footer>
 	</main>
 {/key}
