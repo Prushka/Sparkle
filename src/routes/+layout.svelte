@@ -95,18 +95,13 @@
 	}
 
 	beforeNavigate(({ to, cancel, from }) => {
-		if ((auth?.channelId || (from && from.url.searchParams.has('channel_id')))
-			&& to && !to.url.searchParams.has('channel_id')) {
+		const room = auth?.channelId || $page.url.searchParams.get('room');
+		if (to && !to.url.searchParams.has('room') && from && room) {
 			cancel();
-			goto(to.url.pathname + `?channel_id=${auth?.channelId || from!.url.searchParams.get('channel_id')}`);
-		} else if (!to?.url.searchParams.has('channel_id')) {
-			if (to && !to.url.searchParams.has('room') && from && from.url.searchParams.has('room')) {
-				cancel();
-				goto(to.url.pathname + `?room=${from.url.searchParams.get('room')}`);
-			} else if (to && !to.url.searchParams.has('room')) {
-				cancel();
-				goto(to.url.pathname + `?room=${randomString(6)}`);
-			}
+			goto(to.url.pathname + `?room=${room}`);
+		} else if (to && !to.url.searchParams.has('room')) {
+			cancel();
+			goto(to.url.pathname + `?room=${randomString(6)}`);
 		}
 	});
 
@@ -122,8 +117,8 @@
 
 	onMount(() => {
 		const i = setInterval(async () => {
-			if (auth?.channelId || $page.url.searchParams.has('channel_id')) {
-				const response = await fetch(`/api/cm?channel_id=${auth?.channelId || $page.url.searchParams.get('channel_id')}`, {
+			if ($page.url.searchParams.has('room')) {
+				const response = await fetch(`/api/cm?room=${$page.url.searchParams.get('room')}`, {
 					method: 'GET',
 					headers: {
 						'Content-Type': 'application/json'
@@ -153,7 +148,7 @@
 {/key}
 
 <style>
-	footer div {
-			color: hsl(var(--muted-foreground));
-	}
+    footer div {
+        color: hsl(var(--muted-foreground));
+    }
 </style>

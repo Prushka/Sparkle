@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount, tick } from 'svelte';
-	import { PUBLIC_BE, PUBLIC_STATIC } from '$env/static/public';
+	import { PUBLIC_BE } from '$env/static/public';
 	import CaretSort from 'svelte-radix/CaretSort.svelte';
 	import { IconCheck, IconChevronRight } from '@tabler/icons-svelte';
 	import { Button } from '$lib/components/ui/button/index.js';
@@ -13,7 +13,6 @@
 	} from '$lib/player/t';
 	import { goto } from '$app/navigation';
 	import TitlePoster from '$lib/player/TitlePoster.svelte';
-	import New from '$lib/player/New.svelte';
 
 	export let data: { jobs: Job[], job: Job | undefined };
 	let { jobs, job } = data;

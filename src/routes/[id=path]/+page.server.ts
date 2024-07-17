@@ -2,7 +2,7 @@ import { PUBLIC_STATIC } from '$env/static/public';
 import { type Job } from '$lib/player/t';
 import * as cheerio from 'cheerio';
 import { redirect } from '@sveltejs/kit';
-import { channelMapping, getJobs } from '../../cache';
+import { roomMapping, getJobs } from '../../cache';
 
 /** @type {import('../../.svelte-kit/types/src/routes').PageServerLoad} */
 export async function load({ params, url, fetch }) {
@@ -14,10 +14,10 @@ export async function load({ params, url, fetch }) {
 	let rating = -1
 	let jobs : Job[] = []
 	let titleStr: string
-	const channelId = url.searchParams.get('channel_id')
-	if (channelId) {
-		channelMapping[channelId] = id
-		console.log("Channel mapping", channelMapping)
+	const room = url.searchParams.get('room')
+	if (room) {
+		roomMapping[room] = id
+		console.log("Channel mapping", roomMapping)
 	}
 	try {
 		jobs = await getJobs(fetch, id)

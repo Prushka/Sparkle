@@ -1,12 +1,12 @@
 import { type Job } from '$lib/player/t';
-import { channelMapping, getJobs } from '../cache';
+import { roomMapping, getJobs } from '../cache';
 import { redirect } from '@sveltejs/kit';
 
 export async function load({ params, url }) {
 	let jobs : Job[] = []
-	const channelId = url.searchParams.get('channel_id')
-	if (channelId && channelMapping[channelId]) {
-		redirect(302, `/${channelMapping[channelId]}`);
+	const room = url.searchParams.get('room')
+	if (room && roomMapping[room]) {
+		redirect(302, `/${roomMapping[room]}?room=${room}`);
 	}
 	try {
 		jobs = await getJobs(fetch)

@@ -84,9 +84,7 @@
 	let roomPlayers: Player[] = [];
 	let historicalPlayers: { [key: string]: Player } = {};
 	let roomMessages: Chat[] = [];
-	let roomId = $page.url.searchParams.has("room") ? $page.url.searchParams.get("room")+job.Id :
-		$page.url.searchParams.has("channel_id") ? $page.url.searchParams.get("channel_id")+job.Id :
-		discord?.channelId ? discord.channelId+job.Id : job.Id;
+	let room = $page.url.searchParams.has("room") ? $page.url.searchParams.get("room")+job.Id : job.Id;
 	let lastTicked = 0;
 	let tickedSecsAgo = 0;
 	let tickedSecsAgoStr = '0';
@@ -223,10 +221,10 @@
 		if (!interacted) {
 			return;
 		}
-		socket = new WebSocket(`wss://${location.host}${PUBLIC_BE}/sync/${roomId}/${playerId}`);
-		console.log(`Socket, connecting to ${roomId}`);
+		socket = new WebSocket(`wss://${location.host}${PUBLIC_BE}/sync/${room}/${playerId}`);
+		console.log(`Socket, connecting to ${room}`);
 		socket.onopen = () => {
-			console.log(`Socket, connected to ${roomId}`);
+			console.log(`Socket, connected to ${room}`);
 			socketConnected = true;
 			if (name !== '') {
 				send({ name: name, type: SyncTypes.ProfileSync, discordUser: discord?.user });
@@ -356,11 +354,11 @@
 		};
 
 		socket.onclose = () => {
-			console.log(`Socket closed, ${roomId}`);
+			console.log(`Socket closed, ${room}`);
 			socketConnected = false;
 			if (!exited) {
 				setTimeout(function() {
-					console.log(`Socket reconnecting, ${roomId}`);
+					console.log(`Socket reconnecting, ${room}`);
 					connect();
 				}, 1000);
 			}
@@ -884,8 +882,8 @@
 												class="w-9 h-9 p-1"
 												on:click={()=>{
 													let link = window.location.href;
-													if (discord?.channelId || $page.url.searchParams.has("channel_id")) {
-														link = `${window.location.href.split('?')[0]}?channel_id=${discord?.channelId || $page.url.searchParams.get("channel_id")}`;
+													if ($page.url.searchParams.has("room")) {
+														link = `${window.location.href.split('?')[0]}?room=${$page.url.searchParams.get("room")}`;
 													}
 													navigator.clipboard.writeText(link).then(() => {
 														copiedRoomLink = true;

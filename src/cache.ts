@@ -15,4 +15,4 @@ export async function getJobs(fetch: any, target: string | null = null): Promise
 	return cachedJobs;
 }
 
-export const channelMapping: { [key: string]: string } = {};
+export const roomMapping: { [key: string]: string } = {};
