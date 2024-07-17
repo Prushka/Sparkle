@@ -94,11 +94,11 @@
 		}
 	}
 
-	beforeNavigate(({ to, cancel }) => {
+	beforeNavigate(({ from, to, cancel }) => {
 		if (to && !to.url.searchParams.has('room')) {
-			const room = $page.url.searchParams.get('room') || auth?.channelId || $page.url.searchParams.get('channel_id') || randomString(6);
+			const room = from?.url.searchParams.get('room') || auth?.channelId || from?.url.searchParams.get('channel_id') || randomString(6);
 			cancel();
-			goto(to.url.pathname + `?room=${room}`);
+			goto(to.url.pathname + `?room=${room}`)
 		}
 	});
 
@@ -114,7 +114,7 @@
 </script>
 
 <ModeWatcher defaultMode={"dark"} />
-{#key `${$page.url.pathname}${pageReloadCounter}`}
+{#key `${$page.url.pathname}${$page.url.search}${pageReloadCounter}`}
 	<Toaster position="top-center" richColors />
 	<main id="main-page" class="flex flex-col gap-1 min-h-full items-center w-full">
 		<slot />

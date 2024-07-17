@@ -77,8 +77,9 @@
 			updateList();
 		}, 60000);
 		const i = setInterval(async () => {
-			if ($page.url.searchParams.has('room') || $page.url.searchParams.has('channel_id')) {
-				const response = await fetch(`/api/cm?room=${$page.url.searchParams.get('room') || $page.url.searchParams.get('channel_id')}`, {
+			const room = $page.url.searchParams.get('room') || $page.url.searchParams.get('channel_id');
+			if (room) {
+				const response = await fetch(`/api/cm?room=${room}`, {
 					method: 'GET',
 					headers: {
 						'Content-Type': 'application/json'
@@ -86,10 +87,10 @@
 				});
 				const res = await response.json();
 				if (res?.jobId && (!job || job.Id !== res.jobId)) {
-					await goto(`/${res.jobId}`);
+					await goto(`/${res.jobId}?room=${room}`);
 				}
 			}
-		}, 3000);
+		}, 4000);
 		return () => {
 			clearInterval(i);
 			clearInterval(ii);
