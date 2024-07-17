@@ -9,7 +9,7 @@
 	import { DiscordSDK } from '@discord/embedded-app-sdk';
 	import { PUBLIC_DISCORD_CLIENT_ID } from '$env/static/public';
 	import { formatSeconds, randomString } from '$lib/player/t';
-	import { beforeNavigate, goto } from '$app/navigation';
+	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
 
 	let pageReloadCounter: number;
 	let discordSdk: undefined | null | DiscordSDK;
@@ -94,15 +94,22 @@
 		}
 	}
 
-	beforeNavigate(({ to, cancel, from }) => {
-		const room = auth?.channelId || $page.url.searchParams.get('room');
-		if (to && !to.url.searchParams.has('room') && from && room) {
-			cancel();
+	function setRoom(to: any, cancel: any) {
+		const room = $page.url.searchParams.get('room') || auth?.channelId || $page.url.searchParams.get('channel_id') || randomString(6);
+		if (to && !to.url.searchParams.has('room')) {
+			if (cancel) {
+				cancel();
+			}
 			goto(to.url.pathname + `?room=${room}`);
-		} else if (to && !to.url.searchParams.has('room')) {
-			cancel();
-			goto(to.url.pathname + `?room=${randomString(6)}`);
 		}
+	}
+
+	beforeNavigate(({ to, cancel }) => {
+		setRoom(to, cancel);
+	});
+
+	afterNavigate(({ to }) => {
+		setRoom(to, null);
 	});
 
 	onMount(async () => {
