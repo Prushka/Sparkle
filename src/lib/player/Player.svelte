@@ -84,7 +84,8 @@
 	let roomPlayers: Player[] = [];
 	let historicalPlayers: { [key: string]: Player } = {};
 	let roomMessages: Chat[] = [];
-	let room = $page.url.searchParams.has("room") ? $page.url.searchParams.get("room")+job.Id : job.Id;
+	let room = $page.url.searchParams.has("room") ? $page.url.searchParams.get("room")+job.Id :
+	$page.url.searchParams.has("channel_id") ? $page.url.searchParams.get("channel_id")+job.Id : job.Id;
 	let lastTicked = 0;
 	let tickedSecsAgo = 0;
 	let tickedSecsAgoStr = '0';
@@ -882,8 +883,8 @@
 												class="w-9 h-9 p-1"
 												on:click={()=>{
 													let link = window.location.href;
-													if ($page.url.searchParams.has("room")) {
-														link = `${window.location.href.split('?')[0]}?room=${$page.url.searchParams.get("room")}`;
+													if ($page.url.searchParams.has("room") || $page.url.searchParams.has("channel_id")) {
+														link = `${window.location.href.split('?')[0]}?room=${$page.url.searchParams.get("room") || $page.url.searchParams.get("channel_id")}`;
 													}
 													navigator.clipboard.writeText(link).then(() => {
 														copiedRoomLink = true;

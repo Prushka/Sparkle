@@ -9,7 +9,8 @@
 	import { DiscordSDK } from '@discord/embedded-app-sdk';
 	import { PUBLIC_DISCORD_CLIENT_ID } from '$env/static/public';
 	import { formatSeconds, randomString } from '$lib/player/t';
-	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
+	import { beforeNavigate, goto } from '$app/navigation';
+	import { browser } from '$app/environment';
 
 	let pageReloadCounter: number;
 	let discordSdk: undefined | null | DiscordSDK;
@@ -94,22 +95,12 @@
 		}
 	}
 
-	function setRoom(to: any, cancel: any) {
-		const room = $page.url.searchParams.get('room') || auth?.channelId || $page.url.searchParams.get('channel_id') || randomString(6);
+	beforeNavigate(({ to, cancel }) => {
 		if (to && !to.url.searchParams.has('room')) {
-			if (cancel) {
-				cancel();
-			}
+			const room = $page.url.searchParams.get('room') || auth?.channelId || $page.url.searchParams.get('channel_id') || randomString(6);
+			cancel();
 			goto(to.url.pathname + `?room=${room}`);
 		}
-	}
-
-	beforeNavigate(({ to, cancel }) => {
-		setRoom(to, cancel);
-	});
-
-	afterNavigate(({ to }) => {
-		setRoom(to, null);
 	});
 
 	onMount(async () => {
@@ -124,8 +115,8 @@
 
 	onMount(() => {
 		const i = setInterval(async () => {
-			if ($page.url.searchParams.has('room')) {
-				const response = await fetch(`/api/cm?room=${$page.url.searchParams.get('room')}`, {
+			if ($page.url.searchParams.has('room') || $page.url.searchParams.has('channel_id')) {
+				const response = await fetch(`/api/cm?room=${$page.url.searchParams.get('room') || $page.url.searchParams.get('channel_id')}`, {
 					method: 'GET',
 					headers: {
 						'Content-Type': 'application/json'
@@ -148,8 +139,9 @@
 	<Toaster position="top-center" richColors />
 	<main id="main-page" class="flex flex-col gap-1 min-h-full items-center w-full">
 		<slot />
-		<footer class="mt-auto w-full flex items-center justify-center p-2">
+		<footer class="mt-auto w-full flex flex-col items-center justify-center p-2">
 			<div class="text-xs">Copyright © 2024 hmph. This site does not store any files on its server.</div>
+			<div>{browser && window?.location?.href}</div>
 		</footer>
 	</main>
 {/key}

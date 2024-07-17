@@ -4,7 +4,7 @@ import { redirect } from '@sveltejs/kit';
 
 export async function load({ params, url }) {
 	let jobs : Job[] = []
-	const room = url.searchParams.get('room')
+	const room = url.searchParams.get('room') || url.searchParams.get('channel_id');
 	if (room && roomMapping[room]) {
 		redirect(302, `/${roomMapping[room]}?room=${room}`);
 	}
