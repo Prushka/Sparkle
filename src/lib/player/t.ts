@@ -125,7 +125,7 @@ export interface Job {
 	Id: string;
 	// InputParent: string;
 	Input: string;
-	// State: string;
+	State: string;
 	// SHA256: string;
 	EncodedCodecs: string[];
 	MappedAudio: { [key: string]: Stream[] };
@@ -436,11 +436,10 @@ export function preprocessJob(job: Job) {
 }
 
 export function preprocessJobs(jobs: Job[]) {
-	jobs.map(preprocessJob);
-	jobs.sort((a, b) => {
+	const filtered = jobs.filter(j => j.State === "complete")
+	return filtered.map(preprocessJob).sort((a, b) => {
 		return a.Input.localeCompare(b.Input);
 	});
-	return jobs;
 }
 
 export function extractTitle(job: Job): Title {
