@@ -31,10 +31,10 @@
 	function getNewJobs(jobs: Job[]): Job[] {
 		const last6 = jobs.sort((a, b) => {
 			return a.JobModTime > b.JobModTime ? -1 : 1;
-		}).slice(0, 6);
+		}).slice(0, 7);
 		const last3Days = jobs.filter((job) => {
 			const diff = Date.now() - job.JobModTime * 1000;
-			return diff < 1000 * 60 * 60 * 24 * 3;
+			return diff < 1000 * 60 * 60 * 24 * 7;
 		});
 		const results: { [key: string]: Job } = {};
 		for (const job of last3Days) {
