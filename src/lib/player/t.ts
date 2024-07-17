@@ -492,17 +492,19 @@ export interface Titles { [key: string]: Show }
 
 export function getTitleComponentsByJobs(jobs: Job[]): Titles {
 	const _titles = jobs.reduce((acc: Titles, job) => {
-		const components = job.Title;
-		if (!acc[components.titleId]) {
-			acc[components.titleId] = components;
+		if (!acc[job.Title.titleId]) {
+			acc[job.Title.titleId] = {
+				title: job.Title.title,
+				id: job.Title.id,
+				titleId: job.Title.titleId
+			};
 		}
-		if(components.episode) {
-			if (!acc[components.titleId].episodes) {
-				acc[components.titleId].episodes = [];
+		if(job.Title.episode) {
+			if (!acc[job.Title.titleId].episodes) {
+				acc[job.Title.titleId].episodes = [];
 			}
-			acc[components.titleId].episodes?.push(components.episode);
+			acc[job.Title.titleId].episodes?.push(job.Title.episode);
 		}
-
 		return acc;
 	}, {});
 	// set titles to sorted _titles with same structure, first sort by episodes is null, then by title
