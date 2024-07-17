@@ -1,5 +1,5 @@
 import { PUBLIC_STATIC } from '$env/static/public';
-import { getTitleComponents, type Job, type TitleComponents } from '$lib/player/t';
+import { type Job } from '$lib/player/t';
 import * as cheerio from 'cheerio';
 import { redirect } from '@sveltejs/kit';
 import { channelMapping, getJobs } from '../../cache';
@@ -11,7 +11,6 @@ export async function load({ params, url, fetch }) {
 	let codec = 'h264'
 	let base = `${PUBLIC_STATIC}/${id}`
 	let plot = ''
-	let title: TitleComponents
 	let rating = -1
 	let jobs : Job[] = []
 	let titleStr: string
@@ -42,7 +41,6 @@ export async function load({ params, url, fetch }) {
 				codec = 'hevc'
 			}
 		}
-		title = getTitleComponents(job)
 		const infoResponse = await fetch(`${base}/info.nfo`);
 		const info = await infoResponse.text();
 		const $ = cheerio.load(info, {
@@ -55,10 +53,11 @@ export async function load({ params, url, fetch }) {
 		redirect(302, '/');
 	}
 	let displayTitle: string
-	if (title.episodes) {
-		const se = Object.values(title.episodes)[0]
-		titleStr = `${title.title} - ${se.se} - ${se.seTitle}`
-		displayTitle = `${se.se} - ${se.seTitle}`
+	const title = job!.Title
+	if (title.episode) {
+		const se = title.episode
+		titleStr = `${title.title} - ${se.se} - ${se.title}`
+		displayTitle = `${se.se} - ${se.title}`
 	}else{
 		titleStr = title.title
 		displayTitle = title.title

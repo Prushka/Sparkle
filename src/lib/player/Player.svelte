@@ -28,7 +28,6 @@
 		getLeftAndJoined,
 		hideControlsOnChatFocused,
 		moveSeconds,
-		getTitleComponents
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC } from '$env/static/public';
 	import {
@@ -491,12 +490,12 @@
 	onMount(() => {
 		console.log(job);
 		currentlyWatching.update(() => {
-			const components = getTitleComponents(job);
+			const title = job.Title;
 			return {
 				id: job.Id,
-				title: components.title,
-				se: components.episodes ? Object.values(components.episodes)[0].se : '',
-				seTitle: components.episodes ? Object.values(components.episodes)[0].seTitle : '',
+				title: title.title,
+				se: title.episode ? title.episode.se : '',
+				seTitle: title.episode ? title.episode.title : '',
 				thumbnail: data.preview,
 				timeEntered: Date.now(),
 				paused: true,

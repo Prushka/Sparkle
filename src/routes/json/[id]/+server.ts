@@ -1,5 +1,4 @@
 import { json } from '@sveltejs/kit';
-import { getTitleComponents } from '$lib/player/t';
 import { getJobs } from '../../../cache';
 
 export async function GET({url,params,fetch}) {
@@ -8,14 +7,13 @@ export async function GET({url,params,fetch}) {
 	const jobs = await getJobs(fetch, id)
 	const job = jobs.find(j => j.Id === id)
 	if (job) {
-		const titleComponents = getTitleComponents(job)
 		let showType = 'a movie'
 		const res : any = {
 			"provider_url": to,
 		}
-		if (titleComponents.episodes) {
+		if (job.Title.episode) {
 			showType = 'anime'
-			res.author_name = titleComponents.title
+			res.author_name = job.Title.title
 			res.author_url = to
 		}
 		res.provider_name = `It's time to watch ${showType}!`

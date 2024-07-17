@@ -3,7 +3,7 @@
 	import * as Card from '$lib/components/ui/card/index.js';
 	import { Button } from '$lib/components/ui/button';
 	import TitlePoster from '$lib/player/TitlePoster.svelte';
-	import { getTitleComponents, type Job, type Player } from '$lib/player/t';
+	import { type Job, type Player } from '$lib/player/t';
 	import { goto } from '$app/navigation';
 	import Pfp from '$lib/player/Pfp.svelte';
 	export let historicalPlayers: Player[] = [];
@@ -11,7 +11,6 @@
 	export let firedBy: Player;
 	export let job: Job | undefined;
 	let closed = false;
-	$: title = job ? getTitleComponents(job) : null;
 
 	onMount(() => {
 		const interval = setInterval(() => {
@@ -45,8 +44,8 @@
 		</Card.Header>
 		<Card.Content>
 			<div class="flex gap-1 items-center w-full text-sm font-normal">
-				{#if title}
-					<TitlePoster title={title}/>
+				{#if job?.Title}
+					<TitlePoster title={job.Title}/>
 				{/if}
 				To: {job?.Input}</div>
 		</Card.Content>

@@ -7,26 +7,44 @@
 	import * as Popover from '$lib/components/ui/popover/index.js';
 	import * as Command from '$lib/components/ui/command/index.js';
 	import {
-		getTitleComponents,
 		getTitleComponentsByJobs,
 		type Job,
-		preprocessJobs, type ServerData
+		preprocessJobs
 	} from '$lib/player/t';
 	import { goto } from '$app/navigation';
 	import TitlePoster from '$lib/player/TitlePoster.svelte';
+	import New from '$lib/player/New.svelte';
 
-	export let data: ServerData;
+	export let data: { jobs: Job[], job: Job | undefined };
 	let { jobs, job } = data;
 
 	export let bounceToOverride: ((_id: string) => void) | null = null;
-	let selectedTitleId: string | null = job ? getTitleComponents(job).titleId : null;
-	let selectedSe: string | null = job && getTitleComponents(job).episodes ? Object.keys(getTitleComponents(job).episodes!)[0] : null;
 	let titleSelectionOpen = false;
 	let seSelectionOpen = false;
+	let selectedTitleId: string | undefined = job?.Title?.titleId;
+	let selectedSe: string | undefined = job?.Title?.episode?.se;
 	$: titles = getTitleComponentsByJobs(jobs);
-	$: selectedTitle = selectedTitleId ? titles[selectedTitleId] : null;
-	$: selectedEpisodes = selectedTitle?.episodes;
-	$: selectedEpisode = (selectedTitle?.episodes && selectedSe) ? selectedTitle.episodes[selectedSe!] : null;
+	$: selected = selectedTitleId ? titles[selectedTitleId] : null;
+	$: selectedEpisode = selected?.episodes?.find((ep) => ep.se === selectedSe);
+	$: newJobs = getNewJobs(jobs);
+
+	function getNewJobs(jobs: Job[]): Job[] {
+		const last6 = jobs.sort((a, b) => {
+			return a.JobModTime > b.JobModTime ? -1 : 1;
+		}).slice(0, 6);
+		const last3Days = jobs.filter((job) => {
+			const diff = Date.now() - job.JobModTime * 1000;
+			return diff < 1000 * 60 * 60 * 24 * 3;
+		});
+		const results: { [key: string]: Job } = {};
+		for (const job of last3Days) {
+			results[job.Id] = job;
+		}
+		for (const job of last6) {
+			results[job.Id] = job;
+		}
+		return Object.values(results);
+	}
 
 	function bounceTo(id: string) {
 		if (bounceToOverride) {
@@ -37,8 +55,8 @@
 	}
 
 	export function updateList(untilId: string | null = null, onSuccess =
-															 (_1: Job[]) => {
-															 }) {
+		(_1: Job[]) => {
+		}) {
 		if (untilId !== null && jobs.find((job) => job.Id === untilId)) {
 			onSuccess(jobs);
 			return;
@@ -72,9 +90,9 @@
 				variant="outline"
 				role="combobox"
 				aria-expanded={titleSelectionOpen}
-				class="max-md:w-full justify-between font-semibold {!selectedEpisodes?'col-span-3':''}">
+				class="max-md:w-full justify-between font-semibold {!selected?.episodes ? 'col-span-3' : ''}">
 			<span class="max-w-[calc(100%-2rem)] text-ellipsis overflow-hidden">
-				{selectedTitle?.title ? selectedTitle?.title : "Select media"}
+				{selected?.title || "Select media"}
 			</span>
 				<CaretSort class="ml-2 h-4 w-4 shrink-0 opacity-50" />
 			</Button>
@@ -89,7 +107,7 @@
 													onSelect={()=>{
 											titleSelectionOpen = false;
 									selectedTitleId = title.titleId;
-									selectedSe = null;
+									selectedSe = undefined;
 									if(!title.episodes) {
 										bounceTo(title.id)
 									}else{
@@ -98,7 +116,11 @@
     								});
 									}
 						}}>
-							<TitlePoster title={title} />
+							<TitlePoster title={title.rep ? title.rep :
+							title.episodes ? title.episodes[0] : title
+							} isNew={
+							newJobs.find((job) => job.Title.titleId === title.titleId) !== undefined
+							}/>
 							<span class="mr-4">{title.title}</span>
 							<IconCheck size={18} stroke={2}
 												 class='ml-auto right-0 {selectedTitleId === title.titleId ? "" : "text-transparent"}'
@@ -109,7 +131,7 @@
 			</Command.Root>
 		</Popover.Content>
 	</Popover.Root>
-	{#if selectedEpisodes}
+	{#if selected?.episodes}
 		<IconChevronRight
 			class="max-md:hidden"
 			size={20} stroke={2} />
@@ -121,10 +143,10 @@
 					variant="outline"
 					role="combobox"
 					aria-expanded={titleSelectionOpen}
-					class="max-md:w-full justify-between font-semibold {selectedEpisode ? '' : 'text-red-600 font-bold'}"
+					class="max-md:w-full justify-between font-semibold {!selectedSe ? 'text-red-600 font-bold' : ''}"
 				>
 										<span class="max-w-[calc(100%-2rem)] text-ellipsis overflow-hidden">{selectedEpisode ?
-											`${selectedSe} - ${selectedEpisode.seTitle}` : "Select episode"}</span>
+											`${selectedSe} - ${selectedEpisode.title}` : "Select episode"}</span>
 					<CaretSort class="ml-2 h-4 w-4 shrink-0 opacity-50" />
 				</Button>
 			</Popover.Trigger>
@@ -133,15 +155,15 @@
 					<Command.Input placeholder="Search episode..." class="h-9" />
 					<Command.Empty>No episode found.</Command.Empty>
 					<Command.Group class="overflow-y-auto max-h-[37vh]">
-						{#each Object.values(selectedEpisodes) as es}
-							<Command.Item class="p-1 {selectedSe === es.se ? 'font-bold' : ''}" value={es.se + "-" + es.seTitle}
+						{#each selected.episodes as es}
+							<Command.Item class="p-1 {selectedSe === es.se ? 'font-bold' : ''}" value={es.se + "-" + es.title}
 														onSelect={()=>{
 									seSelectionOpen = false;
 									bounceTo(es.id)
 									selectedSe = es.se;
-						}}><img src="{PUBLIC_STATIC}/{es.id}/poster.jpg" alt="{es.seTitle}"
-										class="h-8 w-12 object-cover mr-2 rounded-sm" />
-								<span class="mr-4">{es.se} - {es.seTitle}</span>
+						}}>
+									<TitlePoster title={es} isNew={newJobs.find((job) => job.Id === es.id) !== undefined} />
+								<span class="mr-4">{es.se} - {es.title}</span>
 								<IconCheck size={18} stroke={2}
 													 class='ml-auto right-0 {selectedSe === es.se ? "" : "text-transparent"}'
 								/>

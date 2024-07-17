@@ -1,9 +1,15 @@
 <script lang="ts">
 	import { PUBLIC_STATIC } from '$env/static/public';
-	import type { TitleComponents } from '$lib/player/t';
+	import type { Title, TitleEpisode } from '$lib/player/t';
+	import New from '$lib/player/New.svelte';
 
-	export let title:TitleComponents;
+	export let title:Title | TitleEpisode;
+	export let isNew : boolean | undefined = false;
 </script>
-
-<img src="{PUBLIC_STATIC}/{!title.episodes ? title.id : Object.values(title.episodes)[0].id}/poster.jpg"
+<div class="relative overflow-hidden">
+<img src="{PUBLIC_STATIC}/{title.id}/poster.jpg"
 		 alt="{title.title}" class="h-8 w-12 object-cover mr-2 rounded-sm" />
+{#if isNew}
+	<New/>
+{/if}
+</div>

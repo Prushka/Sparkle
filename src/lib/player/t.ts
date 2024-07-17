@@ -138,6 +138,8 @@ export interface Job {
 	Chapters: Chapter[];
 	DominantColors: string[];
 	ExtractedQuality: string;
+	JobModTime: number;
+	Title: Title;
 }
 
 export interface Chapter {
@@ -429,6 +431,7 @@ export function preprocessJob(job: Job) {
 			}
 		}
 	}
+	job.Title = extractTitle(job);
 	return job;
 }
 
@@ -440,56 +443,66 @@ export function preprocessJobs(jobs: Job[]) {
 	return jobs;
 }
 
-export function getTitleComponents(job: Job): TitleComponents {
+export function extractTitle(job: Job): Title {
 	let title = job.Input;
 	const parts = title.split(' - ');
 	let se = null;
 	let seTitle = null;
+	let season = 0;
+	let episode = 0;
 	for (let i = 0; i < parts.length; i++) {
-		if (parts[i].match(/S\d{2}E\d{2}/i)) {
+		const match = parts[i].match(/S(\d{2})E(\d{2})/i)
+		if (match) {
 			se = parts[i];
 			seTitle = parts.slice(i + 1).join(' - ');
 			title = parts.slice(0, i).join(' - ');
+			season = parseInt(match[1], 10);
+			episode = parseInt(match[2], 10);
 			break;
 		}
 	}
 	const titleId = title.toLowerCase().replace(/[^a-z0-9]/gi, '');
 	return {
-		titleId, title, id: job.Id, episodes: se && seTitle ? { [se]: { seTitle, id: job.Id, se } } : null
+		titleId, title, id: job.Id,
+		episode: se && seTitle ? { title: seTitle, id: job.Id, se, season, episode } : undefined
 	};
 }
 
-export interface TitleComponents {
+export interface Show extends Title {
+	rep?: TitleEpisode;
+	episodes?: TitleEpisode[]
+}
+
+export interface Title {
 	titleId: string;
 	title: string;
 	id: string;
-	episodes: TitleEpisodes | null;
+	episode?: TitleEpisode;
 }
 
-export interface TitleEpisodes {
-	[key: string]: {
-		seTitle: string;
-		id: string;
-		se: string;
-	};
+export interface TitleEpisode {
+	title: string;
+	id: string;
+	se: string;
+	season: number;
+	episode: number;
 }
 
-export interface Titles { [key: string]: TitleComponents }
+export interface Titles { [key: string]: Show }
 
 export function getTitleComponentsByJobs(jobs: Job[]): Titles {
-	const _titles = jobs.reduce((acc: { [key: string]: TitleComponents }, job) => {
-		const components = getTitleComponents(job);
+	const _titles = jobs.reduce((acc: Titles, job) => {
+		const components = job.Title;
 		if (!acc[components.titleId]) {
 			acc[components.titleId] = components;
-		} else if (components.episodes) {
-			if (!acc[components.titleId].episodes) {
-				acc[components.titleId].episodes = {};
-			}
-			acc[components.titleId].episodes = {
-				...acc[components.titleId].episodes,
-				...components.episodes
-			};
 		}
+		if(components.episode) {
+			if (!acc[components.titleId].episodes) {
+				acc[components.titleId].episodes = [];
+			}
+			acc[components.titleId].episodes?.push(components.episode);
+		}
+
 		return acc;
 	}, {});
 	// set titles to sorted _titles with same structure, first sort by episodes is null, then by title
@@ -501,8 +514,24 @@ export function getTitleComponentsByJobs(jobs: Job[]): Titles {
 		} else {
 			return _titles[a].title.localeCompare(_titles[b].title);
 		}
-	}).reduce((acc: any, key) => {
-		acc[key] = _titles[key];
+	}).reduce((acc: Titles, key) => {
+		const t = _titles[key];
+		if (t.episodes) {
+			t.episodes.sort(
+				(a, b) => a.season === b.season ? (a.episode - b.episode) :
+					(a.season - b.season)
+			)
+			const reversed = t.episodes.slice().reverse();
+			for (let i = 0; i < reversed.length; i++) {
+				const episode = reversed[i];
+				const job = jobs.find((j) => j.Id === episode.id);
+				if(job && job.Files["poster.jpg"]) {
+					t.rep = episode;
+					break;
+				}
+			}
+		}
+		acc[key] = t;
 		return acc;
 	}, {});
 }
