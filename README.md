@@ -51,9 +51,13 @@ Channel id will be used as the room id. All functionalities mentioned above are 
 
 <img src="assets/embed.png" width="400" alt="Discord Embed">
 
-# This repository contains only the frontend & SSR part
+# DEMO
 
 **Demo Website:** [https://sparkle.muddy.ca](https://sparkle.muddy.ca)
+
+The demo website contains only short clips.
+
+# This repository contains only the frontend & SSR part
 
 The [backend](https://github.com/Prushka/Sparkle-BE) part is still a work-in-progress.
 
