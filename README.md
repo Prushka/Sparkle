@@ -53,6 +53,8 @@ Channel id will be used as the room id. All functionalities mentioned above are 
 
 # This repository contains only the frontend & SSR part
 
+**Demo Website:** [https://sparkle.muddy.ca](https://sparkle.muddy.ca)
+
 The [backend](https://github.com/Prushka/Sparkle-BE) part is still a work-in-progress.
 
 Currently, this project is intended to be used as an extension to
