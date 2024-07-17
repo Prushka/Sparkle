@@ -262,7 +262,8 @@
 							firedBy: state.firedBy
 						}
 					});
-					state.moveToText = jobs.find((job) => job.Id === state.broadcast!.moveTo)?.Input;
+					const target = jobs.find((job) => job.Id === state.broadcast!.moveTo)
+					state.moveToText = target?.Title.title + (target?.Title?.episode ? ` ${target.Title.episode.se}` : '');
 					controlsToDisplay.push(state);
 					updateMessages();
 				};

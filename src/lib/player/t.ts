@@ -520,10 +520,9 @@ export function getTitleComponentsByJobs(jobs: Job[]): Titles {
 			t.episodes.sort(
 				(a, b) => a.season === b.season ? (a.episode - b.episode) :
 					(a.season - b.season)
-			)
-			const reversed = t.episodes.slice().reverse();
-			for (let i = 0; i < reversed.length; i++) {
-				const episode = reversed[i];
+			).reverse()
+			for (let i = 0; i < t.episodes.length; i++) {
+				const episode = t.episodes[i];
 				const job = jobs.find((j) => j.Id === episode.id);
 				if(job && job.Files["poster.jpg"]) {
 					t.rep = episode;
