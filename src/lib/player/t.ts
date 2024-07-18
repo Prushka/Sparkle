@@ -463,6 +463,7 @@ export function extractTitle(job: Job): Title {
 	const titleId = title.toLowerCase().replace(/[^a-z0-9]/gi, '');
 	return {
 		titleId, title, id: job.Id,
+		modTime: job.JobModTime,
 		episode: se && seTitle ? { title: seTitle, id: job.Id, se, season, episode } : undefined
 	};
 }
@@ -477,6 +478,7 @@ export interface Title {
 	title: string;
 	id: string;
 	episode?: TitleEpisode;
+	modTime: number;
 }
 
 export interface TitleEpisode {
@@ -495,7 +497,8 @@ export function getTitleComponentsByJobs(jobs: Job[]): Titles {
 			acc[job.Title.titleId] = {
 				title: job.Title.title,
 				id: job.Title.id,
-				titleId: job.Title.titleId
+				titleId: job.Title.titleId,
+				modTime: job.Title.modTime
 			};
 		}
 		if(job.Title.episode) {
@@ -503,6 +506,7 @@ export function getTitleComponentsByJobs(jobs: Job[]): Titles {
 				acc[job.Title.titleId].episodes = [];
 			}
 			acc[job.Title.titleId].episodes?.push(job.Title.episode);
+			acc[job.Title.titleId].modTime = Math.max(acc[job.Title.titleId].modTime, job.JobModTime);
 		}
 		return acc;
 	}, {});
@@ -513,7 +517,7 @@ export function getTitleComponentsByJobs(jobs: Job[]): Titles {
 		} else if (_titles[a].episodes && !_titles[b].episodes) {
 			return -1;
 		} else {
-			return _titles[a].title.localeCompare(_titles[b].title);
+			return _titles[a].modTime > _titles[b].modTime ? -1 : 1;
 		}
 	}).reduce((acc: Titles, key) => {
 		const t = _titles[key];
