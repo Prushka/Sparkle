@@ -477,7 +477,7 @@
 				default: true
 			});
 			for (const chapter of job.Chapters) {
-				if (chapter.tags?.title) {
+				if (chapter.tags?.title && chapter.end - chapter.start > 2 * 1000000000) {
 					track.addCue(new VTTCue(chapter.start, chapter.end, chapter.tags?.title));
 				}
 			}
