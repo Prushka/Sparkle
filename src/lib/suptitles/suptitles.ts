@@ -172,17 +172,22 @@ export default class SUPtitles {
 					PCS.windowObjects.length === 0 ||
 					(PCS.windowObjects.length && !PCS.getObjectByWindowId(w.windowId))
 				) {
-					this.cv[0] // w.windowId
-						.getContext('2d')
-						?.putImageData(
-							new ImageData(
-								new Uint8ClampedArray(w.width * w.height * 4),
-								w.width,
-								w.height
-							),
-							w.xOffset,
-							w.yOffset
-						)
+					try{
+						this.cv[0] // w.windowId
+							.getContext('2d')
+							?.putImageData(
+								new ImageData(
+									new Uint8ClampedArray(w.width * w.height * 4),
+									w.width,
+									w.height
+								),
+								w.xOffset,
+								w.yOffset
+							)
+					}catch (e) {
+						console.error(e)
+						console.log(w)
+					}
 				}
 				return null
 			})
