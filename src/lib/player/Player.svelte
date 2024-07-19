@@ -256,7 +256,7 @@
 						dismissable: false,
 						componentProps: {
 							seconds: moveSeconds,
-							historicalPlayers: Object.values(historicalPlayers),
+							historicalPlayers: historicalPlayers,
 							job: jobs.find((job: Job) => job.Id === broadcast!.moveTo),
 							firedBy: state.firedBy
 						}
@@ -303,7 +303,9 @@
 						}
 						roomPlayers = state.players;
 						for (const player of roomPlayers) {
-							historicalPlayers[player.id] = player;
+							if (!historicalPlayers[player.id]) {
+								historicalPlayers[player.id] = player;
+							}
 						}
 						updateLastTicked(true);
 						currentlyWatching.update((value) => {
@@ -1036,7 +1038,7 @@
 				<Button variant="outline"
 								class="h-auto pr-4 py-0 pl-0 rounded-l-full rounded-r-full flex gap-2">
 					<Pfp class="w-12 h-12 mr-0.5" id={player.id}
-							 discordUser={Object.values(historicalPlayers).find((p) => p.id === player.id)?.discordUser} />
+							 discordUser={historicalPlayers[player.id]?.discordUser} />
 					<span class="flex gap-0.5 flex-col items-center justify-center font-semibold player-status-text">
 						<span class="font-bold w-16 text-ellipsis overflow-hidden">{player.name}</span>
 						{#if player.inBg}

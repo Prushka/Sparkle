@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { type Chat, findName, type Player } from '$lib/player/t.js';
+	import { type Chat, getRealName, type Player } from '$lib/player/t.js';
 import Pfp from '$lib/player/Pfp.svelte';
 
 export let messagesToDisplay: Chat[];
@@ -19,9 +19,9 @@ export let controlsShowing: boolean | null;
 					{message.timeStr ? `[${message.timeStr}]` : ''}
 				</span>
 
-			<span>{findName(Object.values(historicalPlayers), message.uid)}</span>
+			<span>{getRealName(historicalPlayers[message.uid])}</span>
 			<Pfp id={message.uid} class="avatar"
-					 discordUser={Object.values(historicalPlayers).find((p) => p.id === message.uid)?.discordUser} />
+					 discordUser={historicalPlayers[message.uid]?.discordUser} />
 		</div>
 	{/each}
 </div>

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { type Chat, findName, SyncTypes } from '$lib/player/t';
+	import { type Chat, getRealName, SyncTypes } from '$lib/player/t';
 	import { chatFocusedStore, chatLayoutStore, playersStore } from '../../store';
 	import { onDestroy, onMount, tick } from 'svelte';
 	import { Input } from '$lib/components/ui/input';
@@ -153,7 +153,7 @@
 									class={`w-full flex flex-wrap gap-1.5 items-center
 									text-center ${message.isStateUpdate ? 'font-semibold' : ''}`}>
 									<Pfp id={message.uid} class="avatar shrink-0 !w-6 !h-6"
-											 discordUser={Object.values(historicalPlayers).find((p) => p.id === message.uid)?.discordUser} />
+											 discordUser={historicalPlayers[message.uid]?.discordUser} />
 
 									<span class="font-bold shrink-0">
 										{new Date(message.timestamp).toLocaleTimeString('en-US', {
@@ -162,7 +162,7 @@
 											hour12: false
 										})}
 									</span>
-									<span class="shrink-0">{findName(Object.values(historicalPlayers), message.uid)}:</span>
+									<span class="shrink-0">{getRealName(historicalPlayers[message.uid])}:</span>
 
 									<span class="block break-words overflow-x-hidden text-justify pr-3">{message.message}</span>
 								</div>

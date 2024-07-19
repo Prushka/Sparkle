@@ -103,8 +103,7 @@ export type Chat = {
 	timeStr: string;
 }
 
-export function findName(players: Player[], uid: string) : string {
-	const player = players.find((p) => p.id === uid);
+export function getRealName(player: Player | undefined) {
 	const discordName = getName(player?.discordUser);
 	return discordName ? discordName : (player?.name || "Unknown");
 }
