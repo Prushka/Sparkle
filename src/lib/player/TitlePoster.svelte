@@ -6,7 +6,7 @@
 	export let title:Title | TitleEpisode;
 	export let isNew : boolean | undefined = false;
 </script>
-<div class="relative overflow-hidden">
+<div class="relative overflow-hidden shrink-0">
 <img src="{PUBLIC_STATIC}/{title.id}/poster.jpg"
 		 alt="{title.title}" class="h-8 w-12 object-cover mr-2 rounded-sm" />
 {#if isNew}
