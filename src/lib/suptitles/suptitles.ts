@@ -189,6 +189,8 @@ export default class SUPtitles {
 							console.error(e);
 							console.log(w);
 						}
+					} else {
+						this.cv.map(c => c.getContext('2d')?.clearRect(0, 0, c.width, c.height));
 					}
 				}
 				return null;
