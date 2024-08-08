@@ -16,7 +16,7 @@ export async function GET({url,params,fetch}) {
 			res.author_name = job.Title.title
 			res.author_url = to
 		}
-		res.provider_name = `It's time to watch ${showType}!`
+		res.provider_name = `It's time to watch ${showType} together!`
 		return json(res);
 	}
 	return json({
