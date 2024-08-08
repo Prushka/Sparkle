@@ -20,7 +20,7 @@ export async function GET({url,params,fetch}) {
 		return json(res);
 	}
 	return json({
-		author_name: `It's time to watch anime!`,
+		author_name: `It's time to watch anime together!`,
 		author_url: to,
 		provider_url: to,
 		provider_name: `Let's watch anime!`
