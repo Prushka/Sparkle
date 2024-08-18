@@ -303,7 +303,7 @@
 						}
 						roomPlayers = state.players;
 						for (const player of roomPlayers) {
-							if (!historicalPlayers[player.id]) {
+							if (!historicalPlayers[player.id] || historicalPlayers[player.id].name !== player.name) {
 								historicalPlayers[player.id] = player;
 							}
 						}
