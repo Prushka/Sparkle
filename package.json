@@ -52,7 +52,7 @@
 		"tailwind-merge": "^2.3.0",
 		"tailwind-variants": "^0.2.1",
 		"vaul-svelte": "^0.3.2",
-		"vidstack": "1.11.25",
+		"vidstack": "1.12.9",
 		"zod": "^3.23.8"
 	}
 }

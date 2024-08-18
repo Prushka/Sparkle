@@ -320,7 +320,8 @@
 						if (state.paused === true && player.paused === false) {
 							player.pause();
 							persistControlState(state);
-						} else if (state.paused === false && player.paused === true) {
+						} else if (state.paused === false && player.paused === true &&
+							(!inBg || (inBg && roomPlayers.length > 1))) {
 							player.play();
 							persistControlState(state);
 						}
