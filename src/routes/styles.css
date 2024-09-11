@@ -250,6 +250,10 @@ input {
 	aspect-ratio: unset !important;
 }
 
+/*:where([data-media-player][data-view-type=video]) {*/
+/*	aspect-ratio: unset !important;*/
+/*}*/
+
 .media-provider canvas, video {
 	width: 100% !important;
 	height: 100% !important;

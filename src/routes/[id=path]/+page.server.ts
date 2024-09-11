@@ -71,7 +71,7 @@ export async function load({ params, url, fetch }) {
 		title: titleStr,
 		displayTitle,
 		plot,
-		oembedJson: `https://${url.host}/json/${job?.Id}`,
+		oembedJson: room ? `https://${url.host}/json/${job?.Id}?room=${room}` : `https://${url.host}/json/${job?.Id}`,
 		dominantColor: job?.DominantColors?.[0] ? job?.DominantColors?.[0] : "#EC275F"
 	};
 }

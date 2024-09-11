@@ -3,7 +3,8 @@ import { getJobs } from '../../../cache';
 
 export async function GET({url,params,fetch}) {
 	const { id } = params;
-	const to = `https://${url.host}/${id}`;
+	const room = url.searchParams.get('room') || url.searchParams.get('channel_id');
+	const to = room ? `https://${url.host}/${id}?room=${room}` : `https://${url.host}/${id}`;
 	const jobs = await getJobs(fetch, id)
 	const job = jobs.find(j => j.Id === id)
 	if (job) {

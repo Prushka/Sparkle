@@ -34,7 +34,7 @@
 	},
 	"type": "module",
 	"dependencies": {
-		"@discord/embedded-app-sdk": "^1.3.0",
+		"@discord/embedded-app-sdk": "^1.4.2",
 		"@internationalized/date": "^3.5.4",
 		"@tabler/icons-svelte": "^2.47.0",
 		"bits-ui": "^0.21.11",
