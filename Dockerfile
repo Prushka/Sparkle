@@ -1,6 +1,8 @@
-FROM node:18 AS build
+FROM node:lts AS build
 
 WORKDIR /app
+
+ENV NODE_OPTIONS="--max_old_space_size=4096"
 
 COPY package*.json .
 
@@ -10,7 +12,7 @@ COPY . .
 RUN npm run build
 RUN npm prune --production
 
-FROM node:18 AS run
+FROM node:lts AS run
 
 ENV NODE_ENV=production
 

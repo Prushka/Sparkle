@@ -1,6 +1,7 @@
 {
 	"name": "sparkle-fe",
 	"version": "0.0.1",
+	"prepare": "svelte-kit sync",
 	"scripts": {
 		"dev": "vite dev --host",
 		"build": "vite build",
