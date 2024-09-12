@@ -43,7 +43,7 @@ export async function load({ params, url, fetch }) {
 		const infoResponse = await fetch(`${base}/info.nfo`);
 		const info = await infoResponse.text();
 		const $ = cheerio.load(info, {
-			xmlMode: true,
+			xml: true,
 		});
 		rating = parseFloat($('rating').text());
 		plot = $('plot').text();
