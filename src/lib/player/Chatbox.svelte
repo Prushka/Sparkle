@@ -4,10 +4,12 @@
 	import { onDestroy, onMount, tick } from 'svelte';
 	import { Input } from '$lib/components/ui/input';
 	import { Shortcut } from '$lib/components/ui/command';
-	import { IconUsers } from '@tabler/icons-svelte';
+	import { IconEye, IconEyeOff, IconUsers } from '@tabler/icons-svelte';
 	import { Button, buttonVariants } from '$lib/components/ui/button';
 	import * as Dialog from '$lib/components/ui/dialog/index.js';
 	import Pfp from '$lib/player/Pfp.svelte';
+	import * as Tooltip from '$lib/components/ui/tooltip/index.js';
+
 
 	let value: string;
 	export let send: any;
@@ -102,6 +104,32 @@
 			<!--				</Popover.Content>-->
 			<!--			</Popover.Root>-->
 		{/if}
+
+		{#if useButton}
+
+			<Tooltip.Root openDelay={0}>
+				<Tooltip.Trigger asChild let:builder>
+			<Button builders={[builder]} disabled={!connected} variant="outline"
+							class="rounded-r-none border-r-0 px-2"
+							on:click={()=>{
+				chatLayoutStore.update((value) => value === 'hide' ? 'show' : 'hide');
+			}}>
+				{#if chatHidden}
+					<IconEyeOff stroke={2} size={18} class="text-red-600" />
+				{:else}
+					<IconEye stroke={2} size={18} />
+				{/if}
+			</Button>
+				</Tooltip.Trigger>
+				<Tooltip.Content>
+					{#if chatHidden}
+						<p>Show chat</p>
+					{:else}
+						<p>Hide chat</p>
+					{/if}
+				</Tooltip.Content>
+			</Tooltip.Root>
+		{/if}
 		<Input
 			maxlength={250}
 			on:focus={()=>{
@@ -130,7 +158,7 @@
 				e.stopPropagation()
 		}}
 			bind:value={value} autocomplete="off" type="text" placeholder={placeholder}
-			class="input focus-visible:ring-transparent {useButton ? 'rounded-r-none':''}"
+			class="input focus-visible:ring-transparent {useButton ? 'rounded-r-none rounded-l-none':''}"
 			id={inputId}
 		/>
 

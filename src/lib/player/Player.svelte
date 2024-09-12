@@ -17,7 +17,6 @@
 		audiosExistForCodec,
 		fallbackFontsMap,
 		defaultFallback,
-		chatLayouts,
 		BroadcastTypes,
 		codecDisplayMap,
 		setGetLS,
@@ -32,10 +31,9 @@
 	import { PUBLIC_BE, PUBLIC_STATIC } from '$env/static/public';
 	import {
 		IconAlertOctagonFilled, IconArrowBounce, IconCheck,
-		IconCone, IconEyeOff, IconLayout2, IconMoonFilled,
 		IconPlayerPauseFilled,
 		IconPlayerPlayFilled,
-		IconSettings2, IconShare3, IconSunFilled,
+		IconSettings2, IconShare3, IconMoon, IconSun,
 		IconTableExport
 	} from '@tabler/icons-svelte';
 	import Chatbox from '$lib/player/Chatbox.svelte';
@@ -912,52 +910,26 @@
 							</Tooltip.Content>
 						</Tooltip.Root>
 
-
-						<DropdownMenu.Root>
-							<DropdownMenu.Trigger asChild let:builder>
-								<Button variant="outline" builders={[builder]}>
-									<IconLayout2 class="sm:mr-2 max-sm:hidden" size={20} stroke={2} />
-									<span>Layout</span>
+						<Tooltip.Root openDelay={0}>
+							<Tooltip.Trigger asChild let:builder>
+								<Button builders={[builder]} variant="outline"
+												class="w-9 h-9 p-1"
+												on:click={()=>{
+										 setMode(currentTheme === "dark" ? "light" : "dark")
+									 }}
+										>
+									{#if currentTheme === "dark"}
+										<IconMoon size={18} stroke={2} />
+									{:else}
+										<IconSun size={18} stroke={2} />
+									{/if}
 								</Button>
-							</DropdownMenu.Trigger>
-							<DropdownMenu.Content class="w-56">
-								<DropdownMenu.Label>Theme</DropdownMenu.Label>
-								<DropdownMenu.RadioGroup bind:value={currentTheme}>
-									<DropdownMenu.RadioItem value={"light"} on:click={()=>{
-								setMode("light")
-							}}>
-										<IconSunFilled class="mr-2" size={16} stroke={2} />
-										Light
-									</DropdownMenu.RadioItem>
-									<DropdownMenu.RadioItem value={"dark"} on:click={()=>{
-								setMode("dark")
-							}}>
-										<IconMoonFilled class="mr-2" size={16} stroke={2} />
-										Dark
-									</DropdownMenu.RadioItem>
-								</DropdownMenu.RadioGroup>
+							</Tooltip.Trigger>
+							<Tooltip.Content>
+								<p>Toggle theme</p>
+							</Tooltip.Content>
+						</Tooltip.Root>
 
-								<DropdownMenu.Separator />
-
-								<DropdownMenu.Label>Chat Layout</DropdownMenu.Label>
-								<DropdownMenu.RadioGroup bind:value={chatLayout}>
-									{#each chatLayouts as layout}
-										<DropdownMenu.RadioItem value={layout} on:click={()=>{
-								localStorage.setItem('chatLayout2', layout);
-								$chatLayoutStore = layout;
-							}}>
-											{#if layout === "show"}
-												<IconCone class="mr-2" size={16} stroke={2} />
-												Show
-											{:else}
-												<IconEyeOff class="mr-2" size={16} stroke={2} />
-												Hide
-											{/if}
-										</DropdownMenu.RadioItem>
-									{/each}
-								</DropdownMenu.RadioGroup>
-							</DropdownMenu.Content>
-						</DropdownMenu.Root>
 						<DropdownMenu.Root>
 							<DropdownMenu.Trigger asChild let:builder>
 								<Button builders={[builder]} variant={currentTheme === "dark" ? "outline" : "default"}>
