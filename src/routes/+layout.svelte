@@ -119,7 +119,7 @@
 	<main id="main-page" class="flex flex-col gap-1 min-h-full items-center w-full">
 		<slot />
 		<footer class="mt-auto w-full flex flex-col items-center justify-center p-2">
-			<div class="text-xs">Copyright © 2024 hmph. This site does not store any files on its server.</div>
+			<div class="text-xs max-sm:text-[0.7rem]">© 2024 hmph | This site does not store any files on its server.</div>
 		</footer>
 	</main>
 {/key}
