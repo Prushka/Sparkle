@@ -554,13 +554,8 @@
 		let volumeInitialized = false;
 		const playerSoundUnsubscribe = player.subscribe(({ volume, muted }) => {
 			if (!volumeInitialized) {
-				setTimeout(()=>{
-					player.remoteControl.changeVolume((initialVolume >= 0 &&
-						initialVolume <= 1) ? initialVolume : 1)
-					console.log('initial volume set to', initialVolume);
-				}, 1000)
-
-				// TODO: New Vidstack broke volume initialization
+				player.volume = (initialVolume >= 0 &&
+					initialVolume <= 1) ? initialVolume : 1
 				volumeInitialized = true;
 			} else {
 				localStorage.setItem('volume', volume.toString());
