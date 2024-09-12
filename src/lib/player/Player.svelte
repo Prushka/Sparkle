@@ -984,7 +984,7 @@
 			<Card.Content
 				class="max-sm:p-4">
 				<MediaSelection data={data} bind:this={mediaSelection} bounceToOverride={(id)=>{
-								if (syncGoto && socketCommunicating && roomPlayers.length > 1) {
+								if (syncGoto && socketCommunicating && roomPlayers.length > 1 && id !== job.Id) {
 										send({
 											type: SyncTypes.BroadcastSync,
 											broadcast: { type: BroadcastTypes.MoveTo, moveTo: id }
