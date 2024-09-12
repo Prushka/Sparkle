@@ -26,7 +26,7 @@
 		type ServerData,
 		getLeftAndJoined,
 		hideControlsOnChatFocused,
-		moveSeconds,
+		moveSeconds, setGetLsNumber
 	} from './t';
 	import { PUBLIC_BE, PUBLIC_STATIC } from '$env/static/public';
 	import {
@@ -77,6 +77,7 @@
 		});
 	});
 	let playerId: string = setGetLS('id', randomString(14));
+	let initialVolume: number = setGetLsNumber('volume', 1);
 	let pfp: File;
 	let pfpInput: HTMLInputElement;
 	let roomPlayers: Player[] = [];
@@ -553,6 +554,13 @@
 		let volumeInitialized = false;
 		const playerSoundUnsubscribe = player.subscribe(({ volume, muted }) => {
 			if (!volumeInitialized) {
+				setTimeout(()=>{
+					player.remoteControl.changeVolume((initialVolume >= 0 &&
+						initialVolume <= 1) ? initialVolume : 1)
+					console.log('initial volume set to', initialVolume);
+				}, 1000)
+
+				// TODO: New Vidstack broke volume initialization
 				volumeInitialized = true;
 			} else {
 				localStorage.setItem('volume', volume.toString());
@@ -651,12 +659,6 @@
 				chatFocusedSecs = 0;
 			}
 		}, 1000);
-		if (localStorage.getItem('volume')) {
-			const v = parseFloat(localStorage.getItem('volume')!);
-			if (v >= 0 && v <= 1) {
-				player.volume = v;
-			}
-		}
 		const chatOverlay = document.getElementById('chat-overlay');
 		const mouseLeave = () => {
 			if(!player.paused && controlsShowing) {
