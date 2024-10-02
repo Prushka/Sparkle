@@ -3,6 +3,7 @@ import { type Job } from '$lib/player/t';
 import * as cheerio from 'cheerio';
 import { redirect } from '@sveltejs/kit';
 import { roomMapping, getJobs } from '../../cache';
+import { env } from '$env/dynamic/private';
 
 /** @type {import('../../.svelte-kit/types/src/routes').PageServerLoad} */
 export async function load({ params, url, fetch }) {
@@ -40,7 +41,7 @@ export async function load({ params, url, fetch }) {
 				codec = 'hevc'
 			}
 		}
-		const infoResponse = await fetch(`${base}/info.nfo`);
+		const infoResponse = await fetch(`${env.SERVER_BE}/static/${id}/info.nfo`);
 		const info = await infoResponse.text();
 		const $ = cheerio.load(info, {
 			xml: true,
