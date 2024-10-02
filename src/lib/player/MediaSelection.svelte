@@ -76,23 +76,23 @@
 		const ii = setInterval(() => {
 			updateList();
 		}, 60000);
-		const i = setInterval(async () => {
-			const room = $page.url.searchParams.get('room') || $page.url.searchParams.get('channel_id');
-			if (room) {
-				const response = await fetch(`/api/cm?room=${room}`, {
-					method: 'GET',
-					headers: {
-						'Content-Type': 'application/json'
-					}
-				});
-				const res = await response.json();
-				if (res?.jobId && (!job || job.Id !== res.jobId)) {
-					await goto(`/${res.jobId}?room=${room}`);
-				}
-			}
-		}, 4000);
+		// const i = setInterval(async () => {
+		// 	const room = $page.url.searchParams.get('room') || $page.url.searchParams.get('channel_id');
+		// 	if (room) {
+		// 		const response = await fetch(`/api/cm?room=${room}`, {
+		// 			method: 'GET',
+		// 			headers: {
+		// 				'Content-Type': 'application/json'
+		// 			}
+		// 		});
+		// 		const res = await response.json();
+		// 		if (res?.jobId && (!job || job.Id !== res.jobId)) {
+		// 			await goto(`/${res.jobId}?room=${room}`);
+		// 		}
+		// 	}
+		// }, 4000);
 		return () => {
-			clearInterval(i);
+			// clearInterval(i);
 			clearInterval(ii);
 		};
 	});
