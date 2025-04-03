@@ -406,6 +406,10 @@ export function preprocessJob(job: Job) {
 			}
 		}
 	}
+	if (!job.Streams) {
+		job.Streams = []
+		console.error("No streams found for job", job.Id, job.Input);
+	}
 	for (const stream of job.Streams) {
 		stream.Language = stream.Language ?? '';
 		stream.Location = stream.Location ?? '';
