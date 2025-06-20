@@ -537,9 +537,13 @@
 			if (document.hidden) {
 				send({ state: 'bg', type: SyncTypes.StateSync });
 				inBg = true;
+				if (!player.paused) {
+					player.enterPictureInPicture()
+				}
 			} else {
 				send({ state: 'fg', type: SyncTypes.StateSync });
 				inBg = false;
+				player.exitPictureInPicture()
 			}
 		};
 		document.addEventListener('visibilitychange', visibilityChange);
