@@ -428,8 +428,8 @@ export function preprocessJob(job: Job) {
 					Index: largestIndex,
 					CodecType: "subtitle",
 					Location: file,
-					Title: file.split(".")[0],
-					Language: "External",
+					Title: "External - " + file.split(".")[0],
+					Language: file.split(".")[0],
 				})
 			}
 		}
