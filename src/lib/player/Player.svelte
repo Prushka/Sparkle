@@ -131,7 +131,7 @@
 	const unsubscribeInteracted = interactedStore.subscribe((value) => interacted = value);
 	let exited = false;
 	$: BASE_STATIC = `${PUBLIC_STATIC}/${job.Id}`;
-	$: thumbnailVttSrc = `https://${location.host}${BASE_STATIC}/storyboard.vtt`;
+	$: thumbnailVttSrc = `${location.protocol}//${location.host}${BASE_STATIC}/storyboard.vtt`;
 	$: socketCommunicating = socketConnected && (tickedSecsAgo >= 0 && tickedSecsAgo < 5);
 	$: autoCodec = (videoSrc?.sCodec && selectedCodec === 'auto') ? `(${codecDisplayMap[videoSrc.sCodec]})` : '';
 	$: chatHidden = chatLayout === 'hide';
