@@ -221,7 +221,11 @@
 		if (!interacted) {
 			return;
 		}
-		socket = new WebSocket(`wss://${location.host}${PUBLIC_BE}/sync/${room}/${playerId}`);
+		let wsProtocol = 'ws:'
+		if (location.protocol === 'https:') {
+			wsProtocol = 'wss:'
+		}
+		socket = new WebSocket(`${wsProtocol}//${location.host}${PUBLIC_BE}/sync/${room}/${playerId}`);
 		console.log(`Socket, connecting to ${room}`);
 		socket.onopen = () => {
 			console.log(`Socket, connected to ${room}`);
