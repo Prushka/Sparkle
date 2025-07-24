@@ -18,7 +18,8 @@ export const codecDisplayMap: { [key: string]: string } = {
 	'auto': 'Auto'
 };
 
-const subtitlePriority = ['ass', 'vtt', 'sup'];
+const subtitlePriorityNormal = ['ass', 'vtt', 'sup'];
+const subtitlePriorityMobile = ['vtt', 'ass', 'sup'];
 
 export const chatLayouts = ['show', 'hide'];
 
@@ -543,10 +544,16 @@ export function getTitleComponentsByJobs(jobs: Job[]): Titles {
 	}, {});
 }
 
+function isMobile() {
+	const userAgent = navigator.userAgent;
+	return /webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
+	// not including android as it likely runs ass fullscreen
+}
 
 export function sortTracks(job: Job) {
 	const streams = job.Streams;
 	const files = job.Files;
+	const subtitlePriority = isMobile() ? subtitlePriorityMobile : subtitlePriorityNormal;
 	let aExt, bExt, aMapped, bMapped: string;
 	const languagePriority = [navigator.language];
 	if (navigator.language !== 'en-US') {
