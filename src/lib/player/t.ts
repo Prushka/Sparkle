@@ -545,8 +545,9 @@ export function getTitleComponentsByJobs(jobs: Job[]): Titles {
 }
 
 function isMobile() {
-	const userAgent = navigator.userAgent;
-	return /webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(userAgent);
+	const userAgent = navigator.userAgent.toLowerCase();
+	const mobileKeywords = [/webos/, /iphone/, /ipad/, /ipod/, /blackberry/, /windows phone/];
+	return mobileKeywords.some(keyword => userAgent.match(keyword));
 	// not including android as it likely runs ass fullscreen
 }
 
