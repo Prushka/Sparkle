@@ -15,7 +15,7 @@ export let onClick:()=>void;
 	<Tooltip.Trigger asChild let:builder>
 		<Button builders={[builder]} variant="outline"
 						on:click={onClick}
-						class="font-bold {socketCommunicating ? 'text-green-600 hover:text-green-600' : 'text-pink-600 hover:text-pink-600' } {$$restProps.class}">
+						class="font-bold {socketCommunicating ? 'text-green-600 hover:text-green-600' : interacted ? 'text-red-600 hover:text-red-600' : 'text-pink-600 hover:text-pink-600'} {$$restProps.class}">
 			{#if socketCommunicating}
 				<IconPlugConnected size={20} stroke={2} />
 			{:else}
