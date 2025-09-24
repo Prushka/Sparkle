@@ -133,14 +133,14 @@ input {
 }
 
 .chat-pc input {
-	height: 2rem;
+	height: 2.25rem;
 	outline: none;
 	border: none;
 	margin: 0 2rem;
 	width: 25rem;
 	background-color: hsla(0,0%,100%,.3) !important;
 	color: white;
-	font-weight: 800;
+	font-weight: 700;
 	padding-right: 4rem;
 	padding-left: 1rem;
 }
@@ -248,6 +248,11 @@ input {
 
 .media-provider {
 	aspect-ratio: unset !important;
+}
+
+.vds-time-slider.vds-slider {
+        --media-slider-height: 18px !important;
+        margin: 13px 0 !important;
 }
 
 /*:where([data-media-player][data-view-type=video]) {*/
