@@ -250,9 +250,9 @@ input {
 	aspect-ratio: unset !important;
 }
 
-.vds-time-slider.vds-slider {
-        --media-slider-height: 18px !important;
-        margin: 13px 0 !important;
+media-time-slider.vds-time-slider.vds-slider {
+        --media-slider-height: 16px;
+        margin: 14px 0;
 }
 
 /*:where([data-media-player][data-view-type=video]) {*/
