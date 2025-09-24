@@ -15,13 +15,13 @@ export let onClick:()=>void;
 	<Tooltip.Trigger asChild let:builder>
 		<Button builders={[builder]} variant="outline"
 						on:click={onClick}
-						class="font-bold {socketCommunicating ? 'text-green-600 hover:text-green-600' : 'text-red-600 hover:text-red-600' } {$$restProps.class}">
+						class="font-bold {socketCommunicating ? 'text-green-600 hover:text-green-600' : 'text-pink-600 hover:text-pink-600' } {$$restProps.class}">
 			{#if socketCommunicating}
 				<IconPlugConnected size={20} stroke={2} />
 			{:else}
 				{#if !interacted}
 					<Rocket class="mr-2 h-4 w-4 animate-bounce" />
-					Connect Now!
+					Join Watch Room
 				{:else if !exited}
 					<Reload class="mr-2 h-4 w-4 animate-spin" />
 					Connecting...
