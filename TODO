@@ -1,2 +1,4 @@
 Pause send when in bg until reentry, don't send previous ones - pause state won't be sent
 Show chat only when focused
+text wrapping long no space text
+scroll down indicator in case full screen
