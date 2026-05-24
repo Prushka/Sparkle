@@ -192,7 +192,7 @@
 									</span>
 									<span class="shrink-0">{getRealName(historicalPlayers[message.uid])}:</span>
 
-									<span class="block break-words overflow-x-hidden text-justify pr-3">{message.message}</span>
+									<span class="block wrap-break-word overflow-x-hidden text-justify pr-3">{message.message}</span>
 								</div>
 							{/each}
 						</div>

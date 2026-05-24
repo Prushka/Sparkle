@@ -253,7 +253,7 @@
 					toast.loading(MoveToast, {
 						duration: 20000,
 						unstyled: true,
-						class: '!bg-transparent !w-[90%]',
+						class: 'bg-transparent! w-[90%]!',
 						position: 'bottom-center',
 						important: true,
 						dismissable: false,
