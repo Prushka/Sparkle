@@ -1,6 +1,7 @@
 .DS_Store
 node_modules
 /build
+/.next
 /.svelte-kit
 /package
 .env
@@ -10,4 +11,5 @@ node_modules
 .output
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+tsconfig.tsbuildinfo
 .idea
