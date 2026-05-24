@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { useEffect, useRef } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -11,12 +11,7 @@ export function DiscordBridge() {
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
 	const router = useRouter();
-	const {
-		currentlyWatching,
-		discordAuth,
-		setDiscordAuth,
-		setPageReloadCounter
-	} = useAppState();
+	const { currentlyWatching, discordAuth, setDiscordAuth, setPageReloadCounter } = useAppState();
 	const sdkRef = useRef<DiscordSDK | null>(null);
 	const authenticatedRef = useRef(false);
 	const setupStartedRef = useRef(false);
@@ -65,7 +60,11 @@ export function DiscordBridge() {
 		if (params.has('room')) {
 			return;
 		}
-		const room = latestRoomRef.current || discordAuth?.channelId || params.get('channel_id') || randomString(6);
+		const room =
+			latestRoomRef.current ||
+			discordAuth?.channelId ||
+			params.get('channel_id') ||
+			randomString(6);
 		router.replace(`${pathname}?room=${room}`);
 	}, [discordAuth?.channelId, pathname, router, searchParamsString]);
 
@@ -144,7 +143,9 @@ export function DiscordBridge() {
 			.setActivity({
 				activity: {
 					details: `${currentlyWatching.title}`,
-					state: currentlyWatching.se ? `${currentlyWatching.seTitle}` : `${formatSeconds(currentlyWatching.duration)}`,
+					state: currentlyWatching.se
+						? `${currentlyWatching.seTitle}`
+						: `${formatSeconds(currentlyWatching.duration)}`,
 					type: 3,
 					timestamps: {
 						start: currentlyWatching.timeEntered,
@@ -156,7 +157,9 @@ export function DiscordBridge() {
 					instance: true,
 					assets: {
 						large_image: `${window.location.origin}${currentlyWatching.thumbnail}`,
-						large_text: currentlyWatching.se ? `${currentlyWatching.se}: ${formatSeconds(currentlyWatching.duration)}` : "It's a movie!",
+						large_text: currentlyWatching.se
+							? `${currentlyWatching.se}: ${formatSeconds(currentlyWatching.duration)}`
+							: "It's a movie!",
 						small_image: currentlyWatching.paused
 							? `${window.location.origin}/icons/coffee.png`
 							: `${window.location.origin}/icons/magic-ball.png`,

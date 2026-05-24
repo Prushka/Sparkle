@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import * as React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
@@ -16,7 +16,13 @@ const Overlay = React.forwardRef<
 	React.ElementRef<typeof DialogPrimitive.Overlay>,
 	React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
 >(({ className, ...props }, ref) => {
-	return <DialogPrimitive.Overlay ref={ref} className={cn('fixed inset-0 z-50 bg-background/80 backdrop-blur-sm', className)} {...props} />;
+	return (
+		<DialogPrimitive.Overlay
+			ref={ref}
+			className={cn('fixed inset-0 z-50 bg-background/80 backdrop-blur-sm', className)}
+			{...props}
+		/>
+	);
 });
 Overlay.displayName = 'DialogOverlay';
 

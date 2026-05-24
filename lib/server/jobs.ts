@@ -9,7 +9,8 @@ type SparkleServerState = {
 
 const globalState = globalThis as typeof globalThis & SparkleServerState;
 
-export const roomMapping: Record<string, string> = globalState.roomMapping ?? (globalState.roomMapping = {});
+export const roomMapping: Record<string, string> =
+	globalState.roomMapping ?? (globalState.roomMapping = {});
 
 export async function getJobs(fetchFn: typeof fetch, target: string | null = null): Promise<Job[]> {
 	if (

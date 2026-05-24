@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { IconEye, IconEyeOff, IconUsers } from '@tabler/icons-react';
@@ -24,6 +24,7 @@ type Props = {
 	messages: Chat[];
 	historicalPlayers: Record<string, Player>;
 	className?: string;
+	staticBaseUrl: string;
 };
 
 export function Chatbox({
@@ -38,23 +39,23 @@ export function Chatbox({
 	useButton = false,
 	messages,
 	historicalPlayers,
-	className = ''
+	className = '',
+	staticBaseUrl
 }: Props) {
 	const { chatLayout, setChatLayout, playersCount } = useAppState();
 	const [value, setValue] = useState('');
-	const [placeholder, setPlaceholder] = useState('');
+	const [showSent, setShowSent] = useState(false);
 	const [showShortcut, setShowShortcut] = useState(true);
 	const inputRef = useRef<HTMLInputElement | null>(null);
 
 	const chatHidden = chatLayout === 'hide';
 	const connected = playersCount > 0;
 	const chatTxt = useMemo(() => {
-		return chatHidden ? 'Chat (hidden)' : `Chat ${controlsShowing === null && showShortcut ? '[Alt S]' : ''}`;
+		return chatHidden
+			? 'Chat (hidden)'
+			: `Chat ${controlsShowing === null && showShortcut ? '[Alt S]' : ''}`;
 	}, [chatHidden, controlsShowing, showShortcut]);
-
-	useEffect(() => {
-		setPlaceholder(chatTxt);
-	}, [chatTxt]);
+	const placeholder = showSent ? 'Sent!' : chatTxt;
 
 	useEffect(() => {
 		if (!focusByShortcut) {
@@ -64,7 +65,9 @@ export function Chatbox({
 			if (event.altKey && (event.key === 's' || event.key === 'S')) {
 				event.preventDefault();
 				if (controlsShowing === false || controlsShowing === null) {
-					(inputRef.current ?? document.getElementById(inputId) as HTMLInputElement | null)?.focus();
+					(
+						inputRef.current ?? (document.getElementById(inputId) as HTMLInputElement | null)
+					)?.focus();
 				}
 			}
 		};
@@ -82,9 +85,9 @@ export function Chatbox({
 		}
 		send({ chat: value, type: SyncTypes.ChatSync });
 		setValue('');
-		setPlaceholder('Sent!');
+		setShowSent(true);
 		window.setTimeout(() => {
-			setPlaceholder(chatTxt);
+			setShowSent(false);
 		}, 2000);
 	}
 
@@ -122,7 +125,11 @@ export function Chatbox({
 										setChatLayout((value) => (value === 'hide' ? 'show' : 'hide'));
 									}}
 								>
-									{chatHidden ? <IconEyeOff stroke={2} size={18} className="text-red-600" /> : <IconEye stroke={2} size={18} />}
+									{chatHidden ? (
+										<IconEyeOff stroke={2} size={18} className="text-red-600" />
+									) : (
+										<IconEye stroke={2} size={18} />
+									)}
 								</Button>
 							</Tooltip.Trigger>
 							<Tooltip.Content>{chatHidden ? <p>Show chat</p> : <p>Hide chat</p>}</Tooltip.Content>
@@ -177,28 +184,47 @@ export function Chatbox({
 							<Dialog.Content className="gap-3 pr-1 max-sm:pl-2">
 								<div className="self-start text-lg font-bold">Chat History (Session)</div>
 								<div className="flex max-h-[85vh] flex-col items-center gap-2.5 overflow-x-hidden overflow-y-auto">
-									{messages.length === 0 ? <div className="self-start">There&apos;s nothing here yet ┬─┬ノ( º _ ºノ)</div> : null}
-									{messages.slice().reverse().map((message) => (
-										<div
-											key={`${message.timestamp}-${message.uid}-${message.message}`}
-											className={`flex w-full flex-wrap items-center gap-1.5 text-center ${message.isStateUpdate ? 'font-semibold' : ''}`}
-										>
-											<Pfp id={message.uid} className="avatar shrink-0 !h-6 !w-6" discordUser={historicalPlayers[message.uid]?.discordUser} />
-											<span className="shrink-0 font-bold">
-												{new Date(message.timestamp).toLocaleTimeString('en-US', {
-													hour: '2-digit',
-													minute: '2-digit',
-													hour12: false
-												})}
-											</span>
-											<span className="shrink-0">{getRealName(historicalPlayers[message.uid])}:</span>
-											<span className="block overflow-x-hidden wrap-break-word pr-3 text-justify">{message.message}</span>
-										</div>
-									))}
+									{messages.length === 0 ? (
+										<div className="self-start">There&apos;s nothing here yet ┬─┬ノ( º _ ºノ)</div>
+									) : null}
+									{messages
+										.slice()
+										.reverse()
+										.map((message) => (
+											<div
+												key={`${message.timestamp}-${message.uid}-${message.message}`}
+												className={`flex w-full flex-wrap items-center gap-1.5 text-center ${message.isStateUpdate ? 'font-semibold' : ''}`}
+											>
+												<Pfp
+													id={message.uid}
+													className="avatar shrink-0 !h-6 !w-6"
+													discordUser={historicalPlayers[message.uid]?.discordUser}
+													staticBaseUrl={staticBaseUrl}
+												/>
+												<span className="shrink-0 font-bold">
+													{new Date(message.timestamp).toLocaleTimeString('en-US', {
+														hour: '2-digit',
+														minute: '2-digit',
+														hour12: false
+													})}
+												</span>
+												<span className="shrink-0">
+													{getRealName(historicalPlayers[message.uid])}:
+												</span>
+												<span className="block overflow-x-hidden wrap-break-word pr-3 text-justify">
+													{message.message}
+												</span>
+											</div>
+										))}
 								</div>
 							</Dialog.Content>
 						</Dialog.Root>
-						<Button disabled={!connected} variant="outline" className="rounded-l-none" onClick={sendMessage}>
+						<Button
+							disabled={!connected}
+							variant="outline"
+							className="rounded-l-none"
+							onClick={sendMessage}
+						>
 							Send
 						</Button>
 					</div>

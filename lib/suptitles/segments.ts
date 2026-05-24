@@ -137,7 +137,12 @@ class PaletteDefinitionSegment {
 		const a = base.data.slice(2).length / 5;
 		for (let i = 0; i < a; i++) {
 			const j = 2 + i * 5;
-			this.palette[base.data[j]] = new Palette(base.data[j + 1], base.data[j + 2], base.data[j + 3], base.data[j + 4]);
+			this.palette[base.data[j]] = new Palette(
+				base.data[j + 1],
+				base.data[j + 2],
+				base.data[j + 3],
+				base.data[j + 4]
+			);
 		}
 
 		this.base.data = new Uint8Array(0);

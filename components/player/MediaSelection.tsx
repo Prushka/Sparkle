@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -19,13 +19,16 @@ export const MediaSelection = forwardRef<
 	{
 		data: { jobs: Job[]; job?: Job | undefined };
 		bounceToOverride?: ((_id: string) => void) | null;
+		staticBaseUrl: string;
 	}
->(function MediaSelection({ data, bounceToOverride = null }, ref) {
+>(function MediaSelection({ data, bounceToOverride = null, staticBaseUrl }, ref) {
 	const router = useRouter();
 	const [jobs, setJobs] = useState<Job[]>(data.jobs);
 	const [titleSelectionOpen, setTitleSelectionOpen] = useState(false);
 	const [seSelectionOpen, setSeSelectionOpen] = useState(false);
-	const [selectedTitleId, setSelectedTitleId] = useState<string | undefined>(data.job?.Title?.titleId);
+	const [selectedTitleId, setSelectedTitleId] = useState<string | undefined>(
+		data.job?.Title?.titleId
+	);
 	const [selectedSe, setSelectedSe] = useState<string | undefined>(data.job?.Title?.episode?.se);
 
 	useEffect(() => {
@@ -69,21 +72,24 @@ export const MediaSelection = forwardRef<
 		}
 	}
 
-	const updateList = useCallback((untilId: string | null = null, onSuccess: (_jobs: Job[]) => void = () => {}) => {
-		if (untilId !== null && jobs.find((candidate) => candidate.Id === untilId)) {
-			onSuccess(jobs);
-			return;
-		}
-		fetch(`${PUBLIC_BE}/all`)
-			.then((response) => response.json())
-			.then((payload) => {
-				if (payload?.length > 0) {
-					const nextJobs = preprocessJobs(payload);
-					setJobs(nextJobs);
-					onSuccess(nextJobs);
-				}
-			});
-	}, [jobs]);
+	const updateList = useCallback(
+		(untilId: string | null = null, onSuccess: (_jobs: Job[]) => void = () => {}) => {
+			if (untilId !== null && jobs.find((candidate) => candidate.Id === untilId)) {
+				onSuccess(jobs);
+				return;
+			}
+			fetch(`${PUBLIC_BE}/all`)
+				.then((response) => response.json())
+				.then((payload) => {
+					if (payload?.length > 0) {
+						const nextJobs = preprocessJobs(payload);
+						setJobs(nextJobs);
+						onSuccess(nextJobs);
+					}
+				});
+		},
+		[jobs]
+	);
 
 	useImperativeHandle(ref, () => ({ updateList }), [updateList]);
 
@@ -104,7 +110,9 @@ export const MediaSelection = forwardRef<
 						aria-expanded={titleSelectionOpen}
 						className={`max-md:w-full justify-between font-semibold ${!selected?.episodes ? 'col-span-3' : ''}`}
 					>
-						<span className="max-w-[calc(100%-2rem)] overflow-hidden text-ellipsis">{selected?.title || 'Select media'}</span>
+						<span className="max-w-[calc(100%-2rem)] overflow-hidden text-ellipsis">
+							{selected?.title || 'Select media'}
+						</span>
 						<IconChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
 					</Button>
 				</Popover.Trigger>
@@ -131,7 +139,14 @@ export const MediaSelection = forwardRef<
 										}
 									}}
 								>
-									<TitlePoster title={title.rep ? title.rep : title.episodes ? title.episodes[0] : title} isNew={newJobs.find((candidate) => candidate.Title.titleId === title.titleId) !== undefined} />
+									<TitlePoster
+										title={title.rep ? title.rep : title.episodes ? title.episodes[0] : title}
+										staticBaseUrl={staticBaseUrl}
+										isNew={
+											newJobs.find((candidate) => candidate.Title.titleId === title.titleId) !==
+											undefined
+										}
+									/>
 									<span className="mr-4">{title.title}</span>
 									<IconCheck
 										size={18}
@@ -142,8 +157,8 @@ export const MediaSelection = forwardRef<
 							))}
 						</Command.Group>
 					</Command.Root>
-					</Popover.Content>
-				</Popover.Root>
+				</Popover.Content>
+			</Popover.Root>
 
 			{selected?.episodes ? (
 				<>
@@ -179,9 +194,21 @@ export const MediaSelection = forwardRef<
 												setSelectedSe(episode.se);
 											}}
 										>
-											<TitlePoster title={episode} isNew={newJobs.find((candidate) => candidate.Id === episode.id) !== undefined} />
-											<span className="mr-4">{episode.se} - {episode.title}</span>
-											<IconCheck size={18} stroke={2} className={`ml-auto right-0 ${selectedSe === episode.se ? '' : 'text-transparent'}`} />
+											<TitlePoster
+												title={episode}
+												staticBaseUrl={staticBaseUrl}
+												isNew={
+													newJobs.find((candidate) => candidate.Id === episode.id) !== undefined
+												}
+											/>
+											<span className="mr-4">
+												{episode.se} - {episode.title}
+											</span>
+											<IconCheck
+												size={18}
+												stroke={2}
+												className={`ml-auto right-0 ${selectedSe === episode.se ? '' : 'text-transparent'}`}
+											/>
 										</Command.Item>
 									))}
 								</Command.Group>

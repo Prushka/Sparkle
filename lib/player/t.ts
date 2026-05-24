@@ -204,7 +204,9 @@ export interface Stream {
 }
 
 export function audiosExistForCodec(job: Job, codec: string) {
-	return job.MappedAudio && job.MappedAudio[codec] && Object.entries(job.MappedAudio[codec]).length > 0;
+	return (
+		job.MappedAudio && job.MappedAudio[codec] && Object.entries(job.MappedAudio[codec]).length > 0
+	);
 }
 
 export function formatPair(stream: Stream, includeIndex = false, includeCodec = false): string {
@@ -214,7 +216,12 @@ export function formatPair(stream: Stream, includeIndex = false, includeCodec = 
 			lang = lang.split('-')[0];
 		}
 		const extension = stream.Location.split('.').pop();
-		return (includeIndex ? `${stream.Index}-` : '') + lang + (includeCodec ? ` (${extension})` : '') + (stream.Title && stream.Title !== lang ? ` - ${stream.Title}` : '');
+		return (
+			(includeIndex ? `${stream.Index}-` : '') +
+			lang +
+			(includeCodec ? ` (${extension})` : '') +
+			(stream.Title && stream.Title !== lang ? ` - ${stream.Title}` : '')
+		);
 	}
 	return '';
 }
@@ -471,11 +478,18 @@ export function preprocessJob(job: Job) {
 		stream.Title = stream.Title ?? '';
 		stream.CodecType = stream.CodecType ?? '';
 	}
-	const existingSubtitles = job.Streams.filter((stream) => stream.CodecType === 'subtitle').map((stream) => stream.Location);
+	const existingSubtitles = job.Streams.filter((stream) => stream.CodecType === 'subtitle').map(
+		(stream) => stream.Location
+	);
 	let largestIndex = job.Streams.reduce((acc, stream) => Math.max(acc, stream.Index), 0);
 	for (const file in job.Files) {
 		if (!existingSubtitles.includes(file) && !file.includes('storyboard')) {
-			if (file.endsWith('.ass') || file.endsWith('.vtt') || file.endsWith('.srt') || file.endsWith('.sup')) {
+			if (
+				file.endsWith('.ass') ||
+				file.endsWith('.vtt') ||
+				file.endsWith('.srt') ||
+				file.endsWith('.sup')
+			) {
 				largestIndex += 1;
 				job.Streams.push({
 					Index: largestIndex,
@@ -582,7 +596,9 @@ export function getTitleComponentsByJobs(jobs: Job[]): Titles {
 		.reduce((acc: Titles, key) => {
 			const title = _titles[key];
 			if (title.episodes) {
-				title.episodes.sort((a, b) => (a.season === b.season ? a.episode - b.episode : a.season - b.season)).reverse();
+				title.episodes
+					.sort((a, b) => (a.season === b.season ? a.episode - b.episode : a.season - b.season))
+					.reverse();
 				for (let i = 0; i < title.episodes.length; i++) {
 					const episode = title.episodes[i];
 					const job = jobs.find((candidate) => candidate.Id === episode.id);
@@ -667,6 +683,7 @@ export interface ServerData {
 	plot: string;
 	dominantColor: string;
 	oembedJson: string;
+	staticBaseUrl: string;
 }
 
 export function getRealName(player: Player | undefined) {
@@ -675,7 +692,13 @@ export function getRealName(player: Player | undefined) {
 }
 
 export function getLeftAndJoined(oldPlayers: Player[], newPlayers: Player[], ignoreId: string) {
-	const left = oldPlayers.filter((oldPlayer) => oldPlayer.id !== ignoreId && !newPlayers.find((candidate) => candidate.id === oldPlayer.id));
-	const joined = newPlayers.filter((player) => player.id !== ignoreId && !oldPlayers.find((candidate) => candidate.id === player.id));
+	const left = oldPlayers.filter(
+		(oldPlayer) =>
+			oldPlayer.id !== ignoreId && !newPlayers.find((candidate) => candidate.id === oldPlayer.id)
+	);
+	const joined = newPlayers.filter(
+		(player) =>
+			player.id !== ignoreId && !oldPlayers.find((candidate) => candidate.id === player.id)
+	);
 	return { left, joined };
 }

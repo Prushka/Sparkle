@@ -1,16 +1,29 @@
-"use client";
+'use client';
 
-import 'vidstack/bundle';
+import 'vidstack/player';
+import 'vidstack/player/ui';
+import 'vidstack/player/layouts/default';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { TextTrack } from 'vidstack';
+import { TextTrack, type MediaKeyShortcuts } from 'vidstack';
 import JASSUB from 'jassub';
-import { IconAlertOctagonFilled, IconArrowBounce, IconCheck, IconMoon, IconPlayerPauseFilled, IconPlayerPlayFilled, IconSettings2, IconShare3, IconSun, IconTableExport } from '@tabler/icons-react';
+import {
+	IconAlertOctagonFilled,
+	IconArrowBounce,
+	IconCheck,
+	IconMoon,
+	IconPlayerPauseFilled,
+	IconPlayerPlayFilled,
+	IconSettings2,
+	IconShare3,
+	IconSun,
+	IconTableExport
+} from '@tabler/icons-react';
 import { toast } from 'sonner';
 import { useAppState } from '@/lib/app-state';
 import { useTheme } from '@/lib/theme';
-import { PUBLIC_BE, PUBLIC_STATIC } from '@/lib/env';
+import { PUBLIC_BE } from '@/lib/env';
 import { createNotificationAudioUrl } from '@/lib/player/notification-audio';
 import {
 	BroadcastTypes,
@@ -58,12 +71,24 @@ type VideoSource = {
 	type: string;
 	codec: string;
 	sCodec: string;
+	audio: string;
 };
 
 type MoveToastState = {
 	seconds: number;
 	firedBy: RoomPlayer;
 	job: Job | undefined;
+};
+
+const PLAYER_KEY_SHORTCUTS: MediaKeyShortcuts = {
+	togglePaused: 'k Space',
+	toggleMuted: 'm',
+	toggleFullscreen: null,
+	togglePictureInPicture: 'i',
+	seekBackward: ['j', 'J', 'ArrowLeft'],
+	seekForward: ['l', 'L', 'ArrowRight'],
+	volumeUp: 'ArrowUp',
+	volumeDown: 'ArrowDown'
 };
 
 export function Player({ data }: { data: ServerData }) {
@@ -103,31 +128,66 @@ export function Player({ data }: { data: ServerData }) {
 	const [historicalPlayers, setHistoricalPlayers] = useState<Record<string, RoomPlayer>>({});
 	const [roomMessages, setRoomMessages] = useState<Chat[]>([]);
 	const [controlsToDisplay, setControlsToDisplay] = useState<SendPayload[]>([]);
-	const [selectedCodec, setSelectedCodec] = useState(() => (typeof window === 'undefined' ? 'auto' : localStorage.getItem('sCodec') || 'auto'));
-	const [selectedAudio, setSelectedAudio] = useState(() => (typeof window === 'undefined' ? '1-jpn' : localStorage.getItem('sAudio') || '1-jpn'));
+	const [selectedCodec, setSelectedCodec] = useState('auto');
+	const [selectedAudio, setSelectedAudio] = useState('1-jpn');
 	const [syncGoto, setSyncGoto] = useState(() => setGetLsBoolean('syncGoto', true));
-	const [videoSrc, setVideoSrc] = useState<VideoSource | null>(null);
 	const [supportedCodecs, setSupportedCodecs] = useState<string[]>([]);
 	const [copiedRoomLink, setCopiedRoomLink] = useState(false);
 	const [exited, setExited] = useState(false);
 	const [moveToast, setMoveToast] = useState<MoveToastState | null>(null);
 	const [name, setName] = useState('');
 	const [playerId, setPlayerId] = useState('');
-	const [initialVolume, setInitialVolume] = useState(1);
-	const [messageTick, setMessageTick] = useState(0);
+	const [initialVolume] = useState(() => setGetLsNumber('volume', 1));
+	const BASE_STATIC = `${data.staticBaseUrl}/${job.Id}`;
 	const [tickedSecsAgo, setTickedSecsAgo] = useState(-1);
 	const [tickedSecsAgoStr, setTickedSecsAgoStr] = useState('0.00');
 	const [chatFocusedSecs, setChatFocusedSecs] = useState(0);
-	const [thumbnailVttSrc, setThumbnailVttSrc] = useState('');
-	const BASE_STATIC = useMemo(() => `${PUBLIC_STATIC}/${job.Id}`, [job.Id]);
+	const thumbnailVttSrc = `${data.staticBaseUrl}/${job.Id}/storyboard.vtt`;
 	const roomBase = searchParams.get('room') || searchParams.get('channel_id') || '';
 	const room = roomBase ? `${roomBase}${job.Id}` : job.Id;
 	const discord = discordAuth as Discord | null;
+	const displayName = discord?.user ? getName(discord.user) || '' : name;
 	const socketCommunicating = socketConnected && tickedSecsAgo >= 0 && tickedSecsAgo < 5;
-	const autoCodec = videoSrc?.sCodec && selectedCodec === 'auto' ? `(${codecDisplayMap[videoSrc.sCodec]})` : '';
+	const videoSrc = useMemo<VideoSource | null>(() => {
+		const encodedCodecs = job.EncodedCodecs || [];
+		const autoCodec =
+			supportedCodecs.find((codec) => encodedCodecs.includes(codec)) || encodedCodecs[0];
+		const effectiveCodec = selectedCodec === 'auto' ? autoCodec : selectedCodec;
+		if (!effectiveCodec) {
+			return null;
+		}
+		const audioStreams = job.MappedAudio[effectiveCodec] ?? [];
+		let stream = audioStreams.find(
+			(candidate) => `${candidate.Index}-${candidate.Language}` === selectedAudio
+		);
+		if (!stream) {
+			const selectedLanguage = selectedAudio.split('-')[1];
+			stream =
+				audioStreams.find((candidate) => candidate.Language === selectedLanguage) ||
+				audioStreams[0];
+		}
+		const effectiveAudio = stream ? `${stream.Index}-${stream.Language}` : selectedAudio;
+		return {
+			src: `${BASE_STATIC}/${effectiveCodec}-${effectiveAudio}.mp4`,
+			type: 'video/mp4',
+			codec: codecMap[effectiveCodec],
+			sCodec: effectiveCodec,
+			audio: effectiveAudio
+		};
+	}, [
+		BASE_STATIC,
+		job.EncodedCodecs,
+		job.MappedAudio,
+		selectedAudio,
+		selectedCodec,
+		supportedCodecs
+	]);
+	const effectiveAudio = videoSrc?.audio || selectedAudio;
+	const autoCodec =
+		videoSrc?.sCodec && selectedCodec === 'auto' ? `(${codecDisplayMap[videoSrc.sCodec]})` : '';
 	const chatHidden = chatLayout === 'hide';
 
-	const messagesToDisplay = useMemo(() => {
+	const messagesToDisplay = (() => {
 		let nextMessages = roomMessages.filter((message) => Date.now() - message.timestamp < 140000);
 		if (playerEl?.clientHeight < 250) {
 			nextMessages = nextMessages.slice(-4);
@@ -180,7 +240,7 @@ export function Player({ data }: { data: ServerData }) {
 			nextMessages[i].timeStr = prevTimeStr === currTimeStr ? '' : currTimeStr;
 		}
 		return nextMessages;
-	}, [controlsToDisplay, messageTick, roomMessages]);
+	})();
 
 	useEffect(() => {
 		setCurrentlyWatching({
@@ -205,43 +265,148 @@ export function Player({ data }: { data: ServerData }) {
 	}, [roomPlayers.length, setPlayersCount, socketCommunicating]);
 
 	useEffect(() => {
-		if (discord?.user) {
-			setName(getName(discord.user) || '');
-		} else if (typeof window !== 'undefined') {
-			const stored = window.localStorage.getItem('name');
-			if (stored) {
-				setName(stored);
-			} else {
-				const anon = `Anon-${randomString(4)}`;
-				setName(anon);
-				window.localStorage.setItem('name', anon);
-				toast('Using placeholder name: ' + anon, {
-					description: 'Change your name using the input next to your avatar',
-					duration: 9000
-				});
-			}
+		if (!playerEl || typeof customElements === 'undefined') {
+			return;
 		}
-	}, [discord]);
+		let cancelled = false;
+		customElements
+			.whenDefined('media-player')
+			.then(() => {
+				if (!cancelled) {
+					playerEl.keyShortcuts = PLAYER_KEY_SHORTCUTS;
+				}
+			})
+			.catch((error) => console.log(error));
+		return () => {
+			cancelled = true;
+		};
+	}, [playerEl]);
 
 	useEffect(() => {
 		if (typeof window === 'undefined') {
 			return;
 		}
-		const storedId = window.localStorage.getItem('id');
-		if (storedId) {
-			setPlayerId(storedId);
-		} else {
-			const nextId = randomString(14);
-			setPlayerId(nextId);
-			window.localStorage.setItem('id', nextId);
+		const timer = window.setTimeout(() => {
+			if (discord?.user) {
+				setName(getName(discord.user) || '');
+				return;
+			}
+			if (name) {
+				return;
+			}
+			const stored = window.localStorage.getItem('name');
+			if (stored) {
+				setName(stored);
+				return;
+			}
+			const anon = `Anon-${randomString(4)}`;
+			window.localStorage.setItem('name', anon);
+			setName(anon);
+		}, 0);
+		return () => window.clearTimeout(timer);
+	}, [discord?.user, name]);
+
+	useEffect(() => {
+		if (discord?.user || typeof window === 'undefined' || !name.startsWith('Anon-')) {
+			return;
 		}
-		setInitialVolume(setGetLsNumber('volume', 1));
-		setThumbnailVttSrc(`${window.location.protocol}//${window.location.host}${BASE_STATIC}/storyboard.vtt`);
+		const toastKey = `anon-name-toast:${name}`;
+		if (window.sessionStorage.getItem(toastKey)) {
+			return;
+		}
+		window.sessionStorage.setItem(toastKey, '1');
+		toast('Using placeholder name: ' + name, {
+			description: 'Change your name using the input next to your avatar',
+			duration: 9000
+		});
+	}, [discord?.user, name]);
+
+	useEffect(() => {
+		if (typeof window === 'undefined') {
+			return;
+		}
+		const timer = window.setTimeout(() => {
+			const storedId = window.localStorage.getItem('id');
+			if (storedId) {
+				setPlayerId(storedId);
+				return;
+			}
+			const nextId = randomString(14);
+			window.localStorage.setItem('id', nextId);
+			setPlayerId(nextId);
+		}, 0);
+		return () => window.clearTimeout(timer);
+	}, []);
+
+	useEffect(() => {
+		if (typeof window === 'undefined') {
+			return;
+		}
+		const timer = window.setTimeout(() => {
+			setSupportedCodecs(getSupportedCodecs());
+		}, 0);
+		return () => window.clearTimeout(timer);
+	}, []);
+
+	useEffect(() => {
+		if (typeof window === 'undefined') {
+			return;
+		}
+		const timer = window.setTimeout(() => {
+			const storedCodec = window.localStorage.getItem('sCodec') || 'auto';
+			if (
+				storedCodec !== 'auto' &&
+				job.EncodedCodecs &&
+				job.EncodedCodecs.length > 0 &&
+				!job.EncodedCodecs.includes(storedCodec)
+			) {
+				window.localStorage.setItem('sCodec', 'auto');
+				setSelectedCodec('auto');
+				return;
+			}
+			setSelectedCodec(storedCodec);
+		}, 0);
+		return () => window.clearTimeout(timer);
+	}, [job.EncodedCodecs]);
+
+	useEffect(() => {
+		if (typeof window === 'undefined') {
+			return;
+		}
+		const timer = window.setTimeout(() => {
+			const storedAudio = window.localStorage.getItem('sAudio');
+			const codecToUse = selectedCodec === 'auto' ? job.EncodedCodecs?.[0] : selectedCodec;
+			const streams = codecToUse ? (job.MappedAudio[codecToUse] ?? []) : [];
+			let nextAudio = streams[0] ? `${streams[0].Index}-${streams[0].Language}` : '1-jpn';
+			if (storedAudio) {
+				const exactMatch = streams.find(
+					(candidate) => `${candidate.Index}-${candidate.Language}` === storedAudio
+				);
+				if (exactMatch) {
+					nextAudio = storedAudio;
+				} else {
+					const storedLanguage = storedAudio.split('-')[1];
+					const languageMatch = streams.find((candidate) => candidate.Language === storedLanguage);
+					if (languageMatch) {
+						nextAudio = `${languageMatch.Index}-${languageMatch.Language}`;
+					} else if (streams.length === 0) {
+						nextAudio = storedAudio;
+					}
+				}
+			}
+			setSelectedAudio(nextAudio);
+		}, 0);
+		return () => window.clearTimeout(timer);
+	}, [job.EncodedCodecs, job.MappedAudio, selectedCodec]);
+
+	useEffect(() => {
+		if (typeof window === 'undefined') {
+			return;
+		}
 		const notificationAudio = new Audio(createNotificationAudioUrl());
 		notificationAudio.volume = 0.25;
 		notificationAudioRef.current = notificationAudio;
-		setSupportedCodecs(getSupportedCodecs());
-	}, [BASE_STATIC]);
+	}, []);
 
 	const send = useCallback(
 		(data: any) => {
@@ -250,7 +415,7 @@ export function Player({ data }: { data: ServerData }) {
 				socketRef.current?.send(JSON.stringify(data));
 			}
 		},
-		[interacted, socketConnected]
+		[interacted, playerEl, socketConnected]
 	);
 
 	const sendSettings = useCallback(() => {
@@ -260,73 +425,28 @@ export function Player({ data }: { data: ServerData }) {
 		});
 		send({
 			type: SyncTypes.AudioSwitch,
-			audio: selectedAudio
+			audio: effectiveAudio
 		});
 		send({
 			type: SyncTypes.CodecSwitch,
 			codec: `${selectedCodec},${videoSrc?.sCodec}`
 		});
-	}, [send, selectedAudio, selectedCodec, videoSrc?.sCodec]);
-
-	const buildVideoSource = useCallback((): VideoSource | null => {
-		const encodedCodecs = job.EncodedCodecs || [];
-		let autoCodec: string | undefined;
-		for (const codec of supportedCodecs) {
-			if (encodedCodecs.includes(codec)) {
-				autoCodec = codec;
-				break;
-			}
-		}
-		if (!autoCodec) {
-			autoCodec = encodedCodecs[0];
-		}
-		const effectiveCodec = selectedCodec === 'auto' ? autoCodec : selectedCodec;
-		if (!effectiveCodec) {
-			return null;
-		}
-		let stream = job.MappedAudio[effectiveCodec]?.find((candidate) => `${candidate.Index}-${candidate.Language}` === selectedAudio);
-		if (!stream) {
-			stream = job.MappedAudio[effectiveCodec]?.find((candidate) => selectedAudio.split('-').length > 1 && candidate.Language === selectedAudio.split('-')[1]);
-			if (!stream && job.MappedAudio[effectiveCodec] && job.MappedAudio[effectiveCodec].length > 0) {
-				stream = job.MappedAudio[effectiveCodec][0];
-			}
-		}
-		const nextAudio = `${stream?.Index}-${stream?.Language}`;
-		if (nextAudio !== selectedAudio) {
-			setSelectedAudio(nextAudio);
-		}
-		return {
-			src: `${BASE_STATIC}/${effectiveCodec}-${nextAudio}.mp4`,
-			type: 'video/mp4',
-			codec: codecMap[effectiveCodec],
-			sCodec: effectiveCodec
-		};
-	}, [BASE_STATIC, job.EncodedCodecs, job.MappedAudio, selectedAudio, selectedCodec, supportedCodecs]);
+	}, [effectiveAudio, playerEl, send, selectedCodec, videoSrc?.sCodec]);
 
 	useEffect(() => {
-		if (selectedCodec !== 'auto' && job.EncodedCodecs && job.EncodedCodecs.length > 0 && !job.EncodedCodecs.includes(selectedCodec)) {
-			console.log('setting codec - no matching codec', selectedCodec, job.EncodedCodecs);
-			setSelectedCodec('auto');
-			window.localStorage.setItem('sCodec', 'auto');
-			setPageReloadCounter((value) => value + 1);
+		if (!playerEl || !videoSrc) {
 			return;
 		}
-		const nextVideoSrc = buildVideoSource();
-		if (nextVideoSrc) {
-			setVideoSrc(nextVideoSrc);
-			if (playerEl) {
-				playerEl.title = job.Input;
-				playerEl.artist = "Let's watch anime!";
-			}
-			sendSettings();
-		}
-	}, [buildVideoSource, job.EncodedCodecs, job.Input, playerEl, selectedCodec, sendSettings, setPageReloadCounter]);
+		playerEl.title = job.Input;
+		playerEl.artist = "Let's watch anime!";
+		sendSettings();
+	}, [job.Input, playerEl, sendSettings, videoSrc]);
 
 	useEffect(() => {
 		if (!playerEl) {
 			return;
 		}
-		const player = playerEl;
+		let cancelled = false;
 		const dispose = () => {
 			if (supRef.current != null) {
 				supRef.current.dispose();
@@ -336,78 +456,102 @@ export function Player({ data }: { data: ServerData }) {
 				jasRef.current.destroy();
 				jasRef.current = null;
 			}
-			canvasRef.current?.getContext('2d')?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+			canvasRef.current
+				?.getContext('2d')
+				?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
 		};
 
-		const fonts: string[] = [];
-		if (job.Streams) {
-			const sortedJob = { ...job, Streams: [...job.Streams] };
-			sortedJob.Streams = sortTracks(sortedJob);
-			let defaulted = false;
-			for (const [, stream] of Object.entries(sortedJob.Streams)) {
-				switch (stream.CodecType) {
-					case 'attachment':
-						if (stream.Location?.includes('otf') || stream.Location?.includes('ttf')) {
-							fonts.push(`${BASE_STATIC}/${stream.Location}`);
-						}
-						break;
-					case 'subtitle':
-						player.textTracks.add({
-							src: `${BASE_STATIC}/${stream.Location}`,
-							label: formatPair(stream, true, true),
-							kind: 'subtitles',
-							type:
-								stream.Location.slice(-3) === 'vtt'
-									? 'vtt'
-									: stream.Location.slice(-3) === 'ass'
-										? 'asshuh'
-										: stream.Location.slice(-3) === 'sup'
-											? 'sup'
-											: 'srt',
-							language: languageSrcMap[stream.Language] || stream.Language,
-							default: !defaulted
-						});
-						defaulted = true;
-						break;
+		const setupTracks = async () => {
+			try {
+				await customElements.whenDefined('media-player');
+			} catch (error) {
+				console.log(error);
+			}
+			if (cancelled) {
+				return;
+			}
+			const player = playerEl as any;
+			const textTracks = player?.textTracks;
+			if (!textTracks?.add) {
+				return;
+			}
+			if (typeof textTracks.clear === 'function') {
+				textTracks.clear();
+			}
+			const fonts: string[] = [];
+			if (job.Streams) {
+				const sortedJob = { ...job, Streams: [...job.Streams] };
+				sortedJob.Streams = sortTracks(sortedJob);
+				let defaulted = false;
+				for (const [, stream] of Object.entries(sortedJob.Streams)) {
+					switch (stream.CodecType) {
+						case 'attachment':
+							if (stream.Location?.includes('otf') || stream.Location?.includes('ttf')) {
+								fonts.push(`${BASE_STATIC}/${stream.Location}`);
+							}
+							break;
+						case 'subtitle':
+							textTracks.add({
+								src: `${BASE_STATIC}/${stream.Location}`,
+								label: formatPair(stream, true, true),
+								kind: 'subtitles',
+								type:
+									stream.Location.slice(-3) === 'vtt'
+										? 'vtt'
+										: stream.Location.slice(-3) === 'ass'
+											? 'asshuh'
+											: stream.Location.slice(-3) === 'sup'
+												? 'sup'
+												: 'srt',
+								language: languageSrcMap[stream.Language] || stream.Language,
+								default: !defaulted
+							});
+							defaulted = true;
+							break;
+					}
 				}
 			}
-		}
-		fontsRef.current = fonts;
-		if (job.Chapters && job.Chapters.length > 0) {
-			const track = new TextTrack({
-				kind: 'chapters',
-				language: 'en-US',
-				type: 'vtt',
-				default: true
-			});
-			for (const chapter of job.Chapters) {
-				if (chapter.tags?.title && chapter.end - chapter.start > 2 * 1000000000) {
-					track.addCue(new VTTCue(chapter.start, chapter.end, chapter.tags?.title));
+			fontsRef.current = fonts;
+			if (job.Chapters && job.Chapters.length > 0) {
+				const track = new TextTrack({
+					kind: 'chapters',
+					language: 'en-US',
+					type: 'vtt',
+					default: true
+				});
+				for (const chapter of job.Chapters) {
+					if (chapter.tags?.title && chapter.end - chapter.start > 2 * 1000000000) {
+						track.addCue(new VTTCue(chapter.start, chapter.end, chapter.tags?.title));
+					}
 				}
+				textTracks.add(track);
 			}
-			player.textTracks.add(track);
-		}
-		player.controlsDelay = 1500;
+			player.controlsDelay = 1500;
+		};
+		void setupTracks();
 
 		return () => {
+			cancelled = true;
 			dispose();
 		};
-	}, [BASE_STATIC, job]);
+	}, [BASE_STATIC, job, playerEl]);
 
 	function connect() {
 		if (!interacted || !playerEl) {
 			return;
 		}
 		const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-		const socket = new WebSocket(`${wsProtocol}//${window.location.host}${PUBLIC_BE}/sync/${room}/${playerId}`);
+		const socket = new WebSocket(
+			`${wsProtocol}//${window.location.host}${PUBLIC_BE}/sync/${room}/${playerId}`
+		);
 		socketRef.current = socket;
 		console.log(`Socket, connecting to ${room}`);
 		socket.onopen = () => {
 			console.log(`Socket, connected to ${room}`);
 			setSocketConnected(true);
-			if (name !== '') {
+			if (displayName !== '') {
 				send({
-					name,
+					name: displayName,
 					type: SyncTypes.ProfileSync,
 					discordUser: discord?.user
 				});
@@ -427,14 +571,15 @@ export function Player({ data }: { data: ServerData }) {
 			};
 			if (playerEl) {
 				console.debug('received: ' + JSON.stringify(state));
-					const initiateMoveTo = (jobs: Job[]) => {
-						setMoveToast({
-							seconds: moveSeconds,
-							job: jobs.find((candidate: Job) => candidate.Id === broadcast!.moveTo),
-							firedBy: state.firedBy!
+				const initiateMoveTo = (jobs: Job[]) => {
+					setMoveToast({
+						seconds: moveSeconds,
+						job: jobs.find((candidate: Job) => candidate.Id === broadcast!.moveTo),
+						firedBy: state.firedBy!
 					});
 					const target = jobs.find((candidate) => candidate.Id === state.broadcast!.moveTo);
-					state.moveToText = target?.Title.title + (target?.Title?.episode ? ` ${target.Title.episode.se}` : '');
+					state.moveToText =
+						target?.Title.title + (target?.Title?.episode ? ` ${target.Title.episode.se}` : '');
 					setControlsToDisplay((prev) => [...prev, state]);
 				};
 				switch (state.type) {
@@ -445,7 +590,10 @@ export function Player({ data }: { data: ServerData }) {
 						break;
 					case SyncTypes.ChatSync:
 						setRoomMessages((prev) => {
-							if (inBgRef.current && getLatestMessageTimestamp(prev) !== state.chats[state.chats.length - 1]?.timestamp) {
+							if (
+								inBgRef.current &&
+								getLatestMessageTimestamp(prev) !== state.chats[state.chats.length - 1]?.timestamp
+							) {
 								notificationAudioRef.current?.play().catch(() => {});
 							}
 							return state.chats;
@@ -563,7 +711,8 @@ export function Player({ data }: { data: ServerData }) {
 		if (resetTimer) {
 			lastTickedRef.current = Date.now();
 		}
-		const nextTickedSecsAgo = socketConnected && roomPlayers.length > 0 ? (Date.now() - lastTickedRef.current) / 1000 : -1;
+		const nextTickedSecsAgo =
+			socketConnected && roomPlayers.length > 0 ? (Date.now() - lastTickedRef.current) / 1000 : -1;
 		setTickedSecsAgo(nextTickedSecsAgo);
 		setTickedSecsAgoStr((Math.round(nextTickedSecsAgo * 100) / 100).toFixed(2));
 	}
@@ -594,22 +743,26 @@ export function Player({ data }: { data: ServerData }) {
 			return;
 		}
 		const player = playerEl;
-		const playerUnsubscribe = player.subscribe?.(({ controlsVisible }: { controlsVisible: boolean }) => {
-			setControlsShowing(controlsVisible);
-		});
+		const playerUnsubscribe = player.subscribe?.(
+			({ controlsVisible }: { controlsVisible: boolean }) => {
+				setControlsShowing(controlsVisible);
+			}
+		);
 		const playerCanPlayUnsubscribe = player.subscribe?.(({ canPlay }: { canPlay: boolean }) => {
 			if (canPlay && interacted && !socketRef.current) {
 				connect();
 			}
 		});
-		const playerSoundUnsubscribe = player.subscribe?.(({ volume, muted }: { volume: number; muted: boolean }) => {
-			if (!volumeInitializedRef.current) {
-				player.volume = initialVolume >= 0 && initialVolume <= 1 ? initialVolume : 1;
-				volumeInitializedRef.current = true;
-			} else {
-				window.localStorage.setItem('volume', muted ? '0' : volume.toString());
+		const playerSoundUnsubscribe = player.subscribe?.(
+			({ volume, muted }: { volume: number; muted: boolean }) => {
+				if (!volumeInitializedRef.current) {
+					player.volume = initialVolume >= 0 && initialVolume <= 1 ? initialVolume : 1;
+					volumeInitializedRef.current = true;
+				} else {
+					window.localStorage.setItem('volume', muted ? '0' : volume.toString());
+				}
 			}
-		});
+		);
 
 		const visibilityChange = () => {
 			if (document.hidden) {
@@ -638,12 +791,13 @@ export function Player({ data }: { data: ServerData }) {
 		player.addEventListener?.('mouseleave', mouseLeave);
 
 		const interval = window.setInterval(() => {
-			setMessageTick((value) => value + 1);
 			updateTime();
 			updateLastTicked();
-				const videoElement = document.querySelector('media-provider video') as HTMLVideoElement | null;
-				const selectedTrack = player.textTracks?.selected;
-				if (videoElement && prevTrackSrcRef.current !== selectedTrack?.src) {
+			const videoElement = document.querySelector(
+				'media-provider video'
+			) as HTMLVideoElement | null;
+			const selectedTrack = player.textTracks?.selected;
+			if (videoElement && prevTrackSrcRef.current !== selectedTrack?.src) {
 				if (supRef.current) {
 					supRef.current.dispose();
 					supRef.current = null;
@@ -652,7 +806,9 @@ export function Player({ data }: { data: ServerData }) {
 					jasRef.current.destroy();
 					jasRef.current = null;
 				}
-				canvasRef.current?.getContext('2d')?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+				canvasRef.current
+					?.getContext('2d')
+					?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
 				send({ type: SyncTypes.SubtitleSwitch, subtitle: selectedTrack?.src });
 				if (selectedTrack?.src) {
 					const ext = selectedTrack.src.slice(-4);
@@ -661,29 +817,35 @@ export function Player({ data }: { data: ServerData }) {
 							.then((response) => response.arrayBuffer())
 							.then((buffer) => {
 								const file = new Uint8Array(buffer);
-								supRef.current = new SUPtitles(canvasRef.current!, file, () => player.currentTime * 1000);
+								supRef.current = new SUPtitles(
+									canvasRef.current!,
+									file,
+									() => player.currentTime * 1000
+								);
 								if (!player.paused) {
 									supRef.current.playHandler();
 								}
 							});
 					} else if (ext.includes('ass')) {
-						const fallback = fallbackFontsMap[selectedTrack.language] ? fallbackFontsMap[selectedTrack.language] : defaultFallback;
+						const fallback = fallbackFontsMap[selectedTrack.language]
+							? fallbackFontsMap[selectedTrack.language]
+							: defaultFallback;
 						const availableFonts = {
 							[fallback[0]]: fallback[1]
-							};
-							jasRef.current = new JASSUB({
-								video: videoElement,
-								canvas: canvasRef.current!,
-								subUrl: selectedTrack.src,
-								offscreenRender: true,
+						};
+						jasRef.current = new JASSUB({
+							video: videoElement,
+							canvas: canvasRef.current!,
+							subUrl: selectedTrack.src,
+							offscreenRender: true,
 							workerUrl: '/scripts/jassub-worker.js',
-								wasmUrl: '/scripts/jassub-worker.wasm',
-								fallbackFont: fallback[0],
-								availableFonts,
-								fonts: [...fontsRef.current, fallback[1]]
-							} as any);
-						}
+							wasmUrl: '/scripts/jassub-worker.wasm',
+							fallbackFont: fallback[0],
+							availableFonts,
+							fonts: [...fontsRef.current, fallback[1]]
+						} as any);
 					}
+				}
 				prevTrackSrcRef.current = selectedTrack?.src;
 			}
 			if (chatFocused) {
@@ -693,7 +855,10 @@ export function Player({ data }: { data: ServerData }) {
 				chatFocusedSecsRef.current = 0;
 				setChatFocusedSecs(0);
 			}
-			const nextTickedSecsAgo = socketConnected && roomPlayers.length > 0 ? (Date.now() - lastTickedRef.current) / 1000 : -1;
+			const nextTickedSecsAgo =
+				socketConnected && roomPlayers.length > 0
+					? (Date.now() - lastTickedRef.current) / 1000
+					: -1;
 			setTickedSecsAgo(nextTickedSecsAgo);
 			setTickedSecsAgoStr((Math.round(nextTickedSecsAgo * 100) / 100).toFixed(2));
 			if (!playerEl) {
@@ -710,7 +875,19 @@ export function Player({ data }: { data: ServerData }) {
 			playerCanPlayUnsubscribe?.();
 			playerSoundUnsubscribe?.();
 		};
-	}, [chatFocused, connect, controlsShowing, initialVolume, roomPlayers.length, send, socketConnected, updateLastTicked, updateTime, interacted]);
+	}, [
+		chatFocused,
+		connect,
+		controlsShowing,
+		initialVolume,
+		playerEl,
+		roomPlayers.length,
+		send,
+		socketConnected,
+		updateLastTicked,
+		updateTime,
+		interacted
+	]);
 
 	useEffect(() => {
 		if (discordAuth?.user) {
@@ -749,18 +926,8 @@ export function Player({ data }: { data: ServerData }) {
 		<>
 			<media-player
 				keep-alive
-				keyShortcuts={{
-					togglePaused: 'k Space',
-					toggleMuted: 'm',
-					toggleFullscreen: null,
-					togglePictureInPicture: 'i',
-					seekBackward: ['j', 'J', 'ArrowLeft'],
-					seekForward: ['l', 'L', 'ArrowRight'],
-					volumeUp: 'ArrowUp',
-					volumeDown: 'ArrowDown'
-				}}
-				className={`media-player bg-slate-900 relative w-full ${playerEl && !playerEl.paused && chatFocusedSecs > hideControlsOnChatFocused ? 'chat-controls-hidden' : ''} ${discord ? 'h-screen' : ''}`}
-				src={videoSrc || undefined}
+				className={`media-player relative block w-full overflow-hidden bg-slate-900 ${discord ? 'h-screen' : 'aspect-video'} ${playerEl && !playerEl.paused && chatFocusedSecs > hideControlsOnChatFocused ? 'chat-controls-hidden' : ''}`}
+				src={videoSrc?.src || undefined}
 				crossorigin
 				ref={setPlayerEl}
 				playsInline
@@ -780,15 +947,24 @@ export function Player({ data }: { data: ServerData }) {
 					}
 				}}
 			>
-				<media-provider className="media-provider h-full w-full">
+				<media-provider className="media-provider">
 					<media-poster className="vds-poster" src={data.preview}></media-poster>
 					<canvas ref={canvasRef} id="sub-canvas" className="pointer-events-none absolute" />
 				</media-provider>
-				<media-video-layout colorScheme={theme} thumbnails={thumbnailVttSrc}></media-video-layout>
+				<media-video-layout color-scheme={theme} thumbnails={thumbnailVttSrc}></media-video-layout>
 			</media-player>
 
-			<div className="pointer-events-none absolute z-50 flex h-full w-full gap-1" id="chat-overlay" style={chatHidden ? { display: 'none' } : undefined}>
-				<Chats controlsShowing={controlsShowing} messagesToDisplay={messagesToDisplay} historicalPlayers={historicalPlayers} />
+			<div
+				className="pointer-events-none absolute z-50 flex h-full w-full gap-1"
+				id="chat-overlay"
+				style={chatHidden ? { display: 'none' } : undefined}
+			>
+				<Chats
+					controlsShowing={controlsShowing}
+					messagesToDisplay={messagesToDisplay}
+					historicalPlayers={historicalPlayers}
+					staticBaseUrl={data.staticBaseUrl}
+				/>
 			</div>
 
 			<div className="flex w-full flex-col gap-4 p-4 font-semibold">
@@ -796,7 +972,12 @@ export function Player({ data }: { data: ServerData }) {
 					<div className="flex w-full flex-col gap-3 items-center justify-center max-md:w-full">
 						<div className="flex w-full flex-col gap-3 items-center justify-center max-md:w-full">
 							<label className="custom-file-upload">
-								<Pfp id={playerId} className="h-12 w-12" discordUser={discord?.user} />
+								<Pfp
+									id={playerId}
+									className="h-12 w-12"
+									discordUser={discord?.user}
+									staticBaseUrl={data.staticBaseUrl}
+								/>
 								<input
 									accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
 									onChange={(event) => {
@@ -836,11 +1017,13 @@ export function Player({ data }: { data: ServerData }) {
 								onBlur={() => {
 									send({
 										type: SyncTypes.ProfileSync,
-										name
+										name: displayName
 									});
-									window.localStorage.setItem('name', name);
+									if (!discord?.user) {
+										window.localStorage.setItem('name', name);
+									}
 								}}
-								value={name}
+								value={displayName}
 								onChange={(event) => setName(event.target.value)}
 								type="text"
 								className="w-auto focus-visible:ring-transparent max-md:grow"
@@ -860,6 +1043,7 @@ export function Player({ data }: { data: ServerData }) {
 									formId="chat-pc-form"
 									messages={[]}
 									historicalPlayers={{}}
+									staticBaseUrl={data.staticBaseUrl}
 									onFocus={() => {
 										playerEl?.controls?.pause?.();
 										setChatFocused(true);
@@ -882,7 +1066,7 @@ export function Player({ data }: { data: ServerData }) {
 							<div className="flex flex-1 flex-col gap-1 max-sm:mr-4">
 								<CardTitle>Media</CardTitle>
 								<CardDescription className="max-sm:hidden">
-									Codec: {selectedCodec} {autoCodec ?? ''}; Audio: {selectedAudio}
+									Codec: {selectedCodec} {autoCodec ?? ''}; Audio: {effectiveAudio}
 								</CardDescription>
 							</div>
 							<ConnectButton
@@ -925,19 +1109,37 @@ export function Player({ data }: { data: ServerData }) {
 								<Tooltip.Provider delayDuration={0}>
 									<Tooltip.Root>
 										<Tooltip.Trigger asChild>
-											<Button variant="outline" className="h-9 w-9 p-1" onClick={handleCopyRoomLink}>
-												{copiedRoomLink ? <IconCheck size={18} stroke={2} /> : <IconShare3 size={18} stroke={2} />}
+											<Button
+												variant="outline"
+												className="h-9 w-9 p-1"
+												onClick={handleCopyRoomLink}
+											>
+												{copiedRoomLink ? (
+													<IconCheck size={18} stroke={2} />
+												) : (
+													<IconShare3 size={18} stroke={2} />
+												)}
 											</Button>
 										</Tooltip.Trigger>
-										<Tooltip.Content>{copiedRoomLink ? <p>Copied!</p> : <p>Copy room link to clipboard!</p>}</Tooltip.Content>
+										<Tooltip.Content>
+											{copiedRoomLink ? <p>Copied!</p> : <p>Copy room link to clipboard!</p>}
+										</Tooltip.Content>
 									</Tooltip.Root>
 								</Tooltip.Provider>
 
 								<Tooltip.Provider delayDuration={0}>
 									<Tooltip.Root>
 										<Tooltip.Trigger asChild>
-											<Button variant="outline" className="h-9 w-9 p-1" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-												{theme === 'dark' ? <IconMoon size={18} stroke={2} /> : <IconSun size={18} stroke={2} />}
+											<Button
+												variant="outline"
+												className="h-9 w-9 p-1"
+												onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+											>
+												{theme === 'dark' ? (
+													<IconMoon size={18} stroke={2} />
+												) : (
+													<IconSun size={18} stroke={2} />
+												)}
 											</Button>
 										</Tooltip.Trigger>
 										<Tooltip.Content>
@@ -958,11 +1160,15 @@ export function Player({ data }: { data: ServerData }) {
 										<DropdownMenu.Separator />
 										<DropdownMenu.Group>
 											{audiosExistForCodec(job, videoSrc?.sCodec || '') ? (
-												<DropdownMenu.RadioGroup value={selectedAudio}>
+												<DropdownMenu.RadioGroup value={effectiveAudio}>
 													{job.MappedAudio[videoSrc?.sCodec || '']?.map((stream) => {
 														const curr = `${stream.Index}-${stream.Language}`;
 														return (
-															<DropdownMenu.RadioItem key={curr} value={curr} onClick={() => changeAudio(curr)}>
+															<DropdownMenu.RadioItem
+																key={curr}
+																value={curr}
+																onClick={() => changeAudio(curr)}
+															>
 																{formatPair(stream)} ({stream.Index})
 															</DropdownMenu.RadioItem>
 														);
@@ -977,10 +1183,16 @@ export function Player({ data }: { data: ServerData }) {
 													Auto {autoCodec}
 												</DropdownMenu.RadioItem>
 												{job.EncodedCodecs.map((codec) => (
-													<DropdownMenu.RadioItem key={codec} value={codec} onClick={() => changeCodec(codec)}>
+													<DropdownMenu.RadioItem
+														key={codec}
+														value={codec}
+														onClick={() => changeCodec(codec)}
+													>
 														{codecDisplayMap[codec]}
 														{formatMbps(job, codec)}
-														{!supportedCodecs.includes(codec) ? <IconAlertOctagonFilled className="ml-2" size={16} stroke={2} /> : null}
+														{!supportedCodecs.includes(codec) ? (
+															<IconAlertOctagonFilled className="ml-2" size={16} stroke={2} />
+														) : null}
 													</DropdownMenu.RadioItem>
 												))}
 											</DropdownMenu.RadioGroup>
@@ -994,6 +1206,7 @@ export function Player({ data }: { data: ServerData }) {
 						<MediaSelection
 							ref={mediaSelectionRef}
 							data={data}
+							staticBaseUrl={data.staticBaseUrl}
 							bounceToOverride={(id) => {
 								if (syncGoto && socketCommunicating && roomPlayers.length > 1 && id !== job.Id) {
 									send({
@@ -1024,8 +1237,17 @@ export function Player({ data }: { data: ServerData }) {
 
 				<div className="mb-3 flex flex-wrap justify-center gap-4">
 					{roomPlayers.map((player) => (
-						<Button key={player.id} variant="outline" className="flex h-auto gap-2 rounded-full rounded-l-full rounded-r-full py-0 pl-0 pr-4">
-							<Pfp className="mr-0.5 h-12 w-12" id={player.id} discordUser={historicalPlayers[player.id]?.discordUser} />
+						<Button
+							key={player.id}
+							variant="outline"
+							className="flex h-auto gap-2 rounded-full rounded-l-full rounded-r-full py-0 pl-0 pr-4"
+						>
+							<Pfp
+								className="mr-0.5 h-12 w-12"
+								id={player.id}
+								discordUser={historicalPlayers[player.id]?.discordUser}
+								staticBaseUrl={data.staticBaseUrl}
+							/>
 							<span className="player-status-text flex flex-col items-center justify-center gap-0.5 font-semibold">
 								<span className="w-16 overflow-hidden text-ellipsis font-bold">{player.name}</span>
 								{player.inBg ? (
@@ -1037,7 +1259,11 @@ export function Player({ data }: { data: ServerData }) {
 									<span>{formatSeconds(player.time)}</span>
 								)}
 							</span>
-							{player.paused === false ? <IconPlayerPlayFilled size={18} stroke={2} /> : <IconPlayerPauseFilled size={18} stroke={2} />}
+							{player.paused === false ? (
+								<IconPlayerPlayFilled size={18} stroke={2} />
+							) : (
+								<IconPlayerPauseFilled size={18} stroke={2} />
+							)}
 						</Button>
 					))}
 				</div>
@@ -1046,10 +1272,12 @@ export function Player({ data }: { data: ServerData }) {
 			{moveToast ? (
 				<div className="fixed bottom-4 left-1/2 z-[100] w-[90%] max-w-xl -translate-x-1/2">
 					<MoveToast
+						key={`${moveToast.job?.Id ?? 'unknown'}-${moveToast.seconds}-${moveToast.firedBy.id}`}
 						historicalPlayers={historicalPlayers}
 						seconds={moveToast.seconds}
 						firedBy={moveToast.firedBy}
 						job={moveToast.job}
+						staticBaseUrl={data.staticBaseUrl}
 						onClose={() => setMoveToast(null)}
 					/>
 				</div>

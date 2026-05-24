@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { Discord, Watching } from '@/lib/player/t';

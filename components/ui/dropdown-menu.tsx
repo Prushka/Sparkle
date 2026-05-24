@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import * as React from 'react';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
@@ -23,7 +23,10 @@ const Content = React.forwardRef<
 			<DropdownMenuPrimitive.Content
 				ref={ref}
 				sideOffset={sideOffset}
-				className={cn('z-50 min-w-[8rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md focus:outline-none', className)}
+				className={cn(
+					'z-50 min-w-[8rem] rounded-md border bg-popover p-1 text-popover-foreground shadow-md focus:outline-none',
+					className
+				)}
 				{...props}
 			/>
 		</Portal>
@@ -53,7 +56,13 @@ const Label = React.forwardRef<
 	React.ElementRef<typeof DropdownMenuPrimitive.Label>,
 	React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Label> & { inset?: boolean }
 >(({ className, inset, ...props }, ref) => {
-	return <DropdownMenuPrimitive.Label ref={ref} className={cn('px-2 py-1.5 text-sm font-semibold', inset && 'pl-8', className)} {...props} />;
+	return (
+		<DropdownMenuPrimitive.Label
+			ref={ref}
+			className={cn('px-2 py-1.5 text-sm font-semibold', inset && 'pl-8', className)}
+			{...props}
+		/>
+	);
 });
 Label.displayName = 'DropdownMenuLabel';
 
@@ -61,12 +70,23 @@ const Separator = React.forwardRef<
 	React.ElementRef<typeof DropdownMenuPrimitive.Separator>,
 	React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Separator>
 >(({ className, ...props }, ref) => {
-	return <DropdownMenuPrimitive.Separator ref={ref} className={cn('-mx-1 my-1 h-px bg-muted', className)} {...props} />;
+	return (
+		<DropdownMenuPrimitive.Separator
+			ref={ref}
+			className={cn('-mx-1 my-1 h-px bg-muted', className)}
+			{...props}
+		/>
+	);
 });
 Separator.displayName = 'DropdownMenuSeparator';
 
 const Shortcut = ({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) => {
-	return <span className={cn('ml-auto text-xs tracking-widest text-muted-foreground', className)} {...props} />;
+	return (
+		<span
+			className={cn('ml-auto text-xs tracking-widest text-muted-foreground', className)}
+			{...props}
+		/>
+	);
 };
 
 const RadioItem = React.forwardRef<
@@ -82,11 +102,11 @@ const RadioItem = React.forwardRef<
 			)}
 			{...props}
 		>
-				<span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
-					<DropdownMenuPrimitive.ItemIndicator>
-						<span className="h-2 w-2 rounded-full bg-current" />
-					</DropdownMenuPrimitive.ItemIndicator>
-				</span>
+			<span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
+				<DropdownMenuPrimitive.ItemIndicator>
+					<span className="h-2 w-2 rounded-full bg-current" />
+				</DropdownMenuPrimitive.ItemIndicator>
+			</span>
 			{children}
 		</DropdownMenuPrimitive.RadioItem>
 	);

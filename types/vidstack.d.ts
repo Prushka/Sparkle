@@ -1,6 +1,10 @@
 import type React from 'react';
 
-type VidstackElementProps = React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement> & Record<string, unknown>;
+type VidstackElementProps = React.DetailedHTMLProps<
+	React.HTMLAttributes<HTMLElement>,
+	HTMLElement
+> &
+	Record<string, unknown>;
 
 interface VidstackIntrinsicElements {
 	'media-player': VidstackElementProps;

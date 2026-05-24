@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { IconPlugConnected, IconRefresh, IconRocket } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
@@ -27,7 +27,11 @@ export function ConnectButton({
 						variant="outline"
 						onClick={onClick}
 						className={`font-bold ${
-							socketCommunicating ? 'text-green-600 hover:text-green-600' : interacted ? 'text-red-600 hover:text-red-600' : 'text-pink-600 hover:text-pink-600'
+							socketCommunicating
+								? 'text-green-600 hover:text-green-600'
+								: interacted
+									? 'text-red-600 hover:text-red-600'
+									: 'text-pink-600 hover:text-pink-600'
 						} ${className}`}
 					>
 						{socketCommunicating ? (

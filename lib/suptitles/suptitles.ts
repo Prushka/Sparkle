@@ -119,13 +119,20 @@ export default class SUPtitles {
 				this.offset += size;
 			}
 			this.timeout = setTimeout(() => {
-				PDS || this.lastPalette ? this.draw(PCS, WDS, PDS, ODS) : console.log('# SUP SKIPPING, NO PALETTE');
+				PDS || this.lastPalette
+					? this.draw(PCS, WDS, PDS, ODS)
+					: console.log('# SUP SKIPPING, NO PALETTE');
 				this.getNextSubtitle();
 			}, PCS!.base.pts - this.videoTime());
 		}
 	}
 
-	draw(PCS: PresentationCompositionSegment, WDS: WindowDefinitionSegment, PDS: PaletteDefinitionSegment, ODS: ObjectDefinitionSegment[]): void {
+	draw(
+		PCS: PresentationCompositionSegment,
+		WDS: WindowDefinitionSegment,
+		PDS: PaletteDefinitionSegment,
+		ODS: ObjectDefinitionSegment[]
+	): void {
 		if (ODS.length > 0) {
 			let first: ObjectDefinitionSegment | null;
 			ODS.map((objectSegment) => {
@@ -134,35 +141,60 @@ export default class SUPtitles {
 				} else {
 					let imgData: Uint8Array = objectSegment.imgData;
 					if (first) {
-						imgData = Uint8Array.from([...[].slice.call(first.imgData), ...[].slice.call(objectSegment.imgData)]);
+						imgData = Uint8Array.from([
+							...[].slice.call(first.imgData),
+							...[].slice.call(objectSegment.imgData)
+						]);
 					}
 					const width = first ? first.width : objectSegment.width;
 					const height = first ? first.height : objectSegment.height;
 					const object = PCS.getObjectById(first ? first.id : objectSegment.id);
 					const xOffset = object?.xOffset;
 					const yOffset = object?.yOffset;
-						const pixels = this.getPixels(imgData, PDS ? PDS.palette : this.lastPalette!, width, height);
-						this.cv[0]
-							.getContext('2d')
-							?.putImageData(new ImageData(new Uint8ClampedArray(pixels), width, height), xOffset!, yOffset!);
+					const pixels = this.getPixels(
+						imgData,
+						PDS ? PDS.palette : this.lastPalette!,
+						width,
+						height
+					);
+					this.cv[0]
+						.getContext('2d')
+						?.putImageData(
+							new ImageData(new Uint8ClampedArray(pixels), width, height),
+							xOffset!,
+							yOffset!
+						);
 					first = null;
 				}
 				return null;
 			});
 		} else {
 			WDS.windows.map((windowSegment: WindowSeg) => {
-				if (PCS.windowObjects.length === 0 || (PCS.windowObjects.length && !PCS.getObjectByWindowId(windowSegment.windowId))) {
+				if (
+					PCS.windowObjects.length === 0 ||
+					(PCS.windowObjects.length && !PCS.getObjectByWindowId(windowSegment.windowId))
+				) {
 					if (windowSegment.width > 0 && windowSegment.height > 0) {
 						try {
 							this.cv[0]
 								.getContext('2d')
-								?.putImageData(new ImageData(new Uint8ClampedArray(windowSegment.width * windowSegment.height * 4), windowSegment.width, windowSegment.height), windowSegment.xOffset, windowSegment.yOffset);
+								?.putImageData(
+									new ImageData(
+										new Uint8ClampedArray(windowSegment.width * windowSegment.height * 4),
+										windowSegment.width,
+										windowSegment.height
+									),
+									windowSegment.xOffset,
+									windowSegment.yOffset
+								);
 						} catch (error) {
 							console.error(error);
 							console.log(windowSegment);
 						}
 					} else {
-						this.cv.map((canvas) => canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height));
+						this.cv.map((canvas) =>
+							canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height)
+						);
 					}
 				}
 				return null;
@@ -170,7 +202,12 @@ export default class SUPtitles {
 		}
 	}
 
-	getPixels(imgData: Uint8Array, palette: Palette[], width: number, height: number): Uint8ClampedArray {
+	getPixels(
+		imgData: Uint8Array,
+		palette: Palette[],
+		width: number,
+		height: number
+	): Uint8ClampedArray {
 		const rgb = getRgb(palette);
 		const [pxMx1, alphaMx1] = getPxAlpha(imgData, palette);
 		const pxls = new Uint8ClampedArray(width * height * 4);

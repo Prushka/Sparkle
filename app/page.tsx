@@ -9,14 +9,18 @@ export const metadata: Metadata = {
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
-export default async function HomePage({ searchParams }: { searchParams?: SearchParams | Promise<SearchParams> }) {
+export default async function HomePage({
+	searchParams
+}: {
+	searchParams?: SearchParams | Promise<SearchParams>;
+}) {
 	await connection();
 	const resolvedSearchParams = await Promise.resolve(searchParams ?? {});
 	const data = await loadHomePageData(resolvedSearchParams, fetch);
 
 	return (
 		<div className="mt-20 flex w-full flex-col items-center justify-center gap-2 p-10">
-			<MediaSelection data={{ jobs: data.jobs }} />
+			<MediaSelection data={{ jobs: data.jobs }} staticBaseUrl={data.staticBaseUrl} />
 		</div>
 	);
 }

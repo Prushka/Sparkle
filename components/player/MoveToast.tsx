@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -13,20 +13,18 @@ export function MoveToast({
 	seconds,
 	firedBy,
 	job,
-	onClose
+	onClose,
+	staticBaseUrl
 }: {
 	historicalPlayers: Record<string, Player>;
 	seconds: number;
 	firedBy: Player;
 	job: Job | undefined;
 	onClose: () => void;
+	staticBaseUrl: string;
 }) {
 	const router = useRouter();
 	const [remaining, setRemaining] = useState(seconds);
-
-	useEffect(() => {
-		setRemaining(seconds);
-	}, [seconds]);
 
 	useEffect(() => {
 		if (remaining <= 0) {
@@ -45,13 +43,26 @@ export function MoveToast({
 		<Card className="w-full">
 			<CardHeader>
 				<CardTitle className="flex items-center">
-					{firedBy?.id ? <Pfp id={firedBy.id} className="avatar mr-2" discordUser={historicalPlayers[firedBy.id]?.discordUser} /> : null}
-					{remaining > 0 ? <span>Moving in {remaining} second{remaining > 1 ? 's' : ''}</span> : <span>Moving...</span>}
+					{firedBy?.id ? (
+						<Pfp
+							id={firedBy.id}
+							className="avatar mr-2"
+							discordUser={historicalPlayers[firedBy.id]?.discordUser}
+							staticBaseUrl={staticBaseUrl}
+						/>
+					) : null}
+					{remaining > 0 ? (
+						<span>
+							Moving in {remaining} second{remaining > 1 ? 's' : ''}
+						</span>
+					) : (
+						<span>Moving...</span>
+					)}
 				</CardTitle>
 			</CardHeader>
 			<CardContent>
 				<div className="flex w-full items-center gap-1 text-sm font-normal">
-					{job?.Title ? <TitlePoster title={job.Title} /> : null}
+					{job?.Title ? <TitlePoster title={job.Title} staticBaseUrl={staticBaseUrl} /> : null}
 					To: {job?.Input}
 				</div>
 			</CardContent>
