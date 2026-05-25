@@ -48,19 +48,26 @@ export const loadMediaPageData = cache(
 		}
 		try {
 			jobs = await getJobs(fetchFn, id);
-			job = jobs.find((candidate) => candidate.Id === id);
-			if (!job && id.length >= 4) {
-				const prefixJobs = jobs.filter((candidate) => candidate.Id.startsWith(id));
-				if (prefixJobs.length === 1) {
-					job = prefixJobs[0];
-				}
+		} catch (error) {
+			console.log({ id }, error);
+			redirect('/');
+		}
+
+		job = jobs.find((candidate) => candidate.Id === id);
+		if (!job && id.length >= 4) {
+			const prefixJobs = jobs.filter((candidate) => candidate.Id.startsWith(id));
+			if (prefixJobs.length === 1) {
+				job = prefixJobs[0];
 			}
-			if (job) {
-				id = job.Id;
-				base = `${staticBaseUrl}/${id}`;
-			} else {
-				redirect('/');
-			}
+		}
+		if (!job) {
+			redirect('/');
+		}
+
+		id = job.Id;
+		base = `${staticBaseUrl}/${id}`;
+
+		try {
 			if (!job?.EncodedCodecs?.includes('h264')) {
 				if (job?.EncodedCodecs?.includes('av1')) {
 					codec = 'av1';

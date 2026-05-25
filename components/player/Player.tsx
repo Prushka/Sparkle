@@ -1415,67 +1415,69 @@ export function Player({ data }: { data: ServerData }) {
 
 	return (
 		<>
-			{mounted ? (
-				<media-player
-					keep-alive
-					className={mediaPlayerClassName}
-					src={videoSrc?.src || undefined}
-					crossorigin
-					ref={setPlayerElement}
-					playsInline
+			<div className="relative w-full">
+				{mounted ? (
+					<media-player
+						keep-alive
+						className={mediaPlayerClassName}
+						src={videoSrc?.src || undefined}
+						crossorigin
+						ref={setPlayerElement}
+						playsInline
 						onSeeked={() => {
 							supRef.current?.seekedHandler(!playerEl?.paused);
 							supPlayingRef.current = Boolean(supRef.current && !playerEl?.paused);
 						}}
-					onSeeking={() => {
-						supRef.current?.seekingHandler();
-					}}
-					onPause={() => {
-						supRef.current?.pauseHandler();
-						supPlayingRef.current = false;
-						send({ paused: true, type: SyncTypes.PauseSync });
-						setCurrentlyWatching((value) => (value ? { ...value, paused: true } : null));
-					}}
-					onPlay={() => {
-						supRef.current?.playHandler();
-						if (supRef.current) {
-							supPlayingRef.current = true;
-						}
-						if (interactedRef.current) {
-							send({ paused: false, type: SyncTypes.PauseSync });
-							setCurrentlyWatching((value) => (value ? { ...value, paused: false } : null));
-						} else {
-							interactedRef.current = true;
-							setInteracted(true);
-							connect(true);
-						}
-					}}
-				>
-					<media-provider className="media-provider">
-						<media-poster className="vds-poster" src={data.preview}></media-poster>
-						<canvas ref={canvasRef} id="sub-canvas" className="pointer-events-none absolute" />
-					</media-provider>
-					<media-video-layout
-						color-scheme={theme}
-						thumbnails={thumbnailVttSrc}
-					></media-video-layout>
-					{controlsChat}
-				</media-player>
-			) : (
-				<div className={mediaPlayerClassName} />
-			)}
+						onSeeking={() => {
+							supRef.current?.seekingHandler();
+						}}
+						onPause={() => {
+							supRef.current?.pauseHandler();
+							supPlayingRef.current = false;
+							send({ paused: true, type: SyncTypes.PauseSync });
+							setCurrentlyWatching((value) => (value ? { ...value, paused: true } : null));
+						}}
+						onPlay={() => {
+							supRef.current?.playHandler();
+							if (supRef.current) {
+								supPlayingRef.current = true;
+							}
+							if (interactedRef.current) {
+								send({ paused: false, type: SyncTypes.PauseSync });
+								setCurrentlyWatching((value) => (value ? { ...value, paused: false } : null));
+							} else {
+								interactedRef.current = true;
+								setInteracted(true);
+								connect(true);
+							}
+						}}
+					>
+						<media-provider className="media-provider">
+							<media-poster className="vds-poster" src={data.preview}></media-poster>
+							<canvas ref={canvasRef} id="sub-canvas" className="pointer-events-none absolute" />
+						</media-provider>
+						<media-video-layout
+							color-scheme={theme}
+							thumbnails={thumbnailVttSrc}
+						></media-video-layout>
+						{controlsChat}
+					</media-player>
+				) : (
+					<div className={mediaPlayerClassName} />
+				)}
 
-			<div
-				className="pointer-events-none absolute z-50 flex h-full w-full gap-1"
-				id="chat-overlay"
-				style={chatHidden ? { display: 'none' } : undefined}
-			>
-				<Chats
-					controlsShowing={controlsShowing}
-					messagesToDisplay={messagesToDisplay}
-					historicalPlayers={historicalPlayers}
-					staticBaseUrl={data.staticBaseUrl}
-				/>
+				<div
+					className="pointer-events-none absolute inset-0 z-50 flex gap-1"
+					id="chat-overlay"
+					style={chatHidden ? { display: 'none' } : undefined}
+				>
+					<Chats
+						controlsShowing={controlsShowing}
+						messagesToDisplay={messagesToDisplay}
+						historicalPlayers={historicalPlayers}
+						staticBaseUrl={data.staticBaseUrl}
+					/>
+				</div>
 			</div>
 
 			<div className="flex w-full flex-col gap-4 p-4 font-semibold">
