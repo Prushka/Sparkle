@@ -16,3 +16,14 @@ export function getStaticBaseUrl() {
 	}
 	return staticBase;
 }
+
+export function getBrowserBackendBaseUrl(host?: string) {
+	const publicBase = trimTrailingSlash(process.env.PUBLIC_BE ?? '');
+	const serverBase = trimTrailingSlash(process.env.SERVER_BE ?? '');
+	const isLocalHost =
+		host?.startsWith('localhost') || host?.startsWith('127.0.0.1') || host?.startsWith('[::1]');
+	if (isLocalHost && /^https?:\/\//.test(serverBase)) {
+		return serverBase;
+	}
+	return publicBase;
+}

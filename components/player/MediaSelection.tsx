@@ -20,8 +20,9 @@ export const MediaSelection = forwardRef<
 		data: { jobs: Job[]; job?: Job | undefined };
 		bounceToOverride?: ((_id: string) => void) | null;
 		staticBaseUrl: string;
+		backendBaseUrl?: string;
 	}
->(function MediaSelection({ data, bounceToOverride = null, staticBaseUrl }, ref) {
+>(function MediaSelection({ data, bounceToOverride = null, staticBaseUrl, backendBaseUrl }, ref) {
 	const router = useRouter();
 	const [jobs, setJobs] = useState<Job[]>(data.jobs);
 	const [titleSelectionOpen, setTitleSelectionOpen] = useState(false);
@@ -78,7 +79,7 @@ export const MediaSelection = forwardRef<
 				onSuccess(jobs);
 				return;
 			}
-			fetch(`${PUBLIC_BE}/all`)
+			fetch(`${backendBaseUrl ?? PUBLIC_BE}/all`)
 				.then((response) => response.json())
 				.then((payload) => {
 					if (payload?.length > 0) {
@@ -88,7 +89,7 @@ export const MediaSelection = forwardRef<
 					}
 				});
 		},
-		[jobs]
+		[backendBaseUrl, jobs]
 	);
 
 	useImperativeHandle(ref, () => ({ updateList }), [updateList]);

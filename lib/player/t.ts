@@ -684,6 +684,7 @@ export interface ServerData {
 	dominantColor: string;
 	oembedJson: string;
 	staticBaseUrl: string;
+	backendBaseUrl: string;
 }
 
 export function getRealName(player: Player | undefined) {

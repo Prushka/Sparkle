@@ -2,7 +2,7 @@ import * as cheerio from 'cheerio';
 import { cache } from 'react';
 import { redirect } from 'next/navigation';
 import { getJobs, roomMapping } from '@/lib/server/jobs';
-import { getBackendBaseUrl, getStaticBaseUrl } from '@/lib/server/env';
+import { getBackendBaseUrl, getBrowserBackendBaseUrl, getStaticBaseUrl } from '@/lib/server/env';
 import type { Job, ServerData } from '@/lib/player/t';
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -12,14 +12,20 @@ function getSearchValue(searchParams: SearchParams, key: string) {
 	return Array.isArray(value) ? value[0] : value;
 }
 
-export const loadHomePageData = cache(async (searchParams: SearchParams, fetchFn: typeof fetch) => {
-	const room = getSearchValue(searchParams, 'room') || getSearchValue(searchParams, 'channel_id');
-	if (room && roomMapping[room]) {
-		redirect(`/${roomMapping[room]}?room=${room}`);
+export const loadHomePageData = cache(
+	async (searchParams: SearchParams, fetchFn: typeof fetch, host?: string) => {
+		const room = getSearchValue(searchParams, 'room') || getSearchValue(searchParams, 'channel_id');
+		if (room && roomMapping[room]) {
+			redirect(`/${roomMapping[room]}?room=${room}`);
+		}
+		const jobs = await getJobs(fetchFn);
+		return {
+			jobs,
+			staticBaseUrl: getStaticBaseUrl(),
+			backendBaseUrl: getBrowserBackendBaseUrl(host)
+		};
 	}
-	const jobs = await getJobs(fetchFn);
-	return { jobs, staticBaseUrl: getStaticBaseUrl() };
-});
+);
 
 export const loadMediaPageData = cache(
 	async (
@@ -97,7 +103,8 @@ export const loadMediaPageData = cache(
 			oembedJson: room
 				? `https://${host}/json/${job?.Id}?room=${room}`
 				: `https://${host}/json/${job?.Id}`,
-			dominantColor: job?.DominantColors?.[0] ? job.DominantColors[0] : '#EC275F'
+			dominantColor: job?.DominantColors?.[0] ? job.DominantColors[0] : '#EC275F',
+			backendBaseUrl: getBrowserBackendBaseUrl(host)
 		};
 	}
 );

@@ -237,6 +237,11 @@
 	align-self: center;
 }
 
+.chat-pc {
+	visibility: visible !important;
+	pointer-events: auto;
+}
+
 .chat-pc span {
 	font-weight: 700;
 	color: hsla(0, 0%, 100%, 0.56);
@@ -259,6 +264,24 @@
 	font-weight: 700;
 	padding-right: 4rem;
 	padding-left: 1rem;
+}
+
+.player-chat-control {
+	display: block;
+}
+
+@media (max-width: 1000px) {
+	.player-chat-control .chat-pc input {
+		margin: 0 0.75rem;
+		width: 12rem;
+	}
+}
+
+@media (max-width: 640px) {
+	.player-chat-control .chat-pc input {
+		margin: 0 0.5rem;
+		width: 8.5rem;
+	}
 }
 
 .confetti-button {
@@ -379,6 +402,13 @@ video {
 	object-fit: contain;
 }
 
+#sub-canvas,
+.JASSUB {
+	pointer-events: none;
+	position: absolute;
+	z-index: 2;
+}
+
 .chat-line {
 	width: fit-content;
 	border-radius: 0.5rem;
@@ -443,5 +473,5 @@ video {
 }
 
 .chat-controls-hidden input {
-	opacity: 0;
+	background-color: hsla(0, 0%, 10%, 0.18) !important;
 }

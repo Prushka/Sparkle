@@ -5,6 +5,7 @@ import 'vidstack/player/ui';
 import 'vidstack/player/layouts/default';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
 import { TextTrack, type MediaKeyShortcuts } from 'vidstack';
 import JASSUB from 'jassub';
@@ -80,6 +81,22 @@ type MoveToastState = {
 	job: Job | undefined;
 };
 
+type SubtitleTrackFormat = 'ass' | 'srt' | 'sup' | 'vtt';
+
+type SubtitleTrackInfo = {
+	src: string;
+	label: string;
+	kind: 'subtitles';
+	type: string;
+	language: string;
+	default: boolean;
+	format: SubtitleTrackFormat;
+};
+
+type SelectedSubtitleTrack = Pick<SubtitleTrackInfo, 'format' | 'label' | 'language' | 'src'> & {
+	mode?: TextTrackMode;
+};
+
 const PLAYER_KEY_SHORTCUTS: MediaKeyShortcuts = {
 	togglePaused: 'k Space',
 	toggleMuted: 'm',
@@ -90,6 +107,174 @@ const PLAYER_KEY_SHORTCUTS: MediaKeyShortcuts = {
 	volumeUp: 'ArrowUp',
 	volumeDown: 'ArrowDown'
 };
+
+function getSubtitleFormat(src: string): SubtitleTrackFormat {
+	const cleanSrc = src.split(/[?#]/)[0].toLowerCase();
+	if (cleanSrc.endsWith('.ass')) {
+		return 'ass';
+	}
+	if (cleanSrc.endsWith('.sup')) {
+		return 'sup';
+	}
+	if (cleanSrc.endsWith('.srt')) {
+		return 'srt';
+	}
+	return 'vtt';
+}
+
+function toArray(list: any): any[] {
+	if (!list) {
+		return [];
+	}
+	if (typeof list.toArray === 'function') {
+		return list.toArray();
+	}
+	try {
+		return Array.from(list);
+		} catch {
+			return [];
+		}
+	}
+
+function getPublicAssetUrl(src: string) {
+	if (/^(https?:)?\/\//.test(src) || src.startsWith('/')) {
+		return src;
+	}
+	return `/scripts/${src}`;
+}
+
+function findSubtitleTrack(
+	tracks: SubtitleTrackInfo[],
+	track:
+		| (Partial<Pick<SubtitleTrackInfo, 'label' | 'language' | 'src'>> & { id?: string })
+		| null
+		| undefined
+) {
+	if (!track) {
+		return null;
+	}
+	if (track.src) {
+		const matchingSrc = tracks.find((candidate) => candidate.src === track.src);
+		if (matchingSrc) {
+			return matchingSrc;
+		}
+	}
+	if (track.id) {
+		const matchingId = tracks.find((candidate) => candidate.src === track.id);
+		if (matchingId) {
+			return matchingId;
+		}
+	}
+	return (
+		tracks.find(
+			(candidate) => candidate.label === track.label && candidate.language === track.language
+		) || null
+	);
+}
+
+function selectedFromVidstackTrack(
+	track: any,
+	tracks: SubtitleTrackInfo[] = []
+): SelectedSubtitleTrack | null {
+	const matchingTrack = findSubtitleTrack(tracks, track);
+	if (matchingTrack) {
+		return {
+			...matchingTrack,
+			mode: track?.mode
+		};
+	}
+	if (!track?.src) {
+		return null;
+	}
+	return {
+		src: track.src,
+		label: track.label || '',
+		language: track.language || '',
+		format: getSubtitleFormat(track.src),
+		mode: track.mode
+	};
+}
+
+function getSelectedSubtitleTrack(
+	player: any,
+	video: HTMLVideoElement | null,
+	tracks: SubtitleTrackInfo[],
+	requestedTrack: SelectedSubtitleTrack | null = null
+): SelectedSubtitleTrack | null {
+	if (requestedTrack) {
+		return requestedTrack;
+	}
+
+	const directSelected = selectedFromVidstackTrack(player?.textTracks?.selected, tracks);
+	if (directSelected) {
+		return directSelected;
+	}
+
+	const showingTrack = toArray(player?.textTracks).find((track) => track?.mode === 'showing');
+	const selectedFromList = selectedFromVidstackTrack(showingTrack, tracks);
+	if (selectedFromList) {
+		return selectedFromList;
+	}
+
+	const captionsButton = player?.querySelector?.('media-caption-button');
+	const defaultSelected = () =>
+		captionsButton?.getAttribute('aria-pressed') === 'true'
+			? tracks.find((track) => track.default) || tracks[0] || null
+			: null;
+
+	if (!video?.textTracks) {
+		return defaultSelected();
+	}
+	const nativeShowing = Array.from(video.textTracks).find((track) => track.mode === 'showing');
+	if (!nativeShowing) {
+		return defaultSelected();
+	}
+	const matchingTrack = findSubtitleTrack(tracks, nativeShowing);
+	return matchingTrack ? { ...matchingTrack, mode: nativeShowing.mode } : defaultSelected();
+}
+
+function getLatestMessageTimestamp(messages: Chat[]) {
+	for (let i = messages.length - 1; i >= 0; i--) {
+		if (!messages[i].isStateUpdate) {
+			return messages[i].timestamp;
+		}
+	}
+	return 0;
+}
+
+function joinBackendPath(base: string, path: string) {
+	if (!base) {
+		return path.startsWith('/') ? path : `/${path}`;
+	}
+	return `${base.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
+}
+
+function getBackendWebSocketUrl(base: string, path: string) {
+	const fullPath = joinBackendPath(base, path);
+	if (/^https?:\/\//.test(fullPath)) {
+		const url = new URL(fullPath);
+		url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+		return url.toString();
+	}
+	const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+	return `${wsProtocol}//${window.location.host}${fullPath}`;
+}
+
+async function waitForTextTracks(player: any) {
+	try {
+		await window.customElements?.whenDefined('media-player');
+	} catch (error) {
+		console.log(error);
+	}
+	for (let i = 0; i < 60; i++) {
+		const textTracks = player?.textTracks;
+		if (textTracks?.add) {
+			return textTracks;
+		}
+		await new Promise((resolve) => window.setTimeout(resolve, 50));
+	}
+	return null;
+}
 
 export function Player({ data }: { data: ServerData }) {
 	const { job } = data;
@@ -106,22 +291,33 @@ export function Player({ data }: { data: ServerData }) {
 		updatePfp,
 		discordAuth
 	} = useAppState();
-	const { theme, setTheme } = useTheme();
-	const [playerEl, setPlayerEl] = useState<any>(null);
-	const socketRef = useRef<WebSocket | null>(null);
+		const { theme, setTheme } = useTheme();
+		const playerElementRef = useRef<any>(null);
+		const socketRef = useRef<WebSocket | null>(null);
+		const socketUrlRef = useRef<string | null>(null);
+		const reconnectTimerRef = useRef<number | null>(null);
+		const connectRef = useRef<((_forceInteracted?: boolean) => void) | null>(null);
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
+	const chatMountRef = useRef<HTMLDivElement | null>(null);
 	const mediaSelectionRef = useRef<MediaSelectionHandle | null>(null);
 	const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
 	const supRef = useRef<SUPtitles | null>(null);
+	const supPlayingRef = useRef(false);
 	const jasRef = useRef<any>(null);
 	const fontsRef = useRef<string[]>([]);
+	const subtitleTracksRef = useRef<SubtitleTrackInfo[]>([]);
+	const selectedSubtitleTrackRef = useRef<SelectedSubtitleTrack | null>(null);
 	const prevTrackSrcRef = useRef<string | null>('');
 	const lastTickedRef = useRef(0);
 	const lastSentTimeRef = useRef(-100);
 	const inBgRef = useRef(false);
 	const exitedRef = useRef(false);
+	const interactedRef = useRef(interacted);
 	const chatFocusedSecsRef = useRef(0);
 	const volumeInitializedRef = useRef(false);
+	const [mounted, setMounted] = useState(false);
+	const [playerEl, setPlayerEl] = useState<any>(null);
+	const [chatMountNode, setChatMountNode] = useState<HTMLDivElement | null>(null);
 	const [controlsShowing, setControlsShowing] = useState(false);
 	const [socketConnected, setSocketConnected] = useState(false);
 	const [roomPlayers, setRoomPlayers] = useState<RoomPlayer[]>([]);
@@ -138,11 +334,13 @@ export function Player({ data }: { data: ServerData }) {
 	const [name, setName] = useState('');
 	const [playerId, setPlayerId] = useState('');
 	const [initialVolume] = useState(() => setGetLsNumber('volume', 1));
+	const [renderNow, setRenderNow] = useState(0);
 	const BASE_STATIC = `${data.staticBaseUrl}/${job.Id}`;
 	const [tickedSecsAgo, setTickedSecsAgo] = useState(-1);
 	const [tickedSecsAgoStr, setTickedSecsAgoStr] = useState('0.00');
 	const [chatFocusedSecs, setChatFocusedSecs] = useState(0);
 	const thumbnailVttSrc = `${data.staticBaseUrl}/${job.Id}/storyboard.vtt`;
+	const backendBaseUrl = data.backendBaseUrl || PUBLIC_BE;
 	const roomBase = searchParams.get('room') || searchParams.get('channel_id') || '';
 	const room = roomBase ? `${roomBase}${job.Id}` : job.Id;
 	const discord = discordAuth as Discord | null;
@@ -185,10 +383,22 @@ export function Player({ data }: { data: ServerData }) {
 	const effectiveAudio = videoSrc?.audio || selectedAudio;
 	const autoCodec =
 		videoSrc?.sCodec && selectedCodec === 'auto' ? `(${codecDisplayMap[videoSrc.sCodec]})` : '';
-	const chatHidden = chatLayout === 'hide';
+		const chatHidden = chatLayout === 'hide';
+		const setPlayerElement = useCallback((element: any | null) => {
+			playerElementRef.current = element;
+			setPlayerEl(element);
+		}, []);
+
+		const clearReconnectTimer = useCallback(() => {
+			if (reconnectTimerRef.current === null) {
+				return;
+			}
+			window.clearTimeout(reconnectTimerRef.current);
+			reconnectTimerRef.current = null;
+		}, []);
 
 	const messagesToDisplay = (() => {
-		let nextMessages = roomMessages.filter((message) => Date.now() - message.timestamp < 140000);
+		let nextMessages = roomMessages.filter((message) => renderNow - message.timestamp < 140000);
 		if (playerEl?.clientHeight < 250) {
 			nextMessages = nextMessages.slice(-4);
 		} else if (playerEl?.clientHeight < 450) {
@@ -199,7 +409,7 @@ export function Player({ data }: { data: ServerData }) {
 			nextMessages = nextMessages.slice(-10);
 		}
 		for (const control of controlsToDisplay) {
-			if (control.firedBy && Date.now() - control.timestamp < 8000) {
+			if (control.firedBy && renderNow - control.timestamp < 8000) {
 				nextMessages = nextMessages.concat({
 					uid: control.firedBy.id,
 					message:
@@ -243,6 +453,25 @@ export function Player({ data }: { data: ServerData }) {
 	})();
 
 	useEffect(() => {
+		const timer = window.setTimeout(() => setMounted(true), 0);
+		return () => window.clearTimeout(timer);
+	}, []);
+
+	useEffect(() => {
+		interactedRef.current = interacted;
+	}, [interacted]);
+
+	useEffect(() => {
+		const update = () => setRenderNow(Date.now());
+		const timer = window.setTimeout(update, 0);
+		const interval = window.setInterval(update, 1000);
+		return () => {
+			window.clearTimeout(timer);
+			window.clearInterval(interval);
+		};
+	}, []);
+
+	useEffect(() => {
 		setCurrentlyWatching({
 			id: job.Id,
 			title: job.Title.title,
@@ -268,12 +497,16 @@ export function Player({ data }: { data: ServerData }) {
 		if (!playerEl || typeof customElements === 'undefined') {
 			return;
 		}
+		const player = playerElementRef.current;
+		if (!player) {
+			return;
+		}
 		let cancelled = false;
 		customElements
 			.whenDefined('media-player')
 			.then(() => {
 				if (!cancelled) {
-					playerEl.keyShortcuts = PLAYER_KEY_SHORTCUTS;
+					player.keyShortcuts = PLAYER_KEY_SHORTCUTS;
 				}
 			})
 			.catch((error) => console.log(error));
@@ -408,20 +641,30 @@ export function Player({ data }: { data: ServerData }) {
 		notificationAudioRef.current = notificationAudio;
 	}, []);
 
-	const send = useCallback(
-		(data: any) => {
-			if (playerEl && socketConnected && interacted) {
-				console.log('sending: ' + JSON.stringify(data));
-				socketRef.current?.send(JSON.stringify(data));
-			}
-		},
-		[interacted, playerEl, socketConnected]
-	);
+	const send = useCallback((data: any) => {
+		const socket = socketRef.current;
+		if (
+			playerElementRef.current &&
+			interactedRef.current &&
+			socket?.readyState === WebSocket.OPEN
+		) {
+			console.log('sending: ' + JSON.stringify(data));
+			socket.send(JSON.stringify(data));
+		}
+	}, []);
 
 	const sendSettings = useCallback(() => {
+		const selectedTrack = getSelectedSubtitleTrack(
+			playerEl,
+			typeof document === 'undefined'
+				? null
+				: (document.querySelector('media-provider video') as HTMLVideoElement | null),
+			subtitleTracksRef.current,
+			selectedSubtitleTrackRef.current
+		);
 		send({
 			type: SyncTypes.SubtitleSwitch,
-			subtitle: playerEl?.textTracks?.selected?.src
+			subtitle: selectedTrack?.src
 		});
 		send({
 			type: SyncTypes.AudioSwitch,
@@ -437,8 +680,12 @@ export function Player({ data }: { data: ServerData }) {
 		if (!playerEl || !videoSrc) {
 			return;
 		}
-		playerEl.title = job.Input;
-		playerEl.artist = "Let's watch anime!";
+		const player = playerElementRef.current;
+		if (!player) {
+			return;
+		}
+		player.title = job.Input;
+		player.artist = "Let's watch anime!";
 		sendSettings();
 	}, [job.Input, playerEl, sendSettings, videoSrc]);
 
@@ -451,34 +698,35 @@ export function Player({ data }: { data: ServerData }) {
 			if (supRef.current != null) {
 				supRef.current.dispose();
 				supRef.current = null;
+				supPlayingRef.current = false;
 			}
 			if (jasRef.current != null) {
 				jasRef.current.destroy();
 				jasRef.current = null;
 			}
-			canvasRef.current
-				?.getContext('2d')
-				?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+			const canvas = canvasRef.current;
+			canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
 		};
 
 		const setupTracks = async () => {
-			try {
-				await customElements.whenDefined('media-player');
-			} catch (error) {
-				console.log(error);
-			}
 			if (cancelled) {
 				return;
 			}
-			const player = playerEl as any;
-			const textTracks = player?.textTracks;
-			if (!textTracks?.add) {
+			const player = playerElementRef.current;
+			if (!player) {
+				return;
+			}
+			const textTracks = await waitForTextTracks(player);
+			if (cancelled || !textTracks) {
 				return;
 			}
 			if (typeof textTracks.clear === 'function') {
 				textTracks.clear();
 			}
 			const fonts: string[] = [];
+			const subtitleTracks: SubtitleTrackInfo[] = [];
+			selectedSubtitleTrackRef.current = null;
+			prevTrackSrcRef.current = '';
 			if (job.Streams) {
 				const sortedJob = { ...job, Streams: [...job.Streams] };
 				sortedJob.Streams = sortTracks(sortedJob);
@@ -491,27 +739,39 @@ export function Player({ data }: { data: ServerData }) {
 							}
 							break;
 						case 'subtitle':
-							textTracks.add({
-								src: `${BASE_STATIC}/${stream.Location}`,
+							const src = `${BASE_STATIC}/${stream.Location}`;
+							const format = getSubtitleFormat(src);
+							const track: SubtitleTrackInfo = {
+								src,
 								label: formatPair(stream, true, true),
 								kind: 'subtitles',
-								type:
-									stream.Location.slice(-3) === 'vtt'
-										? 'vtt'
-										: stream.Location.slice(-3) === 'ass'
-											? 'asshuh'
-											: stream.Location.slice(-3) === 'sup'
-												? 'sup'
-												: 'srt',
+								type: format === 'ass' ? 'asshuh' : format,
 								language: languageSrcMap[stream.Language] || stream.Language,
-								default: !defaulted
-							});
+								default: !defaulted,
+								format
+							};
+							subtitleTracks.push(track);
+							const shouldRenderTrackNatively = format === 'vtt' || format === 'srt';
+							textTracks.add(
+								new TextTrack(
+									shouldRenderTrackNatively
+										? (track as any)
+										: {
+												id: src,
+												label: track.label,
+												kind: track.kind,
+												language: track.language,
+												default: track.default
+											}
+								)
+							);
 							defaulted = true;
 							break;
 					}
 				}
 			}
 			fontsRef.current = fonts;
+			subtitleTracksRef.current = subtitleTracks;
 			if (job.Chapters && job.Chapters.length > 0) {
 				const track = new TextTrack({
 					kind: 'chapters',
@@ -536,189 +796,27 @@ export function Player({ data }: { data: ServerData }) {
 		};
 	}, [BASE_STATIC, job, playerEl]);
 
-	function connect() {
-		if (!interacted || !playerEl) {
+	const updateLastTicked = useCallback(
+		(resetTimer = false) => {
+			if (resetTimer) {
+				lastTickedRef.current = Date.now();
+			}
+			const nextTickedSecsAgo =
+				socketConnected && roomPlayers.length > 0
+					? (Date.now() - lastTickedRef.current) / 1000
+					: -1;
+			setTickedSecsAgo(nextTickedSecsAgo);
+			setTickedSecsAgoStr((Math.round(nextTickedSecsAgo * 100) / 100).toFixed(2));
+		},
+		[roomPlayers.length, socketConnected]
+	);
+
+	const updateTime = useCallback(() => {
+		const player = playerElementRef.current;
+		if (!player) {
 			return;
 		}
-		const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-		const socket = new WebSocket(
-			`${wsProtocol}//${window.location.host}${PUBLIC_BE}/sync/${room}/${playerId}`
-		);
-		socketRef.current = socket;
-		console.log(`Socket, connecting to ${room}`);
-		socket.onopen = () => {
-			console.log(`Socket, connected to ${room}`);
-			setSocketConnected(true);
-			if (displayName !== '') {
-				send({
-					name: displayName,
-					type: SyncTypes.ProfileSync,
-					discordUser: discord?.user
-				});
-			}
-			send({ type: SyncTypes.NewPlayer });
-			sendSettings();
-			updateLastTicked(true);
-		};
-
-		socket.onmessage = (event: MessageEvent) => {
-			const state: SendPayload = JSON.parse(event.data);
-			const broadcast = state.broadcast;
-			const persistControlState = (payload: any) => {
-				if (payload.firedBy !== undefined) {
-					setControlsToDisplay((prev) => [...prev, payload]);
-				}
-			};
-			if (playerEl) {
-				console.debug('received: ' + JSON.stringify(state));
-				const initiateMoveTo = (jobs: Job[]) => {
-					setMoveToast({
-						seconds: moveSeconds,
-						job: jobs.find((candidate: Job) => candidate.Id === broadcast!.moveTo),
-						firedBy: state.firedBy!
-					});
-					const target = jobs.find((candidate) => candidate.Id === state.broadcast!.moveTo);
-					state.moveToText =
-						target?.Title.title + (target?.Title?.episode ? ` ${target.Title.episode.se}` : '');
-					setControlsToDisplay((prev) => [...prev, state]);
-				};
-				switch (state.type) {
-					case SyncTypes.PfpSync:
-						if (state.firedBy?.id) {
-							updatePfp(state.firedBy.id);
-						}
-						break;
-					case SyncTypes.ChatSync:
-						setRoomMessages((prev) => {
-							if (
-								inBgRef.current &&
-								getLatestMessageTimestamp(prev) !== state.chats[state.chats.length - 1]?.timestamp
-							) {
-								notificationAudioRef.current?.play().catch(() => {});
-							}
-							return state.chats;
-						});
-						break;
-					case SyncTypes.PlayersStatusSync:
-						setRoomPlayers((prev) => {
-							if (prev.length > 0) {
-								const { left, joined } = getLeftAndJoined(prev, state.players, playerId);
-								for (const player of left) {
-									setControlsToDisplay((controls) => [
-										...controls,
-										{
-											...state,
-											type: SyncTypes.PlayerLeft,
-											firedBy: player
-										}
-									]);
-								}
-								for (const player of joined) {
-									setControlsToDisplay((controls) => [
-										...controls,
-										{
-											...state,
-											type: SyncTypes.PlayerJoined,
-											firedBy: player
-										}
-									]);
-								}
-							}
-							return state.players;
-						});
-						setHistoricalPlayers((prev) => {
-							const next = { ...prev };
-							for (const player of state.players) {
-								if (!next[player.id] || next[player.id].name !== player.name) {
-									next[player.id] = player;
-								}
-							}
-							return next;
-						});
-						updateLastTicked(true);
-						setCurrentlyWatching((value) => {
-							if (value) {
-								return { ...value, roomPlayers: state.players.length };
-							}
-							return null;
-						});
-						break;
-					case SyncTypes.PauseSync:
-						if (state.paused === true && playerEl.paused === false) {
-							playerEl.pause();
-							persistControlState(state);
-						} else if (
-							state.paused === false &&
-							playerEl.paused === true &&
-							(!inBgRef.current || (inBgRef.current && roomPlayers.length > 1))
-						) {
-							playerEl.play();
-							persistControlState(state);
-						}
-						break;
-					case SyncTypes.TimeSync:
-						if (state.time !== undefined && Math.abs(playerEl.currentTime - state.time) > 3) {
-							playerEl.currentTime = state.time;
-							persistControlState(state);
-						}
-						break;
-					case SyncTypes.BroadcastSync:
-						switch (broadcast?.type) {
-							case BroadcastTypes.MoveTo:
-								mediaSelectionRef.current?.updateList(broadcast.moveTo, (jobs: Job[]) => {
-									initiateMoveTo(jobs);
-								});
-								break;
-						}
-						break;
-					case SyncTypes.ExitSync:
-						setExited(true);
-						exitedRef.current = true;
-						setInteracted(false);
-						setPageReloadCounter((value) => value + 1);
-						break;
-				}
-			}
-		};
-
-		socket.onerror = (event) => {
-			console.error('Socket encountered error: ', event);
-			socket.close();
-		};
-
-		socket.onclose = () => {
-			console.log(`Socket closed, ${room}`);
-			setSocketConnected(false);
-			if (!exitedRef.current) {
-				window.setTimeout(() => {
-					console.log(`Socket reconnecting, ${room}`);
-					connect();
-				}, 1000);
-			}
-		};
-	}
-
-	function getLatestMessageTimestamp(messages: Chat[]) {
-		for (let i = messages.length - 1; i >= 0; i--) {
-			if (!messages[i].isStateUpdate) {
-				return messages[i].timestamp;
-			}
-		}
-		return 0;
-	}
-
-	function updateLastTicked(resetTimer = false) {
-		if (resetTimer) {
-			lastTickedRef.current = Date.now();
-		}
-		const nextTickedSecsAgo =
-			socketConnected && roomPlayers.length > 0 ? (Date.now() - lastTickedRef.current) / 1000 : -1;
-		setTickedSecsAgo(nextTickedSecsAgo);
-		setTickedSecsAgoStr((Math.round(nextTickedSecsAgo * 100) / 100).toFixed(2));
-	}
-
-	function updateTime() {
-		const timeRounded = Math.ceil(playerEl.currentTime);
+		const timeRounded = Math.ceil(player.currentTime);
 		if (lastSentTimeRef.current !== timeRounded) {
 			send({
 				type: SyncTypes.TimeSync,
@@ -736,7 +834,292 @@ export function Player({ data }: { data: ServerData }) {
 				return null;
 			});
 		}
-	}
+	}, [job.Duration, send, setCurrentlyWatching]);
+
+		const connect = useCallback(
+			(forceInteracted = false) => {
+				const player = playerElementRef.current;
+				if ((!forceInteracted && !interactedRef.current) || !player || !playerId) {
+					return;
+				}
+				const socketUrl = getBackendWebSocketUrl(backendBaseUrl, `/sync/${room}/${playerId}`);
+				const existingSocket = socketRef.current;
+				if (
+					existingSocket &&
+					socketUrlRef.current === socketUrl &&
+					(existingSocket.readyState === WebSocket.CONNECTING ||
+						existingSocket.readyState === WebSocket.OPEN)
+				) {
+					return;
+				}
+				clearReconnectTimer();
+				if (existingSocket && existingSocket.readyState !== WebSocket.CLOSED) {
+					existingSocket.onopen = null;
+					existingSocket.onmessage = null;
+					existingSocket.onerror = null;
+					existingSocket.onclose = null;
+					existingSocket.close();
+				}
+				interactedRef.current = true;
+				exitedRef.current = false;
+				setInteracted(true);
+				setExited(false);
+				const socket = new WebSocket(socketUrl);
+				socketRef.current = socket;
+				socketUrlRef.current = socketUrl;
+				console.log(`Socket, connecting to ${room}`);
+				socket.onopen = () => {
+					if (socketRef.current !== socket) {
+						socket.close();
+						return;
+					}
+					console.log(`Socket, connected to ${room}`);
+					setSocketConnected(true);
+				if (displayName !== '') {
+					send({
+						name: displayName,
+						type: SyncTypes.ProfileSync,
+						discordUser: discord?.user
+					});
+				}
+				send({ type: SyncTypes.NewPlayer });
+				sendSettings();
+				updateLastTicked(true);
+				};
+
+				socket.onmessage = (event: MessageEvent) => {
+					if (socketRef.current !== socket) {
+						return;
+					}
+					const state: SendPayload = JSON.parse(event.data);
+				const broadcast = state.broadcast;
+				const persistControlState = (payload: any) => {
+					if (payload.firedBy !== undefined) {
+						setControlsToDisplay((prev) => [...prev, payload]);
+					}
+				};
+				if (player) {
+					console.debug('received: ' + JSON.stringify(state));
+					const initiateMoveTo = (jobs: Job[]) => {
+						setMoveToast({
+							seconds: moveSeconds,
+							job: jobs.find((candidate: Job) => candidate.Id === broadcast!.moveTo),
+							firedBy: state.firedBy!
+						});
+						const target = jobs.find((candidate) => candidate.Id === state.broadcast!.moveTo);
+						state.moveToText =
+							target?.Title.title + (target?.Title?.episode ? ` ${target.Title.episode.se}` : '');
+						setControlsToDisplay((prev) => [...prev, state]);
+					};
+					switch (state.type) {
+						case SyncTypes.PfpSync:
+							if (state.firedBy?.id) {
+								updatePfp(state.firedBy.id);
+							}
+							break;
+						case SyncTypes.ChatSync:
+							setRoomMessages((prev) => {
+								if (
+									inBgRef.current &&
+									getLatestMessageTimestamp(prev) !== state.chats[state.chats.length - 1]?.timestamp
+								) {
+									notificationAudioRef.current?.play().catch(() => {});
+								}
+								return state.chats;
+							});
+							break;
+						case SyncTypes.PlayersStatusSync:
+							setRoomPlayers((prev) => {
+								if (prev.length > 0) {
+									const { left, joined } = getLeftAndJoined(prev, state.players, playerId);
+									for (const player of left) {
+										setControlsToDisplay((controls) => [
+											...controls,
+											{
+												...state,
+												type: SyncTypes.PlayerLeft,
+												firedBy: player
+											}
+										]);
+									}
+									for (const player of joined) {
+										setControlsToDisplay((controls) => [
+											...controls,
+											{
+												...state,
+												type: SyncTypes.PlayerJoined,
+												firedBy: player
+											}
+										]);
+									}
+								}
+								return state.players;
+							});
+							setHistoricalPlayers((prev) => {
+								const next = { ...prev };
+								for (const player of state.players) {
+									if (!next[player.id] || next[player.id].name !== player.name) {
+										next[player.id] = player;
+									}
+								}
+								return next;
+							});
+							updateLastTicked(true);
+							setCurrentlyWatching((value) => {
+								if (value) {
+									return { ...value, roomPlayers: state.players.length };
+								}
+								return null;
+							});
+							break;
+						case SyncTypes.PauseSync:
+							if (state.paused === true && player.paused === false) {
+								player.pause();
+								persistControlState(state);
+							} else if (
+								state.paused === false &&
+								player.paused === true &&
+								(!inBgRef.current || (inBgRef.current && roomPlayers.length > 1))
+							) {
+								player.play();
+								persistControlState(state);
+							}
+							break;
+						case SyncTypes.TimeSync:
+							if (state.time !== undefined && Math.abs(player.currentTime - state.time) > 3) {
+								player.currentTime = state.time;
+								persistControlState(state);
+							}
+							break;
+						case SyncTypes.BroadcastSync:
+							switch (broadcast?.type) {
+								case BroadcastTypes.MoveTo:
+									mediaSelectionRef.current?.updateList(broadcast.moveTo, (jobs: Job[]) => {
+										initiateMoveTo(jobs);
+									});
+									break;
+							}
+							break;
+						case SyncTypes.ExitSync:
+							setExited(true);
+							exitedRef.current = true;
+							setInteracted(false);
+							setPageReloadCounter((value) => value + 1);
+							break;
+					}
+				}
+				};
+
+				socket.onerror = (event) => {
+					if (socketRef.current !== socket) {
+						return;
+					}
+					console.error('Socket encountered error: ', event);
+					socket.close();
+				};
+
+				socket.onclose = () => {
+					if (socketRef.current !== socket) {
+						return;
+					}
+					console.log(`Socket closed, ${room}`);
+					setSocketConnected(false);
+					socketRef.current = null;
+					socketUrlRef.current = null;
+					if (!exitedRef.current && interactedRef.current) {
+						clearReconnectTimer();
+						reconnectTimerRef.current = window.setTimeout(() => {
+							reconnectTimerRef.current = null;
+							if (socketRef.current || exitedRef.current || !interactedRef.current) {
+								return;
+							}
+							console.log(`Socket reconnecting, ${room}`);
+							connectRef.current?.(true);
+						}, 1000);
+				}
+			};
+		},
+			[
+				backendBaseUrl,
+				clearReconnectTimer,
+				discord?.user,
+				displayName,
+				playerId,
+			room,
+			roomPlayers.length,
+			send,
+			sendSettings,
+			setCurrentlyWatching,
+			setInteracted,
+			setPageReloadCounter,
+			updateLastTicked,
+			updatePfp
+		]
+	);
+
+		useEffect(() => {
+			connectRef.current = connect;
+		}, [connect]);
+
+		useEffect(() => {
+			return () => {
+				clearReconnectTimer();
+				exitedRef.current = true;
+				const socket = socketRef.current;
+				socketRef.current = null;
+				socketUrlRef.current = null;
+				if (socket && socket.readyState !== WebSocket.CLOSED) {
+					socket.onopen = null;
+					socket.onmessage = null;
+					socket.onerror = null;
+					socket.onclose = null;
+					socket.close();
+				}
+			};
+		}, [clearReconnectTimer]);
+
+	useEffect(() => {
+		if (!playerEl) {
+			return;
+		}
+
+		const setSelectedSubtitleTrack = (track: any, mode?: TextTrackMode) => {
+			const nextTrack = selectedFromVidstackTrack(track, subtitleTracksRef.current);
+			const nextMode = mode ?? track?.mode;
+			selectedSubtitleTrackRef.current =
+				nextTrack && (!nextMode || nextMode === 'showing') ? nextTrack : null;
+		};
+
+		const handleTextTrackChange = (event: Event) => {
+			setSelectedSubtitleTrack((event as CustomEvent).detail);
+		};
+
+		const handleTextTrackChangeRequest = (event: Event) => {
+			const detail = (event as CustomEvent).detail;
+			if (detail?.mode !== 'showing') {
+				selectedSubtitleTrackRef.current = null;
+				return;
+			}
+			const requestedTrack =
+				typeof detail.index === 'number'
+					? subtitleTracksRef.current[detail.index] || playerEl.textTracks?.[detail.index]
+					: null;
+			setSelectedSubtitleTrack(requestedTrack, detail.mode);
+		};
+
+		playerEl.addEventListener?.('text-track-change', handleTextTrackChange);
+		playerEl.addEventListener?.('media-text-track-change-request', handleTextTrackChangeRequest);
+		playerEl.textTracks?.addEventListener?.('mode-change', handleTextTrackChange);
+
+		return () => {
+			playerEl.removeEventListener?.('text-track-change', handleTextTrackChange);
+			playerEl.removeEventListener?.(
+				'media-text-track-change-request',
+				handleTextTrackChangeRequest
+			);
+			playerEl.textTracks?.removeEventListener?.('mode-change', handleTextTrackChange);
+		};
+	}, [playerEl]);
 
 	useEffect(() => {
 		if (!playerEl) {
@@ -796,11 +1179,18 @@ export function Player({ data }: { data: ServerData }) {
 			const videoElement = document.querySelector(
 				'media-provider video'
 			) as HTMLVideoElement | null;
-			const selectedTrack = player.textTracks?.selected;
-			if (videoElement && prevTrackSrcRef.current !== selectedTrack?.src) {
+			const selectedTrack = getSelectedSubtitleTrack(
+				player,
+				videoElement,
+				subtitleTracksRef.current,
+				selectedSubtitleTrackRef.current
+			);
+			const selectedTrackSrc = selectedTrack?.src || '';
+			if (videoElement && prevTrackSrcRef.current !== selectedTrackSrc) {
 				if (supRef.current) {
 					supRef.current.dispose();
 					supRef.current = null;
+					supPlayingRef.current = false;
 				}
 				if (jasRef.current) {
 					jasRef.current.destroy();
@@ -811,42 +1201,65 @@ export function Player({ data }: { data: ServerData }) {
 					?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
 				send({ type: SyncTypes.SubtitleSwitch, subtitle: selectedTrack?.src });
 				if (selectedTrack?.src) {
-					const ext = selectedTrack.src.slice(-4);
-					if (ext.includes('sup')) {
+					if (selectedTrack.format === 'sup') {
 						fetch(selectedTrack.src)
-							.then((response) => response.arrayBuffer())
+							.then((response) => {
+								if (!response.ok) {
+									throw new Error(`Failed to load SUP subtitles: ${response.status}`);
+								}
+								return response.arrayBuffer();
+							})
 							.then((buffer) => {
 								const file = new Uint8Array(buffer);
-								supRef.current = new SUPtitles(
-									canvasRef.current!,
-									file,
-									() => player.currentTime * 1000
-								);
-								if (!player.paused) {
-									supRef.current.playHandler();
+								if (!canvasRef.current) {
+									return;
 								}
+								supRef.current = new SUPtitles(canvasRef.current, file, () => {
+									return videoElement.currentTime * 1000;
+								});
+								supPlayingRef.current = false;
+								if (!videoElement.paused) {
+									supRef.current.playHandler();
+									supPlayingRef.current = true;
+								}
+							})
+							.catch((error) => {
+								console.error(error);
 							});
-					} else if (ext.includes('ass')) {
-						const fallback = fallbackFontsMap[selectedTrack.language]
-							? fallbackFontsMap[selectedTrack.language]
-							: defaultFallback;
-						const availableFonts = {
-							[fallback[0]]: fallback[1]
-						};
-						jasRef.current = new JASSUB({
-							video: videoElement,
-							canvas: canvasRef.current!,
-							subUrl: selectedTrack.src,
-							offscreenRender: true,
-							workerUrl: '/scripts/jassub-worker.js',
-							wasmUrl: '/scripts/jassub-worker.wasm',
-							fallbackFont: fallback[0],
-							availableFonts,
-							fonts: [...fontsRef.current, fallback[1]]
-						} as any);
+						} else if (selectedTrack.format === 'ass') {
+							const fallback = fallbackFontsMap[selectedTrack.language]
+								? fallbackFontsMap[selectedTrack.language]
+								: defaultFallback;
+							const fallbackFontUrl = getPublicAssetUrl(fallback[1]);
+							const availableFonts = {
+								[fallback[0]]: fallbackFontUrl
+							};
+							jasRef.current = new JASSUB({
+								video: videoElement,
+								subUrl: selectedTrack.src,
+								fallbackFont: fallback[0],
+								defaultFont: fallback[0],
+								availableFonts,
+								fonts: [...fontsRef.current, fallbackFontUrl],
+								queryFonts: false
+							} as any);
+							jasRef.current.ready?.catch((error: unknown) => {
+								console.error('Failed to initialize ASS subtitles:', error);
+							});
+						}
 					}
+				prevTrackSrcRef.current = selectedTrackSrc;
+			}
+			if (videoElement && selectedTrack?.format === 'sup' && supRef.current) {
+				if (videoElement.paused) {
+					if (supPlayingRef.current) {
+						supRef.current.pauseHandler();
+						supPlayingRef.current = false;
+					}
+				} else if (!supPlayingRef.current) {
+					supRef.current.playHandler();
+					supPlayingRef.current = true;
 				}
-				prevTrackSrcRef.current = selectedTrack?.src;
 			}
 			if (chatFocused) {
 				chatFocusedSecsRef.current += 1;
@@ -890,6 +1303,46 @@ export function Player({ data }: { data: ServerData }) {
 	]);
 
 	useEffect(() => {
+		if (!playerEl) {
+			return;
+		}
+		const ensureChatMount = () => {
+			if (chatMountRef.current?.isConnected) {
+				return;
+			}
+			const anchor =
+				playerEl.querySelector?.('media-caption-button') ||
+				playerEl.querySelector?.('media-title') ||
+				playerEl.querySelector?.('media-chapter-title') ||
+				document.querySelector('media-caption-button') ||
+				document.querySelector('media-title') ||
+				document.querySelector('media-chapter-title');
+			if (!anchor?.parentNode) {
+				return;
+			}
+			const container = document.createElement('div');
+			container.className = 'player-chat-control';
+			container.dataset.playerChatMount = 'true';
+			anchor.parentNode.insertBefore(
+				container,
+				anchor.matches?.('media-caption-button') ? anchor : anchor.nextSibling
+			);
+			chatMountRef.current = container;
+			setChatMountNode(container);
+		};
+
+		ensureChatMount();
+		const interval = window.setInterval(ensureChatMount, 500);
+
+		return () => {
+			window.clearInterval(interval);
+			chatMountRef.current?.remove();
+			chatMountRef.current = null;
+			setChatMountNode(null);
+		};
+	}, [playerEl]);
+
+	useEffect(() => {
 		if (discordAuth?.user) {
 			setInteracted(true);
 		}
@@ -922,37 +1375,96 @@ export function Player({ data }: { data: ServerData }) {
 		});
 	}
 
+	function handleJoinWatchRoom() {
+		if (socketCommunicating) {
+			return;
+		}
+		interactedRef.current = true;
+		setInteracted(true);
+		playerEl?.play?.().catch?.(() => {});
+		connect(true);
+	}
+
+	const mediaPlayerClassName = `media-player relative block w-full overflow-hidden bg-slate-900 ${discord ? 'h-screen' : 'aspect-video'} ${playerEl && !playerEl.paused && chatFocusedSecs > hideControlsOnChatFocused ? 'chat-controls-hidden' : ''}`;
+	const controlsChat =
+		chatMountNode &&
+		createPortal(
+			<Chatbox
+				send={send}
+				chatFocused={chatFocused}
+				focusByShortcut
+				controlsShowing={null}
+				className="chat-pc"
+				inputId="chat-pc-input"
+				formId="chat-pc-form"
+				messages={[]}
+				historicalPlayers={{}}
+				staticBaseUrl={data.staticBaseUrl}
+				onFocus={() => {
+					playerEl?.controls?.pause?.();
+					setChatFocused(true);
+				}}
+				onBlur={() => {
+					playerEl?.controls?.resume?.();
+					setChatFocused(false);
+					chatFocusedSecsRef.current = 0;
+					setChatFocusedSecs(0);
+				}}
+			/>,
+			chatMountNode
+		);
+
 	return (
 		<>
-			<media-player
-				keep-alive
-				className={`media-player relative block w-full overflow-hidden bg-slate-900 ${discord ? 'h-screen' : 'aspect-video'} ${playerEl && !playerEl.paused && chatFocusedSecs > hideControlsOnChatFocused ? 'chat-controls-hidden' : ''}`}
-				src={videoSrc?.src || undefined}
-				crossorigin
-				ref={setPlayerEl}
-				playsInline
-				onSeeked={() => {}}
-				onSeeking={() => {}}
-				onPause={() => {
-					send({ paused: true, type: SyncTypes.PauseSync });
-					setCurrentlyWatching((value) => (value ? { ...value, paused: true } : null));
-				}}
-				onPlay={() => {
-					if (interacted) {
-						send({ paused: false, type: SyncTypes.PauseSync });
-						setCurrentlyWatching((value) => (value ? { ...value, paused: false } : null));
-					} else {
-						setInteracted(true);
-						connect();
-					}
-				}}
-			>
-				<media-provider className="media-provider">
-					<media-poster className="vds-poster" src={data.preview}></media-poster>
-					<canvas ref={canvasRef} id="sub-canvas" className="pointer-events-none absolute" />
-				</media-provider>
-				<media-video-layout color-scheme={theme} thumbnails={thumbnailVttSrc}></media-video-layout>
-			</media-player>
+			{mounted ? (
+				<media-player
+					keep-alive
+					className={mediaPlayerClassName}
+					src={videoSrc?.src || undefined}
+					crossorigin
+					ref={setPlayerElement}
+					playsInline
+						onSeeked={() => {
+							supRef.current?.seekedHandler(!playerEl?.paused);
+							supPlayingRef.current = Boolean(supRef.current && !playerEl?.paused);
+						}}
+					onSeeking={() => {
+						supRef.current?.seekingHandler();
+					}}
+					onPause={() => {
+						supRef.current?.pauseHandler();
+						supPlayingRef.current = false;
+						send({ paused: true, type: SyncTypes.PauseSync });
+						setCurrentlyWatching((value) => (value ? { ...value, paused: true } : null));
+					}}
+					onPlay={() => {
+						supRef.current?.playHandler();
+						if (supRef.current) {
+							supPlayingRef.current = true;
+						}
+						if (interactedRef.current) {
+							send({ paused: false, type: SyncTypes.PauseSync });
+							setCurrentlyWatching((value) => (value ? { ...value, paused: false } : null));
+						} else {
+							interactedRef.current = true;
+							setInteracted(true);
+							connect(true);
+						}
+					}}
+				>
+					<media-provider className="media-provider">
+						<media-poster className="vds-poster" src={data.preview}></media-poster>
+						<canvas ref={canvasRef} id="sub-canvas" className="pointer-events-none absolute" />
+					</media-provider>
+					<media-video-layout
+						color-scheme={theme}
+						thumbnails={thumbnailVttSrc}
+					></media-video-layout>
+					{controlsChat}
+				</media-player>
+			) : (
+				<div className={mediaPlayerClassName} />
+			)}
 
 			<div
 				className="pointer-events-none absolute z-50 flex h-full w-full gap-1"
@@ -998,7 +1510,7 @@ export function Player({ data }: { data: ServerData }) {
 												if (res && typeof res === 'string') {
 													const formData = new FormData();
 													formData.append('pfp', pfp);
-													fetch(`${PUBLIC_BE}/pfp/${playerId}`, {
+													fetch(joinBackendPath(backendBaseUrl, `/pfp/${playerId}`), {
 														method: 'POST',
 														body: formData
 													}).then(() => {
@@ -1030,33 +1542,6 @@ export function Player({ data }: { data: ServerData }) {
 								placeholder="Name"
 							/>
 						</div>
-
-						<div className="fixed left-0 top-0 z-50 flex w-full justify-end p-4 max-md:hidden pointer-events-none">
-							<div className="pointer-events-auto">
-								<Chatbox
-									send={send}
-									chatFocused={chatFocused}
-									focusByShortcut
-									controlsShowing={null}
-									className="chat-pc"
-									inputId="chat-pc-input"
-									formId="chat-pc-form"
-									messages={[]}
-									historicalPlayers={{}}
-									staticBaseUrl={data.staticBaseUrl}
-									onFocus={() => {
-										playerEl?.controls?.pause?.();
-										setChatFocused(true);
-									}}
-									onBlur={() => {
-										playerEl?.controls?.resume?.();
-										setChatFocused(false);
-										chatFocusedSecsRef.current = 0;
-										setChatFocusedSecs(0);
-									}}
-								/>
-							</div>
-						</div>
 					</div>
 				</div>
 
@@ -1075,11 +1560,7 @@ export function Player({ data }: { data: ServerData }) {
 								exited={exited}
 								tickedSecsAgoStr={tickedSecsAgoStr}
 								className="max-md:hidden"
-								onClick={() => {
-									if (!socketCommunicating && !interacted) {
-										playerEl?.play?.();
-									}
-								}}
+								onClick={handleJoinWatchRoom}
 							/>
 							<div className="flex flex-1 items-center justify-end gap-3 max-sm:gap-2">
 								<Tooltip.Provider delayDuration={0}>
@@ -1207,6 +1688,7 @@ export function Player({ data }: { data: ServerData }) {
 							ref={mediaSelectionRef}
 							data={data}
 							staticBaseUrl={data.staticBaseUrl}
+							backendBaseUrl={backendBaseUrl}
 							bounceToOverride={(id) => {
 								if (syncGoto && socketCommunicating && roomPlayers.length > 1 && id !== job.Id) {
 									send({
@@ -1227,11 +1709,7 @@ export function Player({ data }: { data: ServerData }) {
 						interacted={interacted}
 						exited={exited}
 						tickedSecsAgoStr={tickedSecsAgoStr}
-						onClick={() => {
-							if (!socketCommunicating && !interacted) {
-								playerEl?.play?.();
-							}
-						}}
+						onClick={handleJoinWatchRoom}
 					/>
 				</div>
 
