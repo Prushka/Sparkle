@@ -24,7 +24,6 @@ import {
 import { toast } from 'sonner';
 import { useAppState } from '@/lib/app-state';
 import { useTheme } from '@/lib/theme';
-import { PUBLIC_BE } from '@/lib/env';
 import { createNotificationAudioUrl } from '@/lib/player/notification-audio';
 import {
 	BroadcastTypes,
@@ -340,7 +339,7 @@ export function Player({ data }: { data: ServerData }) {
 	const [tickedSecsAgoStr, setTickedSecsAgoStr] = useState('0.00');
 	const [chatFocusedSecs, setChatFocusedSecs] = useState(0);
 	const thumbnailVttSrc = `${data.staticBaseUrl}/${job.Id}/storyboard.vtt`;
-	const backendBaseUrl = data.backendBaseUrl || PUBLIC_BE;
+	const backendBaseUrl = data.backendBaseUrl;
 	const roomBase = searchParams.get('room') || searchParams.get('channel_id') || '';
 	const room = roomBase ? `${roomBase}${job.Id}` : job.Id;
 	const discord = discordAuth as Discord | null;

@@ -3,7 +3,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { IconCheck, IconChevronRight, IconChevronDown } from '@tabler/icons-react';
-import { PUBLIC_BE } from '@/lib/env';
 import { Button } from '@/components/ui/button';
 import * as Popover from '@/components/ui/popover';
 import * as Command from '@/components/ui/command';
@@ -20,7 +19,7 @@ export const MediaSelection = forwardRef<
 		data: { jobs: Job[]; job?: Job | undefined };
 		bounceToOverride?: ((_id: string) => void) | null;
 		staticBaseUrl: string;
-		backendBaseUrl?: string;
+		backendBaseUrl: string;
 	}
 >(function MediaSelection({ data, bounceToOverride = null, staticBaseUrl, backendBaseUrl }, ref) {
 	const router = useRouter();
@@ -79,7 +78,7 @@ export const MediaSelection = forwardRef<
 				onSuccess(jobs);
 				return;
 			}
-			fetch(`${backendBaseUrl ?? PUBLIC_BE}/all`)
+			fetch(`${backendBaseUrl}/all`)
 				.then((response) => response.json())
 				.then((payload) => {
 					if (payload?.length > 0) {

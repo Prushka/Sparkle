@@ -80,10 +80,8 @@ Video files are first processed and transcoded by the backend to:
 
 | Environment Variable           | Description                                                                         |
 | ------------------------------ | ----------------------------------------------------------------------------------- |
+| `SERVER_BE`                    | The backend endpoint used by server code and passed to the browser at runtime       |
 | `SERVER_STATIC`                | The absolute static asset base, including `/static`, used for poster/thumbnail URLs |
-| `PUBLIC_BE`                    | The browser-visible relative path of the backend endpoint (build time)              |
-| `SPARKLE_BACKEND_URL`          | The server-to-backend URL used by Next route/server code (runtime)                  |
-| `SERVER_BE`                    | Deprecated alias for `SPARKLE_BACKEND_URL`                                          |
 | `PUBLIC_DISCORD_CLIENT_ID`     | Your Discord application id / OAuth2 client id (runtime)                            |
 | `SERVER_DISCORD_CLIENT_SECRET` | Your Discord application OAuth2 client secret (runtime)                             |
 
@@ -97,7 +95,7 @@ services:
     ports:
       - '3000:3000'
     environment:
-      - SPARKLE_BACKEND_URL=http://sparkle:1323
+      - SERVER_BE=https://anime.lyu.sh/be
       - SERVER_STATIC=https://anime.lyu.sh/static
       - PUBLIC_DISCORD_CLIENT_ID=
       - SERVER_DISCORD_CLIENT_SECRET=
