@@ -2,6 +2,11 @@ interface IDictionary<TValue> {
 	[id: string]: TValue;
 }
 
+const COMPOSITION_OBJECT_CROPPED_FLAG = 0x80;
+const COMPOSITION_OBJECT_FORCED_FLAG = 0x40;
+const COMPOSITION_OBJECT_BASE_SIZE = 8;
+const COMPOSITION_OBJECT_CROP_SIZE = 8;
+
 class BaseSegment {
 	SEGMENT: IDictionary<string> = {
 		'14': 'PDS',
@@ -17,7 +22,7 @@ class BaseSegment {
 	data: Uint8Array;
 
 	constructor(bytes: Uint8Array) {
-		if (80 !== bytes[0] && 71 !== bytes[1]) {
+		if (bytes.length < 13 || bytes[0] !== 80 || bytes[1] !== 71) {
 			throw new Error('InvalidSegmentError');
 		}
 		this.pts = a2h2i(bytes, 2, 6) / 90;
@@ -57,11 +62,20 @@ class PresentationCompositionSegment {
 		this.numComps = base.data[10];
 		this.windowObjects = [];
 
-		let b = this.base.data.slice(11);
-		while (b.length) {
-			const len = 8 * (1 + (b[3] ? 1 : 0));
-			this.windowObjects.push(new CompositionObject(b.slice(0, len)));
-			b = b.slice(len);
+		let offset = 11;
+		for (let i = 0; i < this.numComps; i++) {
+			if (offset + COMPOSITION_OBJECT_BASE_SIZE > this.base.data.length) {
+				throw new Error('InvalidSegmentError');
+			}
+			const flags = this.base.data[offset + 3];
+			const len =
+				COMPOSITION_OBJECT_BASE_SIZE +
+				(isCompositionObjectCropped(flags) ? COMPOSITION_OBJECT_CROP_SIZE : 0);
+			if (offset + len > this.base.data.length) {
+				throw new Error('InvalidSegmentError');
+			}
+			this.windowObjects.push(new CompositionObject(this.base.data.slice(offset, offset + len)));
+			offset += len;
 		}
 
 		this.base.data = new Uint8Array(0);
@@ -195,6 +209,7 @@ class EndSegment {
 class CompositionObject {
 	objectId: number;
 	windowId: number;
+	forced: boolean;
 	cropped: boolean;
 	xOffset: number;
 	yOffset: number;
@@ -206,7 +221,8 @@ class CompositionObject {
 	constructor(data: Uint8Array) {
 		this.objectId = a2h2i(data, 0, 2);
 		this.windowId = data[2];
-		this.cropped = Boolean(data[3]);
+		this.forced = Boolean(data[3] & COMPOSITION_OBJECT_FORCED_FLAG);
+		this.cropped = isCompositionObjectCropped(data[3]);
 		this.xOffset = a2h2i(data, 4, 6);
 		this.yOffset = a2h2i(data, 6, 8);
 		this.xOffsetCrop = this.cropped ? a2h2i(data, 8, 10) : -1;
@@ -229,7 +245,14 @@ class Palette {
 	}
 }
 
+function isCompositionObjectCropped(flags: number): boolean {
+	return Boolean(flags & COMPOSITION_OBJECT_CROPPED_FLAG);
+}
+
 function a2h2i(array: Uint8Array, from: number, to: number): number {
+	if (from < 0 || to > array.length || from >= to) {
+		throw new Error('InvalidSegmentError');
+	}
 	let hex = '';
 	for (let i = from; i < to; i++) {
 		hex += intToHex(array[i]);
@@ -238,6 +261,9 @@ function a2h2i(array: Uint8Array, from: number, to: number): number {
 }
 
 function intToHex(x: number): string {
+	if (!Number.isFinite(x)) {
+		throw new Error('InvalidSegmentError');
+	}
 	return ('00' + x.toString(16)).slice(-2);
 }
 

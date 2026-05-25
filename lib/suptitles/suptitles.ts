@@ -11,6 +11,8 @@ import {
 
 import { getRgb, getPxAlpha } from './imageParser';
 
+const STALE_SUBTITLE_TOLERANCE_MS = 1000;
+
 export default class SUPtitles {
 	file: Uint8Array;
 	offset = 0;
@@ -19,6 +21,7 @@ export default class SUPtitles {
 	cv: HTMLCanvasElement[] = [];
 	canvasSizeSet = false;
 	videoTime: () => number;
+	playbackGeneration = 0;
 
 	constructor(canvas: HTMLCanvasElement, file: Uint8Array, getTime: () => number) {
 		console.info('# SUP Starting');
@@ -27,63 +30,99 @@ export default class SUPtitles {
 		this.file = file;
 	}
 
-	seekedHandler = (): void => {
-		this.start();
+	seekedHandler = (playing = true): void => {
+		this.reset(true);
+		if (playing) {
+			this.start();
+		}
 	};
 
 	seekingHandler = (): void => {
-		if (this.timeout) {
-			clearTimeout(this.timeout);
-		}
-		this.offset = 0;
-		this.cv.map((canvas) => canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height));
+		this.reset(true);
 	};
 
 	playHandler = (): void => {
-		this.offset = 0;
-		this.cv.map((canvas) => canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height));
+		this.reset(true);
 		this.start();
 	};
 
 	pauseHandler = (): void => {
-		if (this.timeout) {
-			clearTimeout(this.timeout);
-		}
+		this.playbackGeneration += 1;
+		this.clearTimer();
 	};
 
 	dispose(): void {
+		this.playbackGeneration += 1;
+		this.clearTimer();
+		console.info('# SUP Disposed');
+	}
+
+	private clearTimer(): void {
 		if (this.timeout) {
 			clearTimeout(this.timeout);
+			this.timeout = null;
 		}
-		console.info('# SUP Disposed');
+	}
+
+	private clearCanvas(): void {
+		this.cv.map((canvas) => canvas.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height));
+	}
+
+	private reset(clearCanvas: boolean): void {
+		this.playbackGeneration += 1;
+		this.clearTimer();
+		this.offset = 0;
+		this.lastPalette = null;
+		if (clearCanvas) {
+			this.clearCanvas();
+		}
+	}
+
+	private seekToNextPresentation(): void {
+		const currentTime = this.videoTime();
+		while (this.offset < this.file.length) {
+			if (this.offset + 13 > this.file.length) {
+				this.offset = this.file.length;
+				return;
+			}
+			const pts = a2h2i(this.file, this.offset + 2, this.offset + 6) / 90;
+			const size = 13 + a2h2i(this.file, this.offset + 11, this.offset + 13);
+			const type = a2h2i(this.file, this.offset + 10, this.offset + 11);
+			if (this.offset + size > this.file.length) {
+				this.offset = this.file.length;
+				return;
+			}
+
+			if (pts >= currentTime && type === 22) {
+				break;
+			}
+			if (type === 20) {
+				const bytes = this.file.slice(this.offset, this.offset + size);
+				this.lastPalette = new PaletteDefinitionSegment(new BaseSegment(bytes)).palette;
+			}
+			this.offset += size;
+		}
 	}
 
 	start(): void {
 		if (this.offset === 0) {
-			while (this.offset < this.file.length) {
-				const pts = a2h2i(this.file, this.offset + 2, this.offset + 6) / 90;
-				const size = 13 + a2h2i(this.file, this.offset + 11, this.offset + 13);
-				const type = a2h2i(this.file, this.offset + 10, this.offset + 11);
-
-				if (pts > this.videoTime() && type === 22) {
-					break;
-				} else {
-					this.offset += size;
-				}
-			}
-			this.getNextSubtitle();
+			this.seekToNextPresentation();
+			this.getNextSubtitle(this.playbackGeneration);
 		}
 	}
 
-	getNextSubtitle(): void {
+	getNextSubtitle(generation = this.playbackGeneration): void {
+		if (generation !== this.playbackGeneration) {
+			return;
+		}
 		if (this.offset < this.file.length) {
 			let ended = false;
-			let PCS: PresentationCompositionSegment;
-			let WDS: WindowDefinitionSegment;
-			let PDS: PaletteDefinitionSegment;
+			let PCS: PresentationCompositionSegment | null = null;
+			let WDS: WindowDefinitionSegment | null = null;
+			let PDS: PaletteDefinitionSegment | null = null;
 			const ODS: ObjectDefinitionSegment[] = [];
 
-			while (!ended) {
+			while (!ended && this.offset < this.file.length) {
 				const size = 13 + a2h2i(this.file, this.offset + 11, this.offset + 13);
 				const bytes = this.file.slice(this.offset, this.offset + size);
 
@@ -92,9 +131,10 @@ export default class SUPtitles {
 					case 'PCS':
 						PCS = new PresentationCompositionSegment(base);
 						if (!this.canvasSizeSet) {
+							const pcs = PCS;
 							this.cv.map((canvas) => {
-								canvas.height = PCS.height;
-								canvas.width = PCS.width;
+								canvas.height = pcs.height;
+								canvas.width = pcs.width;
 								return null;
 							});
 							this.canvasSizeSet = true;
@@ -118,23 +158,47 @@ export default class SUPtitles {
 				}
 				this.offset += size;
 			}
-			this.timeout = setTimeout(() => {
-				PDS || this.lastPalette
-					? this.draw(PCS, WDS, PDS, ODS)
-					: console.log('# SUP SKIPPING, NO PALETTE');
-				this.getNextSubtitle();
-			}, PCS!.base.pts - this.videoTime());
+
+			if (!PCS) {
+				return;
+			}
+
+			const delay = PCS.base.pts - this.videoTime();
+			if (delay < -STALE_SUBTITLE_TOLERANCE_MS) {
+				this.reset(true);
+				this.start();
+				return;
+			}
+
+			this.timeout = setTimeout(
+				() => {
+					this.timeout = null;
+					if (generation !== this.playbackGeneration) {
+						return;
+					}
+					if (PCS.base.pts - this.videoTime() < -STALE_SUBTITLE_TOLERANCE_MS) {
+						this.reset(true);
+						this.start();
+						return;
+					}
+					PDS || this.lastPalette
+						? this.draw(PCS, WDS, PDS, ODS)
+						: console.log('# SUP SKIPPING, NO PALETTE');
+					this.getNextSubtitle(generation);
+				},
+				Math.max(0, delay)
+			);
 		}
 	}
 
 	draw(
 		PCS: PresentationCompositionSegment,
-		WDS: WindowDefinitionSegment,
-		PDS: PaletteDefinitionSegment,
+		WDS: WindowDefinitionSegment | null,
+		PDS: PaletteDefinitionSegment | null,
 		ODS: ObjectDefinitionSegment[]
 	): void {
 		if (ODS.length > 0) {
-			let first: ObjectDefinitionSegment | null;
+			let first: ObjectDefinitionSegment | null = null;
 			ODS.map((objectSegment) => {
 				if (objectSegment.type === 'First') {
 					first = objectSegment;
@@ -149,6 +213,10 @@ export default class SUPtitles {
 					const width = first ? first.width : objectSegment.width;
 					const height = first ? first.height : objectSegment.height;
 					const object = PCS.getObjectById(first ? first.id : objectSegment.id);
+					if (!object) {
+						first = null;
+						return null;
+					}
 					const xOffset = object?.xOffset;
 					const yOffset = object?.yOffset;
 					const pixels = this.getPixels(
@@ -169,6 +237,9 @@ export default class SUPtitles {
 				return null;
 			});
 		} else {
+			if (!WDS) {
+				return;
+			}
 			WDS.windows.map((windowSegment: WindowSeg) => {
 				if (
 					PCS.windowObjects.length === 0 ||
