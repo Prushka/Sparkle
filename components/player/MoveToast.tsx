@@ -14,6 +14,7 @@ export function MoveToast({
 	firedBy,
 	job,
 	onClose,
+	moveToPath,
 	staticBaseUrl
 }: {
 	historicalPlayers: Record<string, Player>;
@@ -21,6 +22,7 @@ export function MoveToast({
 	firedBy: Player;
 	job: Job | undefined;
 	onClose: () => void;
+	moveToPath?: (_id: string) => string;
 	staticBaseUrl: string;
 }) {
 	const router = useRouter();
@@ -29,7 +31,7 @@ export function MoveToast({
 	useEffect(() => {
 		if (remaining <= 0) {
 			if (job?.Id) {
-				router.push(`/${job.Id}`);
+				router.push(moveToPath ? moveToPath(job.Id) : `/${job.Id}`);
 			}
 			return;
 		}
@@ -37,7 +39,7 @@ export function MoveToast({
 			setRemaining((value) => value - 1);
 		}, 1000);
 		return () => clearInterval(interval);
-	}, [job?.Id, remaining, router]);
+	}, [job?.Id, moveToPath, remaining, router]);
 
 	return (
 		<Card className="w-full">

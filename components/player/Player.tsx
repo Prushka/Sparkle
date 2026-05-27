@@ -6,7 +6,7 @@ import 'vidstack/player/layouts/default';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { TextTrack, type MediaKeyShortcuts } from 'vidstack';
 import JASSUB from 'jassub';
 import {
@@ -277,6 +277,7 @@ async function waitForTextTracks(player: any) {
 
 export function Player({ data }: { data: ServerData }) {
 	const { job } = data;
+	const router = useRouter();
 	const searchParams = useSearchParams();
 	const {
 		setCurrentlyWatching,
@@ -315,6 +316,7 @@ export function Player({ data }: { data: ServerData }) {
 	const inBgRef = useRef(false);
 	const exitedRef = useRef(false);
 	const interactedRef = useRef(interacted);
+	const playerCanPlayRef = useRef(false);
 	const chatFocusedSecsRef = useRef(0);
 	const volumeInitializedRef = useRef(false);
 	const [mounted, setMounted] = useState(false);
@@ -345,6 +347,10 @@ export function Player({ data }: { data: ServerData }) {
 	const backendBaseUrl = data.backendBaseUrl;
 	const roomBase = searchParams.get('room') || searchParams.get('channel_id') || '';
 	const room = roomBase ? `${roomBase}${job.Id}` : job.Id;
+	const getRoomPath = useCallback(
+		(id: string) => (roomBase ? `/${id}?room=${encodeURIComponent(roomBase)}` : `/${id}`),
+		[roomBase]
+	);
 	const discord = discordAuth as Discord | null;
 	const displayName = discord?.user ? getName(discord.user) || '' : name;
 	const socketCommunicating = socketConnected && tickedSecsAgo >= 0 && tickedSecsAgo < 5;
@@ -1088,6 +1094,19 @@ export function Player({ data }: { data: ServerData }) {
 		}, [connect, setInteracted]);
 
 		useEffect(() => {
+			if (
+				!playerEl ||
+				!playerId ||
+				!interactedRef.current ||
+				!playerCanPlayRef.current ||
+				socketRef.current
+			) {
+				return;
+			}
+			connect();
+		}, [connect, interacted, playerEl, playerId]);
+
+		useEffect(() => {
 			if (!socketConnected || profileSyncedRef.current) {
 				return;
 			}
@@ -1165,8 +1184,9 @@ export function Player({ data }: { data: ServerData }) {
 			}
 		);
 		const playerCanPlayUnsubscribe = player.subscribe?.(({ canPlay }: { canPlay: boolean }) => {
-			if (canPlay && interacted && !socketRef.current) {
-				connect();
+			playerCanPlayRef.current = canPlay;
+			if (canPlay && interactedRef.current && !socketRef.current) {
+				connectRef.current?.();
 			}
 		});
 		const playerSoundUnsubscribe = player.subscribe?.(
@@ -1316,6 +1336,7 @@ export function Player({ data }: { data: ServerData }) {
 			document.removeEventListener('mousemove', mouseMove);
 			player.removeEventListener?.('mouseleave', mouseLeave);
 			player.removeEventListener?.('media-play-request', playRequest);
+			playerCanPlayRef.current = false;
 			playerUnsubscribe?.();
 			playerCanPlayUnsubscribe?.();
 			playerSoundUnsubscribe?.();
@@ -1412,10 +1433,6 @@ export function Player({ data }: { data: ServerData }) {
 		}
 		startWatchRoomConnection();
 		playerEl?.play?.().catch?.(() => {});
-	}
-
-	function getRoomPath(id: string) {
-		return roomBase ? `/${id}?room=${encodeURIComponent(roomBase)}` : `/${id}`;
 	}
 
 	const mediaPlayerClassName = `media-player relative block w-full overflow-hidden bg-slate-900 ${discord ? 'h-screen' : 'aspect-video'} ${playerEl && !playerEl.paused && chatFocusedSecs > hideControlsOnChatFocused ? 'chat-controls-hidden' : ''}`;
@@ -1747,7 +1764,7 @@ export function Player({ data }: { data: ServerData }) {
 										broadcast: { type: BroadcastTypes.MoveTo, moveTo: id }
 									});
 								} else {
-									window.location.href = getRoomPath(id);
+									router.push(getRoomPath(id));
 								}
 							}}
 						/>
@@ -1806,6 +1823,7 @@ export function Player({ data }: { data: ServerData }) {
 						seconds={moveToast.seconds}
 						firedBy={moveToast.firedBy}
 						job={moveToast.job}
+						moveToPath={getRoomPath}
 						staticBaseUrl={data.staticBaseUrl}
 						onClose={() => setMoveToast(null)}
 					/>
