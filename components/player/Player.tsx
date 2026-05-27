@@ -130,10 +130,10 @@ function toArray(list: any): any[] {
 	}
 	try {
 		return Array.from(list);
-		} catch {
-			return [];
-		}
+	} catch {
+		return [];
 	}
+}
 
 function getPublicAssetUrl(src: string) {
 	if (/^(https?:)?\/\//.test(src) || src.startsWith('/')) {
@@ -291,14 +291,14 @@ export function Player({ data }: { data: ServerData }) {
 		updatePfp,
 		discordAuth
 	} = useAppState();
-		const { theme, setTheme } = useTheme();
-		const playerElementRef = useRef<any>(null);
-		const socketRef = useRef<WebSocket | null>(null);
-		const socketUrlRef = useRef<string | null>(null);
-		const reconnectTimerRef = useRef<number | null>(null);
-		const reconnectAttemptRef = useRef(0);
-		const connectRef = useRef<((_forceInteracted?: boolean) => void) | null>(null);
-		const profileSyncedRef = useRef(false);
+	const { theme, setTheme } = useTheme();
+	const playerElementRef = useRef<any>(null);
+	const socketRef = useRef<WebSocket | null>(null);
+	const socketUrlRef = useRef<string | null>(null);
+	const reconnectTimerRef = useRef<number | null>(null);
+	const reconnectAttemptRef = useRef(0);
+	const connectRef = useRef<((_forceInteracted?: boolean) => void) | null>(null);
+	const profileSyncedRef = useRef(false);
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
 	const chatMountRef = useRef<HTMLDivElement | null>(null);
 	const mediaSelectionRef = useRef<MediaSelectionHandle | null>(null);
@@ -391,19 +391,19 @@ export function Player({ data }: { data: ServerData }) {
 	const effectiveAudio = videoSrc?.audio || selectedAudio;
 	const autoCodec =
 		videoSrc?.sCodec && selectedCodec === 'auto' ? `(${codecDisplayMap[videoSrc.sCodec]})` : '';
-		const chatHidden = chatLayout === 'hide';
-		const setPlayerElement = useCallback((element: any | null) => {
-			playerElementRef.current = element;
-			setPlayerEl(element);
-		}, []);
+	const chatHidden = chatLayout === 'hide';
+	const setPlayerElement = useCallback((element: any | null) => {
+		playerElementRef.current = element;
+		setPlayerEl(element);
+	}, []);
 
-		const clearReconnectTimer = useCallback(() => {
-			if (reconnectTimerRef.current === null) {
-				return;
-			}
-			window.clearTimeout(reconnectTimerRef.current);
-			reconnectTimerRef.current = null;
-		}, []);
+	const clearReconnectTimer = useCallback(() => {
+		if (reconnectTimerRef.current === null) {
+			return;
+		}
+		window.clearTimeout(reconnectTimerRef.current);
+		reconnectTimerRef.current = null;
+	}, []);
 
 	const messagesToDisplay = (() => {
 		let nextMessages = roomMessages.filter((message) => renderNow - message.timestamp < 140000);
@@ -820,17 +820,20 @@ export function Player({ data }: { data: ServerData }) {
 		};
 	}, [BASE_STATIC, job, playerEl]);
 
-	const updateLastTicked = useCallback((resetTimer = false, playersCount = roomPlayersCountRef.current) => {
-		if (resetTimer) {
-			lastTickedRef.current = Date.now();
-		}
-		const nextTickedSecsAgo =
-			socketRef.current?.readyState === WebSocket.OPEN && playersCount > 0
-				? (Date.now() - lastTickedRef.current) / 1000
-				: -1;
-		setTickedSecsAgo(nextTickedSecsAgo);
-		setTickedSecsAgoStr((Math.round(nextTickedSecsAgo * 100) / 100).toFixed(2));
-	}, []);
+	const updateLastTicked = useCallback(
+		(resetTimer = false, playersCount = roomPlayersCountRef.current) => {
+			if (resetTimer) {
+				lastTickedRef.current = Date.now();
+			}
+			const nextTickedSecsAgo =
+				socketRef.current?.readyState === WebSocket.OPEN && playersCount > 0
+					? (Date.now() - lastTickedRef.current) / 1000
+					: -1;
+			setTickedSecsAgo(nextTickedSecsAgo);
+			setTickedSecsAgoStr((Math.round(nextTickedSecsAgo * 100) / 100).toFixed(2));
+		},
+		[]
+	);
 
 	const updateTime = useCallback(() => {
 		const player = playerElementRef.current;
@@ -857,59 +860,59 @@ export function Player({ data }: { data: ServerData }) {
 		}
 	}, [job.Duration, send, setCurrentlyWatching]);
 
-		const connect = useCallback(
-			(forceInteracted = false) => {
-				const player = playerElementRef.current;
-				if ((!forceInteracted && !interactedRef.current) || !player || !playerId) {
+	const connect = useCallback(
+		(forceInteracted = false) => {
+			const player = playerElementRef.current;
+			if ((!forceInteracted && !interactedRef.current) || !player || !playerId) {
+				return;
+			}
+			const socketUrl = getBackendWebSocketUrl(backendBaseUrl, `/sync/${room}/${playerId}`);
+			const existingSocket = socketRef.current;
+			if (
+				existingSocket &&
+				socketUrlRef.current === socketUrl &&
+				(existingSocket.readyState === WebSocket.CONNECTING ||
+					existingSocket.readyState === WebSocket.OPEN)
+			) {
+				return;
+			}
+			clearReconnectTimer();
+			if (existingSocket && existingSocket.readyState !== WebSocket.CLOSED) {
+				existingSocket.onopen = null;
+				existingSocket.onmessage = null;
+				existingSocket.onerror = null;
+				existingSocket.onclose = null;
+				existingSocket.close();
+			}
+			interactedRef.current = true;
+			exitedRef.current = false;
+			setInteracted(true);
+			setExited(false);
+			const socket = new WebSocket(socketUrl);
+			socketRef.current = socket;
+			socketUrlRef.current = socketUrl;
+			console.log(`Socket, connecting to ${room}`);
+			socket.onopen = () => {
+				if (socketRef.current !== socket) {
+					socket.close();
 					return;
 				}
-				const socketUrl = getBackendWebSocketUrl(backendBaseUrl, `/sync/${room}/${playerId}`);
-				const existingSocket = socketRef.current;
-				if (
-					existingSocket &&
-					socketUrlRef.current === socketUrl &&
-					(existingSocket.readyState === WebSocket.CONNECTING ||
-						existingSocket.readyState === WebSocket.OPEN)
-				) {
-					return;
+				console.log(`Socket, connected to ${room}`);
+				setSocketConnected(true);
+				profileSyncedRef.current = sendProfile();
+				send({ type: SyncTypes.NewPlayer });
+				sendSettings();
+				if (!playerElementRef.current?.paused) {
+					send({ paused: false, type: SyncTypes.PauseSync });
 				}
-				clearReconnectTimer();
-				if (existingSocket && existingSocket.readyState !== WebSocket.CLOSED) {
-					existingSocket.onopen = null;
-					existingSocket.onmessage = null;
-					existingSocket.onerror = null;
-					existingSocket.onclose = null;
-					existingSocket.close();
-				}
-				interactedRef.current = true;
-				exitedRef.current = false;
-				setInteracted(true);
-				setExited(false);
-				const socket = new WebSocket(socketUrl);
-				socketRef.current = socket;
-				socketUrlRef.current = socketUrl;
-				console.log(`Socket, connecting to ${room}`);
-				socket.onopen = () => {
-					if (socketRef.current !== socket) {
-						socket.close();
-						return;
-					}
-					console.log(`Socket, connected to ${room}`);
-					setSocketConnected(true);
-					profileSyncedRef.current = sendProfile();
-					send({ type: SyncTypes.NewPlayer });
-					sendSettings();
-					if (!playerElementRef.current?.paused) {
-						send({ paused: false, type: SyncTypes.PauseSync });
-					}
-					updateLastTicked(true);
-				};
+				updateLastTicked(true);
+			};
 
-				socket.onmessage = (event: MessageEvent) => {
-					if (socketRef.current !== socket) {
-						return;
-					}
-					const state: SendPayload = JSON.parse(event.data);
+			socket.onmessage = (event: MessageEvent) => {
+				if (socketRef.current !== socket) {
+					return;
+				}
+				const state: SendPayload = JSON.parse(event.data);
 				const broadcast = state.broadcast;
 				const persistControlState = (payload: any) => {
 					if (payload.firedBy !== undefined) {
@@ -982,8 +985,8 @@ export function Player({ data }: { data: ServerData }) {
 										next[player.id] = player;
 									}
 								}
-									return next;
-								});
+								return next;
+							});
 							updateLastTicked(true, state.players.length);
 							setCurrentlyWatching((value) => {
 								if (value) {
@@ -999,7 +1002,7 @@ export function Player({ data }: { data: ServerData }) {
 							} else if (
 								state.paused === false &&
 								player.paused === true &&
-								(!inBgRef.current || (inBgRef.current && roomPlayers.length > 1))
+								(!inBgRef.current || (inBgRef.current && roomPlayersCountRef.current > 1))
 							) {
 								player.play();
 								persistControlState(state);
@@ -1028,49 +1031,48 @@ export function Player({ data }: { data: ServerData }) {
 							break;
 					}
 				}
-				};
+			};
 
-				socket.onerror = (event) => {
-					if (socketRef.current !== socket) {
-						return;
-					}
-					console.error('Socket encountered error: ', event);
-					socket.close();
-				};
+			socket.onerror = (event) => {
+				if (socketRef.current !== socket) {
+					return;
+				}
+				console.error('Socket encountered error: ', event);
+				socket.close();
+			};
 
-				socket.onclose = () => {
-					if (socketRef.current !== socket) {
-						return;
-					}
-					console.log(`Socket closed, ${room}`);
-					setSocketConnected(false);
-					socketRef.current = null;
-					socketUrlRef.current = null;
-					if (!exitedRef.current && interactedRef.current) {
-						clearReconnectTimer();
-						const reconnectDelayMs = Math.min(
-							30000,
-							1000 * 2 ** Math.min(reconnectAttemptRef.current, 5)
-						);
-						reconnectAttemptRef.current += 1;
-						console.log(`Socket reconnecting in ${reconnectDelayMs / 1000}s, ${room}`);
-						reconnectTimerRef.current = window.setTimeout(() => {
-							reconnectTimerRef.current = null;
-							if (socketRef.current || exitedRef.current || !interactedRef.current) {
-								return;
-							}
-							console.log(`Socket reconnecting, ${room}`);
-							connectRef.current?.(true);
-						}, reconnectDelayMs);
+			socket.onclose = () => {
+				if (socketRef.current !== socket) {
+					return;
+				}
+				console.log(`Socket closed, ${room}`);
+				setSocketConnected(false);
+				socketRef.current = null;
+				socketUrlRef.current = null;
+				if (!exitedRef.current && interactedRef.current) {
+					clearReconnectTimer();
+					const reconnectDelayMs = Math.min(
+						30000,
+						1000 * 2 ** Math.min(reconnectAttemptRef.current, 5)
+					);
+					reconnectAttemptRef.current += 1;
+					console.log(`Socket reconnecting in ${reconnectDelayMs / 1000}s, ${room}`);
+					reconnectTimerRef.current = window.setTimeout(() => {
+						reconnectTimerRef.current = null;
+						if (socketRef.current || exitedRef.current || !interactedRef.current) {
+							return;
+						}
+						console.log(`Socket reconnecting, ${room}`);
+						connectRef.current?.(true);
+					}, reconnectDelayMs);
 				}
 			};
 		},
-			[
-				backendBaseUrl,
-				clearReconnectTimer,
-				playerId,
+		[
+			backendBaseUrl,
+			clearReconnectTimer,
+			playerId,
 			room,
-			roomPlayers.length,
 			send,
 			sendProfile,
 			sendSettings,
@@ -1082,53 +1084,53 @@ export function Player({ data }: { data: ServerData }) {
 		]
 	);
 
-		useEffect(() => {
-			connectRef.current = connect;
-		}, [connect]);
+	useEffect(() => {
+		connectRef.current = connect;
+	}, [connect]);
 
-		const startWatchRoomConnection = useCallback(() => {
-			reconnectAttemptRef.current = 0;
-			interactedRef.current = true;
-			setInteracted(true);
-			connect(true);
-		}, [connect, setInteracted]);
+	const startWatchRoomConnection = useCallback(() => {
+		reconnectAttemptRef.current = 0;
+		interactedRef.current = true;
+		setInteracted(true);
+		connect(true);
+	}, [connect, setInteracted]);
 
-		useEffect(() => {
-			if (
-				!playerEl ||
-				!playerId ||
-				!interactedRef.current ||
-				!playerCanPlayRef.current ||
-				socketRef.current
-			) {
-				return;
+	useEffect(() => {
+		if (
+			!playerEl ||
+			!playerId ||
+			!interactedRef.current ||
+			!playerCanPlayRef.current ||
+			socketRef.current
+		) {
+			return;
+		}
+		connect();
+	}, [connect, interacted, playerEl, playerId]);
+
+	useEffect(() => {
+		if (!socketConnected || profileSyncedRef.current) {
+			return;
+		}
+		profileSyncedRef.current = sendProfile();
+	}, [sendProfile, socketConnected]);
+
+	useEffect(() => {
+		return () => {
+			clearReconnectTimer();
+			exitedRef.current = true;
+			const socket = socketRef.current;
+			socketRef.current = null;
+			socketUrlRef.current = null;
+			if (socket && socket.readyState !== WebSocket.CLOSED) {
+				socket.onopen = null;
+				socket.onmessage = null;
+				socket.onerror = null;
+				socket.onclose = null;
+				socket.close();
 			}
-			connect();
-		}, [connect, interacted, playerEl, playerId]);
-
-		useEffect(() => {
-			if (!socketConnected || profileSyncedRef.current) {
-				return;
-			}
-			profileSyncedRef.current = sendProfile();
-		}, [sendProfile, socketConnected]);
-
-		useEffect(() => {
-			return () => {
-				clearReconnectTimer();
-				exitedRef.current = true;
-				const socket = socketRef.current;
-				socketRef.current = null;
-				socketUrlRef.current = null;
-				if (socket && socket.readyState !== WebSocket.CLOSED) {
-					socket.onopen = null;
-					socket.onmessage = null;
-					socket.onerror = null;
-					socket.onclose = null;
-					socket.close();
-				}
-			};
-		}, [clearReconnectTimer]);
+		};
+	}, [clearReconnectTimer]);
 
 	useEffect(() => {
 		if (!playerEl) {
@@ -1283,28 +1285,28 @@ export function Player({ data }: { data: ServerData }) {
 							.catch((error) => {
 								console.error(error);
 							});
-						} else if (selectedTrack.format === 'ass') {
-							const fallback = fallbackFontsMap[selectedTrack.language]
-								? fallbackFontsMap[selectedTrack.language]
-								: defaultFallback;
-							const fallbackFontUrl = getPublicAssetUrl(fallback[1]);
-							const availableFonts = {
-								[fallback[0]]: fallbackFontUrl
-							};
-							jasRef.current = new JASSUB({
-								video: videoElement,
-								subUrl: selectedTrack.src,
-								fallbackFont: fallback[0],
-								defaultFont: fallback[0],
-								availableFonts,
-								fonts: [...fontsRef.current, fallbackFontUrl],
-								queryFonts: false
-							} as any);
-							jasRef.current.ready?.catch((error: unknown) => {
-								console.error('Failed to initialize ASS subtitles:', error);
-							});
-						}
+					} else if (selectedTrack.format === 'ass') {
+						const fallback = fallbackFontsMap[selectedTrack.language]
+							? fallbackFontsMap[selectedTrack.language]
+							: defaultFallback;
+						const fallbackFontUrl = getPublicAssetUrl(fallback[1]);
+						const availableFonts = {
+							[fallback[0]]: fallbackFontUrl
+						};
+						jasRef.current = new JASSUB({
+							video: videoElement,
+							subUrl: selectedTrack.src,
+							fallbackFont: fallback[0],
+							defaultFont: fallback[0],
+							availableFonts,
+							fonts: [...fontsRef.current, fallbackFontUrl],
+							queryFonts: false
+						} as any);
+						jasRef.current.ready?.catch((error: unknown) => {
+							console.error('Failed to initialize ASS subtitles:', error);
+						});
 					}
+				}
 				prevTrackSrcRef.current = selectedTrackSrc;
 			}
 			if (videoElement && selectedTrack?.format === 'sup' && supRef.current) {
@@ -1373,7 +1375,7 @@ export function Player({ data }: { data: ServerData }) {
 				return;
 			}
 			const container = document.createElement('div');
-			container.className = 'player-chat-control';
+			container.className = 'player-chat-control max-md:hidden';
 			container.dataset.playerChatMount = 'true';
 			anchor.parentNode.insertBefore(
 				container,
@@ -1435,7 +1437,7 @@ export function Player({ data }: { data: ServerData }) {
 		playerEl?.play?.().catch?.(() => {});
 	}
 
-	const mediaPlayerClassName = `media-player relative block w-full overflow-hidden bg-slate-900 ${discord ? 'h-screen' : 'aspect-video'} ${playerEl && !playerEl.paused && chatFocusedSecs > hideControlsOnChatFocused ? 'chat-controls-hidden' : ''}`;
+	const mediaPlayerClassName = `media-player relative w-full bg-slate-900 ${discord ? 'h-screen' : ''} ${playerEl && !playerEl.paused && chatFocusedSecs > hideControlsOnChatFocused ? 'chat-controls-hidden' : ''}`;
 	const controlsChat =
 		chatMountNode &&
 		createPortal(
@@ -1500,7 +1502,7 @@ export function Player({ data }: { data: ServerData }) {
 							}
 						}}
 					>
-						<media-provider className="media-provider">
+						<media-provider className="media-provider h-full w-full">
 							<media-poster className="vds-poster" src={data.preview}></media-poster>
 							<canvas ref={canvasRef} id="sub-canvas" className="pointer-events-none absolute" />
 						</media-provider>
@@ -1825,7 +1827,6 @@ export function Player({ data }: { data: ServerData }) {
 						job={moveToast.job}
 						moveToPath={getRoomPath}
 						staticBaseUrl={data.staticBaseUrl}
-						onClose={() => setMoveToast(null)}
 					/>
 				</div>
 			) : null}

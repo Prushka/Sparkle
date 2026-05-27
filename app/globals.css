@@ -384,6 +384,16 @@
 	font-size: 0.84rem;
 }
 
+.media-player {
+	border: none !important;
+	border-radius: unset !important;
+	max-height: 100vh;
+	max-width: 100vw;
+	display: flex;
+	justify-content: center;
+	flex-direction: column;
+}
+
 .media-provider {
 	aspect-ratio: unset !important;
 }

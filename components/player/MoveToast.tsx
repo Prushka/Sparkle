@@ -13,7 +13,6 @@ export function MoveToast({
 	seconds,
 	firedBy,
 	job,
-	onClose,
 	moveToPath,
 	staticBaseUrl
 }: {
@@ -21,12 +20,12 @@ export function MoveToast({
 	seconds: number;
 	firedBy: Player;
 	job: Job | undefined;
-	onClose: () => void;
 	moveToPath?: (_id: string) => string;
 	staticBaseUrl: string;
 }) {
 	const router = useRouter();
 	const [remaining, setRemaining] = useState(seconds);
+	const [closed, setClosed] = useState(false);
 
 	useEffect(() => {
 		if (remaining <= 0) {
@@ -40,6 +39,10 @@ export function MoveToast({
 		}, 1000);
 		return () => clearInterval(interval);
 	}, [job?.Id, moveToPath, remaining, router]);
+
+	if (closed) {
+		return null;
+	}
 
 	return (
 		<Card className="w-full">
@@ -70,7 +73,7 @@ export function MoveToast({
 			</CardContent>
 			<CardFooter className="flex justify-between">
 				<Button variant="outline">By: {firedBy?.name}</Button>
-				<Button variant="default" onClick={onClose}>
+				<Button variant="default" onClick={() => setClosed(true)}>
 					Close
 				</Button>
 			</CardFooter>
