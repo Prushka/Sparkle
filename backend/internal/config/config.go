@@ -23,7 +23,7 @@ func Load() (Config, error) {
 	cfg := Config{
 		Addr:              getenv("ADDR", ":1323"),
 		OutputDir:         getenv("OUTPUT", "./output"),
-		JobsCacheTTL:      10 * time.Second,
+		JobsCacheTTL:      15 * time.Minute,
 		MaxPFPBytes:       12_000_000,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,

@@ -10,7 +10,7 @@ This directory contains only the backend pieces used by the frontend:
 ## Run
 
 ```sh
-go run ./cmd/api
+../start-backend.sh
 ```
 
 The API listens on `:1323` and exposes:
@@ -25,5 +25,5 @@ Useful runtime environment variables:
 - `ADDR`, default `:1323`
 - `PORT`, used only when `ADDR` is unset
 - `OUTPUT`, default `./output`
-- `JOBS_CACHE_TTL`, default `10s`
+- `JOBS_CACHE_TTL`, default `15m`
 - `MAX_PFP_BYTES`, default `12000000`
