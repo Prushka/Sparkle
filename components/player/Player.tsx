@@ -295,7 +295,9 @@ export function Player({ data }: { data: ServerData }) {
 		const socketRef = useRef<WebSocket | null>(null);
 		const socketUrlRef = useRef<string | null>(null);
 		const reconnectTimerRef = useRef<number | null>(null);
+		const reconnectAttemptRef = useRef(0);
 		const connectRef = useRef<((_forceInteracted?: boolean) => void) | null>(null);
+		const profileSyncedRef = useRef(false);
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
 	const chatMountRef = useRef<HTMLDivElement | null>(null);
 	const mediaSelectionRef = useRef<MediaSelectionHandle | null>(null);
@@ -308,6 +310,7 @@ export function Player({ data }: { data: ServerData }) {
 	const selectedSubtitleTrackRef = useRef<SelectedSubtitleTrack | null>(null);
 	const prevTrackSrcRef = useRef<string | null>('');
 	const lastTickedRef = useRef(0);
+	const roomPlayersCountRef = useRef(0);
 	const lastSentTimeRef = useRef(-100);
 	const inBgRef = useRef(false);
 	const exitedRef = useRef(false);
@@ -493,6 +496,10 @@ export function Player({ data }: { data: ServerData }) {
 	}, [roomPlayers.length, setPlayersCount, socketCommunicating]);
 
 	useEffect(() => {
+		roomPlayersCountRef.current = roomPlayers.length;
+	}, [roomPlayers.length]);
+
+	useEffect(() => {
 		if (!playerEl || typeof customElements === 'undefined') {
 			return;
 		}
@@ -652,6 +659,18 @@ export function Player({ data }: { data: ServerData }) {
 		}
 	}, []);
 
+	const sendProfile = useCallback(() => {
+		if (displayName === '' || socketRef.current?.readyState !== WebSocket.OPEN) {
+			return false;
+		}
+		send({
+			name: displayName,
+			type: SyncTypes.ProfileSync,
+			discordUser: discord?.user
+		});
+		return true;
+	}, [discord?.user, displayName, send]);
+
 	const sendSettings = useCallback(() => {
 		const selectedTrack = getSelectedSubtitleTrack(
 			playerEl,
@@ -795,20 +814,17 @@ export function Player({ data }: { data: ServerData }) {
 		};
 	}, [BASE_STATIC, job, playerEl]);
 
-	const updateLastTicked = useCallback(
-		(resetTimer = false) => {
-			if (resetTimer) {
-				lastTickedRef.current = Date.now();
-			}
-			const nextTickedSecsAgo =
-				socketConnected && roomPlayers.length > 0
-					? (Date.now() - lastTickedRef.current) / 1000
-					: -1;
-			setTickedSecsAgo(nextTickedSecsAgo);
-			setTickedSecsAgoStr((Math.round(nextTickedSecsAgo * 100) / 100).toFixed(2));
-		},
-		[roomPlayers.length, socketConnected]
-	);
+	const updateLastTicked = useCallback((resetTimer = false, playersCount = roomPlayersCountRef.current) => {
+		if (resetTimer) {
+			lastTickedRef.current = Date.now();
+		}
+		const nextTickedSecsAgo =
+			socketRef.current?.readyState === WebSocket.OPEN && playersCount > 0
+				? (Date.now() - lastTickedRef.current) / 1000
+				: -1;
+		setTickedSecsAgo(nextTickedSecsAgo);
+		setTickedSecsAgoStr((Math.round(nextTickedSecsAgo * 100) / 100).toFixed(2));
+	}, []);
 
 	const updateTime = useCallback(() => {
 		const player = playerElementRef.current;
@@ -874,13 +890,7 @@ export function Player({ data }: { data: ServerData }) {
 					}
 					console.log(`Socket, connected to ${room}`);
 					setSocketConnected(true);
-				if (displayName !== '') {
-					send({
-						name: displayName,
-						type: SyncTypes.ProfileSync,
-						discordUser: discord?.user
-					});
-				}
+					profileSyncedRef.current = sendProfile();
 				send({ type: SyncTypes.NewPlayer });
 				sendSettings();
 				updateLastTicked(true);
@@ -928,6 +938,8 @@ export function Player({ data }: { data: ServerData }) {
 							});
 							break;
 						case SyncTypes.PlayersStatusSync:
+							reconnectAttemptRef.current = 0;
+							roomPlayersCountRef.current = state.players.length;
 							setRoomPlayers((prev) => {
 								if (prev.length > 0) {
 									const { left, joined } = getLeftAndJoined(prev, state.players, playerId);
@@ -961,9 +973,9 @@ export function Player({ data }: { data: ServerData }) {
 										next[player.id] = player;
 									}
 								}
-								return next;
-							});
-							updateLastTicked(true);
+									return next;
+								});
+							updateLastTicked(true, state.players.length);
 							setCurrentlyWatching((value) => {
 								if (value) {
 									return { ...value, roomPlayers: state.players.length };
@@ -1027,6 +1039,12 @@ export function Player({ data }: { data: ServerData }) {
 					socketUrlRef.current = null;
 					if (!exitedRef.current && interactedRef.current) {
 						clearReconnectTimer();
+						const reconnectDelayMs = Math.min(
+							30000,
+							1000 * 2 ** Math.min(reconnectAttemptRef.current, 5)
+						);
+						reconnectAttemptRef.current += 1;
+						console.log(`Socket reconnecting in ${reconnectDelayMs / 1000}s, ${room}`);
 						reconnectTimerRef.current = window.setTimeout(() => {
 							reconnectTimerRef.current = null;
 							if (socketRef.current || exitedRef.current || !interactedRef.current) {
@@ -1034,19 +1052,18 @@ export function Player({ data }: { data: ServerData }) {
 							}
 							console.log(`Socket reconnecting, ${room}`);
 							connectRef.current?.(true);
-						}, 1000);
+						}, reconnectDelayMs);
 				}
 			};
 		},
 			[
 				backendBaseUrl,
 				clearReconnectTimer,
-				discord?.user,
-				displayName,
 				playerId,
 			room,
 			roomPlayers.length,
 			send,
+			sendProfile,
 			sendSettings,
 			setCurrentlyWatching,
 			setInteracted,
@@ -1059,6 +1076,13 @@ export function Player({ data }: { data: ServerData }) {
 		useEffect(() => {
 			connectRef.current = connect;
 		}, [connect]);
+
+		useEffect(() => {
+			if (!socketConnected || profileSyncedRef.current) {
+				return;
+			}
+			profileSyncedRef.current = sendProfile();
+		}, [sendProfile, socketConnected]);
 
 		useEffect(() => {
 			return () => {
@@ -1267,12 +1291,6 @@ export function Player({ data }: { data: ServerData }) {
 				chatFocusedSecsRef.current = 0;
 				setChatFocusedSecs(0);
 			}
-			const nextTickedSecsAgo =
-				socketConnected && roomPlayers.length > 0
-					? (Date.now() - lastTickedRef.current) / 1000
-					: -1;
-			setTickedSecsAgo(nextTickedSecsAgo);
-			setTickedSecsAgoStr((Math.round(nextTickedSecsAgo * 100) / 100).toFixed(2));
 			if (!playerEl) {
 				return;
 			}
@@ -1293,9 +1311,7 @@ export function Player({ data }: { data: ServerData }) {
 		controlsShowing,
 		initialVolume,
 		playerEl,
-		roomPlayers.length,
 		send,
-		socketConnected,
 		updateLastTicked,
 		updateTime,
 		interacted
@@ -1378,6 +1394,7 @@ export function Player({ data }: { data: ServerData }) {
 		if (socketCommunicating) {
 			return;
 		}
+		reconnectAttemptRef.current = 0;
 		interactedRef.current = true;
 		setInteracted(true);
 		playerEl?.play?.().catch?.(() => {});
