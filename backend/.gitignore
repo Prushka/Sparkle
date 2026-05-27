@@ -1,7 +1,7 @@
+.DS_Store
+.env
+.env.*
 output
-.idea
-*.mkv
-ffprobe
-ffmpeg
-HandBrakeCLI
+input
 temp
+.idea
