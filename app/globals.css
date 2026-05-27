@@ -253,12 +253,17 @@
 	opacity: 1;
 }
 
-.chat-pc input {
-	height: 2.25rem;
-	outline: none;
-	border: none;
+.chat-pc .chat-input-wrap {
 	margin: 0 2rem;
 	width: 25rem;
+}
+
+.chat-pc input {
+	height: 2.25rem;
+	width: 100%;
+	outline: none;
+	border: none;
+	margin: 0;
 	background-color: hsla(0, 0%, 100%, 0.3) !important;
 	color: white;
 	font-weight: 700;
@@ -271,14 +276,14 @@
 }
 
 @media (max-width: 1000px) {
-	.player-chat-control .chat-pc input {
+	.player-chat-control .chat-pc .chat-input-wrap {
 		margin: 0 0.75rem;
 		width: 12rem;
 	}
 }
 
 @media (max-width: 640px) {
-	.player-chat-control .chat-pc input {
+	.player-chat-control .chat-pc .chat-input-wrap {
 		margin: 0 0.5rem;
 		width: 8.5rem;
 	}

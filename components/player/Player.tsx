@@ -891,9 +891,12 @@ export function Player({ data }: { data: ServerData }) {
 					console.log(`Socket, connected to ${room}`);
 					setSocketConnected(true);
 					profileSyncedRef.current = sendProfile();
-				send({ type: SyncTypes.NewPlayer });
-				sendSettings();
-				updateLastTicked(true);
+					send({ type: SyncTypes.NewPlayer });
+					sendSettings();
+					if (!playerElementRef.current?.paused) {
+						send({ paused: false, type: SyncTypes.PauseSync });
+					}
+					updateLastTicked(true);
 				};
 
 				socket.onmessage = (event: MessageEvent) => {
@@ -1077,6 +1080,13 @@ export function Player({ data }: { data: ServerData }) {
 			connectRef.current = connect;
 		}, [connect]);
 
+		const startWatchRoomConnection = useCallback(() => {
+			reconnectAttemptRef.current = 0;
+			interactedRef.current = true;
+			setInteracted(true);
+			connect(true);
+		}, [connect, setInteracted]);
+
 		useEffect(() => {
 			if (!socketConnected || profileSyncedRef.current) {
 				return;
@@ -1194,7 +1204,11 @@ export function Player({ data }: { data: ServerData }) {
 				player.remoteControl?.toggleControls?.();
 			}
 		};
+		const playRequest = () => {
+			startWatchRoomConnection();
+		};
 		player.addEventListener?.('mouseleave', mouseLeave);
+		player.addEventListener?.('media-play-request', playRequest);
 
 		const interval = window.setInterval(() => {
 			updateTime();
@@ -1301,6 +1315,7 @@ export function Player({ data }: { data: ServerData }) {
 			document.removeEventListener('visibilitychange', visibilityChange);
 			document.removeEventListener('mousemove', mouseMove);
 			player.removeEventListener?.('mouseleave', mouseLeave);
+			player.removeEventListener?.('media-play-request', playRequest);
 			playerUnsubscribe?.();
 			playerCanPlayUnsubscribe?.();
 			playerSoundUnsubscribe?.();
@@ -1312,6 +1327,7 @@ export function Player({ data }: { data: ServerData }) {
 		initialVolume,
 		playerEl,
 		send,
+		startWatchRoomConnection,
 		updateLastTicked,
 		updateTime,
 		interacted
@@ -1394,11 +1410,8 @@ export function Player({ data }: { data: ServerData }) {
 		if (socketCommunicating) {
 			return;
 		}
-		reconnectAttemptRef.current = 0;
-		interactedRef.current = true;
-		setInteracted(true);
+		startWatchRoomConnection();
 		playerEl?.play?.().catch?.(() => {});
-		connect(true);
 	}
 
 	const mediaPlayerClassName = `media-player relative block w-full overflow-hidden bg-slate-900 ${discord ? 'h-screen' : 'aspect-video'} ${playerEl && !playerEl.paused && chatFocusedSecs > hideControlsOnChatFocused ? 'chat-controls-hidden' : ''}`;
@@ -1459,13 +1472,10 @@ export function Player({ data }: { data: ServerData }) {
 							if (supRef.current) {
 								supPlayingRef.current = true;
 							}
+							startWatchRoomConnection();
 							if (interactedRef.current) {
 								send({ paused: false, type: SyncTypes.PauseSync });
 								setCurrentlyWatching((value) => (value ? { ...value, paused: false } : null));
-							} else {
-								interactedRef.current = true;
-								setInteracted(true);
-								connect(true);
 							}
 						}}
 					>
@@ -1498,69 +1508,87 @@ export function Player({ data }: { data: ServerData }) {
 			</div>
 
 			<div className="flex w-full flex-col gap-4 p-4 font-semibold">
-				<div className="mx-auto flex w-full max-w-[90rem] flex-col items-center justify-center gap-4 max-md:flex-col">
-					<div className="flex w-full flex-col gap-3 items-center justify-center max-md:w-full">
-						<div className="flex w-full flex-col gap-3 items-center justify-center max-md:w-full">
-							<label className="custom-file-upload">
-								<Pfp
-									id={playerId}
-									className="h-12 w-12"
-									discordUser={discord?.user}
-									staticBaseUrl={data.staticBaseUrl}
-								/>
-								<input
-									accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
-									onChange={(event) => {
-										const ppfp = event.currentTarget.files;
-										if (ppfp && ppfp[0]) {
-											if (ppfp[0].size > 12000000) {
-												toast.error('File size too large', {
-													description: 'Max file size: 10MB',
-													duration: 5000
-												});
-												event.currentTarget.value = '';
-												return;
-											}
-											const pfp = ppfp[0];
-											const reader = new FileReader();
-											reader.onload = function (e) {
-												const res = e.target?.result;
-												if (res && typeof res === 'string') {
-													const formData = new FormData();
-													formData.append('pfp', pfp);
-													fetch(joinBackendPath(backendBaseUrl, `/pfp/${playerId}`), {
-														method: 'POST',
-														body: formData
-													}).then(() => {
-														updatePfp(playerId);
-													});
-												}
-											};
-											reader.readAsDataURL(pfp);
+				<div className="mx-auto flex w-full max-w-[90rem] flex-col gap-3 sm:flex-row sm:items-center">
+					<div className="flex w-full min-w-0 items-center gap-3 sm:w-auto sm:min-w-[21rem]">
+						<label className="custom-file-upload shrink-0">
+							<Pfp
+								id={playerId}
+								className="h-12 w-12"
+								discordUser={discord?.user}
+								staticBaseUrl={data.staticBaseUrl}
+							/>
+							<input
+								accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
+								onChange={(event) => {
+									const ppfp = event.currentTarget.files;
+									if (ppfp && ppfp[0]) {
+										if (ppfp[0].size > 12000000) {
+											toast.error('File size too large', {
+												description: 'Max file size: 10MB',
+												duration: 5000
+											});
+											event.currentTarget.value = '';
+											return;
 										}
-									}}
-									type="file"
-								/>
-							</label>
-							<Input
-								disabled={discord?.user !== undefined}
-								onBlur={() => {
-									send({
-										type: SyncTypes.ProfileSync,
-										name: displayName
-									});
-									if (!discord?.user) {
-										window.localStorage.setItem('name', name);
+										const pfp = ppfp[0];
+										const reader = new FileReader();
+										reader.onload = function (e) {
+											const res = e.target?.result;
+											if (res && typeof res === 'string') {
+												const formData = new FormData();
+												formData.append('pfp', pfp);
+												fetch(joinBackendPath(backendBaseUrl, `/pfp/${playerId}`), {
+													method: 'POST',
+													body: formData
+												}).then(() => {
+													updatePfp(playerId);
+												});
+											}
+										};
+										reader.readAsDataURL(pfp);
 									}
 								}}
-								value={displayName}
-								onChange={(event) => setName(event.target.value)}
-								type="text"
-								className="w-auto focus-visible:ring-transparent max-md:grow"
-								placeholder="Name"
+								type="file"
 							/>
-						</div>
+						</label>
+						<Input
+							disabled={discord?.user !== undefined}
+							onBlur={() => {
+								send({
+									type: SyncTypes.ProfileSync,
+									name: displayName
+								});
+								if (!discord?.user) {
+									window.localStorage.setItem('name', name);
+								}
+							}}
+							value={displayName}
+							onChange={(event) => setName(event.target.value)}
+							type="text"
+							className="h-10 min-w-0 flex-1 focus-visible:ring-transparent sm:w-64 sm:flex-none"
+							placeholder="Name"
+						/>
 					</div>
+					<Chatbox
+						send={send}
+						chatFocused={chatFocused}
+						controlsShowing={null}
+						className="w-full min-w-0 flex-1"
+						inputId="chat-page-input"
+						formId="chat-page-form"
+						useButton
+						messages={roomMessages}
+						historicalPlayers={historicalPlayers}
+						staticBaseUrl={data.staticBaseUrl}
+						onFocus={() => {
+							setChatFocused(true);
+						}}
+						onBlur={() => {
+							setChatFocused(false);
+							chatFocusedSecsRef.current = 0;
+							setChatFocusedSecs(0);
+						}}
+					/>
 				</div>
 
 				<Card className="w-full max-w-[90rem] self-center">

@@ -102,17 +102,7 @@ export function Chatbox({
 			style={chatFocused ? { visibility: 'visible' } : { visibility: 'unset' }}
 			autoComplete="off"
 		>
-			<div className="relative flex items-center justify-end">
-				{focusByShortcut ? (
-					<Shortcut className="pointer-events-none absolute mr-12 flex items-center justify-center gap-0.5 text-xs font-bold">
-						{playersCount > 0 ? (
-							<>
-								<IconUsers stroke={3} size={14} /> {playersCount}
-							</>
-						) : null}
-					</Shortcut>
-				) : null}
-
+			<div className="relative flex w-full min-w-0 items-center justify-end">
 				{useButton ? (
 					<Tooltip.Provider delayDuration={0}>
 						<Tooltip.Root>
@@ -137,43 +127,54 @@ export function Chatbox({
 					</Tooltip.Provider>
 				) : null}
 
-				<Input
-					ref={inputRef}
-					id={inputId}
-					maxLength={250}
-					disabled={!connected}
-					value={value}
-					onFocus={() => {
-						onFocus();
-						if (useButton) {
-							window.setTimeout(() => {
-								window.scrollTo(0, 0);
-							}, 100);
-						}
-					}}
-					onBlur={onBlur}
-					onChange={(event) => setValue(event.target.value)}
-					onKeyDown={(event) => {
-						event.stopPropagation();
-						if (event.key === 'Escape') {
-							event.preventDefault();
-							inputRef.current?.blur();
-						}
-					}}
-					onKeyUp={(event) => {
-						event.stopPropagation();
-					}}
-					onKeyPress={(event) => {
-						event.stopPropagation();
-					}}
-					placeholder={placeholder}
-					type="text"
-					autoComplete="off"
-					className={`focus-visible:ring-transparent ${useButton ? 'rounded-l-none rounded-r-none' : ''} input`}
-				/>
+				<div className={`relative min-w-0 ${useButton ? 'flex flex-1' : 'chat-input-wrap'}`}>
+					<Input
+						ref={inputRef}
+						id={inputId}
+						maxLength={250}
+						disabled={!connected}
+						value={value}
+						onFocus={() => {
+							onFocus();
+							if (useButton) {
+								window.setTimeout(() => {
+									window.scrollTo(0, 0);
+								}, 100);
+							}
+						}}
+						onBlur={onBlur}
+						onChange={(event) => setValue(event.target.value)}
+						onKeyDown={(event) => {
+							event.stopPropagation();
+							if (event.key === 'Escape') {
+								event.preventDefault();
+								inputRef.current?.blur();
+							}
+						}}
+						onKeyUp={(event) => {
+							event.stopPropagation();
+						}}
+						onKeyPress={(event) => {
+							event.stopPropagation();
+						}}
+						placeholder={placeholder}
+						type="text"
+						autoComplete="off"
+						className={`min-w-0 flex-1 focus-visible:ring-transparent ${useButton ? 'rounded-l-none rounded-r-none' : ''} ${focusByShortcut ? 'pr-16' : ''} input`}
+					/>
+					{focusByShortcut ? (
+						<Shortcut className="pointer-events-none absolute right-3 top-1/2 z-10 flex -translate-y-1/2 items-center justify-center gap-0.5 text-xs font-bold">
+							{playersCount > 0 ? (
+								<>
+									<IconUsers stroke={3} size={14} /> {playersCount}
+								</>
+							) : null}
+						</Shortcut>
+					) : null}
+				</div>
 
 				{useButton ? (
-					<div className="flex">
+					<div className="flex shrink-0">
 						<Dialog.Root>
 							<Dialog.Trigger
 								disabled={!connected}
@@ -182,7 +183,12 @@ export function Chatbox({
 								History
 							</Dialog.Trigger>
 							<Dialog.Content className="gap-3 pr-1 max-sm:pl-2">
-								<div className="self-start text-lg font-bold">Chat History (Session)</div>
+								<Dialog.Title className="self-start text-lg font-bold">
+									Chat History (Session)
+								</Dialog.Title>
+								<Dialog.Description className="sr-only">
+									Messages sent in this watch room session.
+								</Dialog.Description>
 								<div className="flex max-h-[85vh] flex-col items-center gap-2.5 overflow-x-hidden overflow-y-auto">
 									{messages.length === 0 ? (
 										<div className="self-start">There&apos;s nothing here yet ┬─┬ノ( º _ ºノ)</div>

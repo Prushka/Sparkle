@@ -1,6 +1,14 @@
 'use client';
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from 'react';
+import {
+	forwardRef,
+	useCallback,
+	useEffect,
+	useImperativeHandle,
+	useMemo,
+	useRef,
+	useState
+} from 'react';
 import { useRouter } from 'next/navigation';
 import { IconCheck, IconChevronRight, IconChevronDown } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
@@ -26,6 +34,7 @@ export const MediaSelection = forwardRef<
 	const [jobs, setJobs] = useState<Job[]>(data.jobs);
 	const [titleSelectionOpen, setTitleSelectionOpen] = useState(false);
 	const [seSelectionOpen, setSeSelectionOpen] = useState(false);
+	const openEpisodeSelectionAfterTitleCloseRef = useRef(false);
 	const [selectedTitleId, setSelectedTitleId] = useState<string | undefined>(
 		data.job?.Title?.titleId
 	);
@@ -40,8 +49,19 @@ export const MediaSelection = forwardRef<
 		setSelectedSe(data.job?.Title?.episode?.se);
 	}, [data.job]);
 
+	useEffect(() => {
+		if (titleSelectionOpen || !openEpisodeSelectionAfterTitleCloseRef.current) {
+			return;
+		}
+		openEpisodeSelectionAfterTitleCloseRef.current = false;
+		const timer = window.setTimeout(() => setSeSelectionOpen(true), 0);
+		return () => window.clearTimeout(timer);
+	}, [titleSelectionOpen, selectedTitleId]);
+
 	const titles = useMemo(() => getTitleComponentsByJobs(jobs), [jobs]);
 	const selected = selectedTitleId ? titles[selectedTitleId] : null;
+	const selectedHasEpisodes = Boolean(selected?.episodes?.length);
+	const selectedEpisodes = selected?.episodes ?? [];
 	const selectedEpisode = selected?.episodes?.find((episode) => episode.se === selectedSe);
 	const newJobs = useMemo(() => getNewJobs(jobs), [jobs]);
 
@@ -108,7 +128,7 @@ export const MediaSelection = forwardRef<
 						variant="outline"
 						role="combobox"
 						aria-expanded={titleSelectionOpen}
-						className={`max-md:w-full justify-between font-semibold ${!selected?.episodes ? 'col-span-3' : ''}`}
+						className={`max-md:w-full justify-between font-semibold ${!selectedHasEpisodes ? 'col-span-3' : ''}`}
 					>
 						<span className="max-w-[calc(100%-2rem)] overflow-hidden text-ellipsis">
 							{selected?.title || 'Select media'}
@@ -127,15 +147,14 @@ export const MediaSelection = forwardRef<
 									className={`p-1 ${selectedTitleId === title.titleId ? 'font-bold' : ''}`}
 									value={title.title}
 									onSelect={() => {
-										setTitleSelectionOpen(false);
 										setSelectedTitleId(title.titleId);
 										setSelectedSe(undefined);
-										if (!title.episodes) {
+										if (!title.episodes?.length) {
+											setTitleSelectionOpen(false);
 											bounceTo(title.id);
 										} else {
-											window.setTimeout(() => {
-												setSeSelectionOpen(true);
-											}, 0);
+											openEpisodeSelectionAfterTitleCloseRef.current = true;
+											setTitleSelectionOpen(false);
 										}
 									}}
 								>
@@ -160,7 +179,7 @@ export const MediaSelection = forwardRef<
 				</Popover.Content>
 			</Popover.Root>
 
-			{selected?.episodes ? (
+			{selectedHasEpisodes ? (
 				<>
 					<IconChevronRight className="max-md:hidden" size={20} stroke={2} />
 
@@ -169,7 +188,7 @@ export const MediaSelection = forwardRef<
 							<Button
 								variant="outline"
 								role="combobox"
-								aria-expanded={titleSelectionOpen}
+								aria-expanded={seSelectionOpen}
 								className={`max-md:w-full justify-between font-semibold ${!selectedSe ? 'font-bold text-red-600' : ''}`}
 							>
 								<span className="max-w-[calc(100%-2rem)] overflow-hidden text-ellipsis">
@@ -183,7 +202,7 @@ export const MediaSelection = forwardRef<
 								<Command.Input placeholder="Search episode..." className="h-9" />
 								<Command.Empty>No episode found.</Command.Empty>
 								<Command.Group className="max-h-[37vh] overflow-y-auto">
-									{selected.episodes.map((episode) => (
+									{selectedEpisodes.map((episode) => (
 										<Command.Item
 											key={episode.id}
 											className={`p-1 ${selectedSe === episode.se ? 'font-bold' : ''}`}
