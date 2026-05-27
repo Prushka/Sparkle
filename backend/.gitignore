@@ -1,0 +1,7 @@
+output
+.idea
+*.mkv
+ffprobe
+ffmpeg
+HandBrakeCLI
+temp

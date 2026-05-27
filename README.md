@@ -15,7 +15,7 @@ A fully synced web-based watch party that supports (both on desktop & mobile):
 7. Media selection with season and episode support
 8. Auto Reconnect
 9. In-background (_i.e.,_ tabbed out) notifications
-10. **Automated video transcoding, stream extraction, and metadata generation** in [backend](https://github.com/Prushka/Sparkle-BE)
+10. **Automated video transcoding, stream extraction, and metadata generation** in [backend](backend)
 
 ![Main Page](assets/main.png)
 
@@ -58,9 +58,10 @@ Channel id will be used as the room id. All functionalities mentioned above are 
 
 The demo website contains only short clips.
 
-# This repository contains only the frontend & SSR part
+# Repository layout
 
-The [backend](https://github.com/Prushka/Sparkle-BE) part is still a work-in-progress.
+This repository contains the frontend/SSR app and the extracted Go backend under
+[`backend`](backend).
 
 Currently, this project is intended to be used as an extension to
 [Sonarr](https://github.com/Sonarr/Sonarr)/[Radarr](https://github.com/Radarr/Radarr) and your local media library.
