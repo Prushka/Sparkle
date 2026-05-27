@@ -1414,6 +1414,10 @@ export function Player({ data }: { data: ServerData }) {
 		playerEl?.play?.().catch?.(() => {});
 	}
 
+	function getRoomPath(id: string) {
+		return roomBase ? `/${id}?room=${encodeURIComponent(roomBase)}` : `/${id}`;
+	}
+
 	const mediaPlayerClassName = `media-player relative block w-full overflow-hidden bg-slate-900 ${discord ? 'h-screen' : 'aspect-video'} ${playerEl && !playerEl.paused && chatFocusedSecs > hideControlsOnChatFocused ? 'chat-controls-hidden' : ''}`;
 	const controlsChat =
 		chatMountNode &&
@@ -1597,7 +1601,8 @@ export function Player({ data }: { data: ServerData }) {
 							<div className="flex flex-1 flex-col gap-1 max-sm:mr-4">
 								<CardTitle>Media</CardTitle>
 								<CardDescription className="max-sm:hidden">
-									Codec: {selectedCodec} {autoCodec ?? ''}; Audio: {effectiveAudio}
+									Codec: {selectedCodec} {autoCodec ?? ''} {job.ExtractedQuality}; Audio:{' '}
+									{effectiveAudio}
 								</CardDescription>
 							</div>
 							<ConnectButton
@@ -1742,7 +1747,7 @@ export function Player({ data }: { data: ServerData }) {
 										broadcast: { type: BroadcastTypes.MoveTo, moveTo: id }
 									});
 								} else {
-									window.location.href = `/${id}`;
+									window.location.href = getRoomPath(id);
 								}
 							}}
 						/>

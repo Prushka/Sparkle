@@ -16,7 +16,6 @@ export function DiscordBridge() {
 	const authenticatedRef = useRef(false);
 	const setupStartedRef = useRef(false);
 	const authRef = useRef<Discord | null>(discordAuth);
-	const initializedRouteRef = useRef(false);
 	const latestRoomRef = useRef<string | null>(null);
 	const searchParamsString = searchParams.toString();
 
@@ -49,11 +48,7 @@ export function DiscordBridge() {
 	}, [discordAuth?.channelId, searchParamsString]);
 
 	useEffect(() => {
-		if (!pathname || pathname.startsWith('/api')) {
-			return;
-		}
-		if (!initializedRouteRef.current) {
-			initializedRouteRef.current = true;
+		if (!pathname || pathname === '/' || pathname.startsWith('/api') || pathname.startsWith('/json')) {
 			return;
 		}
 		const params = new URLSearchParams(searchParamsString);
@@ -65,7 +60,9 @@ export function DiscordBridge() {
 			discordAuth?.channelId ||
 			params.get('channel_id') ||
 			randomString(6);
-		router.replace(`${pathname}?room=${room}`);
+		latestRoomRef.current = room;
+		params.set('room', room);
+		router.replace(`${pathname}?${params.toString()}`);
 	}, [discordAuth?.channelId, pathname, router, searchParamsString]);
 
 	useEffect(() => {

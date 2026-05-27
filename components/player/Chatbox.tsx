@@ -110,7 +110,7 @@ export function Chatbox({
 								<Button
 									disabled={!connected}
 									variant="outline"
-									className="rounded-r-none border-r-0 px-2"
+									className="h-10 rounded-r-none border-r-0 px-2"
 									onClick={() => {
 										setChatLayout((value) => (value === 'hide' ? 'show' : 'hide'));
 									}}
@@ -160,7 +160,7 @@ export function Chatbox({
 						placeholder={placeholder}
 						type="text"
 						autoComplete="off"
-						className={`min-w-0 flex-1 focus-visible:ring-transparent ${useButton ? 'rounded-l-none rounded-r-none' : ''} ${focusByShortcut ? 'pr-16' : ''} input`}
+						className={`min-w-0 flex-1 focus-visible:ring-transparent ${useButton ? 'h-10 rounded-l-none rounded-r-none px-2' : ''} ${focusByShortcut ? 'pr-16' : ''} input`}
 					/>
 					{focusByShortcut ? (
 						<Shortcut className="pointer-events-none absolute right-3 top-1/2 z-10 flex -translate-y-1/2 items-center justify-center gap-0.5 text-xs font-bold">
@@ -178,7 +178,7 @@ export function Chatbox({
 						<Dialog.Root>
 							<Dialog.Trigger
 								disabled={!connected}
-								className={`${buttonVariants({ variant: 'outline' })} rounded-l-none rounded-r-none border-l-0 border-r-0`}
+								className={`${buttonVariants({ variant: 'outline' })} h-10 rounded-l-none rounded-r-none border-l-0 border-r-0`}
 							>
 								History
 							</Dialog.Trigger>
@@ -228,7 +228,7 @@ export function Chatbox({
 						<Button
 							disabled={!connected}
 							variant="outline"
-							className="rounded-l-none"
+							className="h-10 rounded-l-none"
 							onClick={sendMessage}
 						>
 							Send
