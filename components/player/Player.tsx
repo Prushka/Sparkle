@@ -1999,7 +1999,7 @@ export function Player({ data }: { data: ServerData }) {
 					/>
 				</div>
 
-				<div className="mb-3 flex flex-wrap justify-center gap-4">
+				<div className="mb-3 flex flex-wrap justify-center gap-4 pt-2 sm:pt-3">
 					{displayedRoomPlayers.map((player) => {
 						const isCurrentUser = player.id === playerId;
 						const isSpeaking = speakingPlayerIds.has(player.id);
@@ -2036,7 +2036,7 @@ export function Player({ data }: { data: ServerData }) {
 									</span>
 								</span>
 								<span className="player-status-text flex flex-col items-center justify-center gap-0.5 font-semibold">
-									<span className="flex w-16 items-center justify-center gap-1 overflow-hidden">
+									<span className="flex w-24 items-center justify-center gap-1 overflow-hidden sm:w-28">
 										<span className="min-w-0 overflow-hidden text-ellipsis font-bold">
 											{player.name}
 										</span>
@@ -2071,7 +2071,14 @@ export function Player({ data }: { data: ServerData }) {
 							return <div key={player.id}>{playerBadge}</div>;
 						}
 						return (
-							<Dialog.Root key={player.id}>
+							<Dialog.Root
+								key={player.id}
+								onOpenChange={(open) => {
+									if (!open) {
+										handleNameBlur();
+									}
+								}}
+							>
 								<Dialog.Trigger asChild>{playerBadge}</Dialog.Trigger>
 								<Dialog.Content className="max-w-sm gap-4">
 									<Dialog.Title className="text-lg font-bold">Profile Settings</Dialog.Title>
