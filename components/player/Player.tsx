@@ -940,6 +940,7 @@ export function Player({ data }: { data: ServerData }) {
 		addSystemMessage
 	});
 	const { handleVoiceBroadcast, join: joinVoice } = voice;
+	const speakingPlayerIds = useMemo(() => new Set(voice.speakingIds), [voice.speakingIds]);
 
 	useEffect(() => {
 		if (!playerEl) {
@@ -2103,36 +2104,43 @@ export function Player({ data }: { data: ServerData }) {
 				</div>
 
 				<div className="mb-3 flex flex-wrap justify-center gap-4">
-					{roomPlayers.map((player) => (
-						<Button
-							key={player.id}
-							variant="outline"
-							className="flex h-auto gap-2 rounded-full rounded-l-full rounded-r-full py-0 pl-0 pr-4"
-						>
-							<Pfp
-								className="mr-0.5 h-12 w-12"
-								id={player.id}
-								discordUser={historicalPlayers[player.id]?.discordUser}
-								staticBaseUrl={data.staticBaseUrl}
-							/>
-							<span className="player-status-text flex flex-col items-center justify-center gap-0.5 font-semibold">
-								<span className="w-16 overflow-hidden text-ellipsis font-bold">{player.name}</span>
-								{player.inBg ? (
-									<div className="flex items-center justify-center gap-1">
-										<IconTableExport size={14} stroke={2} />
-										<span>BG</span>
-									</div>
+					{roomPlayers.map((player) => {
+						const isSpeaking = speakingPlayerIds.has(player.id);
+						return (
+							<Button
+								key={player.id}
+								variant="outline"
+								className={`flex h-auto gap-2 rounded-full rounded-l-full rounded-r-full border-2 py-0 pl-0 pr-4 transition-[background-color,border-color,box-shadow] duration-200 ${
+									isSpeaking
+										? 'border-emerald-500 bg-emerald-500/10 shadow-[0_0_18px_rgba(16,185,129,0.28)]'
+										: 'border-input'
+								}`}
+							>
+								<Pfp
+									className="mr-0.5 h-12 w-12"
+									id={player.id}
+									discordUser={historicalPlayers[player.id]?.discordUser}
+									staticBaseUrl={data.staticBaseUrl}
+								/>
+								<span className="player-status-text flex flex-col items-center justify-center gap-0.5 font-semibold">
+									<span className="w-16 overflow-hidden text-ellipsis font-bold">{player.name}</span>
+									{player.inBg ? (
+										<div className="flex items-center justify-center gap-1">
+											<IconTableExport size={14} stroke={2} />
+											<span>BG</span>
+										</div>
+									) : (
+										<span>{formatSeconds(player.time)}</span>
+									)}
+								</span>
+								{player.paused === false ? (
+									<IconPlayerPlayFilled size={18} stroke={2} />
 								) : (
-									<span>{formatSeconds(player.time)}</span>
+									<IconPlayerPauseFilled size={18} stroke={2} />
 								)}
-							</span>
-							{player.paused === false ? (
-								<IconPlayerPlayFilled size={18} stroke={2} />
-							) : (
-								<IconPlayerPauseFilled size={18} stroke={2} />
-							)}
-						</Button>
-					))}
+							</Button>
+						);
+					})}
 				</div>
 			</div>
 

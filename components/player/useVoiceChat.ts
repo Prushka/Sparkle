@@ -27,6 +27,14 @@ type PeerRecord = {
 	pendingCandidates: RTCIceCandidateInit[];
 };
 
+type SpeakingMonitor = {
+	stream: MediaStream;
+	source: MediaStreamAudioSourceNode;
+	analyser: AnalyserNode;
+	data: Uint8Array<ArrayBuffer>;
+	activeUntil: number;
+};
+
 type UseVoiceChatOptions = {
 	playerId: string;
 	roomPlayers: Player[];
@@ -37,6 +45,8 @@ type UseVoiceChatOptions = {
 
 const voiceIceServers: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
 const maxPeerRetryAttempts = 5;
+const speakingThreshold = 0.035;
+const speakingHoldMs = 450;
 
 function createSessionId() {
 	if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -64,6 +74,10 @@ function toSessionDescription(
 	};
 }
 
+function createAudioSampleBuffer(size: number): Uint8Array<ArrayBuffer> {
+	return new Uint8Array(new ArrayBuffer(size));
+}
+
 export function useVoiceChat({
 	playerId,
 	roomPlayers,
@@ -72,8 +86,13 @@ export function useVoiceChat({
 	addSystemMessage
 }: UseVoiceChatOptions) {
 	const sessionIdRef = useRef(createSessionId());
+	const playerIdRef = useRef(playerId);
 	const localStreamRef = useRef<MediaStream | null>(null);
 	const peersRef = useRef(new Map<string, PeerRecord>());
+	const audioContextRef = useRef<AudioContext | null>(null);
+	const speakingMonitorsRef = useRef(new Map<string, SpeakingMonitor>());
+	const speakingFrameRef = useRef<number | null>(null);
+	const speakingIdsRef = useRef(new Set<string>());
 	const desiredJoinedRef = useRef(false);
 	const mutedRef = useRef(true);
 	const ensurePeerRef = useRef<
@@ -86,6 +105,11 @@ export function useVoiceChat({
 	const [status, setStatus] = useState<VoiceStatus>('idle');
 	const [peerStates, setPeerStates] = useState<Record<string, VoicePeerState>>({});
 	const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
+	const [speakingIds, setSpeakingIds] = useState<string[]>([]);
+
+	useEffect(() => {
+		playerIdRef.current = playerId;
+	}, [playerId]);
 
 	useEffect(() => {
 		desiredJoinedRef.current = desiredJoined;
@@ -103,6 +127,126 @@ export function useVoiceChat({
 	const remoteAudioStreams = useMemo(
 		() => Object.entries(remoteStreams).map(([id, stream]) => ({ id, stream })),
 		[remoteStreams]
+	);
+
+	const publishSpeakingIds = useCallback(() => {
+		const next = Array.from(speakingIdsRef.current);
+		setSpeakingIds((prev) => {
+			if (prev.length === next.length && prev.every((id) => speakingIdsRef.current.has(id))) {
+				return prev;
+			}
+			return next;
+		});
+	}, []);
+
+	const markSpeaking = useCallback(
+		(id: string, active: boolean) => {
+			const speakingIdsSet = speakingIdsRef.current;
+			if (active === speakingIdsSet.has(id)) {
+				return;
+			}
+			if (active) {
+				speakingIdsSet.add(id);
+			} else {
+				speakingIdsSet.delete(id);
+			}
+			publishSpeakingIds();
+		},
+		[publishSpeakingIds]
+	);
+
+	const ensureAudioContext = useCallback(() => {
+		if (audioContextRef.current) {
+			return audioContextRef.current;
+		}
+		const AudioContextConstructor =
+			window.AudioContext ||
+			(window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+		if (!AudioContextConstructor) {
+			return null;
+		}
+		const context = new AudioContextConstructor();
+		audioContextRef.current = context;
+		return context;
+	}, []);
+
+	const startSpeakingLoop = useCallback(() => {
+		if (speakingFrameRef.current !== null) {
+			return;
+		}
+		const tick = () => {
+			speakingFrameRef.current = null;
+			const now = performance.now();
+			for (const [id, monitor] of speakingMonitorsRef.current) {
+				const isLocalMuted = id === playerIdRef.current && mutedRef.current;
+				const hasLiveAudio = monitor.stream
+					.getAudioTracks()
+					.some((track) => track.readyState === 'live' && track.enabled);
+				if (!isLocalMuted && monitor.stream.active && hasLiveAudio) {
+					monitor.analyser.getByteTimeDomainData(monitor.data);
+					let sum = 0;
+					for (const value of monitor.data) {
+						const centered = (value - 128) / 128;
+						sum += centered * centered;
+					}
+					const rms = Math.sqrt(sum / monitor.data.length);
+					if (rms > speakingThreshold) {
+						monitor.activeUntil = now + speakingHoldMs;
+					}
+				}
+				markSpeaking(id, monitor.activeUntil > now && !isLocalMuted);
+			}
+			if (speakingMonitorsRef.current.size > 0) {
+				speakingFrameRef.current = window.requestAnimationFrame(tick);
+			}
+		};
+		speakingFrameRef.current = window.requestAnimationFrame(tick);
+	}, [markSpeaking]);
+
+	const stopSpeakingMonitor = useCallback(
+		(id: string) => {
+			const monitor = speakingMonitorsRef.current.get(id);
+			if (!monitor) {
+				return;
+			}
+			monitor.source.disconnect();
+			monitor.analyser.disconnect();
+			speakingMonitorsRef.current.delete(id);
+			markSpeaking(id, false);
+		},
+		[markSpeaking]
+	);
+
+	const trackSpeakingStream = useCallback(
+		(id: string, stream: MediaStream) => {
+			if (!id || stream.getAudioTracks().length === 0) {
+				return;
+			}
+			const existing = speakingMonitorsRef.current.get(id);
+			if (existing?.stream === stream) {
+				return;
+			}
+			stopSpeakingMonitor(id);
+			const context = ensureAudioContext();
+			if (!context) {
+				return;
+			}
+			void context.resume().catch(() => {});
+			const source = context.createMediaStreamSource(stream);
+			const analyser = context.createAnalyser();
+			analyser.fftSize = 512;
+			analyser.smoothingTimeConstant = 0.45;
+			source.connect(analyser);
+			speakingMonitorsRef.current.set(id, {
+				stream,
+				source,
+				analyser,
+				data: createAudioSampleBuffer(analyser.fftSize),
+				activeUntil: 0
+			});
+			startSpeakingLoop();
+		},
+		[ensureAudioContext, startSpeakingLoop, stopSpeakingMonitor]
 	);
 
 	const updatePeerState = useCallback((id: string, patch: Partial<VoicePeerState>) => {
@@ -143,9 +287,10 @@ export function useVoiceChat({
 		record.pc.oniceconnectionstatechange = null;
 		record.pc.close();
 		peersRef.current.delete(remoteId);
+		stopSpeakingMonitor(remoteId);
 		setRemoteStreams((prev) => omitKey(prev, remoteId));
 		setPeerStates((prev) => omitKey(prev, remoteId));
-	}, []);
+	}, [stopSpeakingMonitor]);
 
 	const schedulePeerRetry = useCallback(
 		(remoteId: string) => {
@@ -211,6 +356,7 @@ export function useVoiceChat({
 				setRemoteStreams((prev) =>
 					prev[remoteId] === stream ? prev : { ...prev, [remoteId]: stream }
 				);
+				trackSpeakingStream(remoteId, stream);
 			};
 			pc.onconnectionstatechange = () => {
 				updatePeerState(remoteId, {
@@ -233,7 +379,7 @@ export function useVoiceChat({
 			updatePeerState(remoteId, { connectionState: 'new', attempts: record.attempts });
 			return record;
 		},
-		[schedulePeerRetry, sendVoiceSignal, updatePeerState]
+		[schedulePeerRetry, sendVoiceSignal, trackSpeakingStream, updatePeerState]
 	);
 
 	const createOffer = useCallback(
@@ -299,8 +445,9 @@ export function useVoiceChat({
 			track.enabled = !mutedRef.current;
 		}
 		localStreamRef.current = stream;
+		trackSpeakingStream(playerIdRef.current, stream);
 		return stream;
-	}, []);
+	}, [trackSpeakingStream]);
 
 	const attachLocalStreamToPeers = useCallback(
 		(stream: MediaStream) => {
@@ -358,9 +505,10 @@ export function useVoiceChat({
 		for (const remoteId of Array.from(peersRef.current.keys())) {
 			closePeer(remoteId);
 		}
+		stopSpeakingMonitor(playerIdRef.current);
 		localStreamRef.current?.getTracks().forEach((track) => track.stop());
 		localStreamRef.current = null;
-	}, [closePeer, sendVoiceSignal]);
+	}, [closePeer, sendVoiceSignal, stopSpeakingMonitor]);
 
 	const toggleMuted = useCallback(async () => {
 		if (!desiredJoinedRef.current) {
@@ -380,11 +528,15 @@ export function useVoiceChat({
 		}
 		const nextMuted = !mutedRef.current;
 		mutedRef.current = nextMuted;
+		void audioContextRef.current?.resume().catch(() => {});
 		for (const track of localStreamRef.current?.getAudioTracks() ?? []) {
 			track.enabled = !nextMuted;
 		}
+		if (nextMuted) {
+			markSpeaking(playerIdRef.current, false);
+		}
 		setMuted(nextMuted);
-	}, [addSystemMessage, attachLocalStreamToPeers, ensureMicrophone, join]);
+	}, [addSystemMessage, attachLocalStreamToPeers, ensureMicrophone, join, markSpeaking]);
 
 	const toggleDeafened = useCallback(() => {
 		setDeafened((value) => !value);
@@ -474,8 +626,14 @@ export function useVoiceChat({
 
 	useEffect(() => {
 		const peers = peersRef.current;
+		const speakingMonitors = speakingMonitorsRef.current;
+		const speakingIdsSet = speakingIdsRef.current;
 		return () => {
 			desiredJoinedRef.current = false;
+			if (speakingFrameRef.current !== null) {
+				window.cancelAnimationFrame(speakingFrameRef.current);
+				speakingFrameRef.current = null;
+			}
 			for (const record of Array.from(peers.values())) {
 				if (record.retryTimer !== null) {
 					window.clearTimeout(record.retryTimer);
@@ -483,6 +641,14 @@ export function useVoiceChat({
 				record.pc.close();
 			}
 			peers.clear();
+			for (const monitor of speakingMonitors.values()) {
+				monitor.source.disconnect();
+				monitor.analyser.disconnect();
+			}
+			speakingMonitors.clear();
+			speakingIdsSet.clear();
+			void audioContextRef.current?.close().catch(() => {});
+			audioContextRef.current = null;
 			localStreamRef.current?.getTracks().forEach((track) => track.stop());
 			localStreamRef.current = null;
 		};
@@ -500,6 +666,7 @@ export function useVoiceChat({
 		status,
 		peerList,
 		connectedPeers,
-		remoteAudioStreams
+		remoteAudioStreams,
+		speakingIds
 	};
 }
