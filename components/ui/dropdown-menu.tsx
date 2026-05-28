@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import * as DropdownMenuPrimitive from '@radix-ui/react-dropdown-menu';
+import { IconCheck } from '@tabler/icons-react';
 import { cn } from '@/lib/utils';
 
 const Root = DropdownMenuPrimitive.Root;
@@ -104,7 +105,7 @@ const RadioItem = React.forwardRef<
 		>
 			<span className="absolute left-2 flex h-3.5 w-3.5 items-center justify-center">
 				<DropdownMenuPrimitive.ItemIndicator>
-					<span className="h-2 w-2 rounded-full bg-current" />
+					<IconCheck className="h-3.5 w-3.5" stroke={2.5} />
 				</DropdownMenuPrimitive.ItemIndicator>
 			</span>
 			{children}

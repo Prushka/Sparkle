@@ -67,7 +67,7 @@ import {
 } from '@/lib/player/t';
 import SUPtitles from '@/lib/suptitles/suptitles';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import * as Dialog from '@/components/ui/dialog';
 import * as DropdownMenu from '@/components/ui/dropdown-menu';
 import * as Tooltip from '@/components/ui/tooltip';
@@ -2177,10 +2177,6 @@ export function Player({ data }: { data: ServerData }) {
 						>
 							<div className="flex min-w-0 flex-1 flex-col gap-1">
 								<CardTitle>Media</CardTitle>
-								<CardDescription className="max-sm:hidden">
-									Codec: {selectedCodec} {autoCodec ?? ''} {job.ExtractedQuality}; Audio:{' '}
-									{effectiveAudio}
-								</CardDescription>
 							</div>
 							<DropdownMenu.Root>
 								<DropdownMenu.Trigger asChild>
@@ -2198,19 +2194,20 @@ export function Player({ data }: { data: ServerData }) {
 									</Button>
 								</DropdownMenu.Trigger>
 								<DropdownMenu.Content className="w-56">
-									<DropdownMenu.Label>Video Settings</DropdownMenu.Label>
+									<DropdownMenu.Label className="flex items-center justify-between gap-3">
+										<span>Video Settings</span>
+										<span className="truncate text-xs font-medium text-muted-foreground">
+											{job.ExtractedQuality}
+										</span>
+									</DropdownMenu.Label>
 									<DropdownMenu.Separator />
 									<DropdownMenu.Group>
 										{audiosExistForCodec(job, videoSrc?.sCodec || '') ? (
-											<DropdownMenu.RadioGroup value={effectiveAudio}>
+											<DropdownMenu.RadioGroup value={effectiveAudio} onValueChange={changeAudio}>
 												{job.MappedAudio[videoSrc?.sCodec || '']?.map((stream) => {
 													const curr = `${stream.Index}-${stream.Language}`;
 													return (
-														<DropdownMenu.RadioItem
-															key={curr}
-															value={curr}
-															onClick={() => changeAudio(curr)}
-														>
+														<DropdownMenu.RadioItem key={curr} value={curr}>
 															{formatPair(stream)} ({stream.Index})
 														</DropdownMenu.RadioItem>
 													);
@@ -2220,16 +2217,10 @@ export function Player({ data }: { data: ServerData }) {
 									</DropdownMenu.Group>
 									<DropdownMenu.Separator />
 									<DropdownMenu.Group>
-										<DropdownMenu.RadioGroup value={selectedCodec}>
-											<DropdownMenu.RadioItem value="auto" onClick={() => changeCodec('auto')}>
-												Auto {autoCodec}
-											</DropdownMenu.RadioItem>
+										<DropdownMenu.RadioGroup value={selectedCodec} onValueChange={changeCodec}>
+											<DropdownMenu.RadioItem value="auto">Auto {autoCodec}</DropdownMenu.RadioItem>
 											{job.EncodedCodecs.map((codec) => (
-												<DropdownMenu.RadioItem
-													key={codec}
-													value={codec}
-													onClick={() => changeCodec(codec)}
-												>
+												<DropdownMenu.RadioItem key={codec} value={codec}>
 													{codecDisplayMap[codec]}
 													{formatMbps(job, codec)}
 													{!supportedCodecs.includes(codec) ? (
