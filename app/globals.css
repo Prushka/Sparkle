@@ -158,9 +158,13 @@
 	}
 
 	html,
-	body,
 	#__next {
 		height: 100%;
+	}
+
+	/* Keep body height content-based so Radix scroll locking does not collapse page scroll. */
+	body {
+		min-height: 100dvh;
 	}
 
 	html,
@@ -174,7 +178,6 @@
 	body {
 		@apply bg-background text-foreground;
 		font-family: var(--font-body);
-		min-height: 100dvh;
 	}
 
 	button {
