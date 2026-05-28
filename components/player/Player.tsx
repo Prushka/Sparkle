@@ -135,11 +135,20 @@ function normalizePlayerVolume(volume: number): number {
 	return Math.min(1, Math.max(0, volume));
 }
 
-function savePlayerVolume(volume: number) {
+function savePlayerVolume(volume: number, muted: boolean) {
 	if (typeof window === 'undefined') {
 		return;
 	}
-	window.localStorage.setItem(PLAYER_VOLUME_STORAGE_KEY, normalizePlayerVolume(volume).toString());
+	window.localStorage.setItem(
+		PLAYER_VOLUME_STORAGE_KEY,
+		normalizePlayerVolume(muted ? 0 : volume).toString()
+	);
+}
+
+function restorePlayerVolume(player: MediaPlayerInstance, volume: number) {
+	const nextVolume = normalizePlayerVolume(volume);
+	player.volume = nextVolume;
+	player.muted = nextVolume === 0;
 }
 
 function getSubtitleFormat(src: string): SubtitleTrackFormat {
@@ -505,6 +514,8 @@ export function Player({ data }: { data: ServerData }) {
 	const playerCanPlayRef = useRef(false);
 	const chatFocusedSecsRef = useRef(0);
 	const volumeInitializedRef = useRef(false);
+	const volumeRestoringRef = useRef(false);
+	const volumeCanPlayRestoredRef = useRef(false);
 	const playbackSyncSuppressionTimerRef = useRef<number | null>(null);
 	const autoPlayWhenAloneOnJoinRef = useRef(false);
 	const [mounted, setMounted] = useState(false);
@@ -529,6 +540,8 @@ export function Player({ data }: { data: ServerData }) {
 	const [initialVolume] = useState(() =>
 		normalizePlayerVolume(setGetLsNumber(PLAYER_VOLUME_STORAGE_KEY, DEFAULT_PLAYER_VOLUME))
 	);
+	const [playerVolume, setPlayerVolume] = useState(initialVolume);
+	const [playerMuted, setPlayerMuted] = useState(initialVolume === 0);
 	const [renderNow, setRenderNow] = useState(0);
 	const BASE_STATIC = `${data.staticBaseUrl}/${job.Id}`;
 	const [tickedSecsAgo, setTickedSecsAgo] = useState(-1);
@@ -598,6 +611,8 @@ export function Player({ data }: { data: ServerData }) {
 	const setPlayerElement = useCallback((element: MediaPlayerInstance | null) => {
 		if (element !== playerElementRef.current) {
 			volumeInitializedRef.current = false;
+			volumeRestoringRef.current = false;
+			volumeCanPlayRestoredRef.current = false;
 		}
 		playerElementRef.current = element;
 		setPlayerEl(element);
@@ -1515,9 +1530,16 @@ export function Player({ data }: { data: ServerData }) {
 			return;
 		}
 		const player = playerEl;
-		if (!volumeInitializedRef.current) {
-			player.volume = initialVolume;
+		const applyInitialVolume = () => {
+			volumeRestoringRef.current = true;
+			restorePlayerVolume(player, initialVolume);
 			volumeInitializedRef.current = true;
+			window.setTimeout(() => {
+				volumeRestoringRef.current = false;
+			}, 0);
+		};
+		if (!volumeInitializedRef.current) {
+			applyInitialVolume();
 		}
 		const playerUnsubscribe = player.subscribe?.(
 			({ controlsVisible }: { controlsVisible: boolean }) => {
@@ -1529,11 +1551,9 @@ export function Player({ data }: { data: ServerData }) {
 			if (canPlay && interactedRef.current && !socketRef.current) {
 				connectRef.current?.();
 			}
-			if (canPlay) {
-				if (!volumeInitializedRef.current) {
-					player.volume = initialVolume;
-					volumeInitializedRef.current = true;
-				}
+			if (canPlay && !volumeCanPlayRestoredRef.current) {
+				applyInitialVolume();
+				volumeCanPlayRestoredRef.current = true;
 			}
 		});
 
@@ -1903,7 +1923,9 @@ export function Player({ data }: { data: ServerData }) {
 							crossOrigin
 							keyShortcuts={PLAYER_KEY_SHORTCUTS}
 							ref={setPlayerElement}
+							muted={playerMuted}
 							playsInline
+							volume={playerVolume}
 							onMediaPlayRequest={() => {
 								startWatchRoomConnection();
 							}}
@@ -1933,8 +1955,13 @@ export function Player({ data }: { data: ServerData }) {
 								}
 								setCurrentlyWatching((value) => (value ? { ...value, paused: false } : null));
 							}}
-							onVolumeChange={({ volume }: { muted: boolean; volume: number }) => {
-								savePlayerVolume(volume);
+							onVolumeChange={({ muted, volume }: { muted: boolean; volume: number }) => {
+								if (!volumeInitializedRef.current || volumeRestoringRef.current) {
+									return;
+								}
+								setPlayerVolume(normalizePlayerVolume(volume));
+								setPlayerMuted(muted);
+								savePlayerVolume(volume, muted);
 							}}
 						>
 							<MediaProvider className="media-provider h-full w-full">
