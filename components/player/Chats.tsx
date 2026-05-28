@@ -19,9 +19,9 @@ export function Chats({
 		<div
 			className={`${controlsShowing ? '!mt-10' : ''} chat-history ml-auto flex flex-col gap-0.5 items-end`}
 		>
-			{messagesToDisplay.map((message) => (
+			{messagesToDisplay.map((message, index) => (
 				<div
-					key={`${message.timestamp}-${message.uid}-${message.message}`}
+					key={`${message.timestamp}-${message.uid}-${message.message}-${index}`}
 					className={`chat-line flex items-center justify-center gap-1 px-2.5 py-1 text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''} ${message.isSystem ? 'chat-line-system' : ''}`}
 				>
 					{message.isSystem ? (

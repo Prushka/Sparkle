@@ -175,13 +175,14 @@ export interface BroadcastPayload {
 	signal?: VoiceSignalPayload;
 }
 
-export type VoiceSignalKind = 'hello' | 'offer' | 'answer' | 'ice' | 'leave';
+export type VoiceSignalKind = 'hello' | 'offer' | 'answer' | 'ice' | 'leave' | 'status';
 
 export interface VoiceSignalPayload {
 	kind: VoiceSignalKind;
 	sessionId: string;
 	description?: RTCSessionDescriptionInit;
 	candidate?: RTCIceCandidateInit;
+	muted?: boolean;
 }
 
 export interface Job {

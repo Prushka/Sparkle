@@ -21,6 +21,8 @@ import JASSUB from 'jassub';
 import {
 	IconAlertOctagonFilled,
 	IconCheck,
+	IconHeadphones,
+	IconHeadphonesOff,
 	IconMicrophone,
 	IconMicrophoneOff,
 	IconMoon,
@@ -28,9 +30,7 @@ import {
 	IconPlayerPlayFilled,
 	IconSettings2,
 	IconSun,
-	IconTableExport,
-	IconVolume,
-	IconVolumeOff
+	IconTableExport
 } from '@tabler/icons-react';
 import { useAppState } from '@/lib/app-state';
 import { useTheme } from '@/lib/theme';
@@ -65,6 +65,7 @@ import {
 import SUPtitles from '@/lib/suptitles/suptitles';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import * as Dialog from '@/components/ui/dialog';
 import * as DropdownMenu from '@/components/ui/dropdown-menu';
 import * as Tooltip from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
@@ -355,7 +356,8 @@ function VoiceToggleButton({
 						disabled={disabled}
 						onClick={onClick}
 						whileTap={{ scale: disabled ? 1 : 0.94 }}
-						className={`inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border text-sm transition-colors disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 ${
+						style={{ width: 40, height: 40, minWidth: 40, maxWidth: 40 }}
+						className={`inline-flex flex-none cursor-pointer items-center justify-center rounded-xl border p-0 text-sm transition-colors disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 ${
 							active
 								? 'border-primary/40 bg-primary text-primary-foreground shadow-sm'
 								: 'border-input bg-background hover:bg-accent hover:text-accent-foreground'
@@ -368,6 +370,7 @@ function VoiceToggleButton({
 								animate={{ opacity: 1, rotate: 0, scale: 1 }}
 								exit={{ opacity: 0, rotate: 8, scale: 0.82 }}
 								transition={{ duration: 0.16, ease: 'easeOut' }}
+								className="flex h-5 w-5 items-center justify-center"
 							>
 								{children}
 							</motion.span>
@@ -383,18 +386,6 @@ function VoiceToggleButton({
 }
 
 function VoiceControls({ voice }: { voice: VoiceChatController }) {
-	const statusText =
-		voice.status === 'joining'
-			? 'Connecting'
-			: voice.status === 'listen-only'
-				? 'Listen only'
-				: voice.status === 'ready'
-					? voice.connectedPeers > 0
-						? `${voice.connectedPeers} voice`
-						: 'Voice ready'
-					: voice.status === 'error'
-						? 'Voice issue'
-						: 'Voice idle';
 	const isMuted = voice.muted || voice.status === 'listen-only';
 	const isDeafened = voice.deafened;
 	const disabled = voice.status === 'joining' || !voice.desiredJoined;
@@ -405,20 +396,8 @@ function VoiceControls({ voice }: { voice: VoiceChatController }) {
 			initial={{ opacity: 0, y: 4 }}
 			animate={{ opacity: 1, y: 0 }}
 			transition={{ duration: 0.22, ease: 'easeOut' }}
-			className="flex items-center gap-1 rounded-lg border bg-muted/35 p-1 shadow-sm"
+			className="flex items-center gap-1 rounded-xl border bg-muted/35 p-1 shadow-sm"
 		>
-			<motion.div layout className="flex min-w-[7.25rem] items-center gap-2 px-2 text-xs">
-				<span
-					className={`h-2 w-2 rounded-full ${
-						voice.desiredJoined
-							? voice.status === 'listen-only'
-								? 'bg-amber-500'
-								: 'bg-emerald-500'
-							: 'bg-muted-foreground/45'
-					}`}
-				/>
-				<span className="truncate font-medium text-muted-foreground">{statusText}</span>
-			</motion.div>
 			<VoiceToggleButton
 				active={!isMuted}
 				disabled={disabled}
@@ -439,7 +418,11 @@ function VoiceControls({ voice }: { voice: VoiceChatController }) {
 				label={isDeafened ? 'Undeafen' : 'Deafen'}
 				onClick={voice.toggleDeafened}
 			>
-				{isDeafened ? <IconVolumeOff size={18} stroke={2} /> : <IconVolume size={18} stroke={2} />}
+				{isDeafened ? (
+					<IconHeadphonesOff size={18} stroke={2} />
+				) : (
+					<IconHeadphones size={18} stroke={2} />
+				)}
 			</VoiceToggleButton>
 		</motion.div>
 	);
@@ -941,6 +924,35 @@ export function Player({ data }: { data: ServerData }) {
 	});
 	const { handleVoiceBroadcast, join: joinVoice } = voice;
 	const speakingPlayerIds = useMemo(() => new Set(voice.speakingIds), [voice.speakingIds]);
+	const displayedRoomPlayers = useMemo(() => {
+		if (!playerId) {
+			return roomPlayers;
+		}
+		const currentRoomPlayer = roomPlayers.find((player) => player.id === playerId);
+		const selfPlayer: RoomPlayer = currentRoomPlayer ?? {
+			id: playerId,
+			name: displayName || 'You',
+			time: 0,
+			paused: true,
+			inBg: false,
+			audio: effectiveAudio,
+			codec: videoSrc?.sCodec || selectedCodec,
+			subtitle: '',
+			discordUser: discord?.user
+		};
+		return [
+			{ ...selfPlayer, name: selfPlayer.name || displayName || 'You' },
+			...roomPlayers.filter((player) => player.id !== playerId)
+		];
+	}, [
+		discord?.user,
+		displayName,
+		effectiveAudio,
+		playerId,
+		roomPlayers,
+		selectedCodec,
+		videoSrc?.sCodec
+	]);
 
 	useEffect(() => {
 		if (!playerEl) {
@@ -1061,7 +1073,7 @@ export function Player({ data }: { data: ServerData }) {
 			setTickedSecsAgo(nextTickedSecsAgo);
 			setTickedSecsAgoStr((Math.round(nextTickedSecsAgo * 100) / 100).toFixed(2));
 		},
-		[]
+		[setTickedSecsAgo, setTickedSecsAgoStr]
 	);
 
 	const updateTime = useCallback(() => {
@@ -1799,7 +1811,8 @@ export function Player({ data }: { data: ServerData }) {
 		playerEl?.play?.().catch?.(() => {});
 	}
 
-	const mediaPlayerClassName = `media-player relative w-full bg-slate-900 ${discord ? 'h-screen' : ''} ${playerEl && !playerEl.paused && chatFocusedSecs > hideControlsOnChatFocused ? 'chat-controls-hidden' : ''}`;
+	const showJoinOverlay = !socketConnected;
+	const mediaPlayerClassName = `media-player relative w-full bg-slate-900 ${discord ? 'h-[100dvh]' : 'aspect-video'} ${playerEl && !playerEl.paused && chatFocusedSecs > hideControlsOnChatFocused ? 'chat-controls-hidden' : ''}`;
 	const controlsChat =
 		chatMountNode &&
 		createPortal(
@@ -1834,52 +1847,58 @@ export function Player({ data }: { data: ServerData }) {
 				<RemoteVoiceAudio key={id} stream={stream} deafened={voice.deafened} />
 			))}
 			<div className="relative w-full">
-				{mounted ? (
-					<media-player
-						keep-alive
-						className={mediaPlayerClassName}
-						src={videoSrc?.src || undefined}
-						crossorigin
-						ref={setPlayerElement}
-						playsInline
-						onSeeked={() => {
-							supRef.current?.seekedHandler(!playerEl?.paused);
-							supPlayingRef.current = Boolean(supRef.current && !playerEl?.paused);
-						}}
-						onSeeking={() => {
-							supRef.current?.seekingHandler();
-						}}
-						onPause={() => {
-							supRef.current?.pauseHandler();
-							supPlayingRef.current = false;
-							send({ paused: true, type: SyncTypes.PauseSync });
-							setCurrentlyWatching((value) => (value ? { ...value, paused: true } : null));
-						}}
-						onPlay={() => {
-							supRef.current?.playHandler();
-							if (supRef.current) {
-								supPlayingRef.current = true;
-							}
-							startWatchRoomConnection();
-							if (interactedRef.current) {
-								send({ paused: false, type: SyncTypes.PauseSync });
-								setCurrentlyWatching((value) => (value ? { ...value, paused: false } : null));
-							}
-						}}
-					>
-						<media-provider className="media-provider h-full w-full">
-							<media-poster className="vds-poster" src={data.preview}></media-poster>
-							<canvas ref={canvasRef} id="sub-canvas" className="pointer-events-none absolute" />
-						</media-provider>
-						<media-video-layout
-							color-scheme={theme}
-							thumbnails={thumbnailVttSrc}
-						></media-video-layout>
-						{controlsChat}
-					</media-player>
-				) : (
-					<div className={mediaPlayerClassName} />
-				)}
+				<div
+					className={`transition-[filter,opacity] duration-300 ${
+						showJoinOverlay ? 'pointer-events-none blur-sm' : 'blur-0'
+					}`}
+				>
+					{mounted ? (
+						<media-player
+							keep-alive
+							className={mediaPlayerClassName}
+							src={videoSrc?.src || undefined}
+							crossorigin
+							ref={setPlayerElement}
+							playsInline
+							onSeeked={() => {
+								supRef.current?.seekedHandler(!playerEl?.paused);
+								supPlayingRef.current = Boolean(supRef.current && !playerEl?.paused);
+							}}
+							onSeeking={() => {
+								supRef.current?.seekingHandler();
+							}}
+							onPause={() => {
+								supRef.current?.pauseHandler();
+								supPlayingRef.current = false;
+								send({ paused: true, type: SyncTypes.PauseSync });
+								setCurrentlyWatching((value) => (value ? { ...value, paused: true } : null));
+							}}
+							onPlay={() => {
+								supRef.current?.playHandler();
+								if (supRef.current) {
+									supPlayingRef.current = true;
+								}
+								startWatchRoomConnection();
+								if (interactedRef.current) {
+									send({ paused: false, type: SyncTypes.PauseSync });
+									setCurrentlyWatching((value) => (value ? { ...value, paused: false } : null));
+								}
+							}}
+						>
+							<media-provider className="media-provider h-full w-full">
+								<media-poster className="vds-poster" src={data.preview}></media-poster>
+								<canvas ref={canvasRef} id="sub-canvas" className="pointer-events-none absolute" />
+							</media-provider>
+							<media-video-layout
+								color-scheme={theme}
+								thumbnails={thumbnailVttSrc}
+							></media-video-layout>
+							{controlsChat}
+						</media-player>
+					) : (
+						<div className={mediaPlayerClassName} />
+					)}
+				</div>
 
 				<div
 					className="pointer-events-none absolute inset-0 z-50 flex gap-1"
@@ -1893,33 +1912,36 @@ export function Player({ data }: { data: ServerData }) {
 						staticBaseUrl={data.staticBaseUrl}
 					/>
 				</div>
+				<AnimatePresence>
+					{showJoinOverlay ? (
+						<motion.div
+							key="join-watch-room-overlay"
+							initial={{ opacity: 0 }}
+							animate={{ opacity: 1 }}
+							exit={{ opacity: 0 }}
+							transition={{ duration: 0.2, ease: 'easeOut' }}
+							className="absolute inset-0 z-[70] flex items-center justify-center bg-black/10 px-4"
+						>
+							<ConnectButton
+								socketCommunicating={socketCommunicating}
+								interacted={interacted}
+								exited={exited}
+								tickedSecsAgoStr={tickedSecsAgoStr}
+								className="border-white/35 !bg-white/10 px-5 py-5 !text-white shadow-xl shadow-black/20 backdrop-blur-md hover:!bg-white/15 hover:!text-white"
+								onClick={handleJoinWatchRoom}
+							/>
+						</motion.div>
+					) : null}
+				</AnimatePresence>
 			</div>
 
-			<div className="flex w-full flex-col gap-4 p-4 font-semibold">
+			<div
+				className="flex w-full flex-col gap-4 p-4 font-semibold"
+				style={!discord ? { minHeight: 'calc(100dvh - min(100dvh, 56.25vw))' } : undefined}
+			>
 				<div className="mx-auto flex w-full max-w-[90rem] flex-col gap-2 sm:flex-row sm:items-center">
-					<div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:flex-[0_1_17rem]">
-						<label className="custom-file-upload shrink-0">
-							<Pfp
-								id={playerId}
-								className="h-12 w-12"
-								discordUser={discord?.user}
-								staticBaseUrl={data.staticBaseUrl}
-							/>
-							<input
-								accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
-								onChange={handleAvatarChange}
-								type="file"
-							/>
-						</label>
-						<Input
-							disabled={discord?.user !== undefined}
-							onBlur={handleNameBlur}
-							value={displayName}
-							onChange={(event) => setName(event.target.value)}
-							type="text"
-							className="h-10 min-w-0 flex-1 focus-visible:ring-transparent"
-							placeholder="Name"
-						/>
+					<div className="flex w-full justify-center sm:w-auto sm:justify-start">
+						<VoiceControls voice={voice} />
 					</div>
 					<Chatbox
 						send={send}
@@ -1943,11 +1965,166 @@ export function Player({ data }: { data: ServerData }) {
 					/>
 				</div>
 
-				<Card className="w-full max-w-[90rem] self-center">
+				<div className="mx-auto flex w-full max-w-[90rem] items-center justify-end gap-2">
+					<div className="flex shrink-0 items-center justify-end gap-2">
+						<Tooltip.Provider delayDuration={0}>
+							<Tooltip.Root>
+								<Tooltip.Trigger asChild>
+									<Button
+										variant={theme === 'dark' ? 'outline' : 'default'}
+										className="h-10 px-3 max-[380px]:px-2"
+										onClick={handleCopyRoomLink}
+									>
+										{copiedRoomLink ? (
+											<>
+												<IconCheck className="mr-2 max-sm:hidden" size={16} stroke={2} />
+												Copied
+											</>
+										) : (
+											'Share Room'
+										)}
+									</Button>
+								</Tooltip.Trigger>
+								<Tooltip.Content>
+									{copiedRoomLink ? <p>Copied!</p> : <p>Copy the watch room link</p>}
+								</Tooltip.Content>
+							</Tooltip.Root>
+						</Tooltip.Provider>
+						<Tooltip.Provider delayDuration={0}>
+							<Tooltip.Root>
+								<Tooltip.Trigger asChild>
+									<Button
+										variant="outline"
+										className="h-10 w-10 p-1"
+										onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+									>
+										{theme === 'dark' ? (
+											<IconMoon size={18} stroke={2} />
+										) : (
+											<IconSun size={18} stroke={2} />
+										)}
+									</Button>
+								</Tooltip.Trigger>
+								<Tooltip.Content>
+									<p>Toggle theme</p>
+								</Tooltip.Content>
+							</Tooltip.Root>
+						</Tooltip.Provider>
+					</div>
+				</div>
+
+				<div className="mb-3 flex flex-wrap justify-center gap-4">
+					{displayedRoomPlayers.map((player) => {
+						const isCurrentUser = player.id === playerId;
+						const isSpeaking = speakingPlayerIds.has(player.id);
+						const playerMuted = isCurrentUser
+							? !voice.desiredJoined || voice.status === 'listen-only' || voice.muted
+							: (voice.peerMuted[player.id] ?? true);
+						const playerBadge = (
+							<Button
+								variant="outline"
+								className={`group relative flex h-auto gap-2 overflow-visible rounded-full rounded-l-full rounded-r-full border-2 py-0 pl-0 pr-4 transition-[background-color,border-color,box-shadow] duration-200 ${
+									isSpeaking
+										? 'border-emerald-500 bg-emerald-500/10 shadow-[0_0_18px_rgba(16,185,129,0.28)]'
+										: 'border-input'
+								}`}
+							>
+								<span className="relative mr-0.5 shrink-0">
+									<Pfp
+										className="h-12 w-12"
+										id={player.id}
+										discordUser={historicalPlayers[player.id]?.discordUser ?? player.discordUser}
+										staticBaseUrl={data.staticBaseUrl}
+									/>
+									<span
+										aria-label={playerMuted ? `${player.name} muted` : `${player.name} unmuted`}
+										className={`absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-background text-white shadow-[0_0.35rem_1rem_rgba(0,0,0,0.24)] transition-colors ${
+											playerMuted ? 'bg-rose-500' : 'bg-emerald-500'
+										}`}
+									>
+										{playerMuted ? (
+											<IconMicrophoneOff size={12} stroke={2.15} />
+										) : (
+											<IconMicrophone size={12} stroke={2.15} />
+										)}
+									</span>
+								</span>
+								<span className="player-status-text flex flex-col items-center justify-center gap-0.5 font-semibold">
+									<span className="w-16 overflow-hidden text-ellipsis font-bold">
+										{player.name}
+									</span>
+									{player.inBg ? (
+										<div className="flex items-center justify-center gap-1">
+											<IconTableExport size={14} stroke={2} />
+											<span>BG</span>
+										</div>
+									) : (
+										<span>{formatSeconds(player.time)}</span>
+									)}
+								</span>
+								{player.paused === false ? (
+									<IconPlayerPlayFilled size={18} stroke={2} />
+								) : (
+									<IconPlayerPauseFilled size={18} stroke={2} />
+								)}
+								{isCurrentUser ? (
+									<span className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background/95 text-muted-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+										<IconSettings2 size={13} stroke={2} />
+									</span>
+								) : null}
+							</Button>
+						);
+						if (!isCurrentUser) {
+							return <div key={player.id}>{playerBadge}</div>;
+						}
+						return (
+							<Dialog.Root key={player.id}>
+								<Dialog.Trigger asChild>{playerBadge}</Dialog.Trigger>
+								<Dialog.Content className="max-w-sm gap-4">
+									<Dialog.Title className="text-lg font-bold">Profile Settings</Dialog.Title>
+									<Dialog.Description className="sr-only">
+										Change your display name and profile picture.
+									</Dialog.Description>
+									<div className="flex items-center gap-3">
+										<label className="custom-file-upload shrink-0">
+											<Pfp
+												id={playerId}
+												className="h-14 w-14"
+												discordUser={discord?.user}
+												staticBaseUrl={data.staticBaseUrl}
+											/>
+											<input
+												accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
+												onChange={handleAvatarChange}
+												type="file"
+											/>
+										</label>
+										<div className="min-w-0 flex-1">
+											<label className="mb-1 block text-xs font-bold text-muted-foreground">
+												Username
+											</label>
+											<Input
+												disabled={discord?.user !== undefined}
+												onBlur={handleNameBlur}
+												value={displayName}
+												onChange={(event) => setName(event.target.value)}
+												type="text"
+												className="h-10 min-w-0 focus-visible:ring-transparent"
+												placeholder="Name"
+											/>
+										</div>
+									</div>
+								</Dialog.Content>
+							</Dialog.Root>
+						);
+					})}
+				</div>
+
+				<Card className="mt-auto w-full max-w-[90rem] self-center">
 					<CardHeader className="max-sm:pb-0 max-sm:pl-4 max-sm:pr-4 max-sm:pt-4">
 						<motion.div
 							layout
-							className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"
+							className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
 							transition={{ duration: 0.24, ease: 'easeOut' }}
 						>
 							<div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -1957,120 +2134,57 @@ export function Player({ data }: { data: ServerData }) {
 									{effectiveAudio}
 								</CardDescription>
 							</div>
-							<motion.div
-								layout
-								className="flex flex-wrap items-center justify-start gap-2 xl:justify-center"
-							>
-								<ConnectButton
-									socketCommunicating={socketCommunicating}
-									interacted={interacted}
-									exited={exited}
-									tickedSecsAgoStr={tickedSecsAgoStr}
-									className="max-md:hidden"
-									onClick={handleJoinWatchRoom}
-								/>
-								<VoiceControls voice={voice} />
-							</motion.div>
-							<motion.div
-								layout
-								className="flex flex-wrap items-center justify-start gap-2 xl:justify-end"
-							>
-								<Tooltip.Provider delayDuration={0}>
-									<Tooltip.Root>
-										<Tooltip.Trigger asChild>
-											<Button
-												variant="outline"
-												className="h-9 w-9 p-1"
-												onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-											>
-												{theme === 'dark' ? (
-													<IconMoon size={18} stroke={2} />
-												) : (
-													<IconSun size={18} stroke={2} />
-												)}
-											</Button>
-										</Tooltip.Trigger>
-										<Tooltip.Content>
-											<p>Toggle theme</p>
-										</Tooltip.Content>
-									</Tooltip.Root>
-								</Tooltip.Provider>
-
-								<Tooltip.Provider delayDuration={0}>
-									<Tooltip.Root>
-										<Tooltip.Trigger asChild>
-											<Button
-												variant={theme === 'dark' ? 'outline' : 'default'}
-												onClick={handleCopyRoomLink}
-											>
-												{copiedRoomLink ? (
-													<>
-														<IconCheck className="mr-2 max-sm:hidden" size={16} stroke={2} />
-														Copied
-													</>
-												) : (
-													'Share Room'
-												)}
-											</Button>
-										</Tooltip.Trigger>
-										<Tooltip.Content>
-											{copiedRoomLink ? <p>Copied!</p> : <p>Copy the watch room link</p>}
-										</Tooltip.Content>
-									</Tooltip.Root>
-								</Tooltip.Provider>
-
-								<DropdownMenu.Root>
-									<DropdownMenu.Trigger asChild>
-										<Button variant={theme === 'dark' ? 'outline' : 'default'}>
-											<IconSettings2 className="mr-2 max-sm:hidden" size={16} stroke={2} />
-											Video <span className="max-sm:hidden">&nbsp;Settings</span>
-										</Button>
-									</DropdownMenu.Trigger>
-									<DropdownMenu.Content className="w-56">
-										<DropdownMenu.Label>Video Settings</DropdownMenu.Label>
-										<DropdownMenu.Separator />
-										<DropdownMenu.Group>
-											{audiosExistForCodec(job, videoSrc?.sCodec || '') ? (
-												<DropdownMenu.RadioGroup value={effectiveAudio}>
-													{job.MappedAudio[videoSrc?.sCodec || '']?.map((stream) => {
-														const curr = `${stream.Index}-${stream.Language}`;
-														return (
-															<DropdownMenu.RadioItem
-																key={curr}
-																value={curr}
-																onClick={() => changeAudio(curr)}
-															>
-																{formatPair(stream)} ({stream.Index})
-															</DropdownMenu.RadioItem>
-														);
-													})}
-												</DropdownMenu.RadioGroup>
-											) : null}
-										</DropdownMenu.Group>
-										<DropdownMenu.Separator />
-										<DropdownMenu.Group>
-											<DropdownMenu.RadioGroup value={selectedCodec}>
-												<DropdownMenu.RadioItem value="auto" onClick={() => changeCodec('auto')}>
-													Auto {autoCodec}
-												</DropdownMenu.RadioItem>
-												{job.EncodedCodecs.map((codec) => (
-													<DropdownMenu.RadioItem
-														key={codec}
-														value={codec}
-														onClick={() => changeCodec(codec)}
-													>
-														{codecDisplayMap[codec]}
-														{formatMbps(job, codec)}
-														{!supportedCodecs.includes(codec) ? (
-															<IconAlertOctagonFilled className="ml-2" size={16} stroke={2} />
-														) : null}
-													</DropdownMenu.RadioItem>
-												))}
+							<DropdownMenu.Root>
+								<DropdownMenu.Trigger asChild>
+									<Button variant={theme === 'dark' ? 'outline' : 'default'}>
+										<IconSettings2 className="mr-2 max-sm:hidden" size={16} stroke={2} />
+										Video <span className="max-sm:hidden">&nbsp;Settings</span>
+									</Button>
+								</DropdownMenu.Trigger>
+								<DropdownMenu.Content className="w-56">
+									<DropdownMenu.Label>Video Settings</DropdownMenu.Label>
+									<DropdownMenu.Separator />
+									<DropdownMenu.Group>
+										{audiosExistForCodec(job, videoSrc?.sCodec || '') ? (
+											<DropdownMenu.RadioGroup value={effectiveAudio}>
+												{job.MappedAudio[videoSrc?.sCodec || '']?.map((stream) => {
+													const curr = `${stream.Index}-${stream.Language}`;
+													return (
+														<DropdownMenu.RadioItem
+															key={curr}
+															value={curr}
+															onClick={() => changeAudio(curr)}
+														>
+															{formatPair(stream)} ({stream.Index})
+														</DropdownMenu.RadioItem>
+													);
+												})}
 											</DropdownMenu.RadioGroup>
-										</DropdownMenu.Group>
-									</DropdownMenu.Content>
-								</DropdownMenu.Root>
-							</motion.div>
+										) : null}
+									</DropdownMenu.Group>
+									<DropdownMenu.Separator />
+									<DropdownMenu.Group>
+										<DropdownMenu.RadioGroup value={selectedCodec}>
+											<DropdownMenu.RadioItem value="auto" onClick={() => changeCodec('auto')}>
+												Auto {autoCodec}
+											</DropdownMenu.RadioItem>
+											{job.EncodedCodecs.map((codec) => (
+												<DropdownMenu.RadioItem
+													key={codec}
+													value={codec}
+													onClick={() => changeCodec(codec)}
+												>
+													{codecDisplayMap[codec]}
+													{formatMbps(job, codec)}
+													{!supportedCodecs.includes(codec) ? (
+														<IconAlertOctagonFilled className="ml-2" size={16} stroke={2} />
+													) : null}
+												</DropdownMenu.RadioItem>
+											))}
+										</DropdownMenu.RadioGroup>
+									</DropdownMenu.Group>
+								</DropdownMenu.Content>
+							</DropdownMenu.Root>
 						</motion.div>
 					</CardHeader>
 					<CardContent className="max-sm:p-4">
@@ -2092,56 +2206,6 @@ export function Player({ data }: { data: ServerData }) {
 						/>
 					</CardContent>
 				</Card>
-
-				<div className="flex w-full items-center justify-center gap-3 md:hidden">
-					<ConnectButton
-						socketCommunicating={socketCommunicating}
-						interacted={interacted}
-						exited={exited}
-						tickedSecsAgoStr={tickedSecsAgoStr}
-						onClick={handleJoinWatchRoom}
-					/>
-				</div>
-
-				<div className="mb-3 flex flex-wrap justify-center gap-4">
-					{roomPlayers.map((player) => {
-						const isSpeaking = speakingPlayerIds.has(player.id);
-						return (
-							<Button
-								key={player.id}
-								variant="outline"
-								className={`flex h-auto gap-2 rounded-full rounded-l-full rounded-r-full border-2 py-0 pl-0 pr-4 transition-[background-color,border-color,box-shadow] duration-200 ${
-									isSpeaking
-										? 'border-emerald-500 bg-emerald-500/10 shadow-[0_0_18px_rgba(16,185,129,0.28)]'
-										: 'border-input'
-								}`}
-							>
-								<Pfp
-									className="mr-0.5 h-12 w-12"
-									id={player.id}
-									discordUser={historicalPlayers[player.id]?.discordUser}
-									staticBaseUrl={data.staticBaseUrl}
-								/>
-								<span className="player-status-text flex flex-col items-center justify-center gap-0.5 font-semibold">
-									<span className="w-16 overflow-hidden text-ellipsis font-bold">{player.name}</span>
-									{player.inBg ? (
-										<div className="flex items-center justify-center gap-1">
-											<IconTableExport size={14} stroke={2} />
-											<span>BG</span>
-										</div>
-									) : (
-										<span>{formatSeconds(player.time)}</span>
-									)}
-								</span>
-								{player.paused === false ? (
-									<IconPlayerPlayFilled size={18} stroke={2} />
-								) : (
-									<IconPlayerPauseFilled size={18} stroke={2} />
-								)}
-							</Button>
-						);
-					})}
-				</div>
 			</div>
 
 			{moveToast ? (

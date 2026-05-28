@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { IconEye, IconEyeOff, IconUsers } from '@tabler/icons-react';
+import { IconEye, IconEyeOff, IconSend, IconUsers } from '@tabler/icons-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Shortcut } from '@/components/ui/command';
@@ -197,9 +197,9 @@ export function Chatbox({
 									{messages
 										.slice()
 										.reverse()
-										.map((message) => (
+										.map((message, index) => (
 											<div
-												key={`${message.timestamp}-${message.uid}-${message.message}`}
+												key={`${message.timestamp}-${message.uid}-${message.message}-${index}`}
 												className={`flex w-full flex-wrap items-center gap-1.5 text-center ${message.isStateUpdate ? 'font-semibold' : ''}`}
 											>
 												<Pfp
@@ -229,10 +229,11 @@ export function Chatbox({
 						<Button
 							disabled={!connected}
 							variant="outline"
-							className="h-10 rounded-l-none"
+							className="h-10 w-10 rounded-l-none px-0"
+							aria-label="Send message"
 							onClick={sendMessage}
 						>
-							Send
+							<IconSend size={18} stroke={2} />
 						</Button>
 					</div>
 				) : null}

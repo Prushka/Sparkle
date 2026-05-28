@@ -8,11 +8,6 @@ function AppShellFrame({ children }: { children: React.ReactNode }) {
 	return (
 		<main id="main-page" className="flex min-h-full w-full flex-col items-center gap-1">
 			{children}
-			<footer className="mt-auto flex w-full flex-col items-center justify-center p-2">
-				<div className="text-xs max-sm:text-[0.65rem]">
-					© 2025 hmph | This site does not store any files on its server.
-				</div>
-			</footer>
 		</main>
 	);
 }

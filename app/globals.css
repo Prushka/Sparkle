@@ -167,12 +167,14 @@
 	body {
 		scroll-behavior: smooth;
 		max-width: 100vw;
-		overflow-x: hidden;
+		overflow-x: clip;
+		overscroll-behavior: none;
 	}
 
 	body {
 		@apply bg-background text-foreground;
 		font-family: var(--font-body);
+		min-height: 100dvh;
 	}
 
 	button {
@@ -417,8 +419,9 @@ media-google-cast-button {
 .media-player {
 	border: none !important;
 	border-radius: unset !important;
-	max-height: 100vh;
+	max-height: 100dvh;
 	max-width: 100vw;
+	overflow: hidden;
 	display: flex;
 	justify-content: center;
 	flex-direction: column;

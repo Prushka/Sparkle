@@ -105,6 +105,7 @@ export function useVoiceChat({
 	const [status, setStatus] = useState<VoiceStatus>('idle');
 	const [peerStates, setPeerStates] = useState<Record<string, VoicePeerState>>({});
 	const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
+	const [peerMuted, setPeerMuted] = useState<Record<string, boolean>>({});
 	const [speakingIds, setSpeakingIds] = useState<string[]>([]);
 
 	useEffect(() => {
@@ -273,24 +274,36 @@ export function useVoiceChat({
 		[send]
 	);
 
-	const closePeer = useCallback((remoteId: string) => {
-		const record = peersRef.current.get(remoteId);
-		if (!record) {
-			return;
-		}
-		if (record.retryTimer !== null) {
-			window.clearTimeout(record.retryTimer);
-		}
-		record.pc.onicecandidate = null;
-		record.pc.ontrack = null;
-		record.pc.onconnectionstatechange = null;
-		record.pc.oniceconnectionstatechange = null;
-		record.pc.close();
-		peersRef.current.delete(remoteId);
-		stopSpeakingMonitor(remoteId);
-		setRemoteStreams((prev) => omitKey(prev, remoteId));
-		setPeerStates((prev) => omitKey(prev, remoteId));
-	}, [stopSpeakingMonitor]);
+	const broadcastVoiceStatus = useCallback(() => {
+		sendVoiceSignal(undefined, {
+			kind: 'status',
+			sessionId: sessionIdRef.current,
+			muted: mutedRef.current
+		});
+	}, [sendVoiceSignal]);
+
+	const closePeer = useCallback(
+		(remoteId: string) => {
+			const record = peersRef.current.get(remoteId);
+			if (!record) {
+				return;
+			}
+			if (record.retryTimer !== null) {
+				window.clearTimeout(record.retryTimer);
+			}
+			record.pc.onicecandidate = null;
+			record.pc.ontrack = null;
+			record.pc.onconnectionstatechange = null;
+			record.pc.oniceconnectionstatechange = null;
+			record.pc.close();
+			peersRef.current.delete(remoteId);
+			stopSpeakingMonitor(remoteId);
+			setRemoteStreams((prev) => omitKey(prev, remoteId));
+			setPeerStates((prev) => omitKey(prev, remoteId));
+			setPeerMuted((prev) => omitKey(prev, remoteId));
+		},
+		[stopSpeakingMonitor]
+	);
 
 	const schedulePeerRetry = useCallback(
 		(remoteId: string) => {
@@ -490,7 +503,8 @@ export function useVoiceChat({
 
 		sendVoiceSignal(undefined, {
 			kind: 'hello',
-			sessionId: sessionIdRef.current
+			sessionId: sessionIdRef.current,
+			muted: mutedRef.current
 		});
 	}, [addSystemMessage, attachLocalStreamToPeers, ensureMicrophone, sendVoiceSignal]);
 
@@ -536,7 +550,15 @@ export function useVoiceChat({
 			markSpeaking(playerIdRef.current, false);
 		}
 		setMuted(nextMuted);
-	}, [addSystemMessage, attachLocalStreamToPeers, ensureMicrophone, join, markSpeaking]);
+		broadcastVoiceStatus();
+	}, [
+		addSystemMessage,
+		attachLocalStreamToPeers,
+		broadcastVoiceStatus,
+		ensureMicrophone,
+		join,
+		markSpeaking
+	]);
 
 	const toggleDeafened = useCallback(() => {
 		setDeafened((value) => !value);
@@ -557,12 +579,19 @@ export function useVoiceChat({
 			if (signal.sessionId === sessionIdRef.current || !desiredJoinedRef.current) {
 				return true;
 			}
+			if (typeof signal.muted === 'boolean') {
+				setPeerMuted((prev) => ({ ...prev, [fromId]: signal.muted ?? true }));
+			}
 			if (signal.kind === 'leave') {
 				closePeer(fromId);
 				return true;
 			}
 			if (signal.kind === 'hello') {
 				await ensurePeer(fromId);
+				broadcastVoiceStatus();
+				return true;
+			}
+			if (signal.kind === 'status') {
 				return true;
 			}
 
@@ -604,7 +633,15 @@ export function useVoiceChat({
 			}
 			return true;
 		},
-		[closePeer, createPeerConnection, ensurePeer, playerId, schedulePeerRetry, sendVoiceSignal]
+		[
+			broadcastVoiceStatus,
+			closePeer,
+			createPeerConnection,
+			ensurePeer,
+			playerId,
+			schedulePeerRetry,
+			sendVoiceSignal
+		]
 	);
 
 	useEffect(() => {
@@ -665,6 +702,7 @@ export function useVoiceChat({
 		desiredJoined,
 		status,
 		peerList,
+		peerMuted,
 		connectedPeers,
 		remoteAudioStreams,
 		speakingIds
