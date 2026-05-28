@@ -106,7 +106,6 @@ const PLAYER_KEY_SHORTCUTS: MediaKeyShortcuts = {
 	volumeUp: 'ArrowUp',
 	volumeDown: 'ArrowDown'
 };
-
 function getSubtitleFormat(src: string): SubtitleTrackFormat {
 	const cleanSrc = src.split(/[?#]/)[0].toLowerCase();
 	if (cleanSrc.endsWith('.ass')) {
@@ -1438,7 +1437,7 @@ export function Player({ data }: { data: ServerData }) {
 
 		const updateSmallLayout = () => {
 			animationFrame = 0;
-			const layout = playerEl.querySelector?.('media-video-layout') as Element | null;
+			const layout = playerEl.querySelector?.('media-video-layout') as HTMLElement | null;
 			if (layout !== observedLayout) {
 				layoutObserver.disconnect();
 				observedLayout = layout;
@@ -1449,7 +1448,12 @@ export function Player({ data }: { data: ServerData }) {
 					});
 				}
 			}
-			setPlayerSmallLayout(Boolean(layout?.hasAttribute('data-sm')));
+			const isSmallLayout = Boolean(layout?.hasAttribute('data-sm'));
+			const chatMount = chatMountRef.current;
+			if (chatMount) {
+				chatMount.dataset.mobileLayout = isSmallLayout ? 'true' : 'false';
+			}
+			setPlayerSmallLayout(isSmallLayout);
 		};
 
 		function scheduleUpdate() {
@@ -1495,6 +1499,8 @@ export function Player({ data }: { data: ServerData }) {
 			const container = document.createElement('div');
 			container.className = 'player-chat-control';
 			container.dataset.playerChatMount = 'true';
+			const layout = playerEl.querySelector?.('media-video-layout') as HTMLElement | null;
+			container.dataset.mobileLayout = layout?.hasAttribute('data-sm') ? 'true' : 'false';
 			anchor.parentNode.insertBefore(
 				container,
 				anchor.matches?.('media-caption-button') ? anchor : anchor.nextSibling
@@ -1561,7 +1567,6 @@ export function Player({ data }: { data: ServerData }) {
 				throw new Error(`Avatar upload failed: ${response.status}`);
 			}
 			updatePfp(playerId);
-			send({ type: SyncTypes.PfpSync });
 			addSystemMessage('Avatar updated');
 		} catch (error) {
 			console.error(error);
@@ -1786,30 +1791,6 @@ export function Player({ data }: { data: ServerData }) {
 										<Tooltip.Trigger asChild>
 											<Button
 												variant="outline"
-												className="h-9 px-3 font-bold"
-												onClick={handleCopyRoomLink}
-											>
-												{copiedRoomLink ? (
-													<>
-														<IconCheck className="mr-1.5 h-4 w-4" stroke={2} />
-														Copied
-													</>
-												) : (
-													'Share Room'
-												)}
-											</Button>
-										</Tooltip.Trigger>
-										<Tooltip.Content>
-											{copiedRoomLink ? <p>Copied!</p> : <p>Copy the watch room link</p>}
-										</Tooltip.Content>
-									</Tooltip.Root>
-								</Tooltip.Provider>
-
-								<Tooltip.Provider delayDuration={0}>
-									<Tooltip.Root>
-										<Tooltip.Trigger asChild>
-											<Button
-												variant="outline"
 												className="h-9 w-9 p-1"
 												onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
 											>
@@ -1822,6 +1803,29 @@ export function Player({ data }: { data: ServerData }) {
 										</Tooltip.Trigger>
 										<Tooltip.Content>
 											<p>Toggle theme</p>
+										</Tooltip.Content>
+									</Tooltip.Root>
+								</Tooltip.Provider>
+
+								<Tooltip.Provider delayDuration={0}>
+									<Tooltip.Root>
+										<Tooltip.Trigger asChild>
+											<Button
+												variant={theme === 'dark' ? 'outline' : 'default'}
+												onClick={handleCopyRoomLink}
+											>
+												{copiedRoomLink ? (
+													<>
+														<IconCheck className="mr-2 max-sm:hidden" size={16} stroke={2} />
+														Copied
+													</>
+												) : (
+													'Share Room'
+												)}
+											</Button>
+										</Tooltip.Trigger>
+										<Tooltip.Content>
+											{copiedRoomLink ? <p>Copied!</p> : <p>Copy the watch room link</p>}
 										</Tooltip.Content>
 									</Tooltip.Root>
 								</Tooltip.Provider>

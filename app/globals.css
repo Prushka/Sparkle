@@ -287,7 +287,7 @@
 	display: block;
 }
 
-media-video-layout[data-sm] .player-chat-control {
+.player-chat-control[data-mobile-layout='true'] {
 	display: none !important;
 }
 

@@ -318,6 +318,8 @@ func (r *Room) handlePayload(current *Player, payload ClientPayload) {
 		r.syncTime(current, payload.Time)
 	case PauseSync:
 		r.syncPause(current, payload.Paused)
+	case PfpSync:
+		r.broadcastPFP(current.state.Id)
 	case NewPlayer:
 		r.newPlayer(current)
 	default:
