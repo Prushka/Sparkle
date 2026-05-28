@@ -1,3 +1,5 @@
+import type { ChatEmojiRef } from '@/lib/player/emoji';
+
 export interface DiscordUser {
 	username: string;
 	discriminator: string;
@@ -78,6 +80,8 @@ export interface Player {
 
 export type Chat = {
 	message: string;
+	emojis?: string[];
+	emojiRefs?: ChatEmojiRef[];
 	timestamp: number;
 	mediaSec: number;
 	uid: string;
@@ -150,7 +154,8 @@ export enum SyncTypes {
 
 export enum BroadcastTypes {
 	MoveTo = 'moveTo',
-	VoiceSignal = 'voiceSignal'
+	VoiceSignal = 'voiceSignal',
+	SoundEffect = 'soundEffect'
 }
 
 export interface SendPayload {
@@ -173,6 +178,11 @@ export interface BroadcastPayload {
 	moveTo?: string;
 	targetId?: string;
 	signal?: VoiceSignalPayload;
+	soundEffect?: SoundEffectPayload;
+}
+
+export interface SoundEffectPayload {
+	id: string;
 }
 
 export type VoiceSignalKind = 'hello' | 'offer' | 'answer' | 'ice' | 'leave' | 'status';

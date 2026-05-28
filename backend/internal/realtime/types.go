@@ -10,6 +10,7 @@ const (
 	PfpSync           = "pfp"
 	StateSync         = "state"
 	BroadcastSync     = "broadcast"
+	SoundEffectSync   = "soundEffect"
 	ExitSync          = "exit"
 	CodecSwitch       = "codec"
 	AudioSwitch       = "audio"
@@ -19,6 +20,7 @@ const (
 const (
 	maxChatMessages = 200
 	maxChatLength   = 2000
+	maxChatEmojis   = 50
 )
 
 type Options struct {
@@ -57,10 +59,23 @@ type PlayerSnapshot struct {
 }
 
 type Chat struct {
-	Message   string  `json:"message"`
-	Timestamp int64   `json:"timestamp"`
-	MediaSec  float64 `json:"mediaSec"`
-	Uid       string  `json:"uid"`
+	Message   string         `json:"message"`
+	Emojis    []string       `json:"emojis,omitempty"`
+	EmojiRefs []ChatEmojiRef `json:"emojiRefs,omitempty"`
+	Timestamp int64          `json:"timestamp"`
+	MediaSec  float64        `json:"mediaSec"`
+	Uid       string         `json:"uid"`
+}
+
+type ChatEmojiRef struct {
+	ID         string `json:"id"`
+	Label      string `json:"label"`
+	Src        string `json:"src"`
+	Source     string `json:"source"`
+	Animated   bool   `json:"animated"`
+	Kind       string `json:"kind"`
+	PreviewSrc string `json:"previewSrc,omitempty"`
+	ItemURL    string `json:"itemUrl,omitempty"`
 }
 
 type ClientPayload struct {
@@ -70,6 +85,8 @@ type ClientPayload struct {
 	DiscordUser *DiscordUser   `json:"discordUser,omitempty"`
 	Paused      *bool          `json:"paused,omitempty"`
 	Chat        string         `json:"chat,omitempty"`
+	Emojis      []string       `json:"emojis,omitempty"`
+	EmojiRefs   []ChatEmojiRef `json:"emojiRefs,omitempty"`
 	State       string         `json:"state,omitempty"`
 	Broadcast   map[string]any `json:"broadcast,omitempty"`
 	Codec       string         `json:"codec,omitempty"`

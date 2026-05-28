@@ -85,6 +85,16 @@ Video files are first processed and transcoded by the backend to:
 | `SERVER_STATIC`                | The absolute static asset base, including `/static`, used for poster/thumbnail URLs |
 | `PUBLIC_DISCORD_CLIENT_ID`     | Your Discord application id / OAuth2 client id (runtime)                            |
 | `SERVER_DISCORD_CLIENT_SECRET` | Your Discord application OAuth2 client secret (runtime)                             |
+| `SERVER_TENOR_API_KEY`         | Google Tenor API key used by `/api/tenor` for live GIF emoji search                 |
+| `SERVER_TENOR_CLIENT_KEY`      | Optional Tenor client key label, defaults to `sparkle`                              |
+
+Tenor API access requires an existing API key. Google has announced Tenor API
+decommissioning for app developers on June 30, 2026, so `/api/tenor` is kept as a
+small proxy surface that can be replaced with another GIF provider later.
+
+Built-in room sound effects use short Mixkit preview MP3s. Mixkit lists these
+sound effects as free to download and usable under the Mixkit sound effects
+license.
 
 ## Docker Compose
 

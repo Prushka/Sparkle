@@ -3,6 +3,7 @@
 import type { Chat, Player } from '@/lib/player/t';
 import { getRealName } from '@/lib/player/t';
 import { Pfp } from '@/components/player/Pfp';
+import { EmojiText } from '@/components/player/EmojiText';
 
 export function Chats({
 	messagesToDisplay,
@@ -26,13 +27,17 @@ export function Chats({
 				>
 					{message.isSystem ? (
 						<>
-							<span>{message.message}</span>
+							<span className="chat-message-text">
+								<EmojiText text={message.message} emojiRefs={message.emojiRefs} />
+							</span>
 							<span>{message.timeStr ? `[${message.timeStr}]` : ''}</span>
 							<span className="chat-system-label">System</span>
 						</>
 					) : (
 						<>
-							<span>{message.message}</span>
+							<span className="chat-message-text">
+								<EmojiText text={message.message} emojiRefs={message.emojiRefs} />
+							</span>
 							<span>{message.timeStr ? `[${message.timeStr}]` : ''}</span>
 							<span>{getRealName(historicalPlayers[message.uid])}</span>
 							<Pfp

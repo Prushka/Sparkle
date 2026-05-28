@@ -8,6 +8,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -19,7 +20,11 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var safeID = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+var (
+	safeID            = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+	emojiTokenPattern = regexp.MustCompile(`:([a-z0-9][a-z0-9_+-]{1,39}):`)
+	safeEmojiID       = regexp.MustCompile(`^[a-z0-9][a-z0-9_+-]{1,39}$`)
+)
 
 type Hub struct {
 	outputDir      string
@@ -318,9 +323,9 @@ func (r *Room) handlePayload(current *Player, payload ClientPayload) {
 			state.DiscordUser = payload.DiscordUser
 		})
 	case BroadcastSync:
-		r.broadcast(current, payload.Broadcast)
+		r.broadcast(current, sanitizeBroadcast(payload.Broadcast))
 	case ChatSync:
-		r.chat(current, payload.Chat)
+		r.chat(current, payload.Chat, payload.EmojiRefs)
 	case TimeSync:
 		r.syncTime(current, payload.Time)
 	case PauseSync:
@@ -411,13 +416,42 @@ func broadcastTargetID(broadcast map[string]any) (string, bool) {
 	return strings.TrimSpace(targetID), true
 }
 
-func (r *Room) chat(sender *Player, message string) {
+func sanitizeBroadcast(broadcast map[string]any) map[string]any {
+	if broadcast == nil {
+		return nil
+	}
+	if broadcast["type"] != SoundEffectSync {
+		return broadcast
+	}
+
+	rawEffect, ok := broadcast["soundEffect"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	id, ok := rawEffect["id"].(string)
+	if !ok {
+		return nil
+	}
+	id = strings.TrimSpace(id)
+	if !safeEmojiID.MatchString(id) {
+		return nil
+	}
+	return map[string]any{
+		"type": SoundEffectSync,
+		"soundEffect": map[string]any{
+			"id": id,
+		},
+	}
+}
+
+func (r *Room) chat(sender *Player, message string, emojiRefs []ChatEmojiRef) {
 	message = strings.TrimSpace(message)
 	if message == "" {
 		return
 	}
-	if len(message) > maxChatLength {
-		message = message[:maxChatLength]
+	messageRunes := []rune(message)
+	if len(messageRunes) > maxChatLength {
+		message = string(messageRunes[:maxChatLength])
 	}
 
 	var chats []Chat
@@ -430,6 +464,8 @@ func (r *Room) chat(sender *Player, message string) {
 	sender.state.LastSeen = time.Now().Unix()
 	chat := Chat{
 		Message:   message,
+		Emojis:    extractEmojiIDs(message),
+		EmojiRefs: sanitizeEmojiRefs(message, emojiRefs),
 		Uid:       sender.state.Id,
 		Timestamp: time.Now().UnixMilli(),
 		MediaSec:  sender.state.Time,
@@ -445,6 +481,128 @@ func (r *Room) chat(sender *Player, message string) {
 	payload := SendPayload{Type: ChatSync, Chats: chats, Timestamp: time.Now().UnixMilli()}
 	for _, player := range targets {
 		player.sendJSON(payload)
+	}
+}
+
+func extractEmojiIDs(message string) []string {
+	matches := emojiTokenPattern.FindAllStringSubmatch(message, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]bool, len(matches))
+	ids := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if len(match) < 2 {
+			continue
+		}
+		id := match[1]
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		ids = append(ids, id)
+		if len(ids) >= maxChatEmojis {
+			break
+		}
+	}
+	return ids
+}
+
+func sanitizeEmojiRefs(message string, refs []ChatEmojiRef) []ChatEmojiRef {
+	if len(refs) == 0 {
+		return nil
+	}
+
+	tokenIDs := make(map[string]bool)
+	for _, match := range emojiTokenPattern.FindAllStringSubmatch(message, -1) {
+		if len(match) >= 2 {
+			tokenIDs[strings.ToLower(match[1])] = true
+		}
+	}
+	if len(tokenIDs) == 0 {
+		return nil
+	}
+
+	seen := make(map[string]bool, len(refs))
+	sanitized := make([]ChatEmojiRef, 0, len(refs))
+	for _, ref := range refs {
+		id := strings.ToLower(strings.TrimSpace(ref.ID))
+		if !tokenIDs[id] || seen[id] || !safeEmojiID.MatchString(id) {
+			continue
+		}
+
+		source := strings.TrimSpace(ref.Source)
+		if !isAllowedEmojiSource(source) {
+			continue
+		}
+
+		src := sanitizeEmojiURL(ref.Src, false)
+		if src == "" {
+			continue
+		}
+
+		kind := strings.TrimSpace(ref.Kind)
+		if kind != "emoji" && kind != "sticker" {
+			kind = "emoji"
+		}
+
+		label := strings.TrimSpace(ref.Label)
+		labelRunes := []rune(label)
+		if len(labelRunes) > 80 {
+			label = string(labelRunes[:80])
+		}
+		if label == "" {
+			label = id
+		}
+
+		seen[id] = true
+		sanitized = append(sanitized, ChatEmojiRef{
+			ID:         id,
+			Label:      label,
+			Src:        src,
+			Source:     source,
+			Animated:   ref.Animated,
+			Kind:       kind,
+			PreviewSrc: sanitizeEmojiURL(ref.PreviewSrc, false),
+			ItemURL:    sanitizeEmojiURL(ref.ItemURL, true),
+		})
+		if len(sanitized) >= maxChatEmojis {
+			break
+		}
+	}
+	return sanitized
+}
+
+func isAllowedEmojiSource(source string) bool {
+	switch source {
+	case "7TV", "BetterTTV", "FrankerFaceZ", "Tenor":
+		return true
+	default:
+		return false
+	}
+}
+
+func sanitizeEmojiURL(raw string, allowItemURL bool) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" {
+		return ""
+	}
+
+	switch parsed.Hostname() {
+	case "media.tenor.com", "c.tenor.com", "cdn.7tv.app", "cdn.betterttv.net", "cdn.frankerfacez.com":
+		return parsed.String()
+	case "tenor.com":
+		if allowItemURL {
+			return parsed.String()
+		}
+		return ""
+	default:
+		return ""
 	}
 }
 

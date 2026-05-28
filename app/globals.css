@@ -288,6 +288,20 @@
 	padding-left: 1rem;
 }
 
+.chat-pc .chat-input-wrap input {
+	padding-left: 4.75rem;
+}
+
+.chat-pc .emoji-trigger,
+.chat-pc .sound-trigger {
+	color: rgba(255, 255, 255, 0.72);
+}
+
+.chat-pc .emoji-trigger:hover,
+.chat-pc .sound-trigger:hover {
+	color: white;
+}
+
 .player-chat-control {
 	display: block;
 }
@@ -465,6 +479,39 @@ video {
 	border-radius: 0.5rem;
 	background-color: rgba(0, 0, 0, 0.28);
 	text-align: right;
+}
+
+.chat-message-text {
+	display: inline-flex;
+	max-width: min(30rem, 72vw);
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 0.08rem 0.18rem;
+	overflow-wrap: anywhere;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
+.chat-emoji {
+	display: inline-block;
+	width: 1.3em;
+	height: 1.3em;
+	min-width: 1.3em;
+	object-fit: contain;
+	vertical-align: -0.24em;
+}
+
+.chat-sticker {
+	width: 2.55em;
+	height: 2.55em;
+	min-width: 2.55em;
+}
+
+.chat-history .chat-sticker {
+	width: 2.25em;
+	height: 2.25em;
+	min-width: 2.25em;
 }
 
 .chat-line:hover {

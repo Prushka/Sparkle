@@ -38,6 +38,7 @@ import {
 import { useAppState } from '@/lib/app-state';
 import { useTheme } from '@/lib/theme';
 import { createNotificationAudioUrl } from '@/lib/player/notification-audio';
+import { getSoundEffect } from '@/lib/player/sound-effects';
 import {
 	BroadcastTypes,
 	codecDisplayMap,
@@ -496,6 +497,7 @@ export function Player({ data }: { data: ServerData }) {
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
 	const mediaSelectionRef = useRef<MediaSelectionHandle | null>(null);
 	const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
+	const soundEffectAudioRef = useRef<HTMLAudioElement | null>(null);
 	const supRef = useRef<SUPtitles | null>(null);
 	const supPlayingRef = useRef(false);
 	const jasRef = useRef<any>(null);
@@ -643,6 +645,27 @@ export function Player({ data }: { data: ServerData }) {
 		]);
 	}, []);
 
+	const playSoundEffect = useCallback((id: string | undefined) => {
+		const effect = getSoundEffect(id);
+		if (!effect) {
+			return;
+		}
+
+		const previous = soundEffectAudioRef.current;
+		if (previous) {
+			previous.pause();
+			previous.currentTime = 0;
+		}
+
+		const audio = new Audio(effect.src);
+		audio.preload = 'auto';
+		audio.volume = 0.72;
+		soundEffectAudioRef.current = audio;
+		audio.play().catch((error) => {
+			console.warn('Unable to play sound effect', error);
+		});
+	}, []);
+
 	const messagesToDisplay = (() => {
 		let nextMessages = [
 			...roomMessages.filter((message) => renderNow - message.timestamp < 140000),
@@ -707,6 +730,13 @@ export function Player({ data }: { data: ServerData }) {
 	useEffect(() => {
 		const timer = window.setTimeout(() => setMounted(true), 0);
 		return () => window.clearTimeout(timer);
+	}, []);
+
+	useEffect(() => {
+		return () => {
+			soundEffectAudioRef.current?.pause();
+			soundEffectAudioRef.current = null;
+		};
 	}, []);
 
 	useEffect(() => {
@@ -1360,6 +1390,9 @@ export function Player({ data }: { data: ServerData }) {
 								case BroadcastTypes.VoiceSignal:
 									void handleVoiceBroadcast(state.firedBy?.id, broadcast);
 									break;
+								case BroadcastTypes.SoundEffect:
+									playSoundEffect(broadcast.soundEffect?.id);
+									break;
 							}
 							break;
 						case SyncTypes.ExitSync:
@@ -1421,6 +1454,7 @@ export function Player({ data }: { data: ServerData }) {
 			updateLastTicked,
 			updatePfp,
 			handleVoiceBroadcast,
+			playSoundEffect,
 			armPlaybackSyncSuppression,
 			clearPlaybackSyncSuppression,
 			playFromSoloJoin
