@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { AppProviders } from '@/components/providers';
-import 'vidstack/player/styles/default/theme.css';
-import 'vidstack/player/styles/default/layouts/video.css';
+import '@vidstack/react/player/styles/default/theme.css';
+import '@vidstack/react/player/styles/default/layouts/video.css';
 import './globals.css';
 
 export const metadata: Metadata = {

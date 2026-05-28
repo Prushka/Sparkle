@@ -431,7 +431,7 @@ media-google-cast-button {
 	aspect-ratio: unset !important;
 }
 
-media-time-slider.vds-time-slider.vds-slider {
+.vds-time-slider.vds-slider {
 	--media-slider-height: 14px;
 	margin: 15px 0;
 }

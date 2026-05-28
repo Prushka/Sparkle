@@ -1,9 +1,5 @@
 'use client';
 
-import 'vidstack/player';
-import 'vidstack/player/ui';
-import 'vidstack/player/layouts/default';
-
 import {
 	type ChangeEvent,
 	type ReactNode,
@@ -13,10 +9,17 @@ import {
 	useRef,
 	useState
 } from 'react';
-import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'framer-motion';
-import { TextTrack, type MediaKeyShortcuts } from 'vidstack';
+import {
+	MediaPlayer,
+	MediaProvider,
+	Poster,
+	TextTrack,
+	type MediaKeyShortcuts,
+	type MediaPlayerInstance
+} from '@vidstack/react';
+import { DefaultVideoLayout, defaultLayoutIcons } from '@vidstack/react/player/layouts/default';
 import JASSUB from 'jassub';
 import {
 	IconAlertOctagonFilled,
@@ -229,7 +232,7 @@ function getSelectedSubtitleTrack(
 		return selectedFromList;
 	}
 
-	const captionsButton = player?.querySelector?.('media-caption-button');
+	const captionsButton = player?.querySelector?.('.vds-caption-button');
 	const defaultSelected = () =>
 		captionsButton?.getAttribute('aria-pressed') === 'true'
 			? tracks.find((track) => track.default) || tracks[0] || null
@@ -429,11 +432,6 @@ function VoiceControls({ voice }: { voice: VoiceChatController }) {
 }
 
 async function waitForTextTracks(player: any) {
-	try {
-		await window.customElements?.whenDefined('media-player');
-	} catch (error) {
-		console.log(error);
-	}
 	for (let i = 0; i < 60; i++) {
 		const textTracks = player?.textTracks;
 		if (textTracks?.add) {
@@ -461,7 +459,7 @@ export function Player({ data }: { data: ServerData }) {
 		discordAuth
 	} = useAppState();
 	const { theme, setTheme } = useTheme();
-	const playerElementRef = useRef<any>(null);
+	const playerElementRef = useRef<MediaPlayerInstance | null>(null);
 	const socketRef = useRef<WebSocket | null>(null);
 	const socketUrlRef = useRef<string | null>(null);
 	const reconnectTimerRef = useRef<number | null>(null);
@@ -469,7 +467,6 @@ export function Player({ data }: { data: ServerData }) {
 	const connectRef = useRef<((_forceInteracted?: boolean) => void) | null>(null);
 	const profileSyncedRef = useRef(false);
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
-	const chatMountRef = useRef<HTMLDivElement | null>(null);
 	const mediaSelectionRef = useRef<MediaSelectionHandle | null>(null);
 	const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
 	const supRef = useRef<SUPtitles | null>(null);
@@ -490,9 +487,9 @@ export function Player({ data }: { data: ServerData }) {
 	const playerCanPlayRef = useRef(false);
 	const chatFocusedSecsRef = useRef(0);
 	const volumeInitializedRef = useRef(false);
+	const playbackSyncSuppressionTimerRef = useRef<number | null>(null);
 	const [mounted, setMounted] = useState(false);
-	const [playerEl, setPlayerEl] = useState<any>(null);
-	const [chatMountNode, setChatMountNode] = useState<HTMLDivElement | null>(null);
+	const [playerEl, setPlayerEl] = useState<MediaPlayerInstance | null>(null);
 	const [controlsShowing, setControlsShowing] = useState(false);
 	const [playerSmallLayout, setPlayerSmallLayout] = useState(false);
 	const [socketConnected, setSocketConnected] = useState(false);
@@ -564,7 +561,7 @@ export function Player({ data }: { data: ServerData }) {
 	const autoCodec =
 		videoSrc?.sCodec && selectedCodec === 'auto' ? `(${codecDisplayMap[videoSrc.sCodec]})` : '';
 	const chatHidden = chatLayout === 'hide';
-	const setPlayerElement = useCallback((element: any | null) => {
+	const setPlayerElement = useCallback((element: MediaPlayerInstance | null) => {
 		playerElementRef.current = element;
 		setPlayerEl(element);
 	}, []);
@@ -600,11 +597,12 @@ export function Player({ data }: { data: ServerData }) {
 				(message) => renderNow - message.timestamp < SYSTEM_MESSAGE_DURATION_MS
 			)
 		];
-		if (playerEl?.clientHeight < 250) {
+		const playerHeight = playerEl?.el?.clientHeight ?? 0;
+		if (playerHeight < 250) {
 			nextMessages = nextMessages.slice(-4);
-		} else if (playerEl?.clientHeight < 450) {
+		} else if (playerHeight < 450) {
 			nextMessages = nextMessages.slice(-6);
-		} else if (playerEl?.clientHeight < 620) {
+		} else if (playerHeight < 620) {
 			nextMessages = nextMessages.slice(-8);
 		} else {
 			nextMessages = nextMessages.slice(-10);
@@ -698,28 +696,6 @@ export function Player({ data }: { data: ServerData }) {
 		roomPlayersCountRef.current = roomPlayers.length;
 		roomPlayersRef.current = roomPlayers;
 	}, [roomPlayers]);
-
-	useEffect(() => {
-		if (!playerEl || typeof customElements === 'undefined') {
-			return;
-		}
-		const player = playerElementRef.current;
-		if (!player) {
-			return;
-		}
-		let cancelled = false;
-		customElements
-			.whenDefined('media-player')
-			.then(() => {
-				if (!cancelled) {
-					player.keyShortcuts = PLAYER_KEY_SHORTCUTS;
-				}
-			})
-			.catch((error) => console.log(error));
-		return () => {
-			cancelled = true;
-		};
-	}, [playerEl]);
 
 	useEffect(() => {
 		if (typeof window === 'undefined') {
@@ -886,7 +862,7 @@ export function Player({ data }: { data: ServerData }) {
 			playerEl,
 			typeof document === 'undefined'
 				? null
-				: (document.querySelector('media-provider video') as HTMLVideoElement | null),
+				: (document.querySelector('.media-provider video') as HTMLVideoElement | null),
 			subtitleTracksRef.current,
 			selectedSubtitleTrackRef.current
 		);
@@ -912,10 +888,8 @@ export function Player({ data }: { data: ServerData }) {
 		if (!player) {
 			return;
 		}
-		player.title = job.Input;
-		player.artist = "Let's watch anime!";
 		sendSettings();
-	}, [job.Input, playerEl, sendSettings, videoSrc]);
+	}, [playerEl, sendSettings, videoSrc]);
 
 	const voice = useVoiceChat({
 		playerId,
@@ -1053,7 +1027,6 @@ export function Player({ data }: { data: ServerData }) {
 				}
 				textTracks.add(track);
 			}
-			player.controlsDelay = 1500;
 		};
 		void setupTracks();
 
@@ -1101,6 +1074,35 @@ export function Player({ data }: { data: ServerData }) {
 			});
 		}
 	}, [job.Duration, send, setCurrentlyWatching]);
+
+	const clearPlaybackSyncSuppression = useCallback(() => {
+		if (playbackSyncSuppressionTimerRef.current !== null) {
+			window.clearTimeout(playbackSyncSuppressionTimerRef.current);
+			playbackSyncSuppressionTimerRef.current = null;
+		}
+		suppressNextPlaybackSyncRef.current = false;
+	}, []);
+
+	const armPlaybackSyncSuppression = useCallback(() => {
+		clearPlaybackSyncSuppression();
+		suppressNextPlaybackSyncRef.current = true;
+		playbackSyncSuppressionTimerRef.current = window.setTimeout(() => {
+			playbackSyncSuppressionTimerRef.current = null;
+			suppressNextPlaybackSyncRef.current = false;
+		}, 1500);
+	}, [clearPlaybackSyncSuppression]);
+
+	const consumePlaybackSyncSuppression = useCallback(() => {
+		if (!suppressNextPlaybackSyncRef.current) {
+			return false;
+		}
+		clearPlaybackSyncSuppression();
+		return true;
+	}, [clearPlaybackSyncSuppression]);
+
+	useEffect(() => {
+		return () => clearPlaybackSyncSuppression();
+	}, [clearPlaybackSyncSuppression]);
 
 	const connect = useCallback(
 		(forceInteracted = false) => {
@@ -1237,18 +1239,29 @@ export function Player({ data }: { data: ServerData }) {
 							break;
 						case SyncTypes.PauseSync:
 							if (state.paused === true && player.paused === false) {
-								suppressNextPlaybackSyncRef.current = true;
-								player.pause();
+								armPlaybackSyncSuppression();
+								Promise.resolve(player.pause()).catch((error) => {
+									clearPlaybackSyncSuppression();
+									console.warn('Unable to sync remote pause', error);
+								});
 								persistControlState(state);
 							} else if (
 								state.paused === false &&
 								player.paused === true &&
 								(!inBgRef.current || (inBgRef.current && roomPlayersCountRef.current > 1))
 							) {
-								suppressNextPlaybackSyncRef.current = true;
-								Promise.resolve(player.play()).catch(() => {
-									suppressNextPlaybackSyncRef.current = false;
-								});
+								const playFromRemoteSync = () => {
+									armPlaybackSyncSuppression();
+									Promise.resolve(player.play()).catch((error) => {
+										clearPlaybackSyncSuppression();
+										console.warn('Unable to sync remote play', error);
+									});
+								};
+								if (player.state.canPlay) {
+									playFromRemoteSync();
+								} else {
+									player.canPlayQueue.enqueue('remote-pause-sync-play', playFromRemoteSync);
+								}
 								persistControlState(state);
 							}
 							break;
@@ -1328,7 +1341,9 @@ export function Player({ data }: { data: ServerData }) {
 			setPageReloadCounter,
 			updateLastTicked,
 			updatePfp,
-			handleVoiceBroadcast
+			handleVoiceBroadcast,
+			armPlaybackSyncSuppression,
+			clearPlaybackSyncSuppression
 		]
 	);
 
@@ -1475,17 +1490,13 @@ export function Player({ data }: { data: ServerData }) {
 				player.remoteControl?.toggleControls?.();
 			}
 		};
-		const playRequest = () => {
-			startWatchRoomConnection();
-		};
 		player.addEventListener?.('mouseleave', mouseLeave);
-		player.addEventListener?.('media-play-request', playRequest);
 
 		const interval = window.setInterval(() => {
 			updateTime();
 			updateLastTicked();
 			const videoElement = document.querySelector(
-				'media-provider video'
+				'.media-provider video'
 			) as HTMLVideoElement | null;
 			const selectedTrack = getSelectedSubtitleTrack(
 				player,
@@ -1586,7 +1597,6 @@ export function Player({ data }: { data: ServerData }) {
 			document.removeEventListener('visibilitychange', visibilityChange);
 			document.removeEventListener('mousemove', mouseMove);
 			player.removeEventListener?.('mouseleave', mouseLeave);
-			player.removeEventListener?.('media-play-request', playRequest);
 			playerCanPlayRef.current = false;
 			playerUnsubscribe?.();
 			playerCanPlayUnsubscribe?.();
@@ -1606,7 +1616,8 @@ export function Player({ data }: { data: ServerData }) {
 	]);
 
 	useEffect(() => {
-		if (!playerEl || typeof MutationObserver === 'undefined') {
+		const playerNode = playerEl?.el;
+		if (!playerNode || typeof MutationObserver === 'undefined') {
 			return;
 		}
 
@@ -1616,7 +1627,7 @@ export function Player({ data }: { data: ServerData }) {
 
 		const updateSmallLayout = () => {
 			animationFrame = 0;
-			const layout = playerEl.querySelector?.('media-video-layout') as HTMLElement | null;
+			const layout = playerNode.querySelector?.('.vds-video-layout') as HTMLElement | null;
 			if (layout !== observedLayout) {
 				layoutObserver.disconnect();
 				observedLayout = layout;
@@ -1628,10 +1639,6 @@ export function Player({ data }: { data: ServerData }) {
 				}
 			}
 			const isSmallLayout = Boolean(layout?.hasAttribute('data-sm'));
-			const chatMount = chatMountRef.current;
-			if (chatMount) {
-				chatMount.dataset.mobileLayout = isSmallLayout ? 'true' : 'false';
-			}
 			setPlayerSmallLayout(isSmallLayout);
 		};
 
@@ -1643,7 +1650,7 @@ export function Player({ data }: { data: ServerData }) {
 		}
 
 		const playerObserver = new MutationObserver(() => scheduleUpdate());
-		playerObserver.observe(playerEl, { childList: true, subtree: true });
+		playerObserver.observe(playerNode, { childList: true, subtree: true });
 		window.addEventListener('resize', scheduleUpdate);
 		scheduleUpdate();
 
@@ -1654,48 +1661,6 @@ export function Player({ data }: { data: ServerData }) {
 			playerObserver.disconnect();
 			layoutObserver.disconnect();
 			window.removeEventListener('resize', scheduleUpdate);
-		};
-	}, [playerEl]);
-
-	useEffect(() => {
-		if (!playerEl) {
-			return;
-		}
-		const ensureChatMount = () => {
-			if (chatMountRef.current?.isConnected) {
-				return;
-			}
-			const anchor =
-				playerEl.querySelector?.('media-caption-button') ||
-				playerEl.querySelector?.('media-title') ||
-				playerEl.querySelector?.('media-chapter-title') ||
-				document.querySelector('media-caption-button') ||
-				document.querySelector('media-title') ||
-				document.querySelector('media-chapter-title');
-			if (!anchor?.parentNode) {
-				return;
-			}
-			const container = document.createElement('div');
-			container.className = 'player-chat-control';
-			container.dataset.playerChatMount = 'true';
-			const layout = playerEl.querySelector?.('media-video-layout') as HTMLElement | null;
-			container.dataset.mobileLayout = layout?.hasAttribute('data-sm') ? 'true' : 'false';
-			anchor.parentNode.insertBefore(
-				container,
-				anchor.matches?.('media-caption-button') ? anchor : anchor.nextSibling
-			);
-			chatMountRef.current = container;
-			setChatMountNode(container);
-		};
-
-		ensureChatMount();
-		const interval = window.setInterval(ensureChatMount, 500);
-
-		return () => {
-			window.clearInterval(interval);
-			chatMountRef.current?.remove();
-			chatMountRef.current = null;
-			setChatMountNode(null);
 		};
 	}, [playerEl]);
 
@@ -1816,17 +1781,20 @@ export function Player({ data }: { data: ServerData }) {
 
 	const showJoinOverlay = !socketConnected;
 	const mediaPlayerClassName = `media-player relative w-full bg-slate-900 ${discord ? 'h-[100dvh]' : 'aspect-video'} ${playerEl && !playerEl.paused && chatFocusedSecs > hideControlsOnChatFocused ? 'chat-controls-hidden' : ''}`;
-	const controlsChat =
-		chatMountNode &&
-		createPortal(
+	const renderControlsChat = (mobileLayout: boolean, suffix: string) => (
+		<div
+			className="player-chat-control"
+			data-player-chat-mount="true"
+			data-mobile-layout={mobileLayout ? 'true' : 'false'}
+		>
 			<Chatbox
 				send={send}
 				chatFocused={chatFocused}
 				focusByShortcut
 				controlsShowing={null}
 				className="chat-pc"
-				inputId="chat-pc-input"
-				formId="chat-pc-form"
+				inputId={`chat-pc-input-${suffix}`}
+				formId={`chat-pc-form-${suffix}`}
 				messages={[]}
 				historicalPlayers={{}}
 				staticBaseUrl={data.staticBaseUrl}
@@ -1840,9 +1808,9 @@ export function Player({ data }: { data: ServerData }) {
 					chatFocusedSecsRef.current = 0;
 					setChatFocusedSecs(0);
 				}}
-			/>,
-			chatMountNode
-		);
+			/>
+		</div>
+	);
 
 	return (
 		<>
@@ -1856,13 +1824,19 @@ export function Player({ data }: { data: ServerData }) {
 					}`}
 				>
 					{mounted ? (
-						<media-player
-							keep-alive
+						<MediaPlayer
 							className={mediaPlayerClassName}
 							src={videoSrc?.src || undefined}
-							crossorigin
+							title={job.Input}
+							artist="Let's watch anime!"
+							controlsDelay={1500}
+							crossOrigin
+							keyShortcuts={PLAYER_KEY_SHORTCUTS}
 							ref={setPlayerElement}
 							playsInline
+							onMediaPlayRequest={() => {
+								startWatchRoomConnection();
+							}}
 							onSeeked={() => {
 								supRef.current?.seekedHandler(!playerEl?.paused);
 								supPlayingRef.current = Boolean(supRef.current && !playerEl?.paused);
@@ -1873,9 +1847,7 @@ export function Player({ data }: { data: ServerData }) {
 							onPause={() => {
 								supRef.current?.pauseHandler();
 								supPlayingRef.current = false;
-								if (suppressNextPlaybackSyncRef.current) {
-									suppressNextPlaybackSyncRef.current = false;
-								} else {
+								if (!consumePlaybackSyncSuppression()) {
 									send({ paused: true, type: SyncTypes.PauseSync });
 								}
 								setCurrentlyWatching((value) => (value ? { ...value, paused: true } : null));
@@ -1886,24 +1858,30 @@ export function Player({ data }: { data: ServerData }) {
 									supPlayingRef.current = true;
 								}
 								startWatchRoomConnection();
-								if (suppressNextPlaybackSyncRef.current) {
-									suppressNextPlaybackSyncRef.current = false;
-								} else if (interactedRef.current) {
+								if (!consumePlaybackSyncSuppression() && interactedRef.current) {
 									send({ paused: false, type: SyncTypes.PauseSync });
 								}
 								setCurrentlyWatching((value) => (value ? { ...value, paused: false } : null));
 							}}
 						>
-							<media-provider className="media-provider h-full w-full">
-								<media-poster className="vds-poster" src={data.preview}></media-poster>
+							<MediaProvider className="media-provider h-full w-full">
+								<Poster className="vds-poster" src={data.preview} alt="" />
 								<canvas ref={canvasRef} id="sub-canvas" className="pointer-events-none absolute" />
-							</media-provider>
-							<media-video-layout
-								color-scheme={theme}
+							</MediaProvider>
+							<DefaultVideoLayout
+								colorScheme={theme}
+								icons={defaultLayoutIcons}
 								thumbnails={thumbnailVttSrc}
-							></media-video-layout>
-							{controlsChat}
-						</media-player>
+								slots={{
+									largeLayout: {
+										beforeCaptionButton: renderControlsChat(false, 'large')
+									},
+									smallLayout: {
+										beforeCaptionButton: renderControlsChat(true, 'small')
+									}
+								}}
+							/>
+						</MediaPlayer>
 					) : (
 						<div className={mediaPlayerClassName} />
 					)}
