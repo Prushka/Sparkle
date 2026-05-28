@@ -17,7 +17,7 @@ export function Chats({
 }) {
 	return (
 		<div
-			className={`${controlsShowing ? 'max-md:!mt-10' : ''} chat-history ml-auto flex flex-col gap-0.5 items-end`}
+			className={`${controlsShowing ? '!mt-10' : ''} chat-history ml-auto flex flex-col gap-0.5 items-end`}
 		>
 			{messagesToDisplay.map((message) => (
 				<div
@@ -26,8 +26,9 @@ export function Chats({
 				>
 					{message.isSystem ? (
 						<>
-							<span className="chat-system-label">System</span>
 							<span>{message.message}</span>
+							<span>{message.timeStr ? `[${message.timeStr}]` : ''}</span>
+							<span className="chat-system-label">System</span>
 						</>
 					) : (
 						<>

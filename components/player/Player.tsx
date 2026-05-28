@@ -243,6 +243,7 @@ function getLatestMessageTimestamp(messages: Chat[]) {
 
 const GENERATED_NAME_STORAGE_KEY = 'generatedName';
 const GENERATED_NAME_MESSAGE_PREFIX = 'generated-name-message';
+const SYSTEM_MESSAGE_DURATION_MS = 4000;
 const USERNAME_ADJECTIVES = [
 	'Nova',
 	'Pixel',
@@ -360,6 +361,7 @@ export function Player({ data }: { data: ServerData }) {
 	const [playerEl, setPlayerEl] = useState<any>(null);
 	const [chatMountNode, setChatMountNode] = useState<HTMLDivElement | null>(null);
 	const [controlsShowing, setControlsShowing] = useState(false);
+	const [playerSmallLayout, setPlayerSmallLayout] = useState(false);
 	const [socketConnected, setSocketConnected] = useState(false);
 	const [roomPlayers, setRoomPlayers] = useState<RoomPlayer[]>([]);
 	const [historicalPlayers, setHistoricalPlayers] = useState<Record<string, RoomPlayer>>({});
@@ -462,7 +464,9 @@ export function Player({ data }: { data: ServerData }) {
 	const messagesToDisplay = (() => {
 		let nextMessages = [
 			...roomMessages.filter((message) => renderNow - message.timestamp < 140000),
-			...localSystemMessages.filter((message) => renderNow - message.timestamp < 9000)
+			...localSystemMessages.filter(
+				(message) => renderNow - message.timestamp < SYSTEM_MESSAGE_DURATION_MS
+			)
 		];
 		if (playerEl?.clientHeight < 250) {
 			nextMessages = nextMessages.slice(-4);
@@ -630,7 +634,7 @@ export function Player({ data }: { data: ServerData }) {
 			return;
 		}
 		window.sessionStorage.setItem(messageKey, '1');
-		addSystemMessage(`Using placeholder name: ${name}.`);
+		addSystemMessage(`Using placeholder name: ${name}`);
 	}, [addSystemMessage, discord?.user, name]);
 
 	useEffect(() => {
@@ -1424,6 +1428,53 @@ export function Player({ data }: { data: ServerData }) {
 	]);
 
 	useEffect(() => {
+		if (!playerEl || typeof MutationObserver === 'undefined') {
+			return;
+		}
+
+		let animationFrame = 0;
+		let observedLayout: Element | null = null;
+		const layoutObserver = new MutationObserver(() => scheduleUpdate());
+
+		const updateSmallLayout = () => {
+			animationFrame = 0;
+			const layout = playerEl.querySelector?.('media-video-layout') as Element | null;
+			if (layout !== observedLayout) {
+				layoutObserver.disconnect();
+				observedLayout = layout;
+				if (layout) {
+					layoutObserver.observe(layout, {
+						attributes: true,
+						attributeFilter: ['data-sm', 'data-size']
+					});
+				}
+			}
+			setPlayerSmallLayout(Boolean(layout?.hasAttribute('data-sm')));
+		};
+
+		function scheduleUpdate() {
+			if (animationFrame) {
+				return;
+			}
+			animationFrame = window.requestAnimationFrame(updateSmallLayout);
+		}
+
+		const playerObserver = new MutationObserver(() => scheduleUpdate());
+		playerObserver.observe(playerEl, { childList: true, subtree: true });
+		window.addEventListener('resize', scheduleUpdate);
+		scheduleUpdate();
+
+		return () => {
+			if (animationFrame) {
+				window.cancelAnimationFrame(animationFrame);
+			}
+			playerObserver.disconnect();
+			layoutObserver.disconnect();
+			window.removeEventListener('resize', scheduleUpdate);
+		};
+	}, [playerEl]);
+
+	useEffect(() => {
 		if (!playerEl) {
 			return;
 		}
@@ -1442,7 +1493,7 @@ export function Player({ data }: { data: ServerData }) {
 				return;
 			}
 			const container = document.createElement('div');
-			container.className = 'player-chat-control max-md:hidden';
+			container.className = 'player-chat-control';
 			container.dataset.playerChatMount = 'true';
 			anchor.parentNode.insertBefore(
 				container,
@@ -1490,12 +1541,12 @@ export function Player({ data }: { data: ServerData }) {
 			return;
 		}
 		if (!playerId) {
-			addSystemMessage('Avatar upload is not ready yet.');
+			addSystemMessage('Avatar upload is not ready yet');
 			input.value = '';
 			return;
 		}
 		if (pfp.size > 12000000) {
-			addSystemMessage('Avatar file is too large. Max size is 10MB.');
+			addSystemMessage('Avatar file is too large. Max size is 10MB');
 			input.value = '';
 			return;
 		}
@@ -1511,10 +1562,10 @@ export function Player({ data }: { data: ServerData }) {
 			}
 			updatePfp(playerId);
 			send({ type: SyncTypes.PfpSync });
-			addSystemMessage('Avatar updated.');
+			addSystemMessage('Avatar updated');
 		} catch (error) {
 			console.error(error);
-			addSystemMessage('Avatar upload failed. Please try another image.');
+			addSystemMessage('Avatar upload failed. Please try another image');
 		} finally {
 			input.value = '';
 		}
@@ -1531,7 +1582,7 @@ export function Player({ data }: { data: ServerData }) {
 		const nextName = name.trim();
 		if (!nextName) {
 			setName(lastSavedNameRef.current);
-			addSystemMessage('Name cannot be empty.');
+			addSystemMessage('Name cannot be empty');
 			return;
 		}
 		if (nextName !== name) {
@@ -1545,7 +1596,7 @@ export function Player({ data }: { data: ServerData }) {
 		if (nextName !== lastSavedNameRef.current) {
 			lastSavedNameRef.current = nextName;
 			window.localStorage.removeItem(GENERATED_NAME_STORAGE_KEY);
-			addSystemMessage('Name updated.');
+			addSystemMessage('Name updated');
 		}
 	}
 
@@ -1655,7 +1706,7 @@ export function Player({ data }: { data: ServerData }) {
 					style={chatHidden ? { display: 'none' } : undefined}
 				>
 					<Chats
-						controlsShowing={controlsShowing}
+						controlsShowing={controlsShowing && playerSmallLayout}
 						messagesToDisplay={messagesToDisplay}
 						historicalPlayers={historicalPlayers}
 						staticBaseUrl={data.staticBaseUrl}

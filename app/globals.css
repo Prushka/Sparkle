@@ -287,10 +287,8 @@
 	display: block;
 }
 
-@media (max-width: 767px) {
-	.player-chat-control {
-		display: none !important;
-	}
+media-video-layout[data-sm] .player-chat-control {
+	display: none !important;
 }
 
 @media (max-width: 1000px) {
