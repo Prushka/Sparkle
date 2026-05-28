@@ -20,22 +20,23 @@ export function Pfp({
 	staticBaseUrl: string;
 }) {
 	const { pfpLastFetched, updatePfp } = useAppState();
+	const pfpRevision = pfpLastFetched[id];
+	const imageSrc = discordUser
+		? getAvatarUrl(discordUser)
+		: id
+			? `${staticBaseUrl}/pfp/${id}.png?${pfpRevision || ''}`
+			: TRANSPARENT_PIXEL;
 
 	useEffect(() => {
-		if (id && !pfpLastFetched[id] && !discordUser) {
+		if (id && !pfpRevision && !discordUser) {
 			updatePfp(id);
 		}
-	}, [discordUser, id, pfpLastFetched, updatePfp]);
+	}, [discordUser, id, pfpRevision, updatePfp]);
 
 	return (
 		<img
-			src={
-				discordUser
-					? getAvatarUrl(discordUser)
-					: id
-						? `${staticBaseUrl}/pfp/${id}.png?${pfpLastFetched[id] || ''}`
-						: TRANSPARENT_PIXEL
-			}
+			key={imageSrc}
+			src={imageSrc}
 			alt="pfp"
 			className={`rounded-full object-cover ${className}`}
 		/>

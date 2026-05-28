@@ -110,6 +110,10 @@ func staticFiles(outputDir string) http.Handler {
 			http.NotFound(w, r)
 			return
 		}
+		if strings.HasPrefix(r.URL.Path, "/static/pfp/") {
+			w.Header().Set("Cache-Control", "no-store, no-cache, max-age=0")
+			w.Header().Set("Pragma", "no-cache")
+		}
 		files.ServeHTTP(w, r)
 	})
 }

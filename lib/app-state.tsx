@@ -17,7 +17,7 @@ type AppStateValue = {
 	playersCount: number;
 	setPlayersCount: React.Dispatch<React.SetStateAction<number>>;
 	pfpLastFetched: Record<string, number>;
-	updatePfp: (_id: string) => void;
+	updatePfp: (_id: string, _revision?: number) => void;
 	discordAuth: Discord | null;
 	setDiscordAuth: React.Dispatch<React.SetStateAction<Discord | null>>;
 };
@@ -48,9 +48,14 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 		window.localStorage.setItem('chatLayout2', chatLayout);
 	}, [chatLayout]);
 
-	const updatePfp = useCallback((id: string) => {
+	const updatePfp = useCallback((id: string, revision?: number) => {
 		setPfpLastFetched((store) => {
-			return { ...store, [id]: Date.now() };
+			const requestedRevision =
+				typeof revision === 'number' && Number.isFinite(revision) ? revision : Date.now();
+			const currentRevision = store[id] ?? 0;
+			const nextRevision =
+				requestedRevision > currentRevision ? requestedRevision : currentRevision + 1;
+			return { ...store, [id]: nextRevision };
 		});
 	}, []);
 

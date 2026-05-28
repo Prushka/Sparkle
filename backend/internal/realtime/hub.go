@@ -3,6 +3,7 @@ package realtime
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"log"
 	"math"
@@ -147,9 +148,11 @@ func (h *Hub) HandlePFP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.broadcastPFP(id)
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	_, _ = w.Write([]byte("File uploaded"))
+	revision := time.Now().UnixMilli()
+	h.broadcastPFP(id, revision)
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]any{"id": id, "revision": revision})
 }
 
 func (h *Hub) getOrCreateRoom(id string) *Room {
@@ -207,7 +210,11 @@ func (h *Hub) readPump(room *Room, player *Player) {
 	}
 }
 
-func (h *Hub) broadcastPFP(id string) {
+func (h *Hub) broadcastPFP(id string, timestamp int64) {
+	if timestamp == 0 {
+		timestamp = time.Now().UnixMilli()
+	}
+
 	h.mu.RLock()
 	rooms := make([]*Room, 0, len(h.rooms))
 	for _, room := range h.rooms {
@@ -216,7 +223,7 @@ func (h *Hub) broadcastPFP(id string) {
 	h.mu.RUnlock()
 
 	for _, room := range rooms {
-		room.broadcastPFP(id)
+		room.broadcastPFP(id, timestamp)
 	}
 }
 
@@ -319,7 +326,7 @@ func (r *Room) handlePayload(current *Player, payload ClientPayload) {
 	case PauseSync:
 		r.syncPause(current, payload.Paused)
 	case PfpSync:
-		r.broadcastPFP(current.state.Id)
+		r.broadcastPFP(current.state.Id, now.UnixMilli())
 	case NewPlayer:
 		r.newPlayer(current)
 	default:
@@ -521,7 +528,11 @@ func (r *Room) newPlayer(sender *Player) {
 	}
 }
 
-func (r *Room) broadcastPFP(id string) {
+func (r *Room) broadcastPFP(id string, timestamp int64) {
+	if timestamp == 0 {
+		timestamp = time.Now().UnixMilli()
+	}
+
 	var firedBy *PlayerSnapshot
 	var targets []*Player
 
@@ -536,7 +547,7 @@ func (r *Room) broadcastPFP(id string) {
 	if firedBy == nil {
 		return
 	}
-	payload := SendPayload{Type: PfpSync, FiredBy: firedBy, Timestamp: time.Now().UnixMilli()}
+	payload := SendPayload{Type: PfpSync, FiredBy: firedBy, Timestamp: timestamp}
 	for _, player := range targets {
 		player.sendJSON(payload)
 	}

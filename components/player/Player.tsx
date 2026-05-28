@@ -242,7 +242,7 @@ function getLatestMessageTimestamp(messages: Chat[]) {
 
 const GENERATED_NAME_STORAGE_KEY = 'generatedName';
 const GENERATED_NAME_MESSAGE_PREFIX = 'generated-name-message';
-const SYSTEM_MESSAGE_DURATION_MS = 4000;
+const SYSTEM_MESSAGE_DURATION_MS = 6000;
 const USERNAME_ADJECTIVES = [
 	'Nova',
 	'Pixel',
@@ -1005,7 +1005,7 @@ export function Player({ data }: { data: ServerData }) {
 					switch (state.type) {
 						case SyncTypes.PfpSync:
 							if (state.firedBy?.id) {
-								updatePfp(state.firedBy.id);
+								updatePfp(state.firedBy.id, state.timestamp);
 							}
 							break;
 						case SyncTypes.ChatSync:
@@ -1566,7 +1566,16 @@ export function Player({ data }: { data: ServerData }) {
 			if (!response.ok) {
 				throw new Error(`Avatar upload failed: ${response.status}`);
 			}
-			updatePfp(playerId);
+			let avatarRevision: number | undefined;
+			if (response.headers.get('content-type')?.includes('application/json')) {
+				try {
+					const payload = (await response.json()) as { revision?: number };
+					avatarRevision = payload.revision;
+				} catch (error) {
+					console.warn('Avatar upload response did not include a revision', error);
+				}
+			}
+			updatePfp(playerId, avatarRevision);
 			addSystemMessage('Avatar updated');
 		} catch (error) {
 			console.error(error);
@@ -1601,7 +1610,7 @@ export function Player({ data }: { data: ServerData }) {
 		if (nextName !== lastSavedNameRef.current) {
 			lastSavedNameRef.current = nextName;
 			window.localStorage.removeItem(GENERATED_NAME_STORAGE_KEY);
-			addSystemMessage('Name updated');
+			addSystemMessage(`Name updated: ${nextName}`);
 		}
 	}
 
