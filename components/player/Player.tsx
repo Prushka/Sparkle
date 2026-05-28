@@ -488,6 +488,7 @@ export function Player({ data }: { data: ServerData }) {
 	const chatFocusedSecsRef = useRef(0);
 	const volumeInitializedRef = useRef(false);
 	const playbackSyncSuppressionTimerRef = useRef<number | null>(null);
+	const autoPlayWhenAloneOnJoinRef = useRef(false);
 	const [mounted, setMounted] = useState(false);
 	const [playerEl, setPlayerEl] = useState<MediaPlayerInstance | null>(null);
 	const [controlsShowing, setControlsShowing] = useState(false);
@@ -1100,6 +1101,23 @@ export function Player({ data }: { data: ServerData }) {
 		return true;
 	}, [clearPlaybackSyncSuppression]);
 
+	const playFromSoloJoin = useCallback(() => {
+		const player = playerElementRef.current;
+		if (!player || !player.paused) {
+			return;
+		}
+		const play = () => {
+			Promise.resolve(player.play()).catch((error) => {
+				console.warn('Unable to auto-play after joining an empty room', error);
+			});
+		};
+		if (player.state.canPlay) {
+			play();
+		} else {
+			player.canPlayQueue.enqueue('auto-play-empty-room-join', play);
+		}
+	}, []);
+
 	useEffect(() => {
 		return () => clearPlaybackSyncSuppression();
 	}, [clearPlaybackSyncSuppression]);
@@ -1196,6 +1214,15 @@ export function Player({ data }: { data: ServerData }) {
 						case SyncTypes.PlayersStatusSync:
 							reconnectAttemptRef.current = 0;
 							roomPlayersCountRef.current = state.players.length;
+							if (autoPlayWhenAloneOnJoinRef.current) {
+								const joinedRoom = state.players.some((player) => player.id === playerId);
+								if (joinedRoom) {
+									autoPlayWhenAloneOnJoinRef.current = false;
+									if (state.players.length === 1) {
+										playFromSoloJoin();
+									}
+								}
+							}
 							if (roomPlayersRef.current.length > 0) {
 								const { left, joined } = getLeftAndJoined(
 									roomPlayersRef.current,
@@ -1343,7 +1370,8 @@ export function Player({ data }: { data: ServerData }) {
 			updatePfp,
 			handleVoiceBroadcast,
 			armPlaybackSyncSuppression,
-			clearPlaybackSyncSuppression
+			clearPlaybackSyncSuppression,
+			playFromSoloJoin
 		]
 	);
 
@@ -1353,6 +1381,13 @@ export function Player({ data }: { data: ServerData }) {
 
 	const startWatchRoomConnection = useCallback(() => {
 		reconnectAttemptRef.current = 0;
+		const socket = socketRef.current;
+		if (
+			!socket ||
+			(socket.readyState !== WebSocket.CONNECTING && socket.readyState !== WebSocket.OPEN)
+		) {
+			autoPlayWhenAloneOnJoinRef.current = true;
+		}
 		interactedRef.current = true;
 		setInteracted(true);
 		void joinVoice();
