@@ -7,18 +7,21 @@ export function ConnectButton({
 	socketCommunicating,
 	interacted,
 	exited,
+	disabled = false,
 	onClick,
 	className = ''
 }: {
 	socketCommunicating: boolean;
 	interacted: boolean;
 	exited: boolean;
+	disabled?: boolean;
 	onClick: () => void;
 	className?: string;
 }) {
 	return (
 		<Button
 			variant="outline"
+			disabled={disabled}
 			onClick={onClick}
 			className={`font-bold ${
 				socketCommunicating

@@ -520,6 +520,7 @@ export function Player({ data }: { data: ServerData }) {
 	const autoPlayWhenAloneOnJoinRef = useRef(false);
 	const [mounted, setMounted] = useState(false);
 	const [playerEl, setPlayerEl] = useState<MediaPlayerInstance | null>(null);
+	const [playerCanPlay, setPlayerCanPlay] = useState(false);
 	const [controlsShowing, setControlsShowing] = useState(false);
 	const [playerSmallLayout, setPlayerSmallLayout] = useState(false);
 	const [socketConnected, setSocketConnected] = useState(false);
@@ -1548,6 +1549,7 @@ export function Player({ data }: { data: ServerData }) {
 		);
 		const playerCanPlayUnsubscribe = player.subscribe?.(({ canPlay }: { canPlay: boolean }) => {
 			playerCanPlayRef.current = canPlay;
+			setPlayerCanPlay(canPlay);
 			if (canPlay && interactedRef.current && !socketRef.current) {
 				connectRef.current?.();
 			}
@@ -1689,6 +1691,7 @@ export function Player({ data }: { data: ServerData }) {
 			document.removeEventListener('mousemove', mouseMove);
 			player.removeEventListener?.('mouseleave', mouseLeave);
 			playerCanPlayRef.current = false;
+			setPlayerCanPlay(false);
 			playerUnsubscribe?.();
 			playerCanPlayUnsubscribe?.();
 		};
@@ -1862,7 +1865,7 @@ export function Player({ data }: { data: ServerData }) {
 	}
 
 	function handleJoinWatchRoom() {
-		if (socketCommunicating) {
+		if (socketCommunicating || !playerCanPlayRef.current) {
 			return;
 		}
 		startWatchRoomConnection();
@@ -2013,6 +2016,7 @@ export function Player({ data }: { data: ServerData }) {
 								socketCommunicating={socketCommunicating}
 								interacted={interacted}
 								exited={exited}
+								disabled={!playerCanPlay}
 								className="border-white/35 !bg-white/10 px-5 py-5 !text-white shadow-xl shadow-black/20 backdrop-blur-md hover:!bg-white/15 hover:!text-white"
 								onClick={handleJoinWatchRoom}
 							/>
