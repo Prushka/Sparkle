@@ -467,6 +467,30 @@ video {
 	background-color: rgba(0, 0, 0, 0.52) !important;
 }
 
+.chat-line-system {
+	gap: 0.45rem;
+	border: 1px solid rgba(255, 255, 255, 0.18);
+	background-color: rgba(10, 10, 12, 0.38);
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
+	box-shadow: 0 0.35rem 1.5rem rgba(0, 0, 0, 0.18);
+	text-align: left;
+}
+
+.chat-line-system:hover {
+	background-color: rgba(10, 10, 12, 0.52) !important;
+}
+
+.chat-system-label {
+	border-radius: 9999px;
+	background-color: rgba(255, 255, 255, 0.18);
+	padding: 0.05rem 0.45rem;
+	font-size: 0.72em;
+	font-weight: 900;
+	letter-spacing: 0;
+	text-transform: uppercase;
+}
+
 .chat-history {
 	margin-top: 2rem;
 	margin-right: 2rem;

@@ -22,17 +22,26 @@ export function Chats({
 			{messagesToDisplay.map((message) => (
 				<div
 					key={`${message.timestamp}-${message.uid}-${message.message}`}
-					className={`chat-line flex items-center justify-center gap-1 px-2.5 py-1 text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''}`}
+					className={`chat-line flex items-center justify-center gap-1 px-2.5 py-1 text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''} ${message.isSystem ? 'chat-line-system' : ''}`}
 				>
-					<span>{message.message}</span>
-					<span>{message.timeStr ? `[${message.timeStr}]` : ''}</span>
-					<span>{getRealName(historicalPlayers[message.uid])}</span>
-					<Pfp
-						id={message.uid}
-						className="avatar"
-						discordUser={historicalPlayers[message.uid]?.discordUser}
-						staticBaseUrl={staticBaseUrl}
-					/>
+					{message.isSystem ? (
+						<>
+							<span className="chat-system-label">System</span>
+							<span>{message.message}</span>
+						</>
+					) : (
+						<>
+							<span>{message.message}</span>
+							<span>{message.timeStr ? `[${message.timeStr}]` : ''}</span>
+							<span>{getRealName(historicalPlayers[message.uid])}</span>
+							<Pfp
+								id={message.uid}
+								className="avatar"
+								discordUser={historicalPlayers[message.uid]?.discordUser}
+								staticBaseUrl={staticBaseUrl}
+							/>
+						</>
+					)}
 				</div>
 			))}
 		</div>

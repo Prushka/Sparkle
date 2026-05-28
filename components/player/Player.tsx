@@ -19,7 +19,6 @@ import {
 	IconSun,
 	IconTableExport
 } from '@tabler/icons-react';
-import { toast } from 'sonner';
 import { useAppState } from '@/lib/app-state';
 import { useTheme } from '@/lib/theme';
 import { createNotificationAudioUrl } from '@/lib/player/notification-audio';
@@ -75,6 +74,10 @@ type MoveToastState = {
 	seconds: number;
 	firedBy: RoomPlayer;
 	job: Job | undefined;
+};
+
+type LocalSystemMessage = Chat & {
+	isSystem: true;
 };
 
 type SubtitleTrackFormat = 'ass' | 'srt' | 'sup' | 'vtt';
@@ -239,7 +242,7 @@ function getLatestMessageTimestamp(messages: Chat[]) {
 }
 
 const GENERATED_NAME_STORAGE_KEY = 'generatedName';
-const GENERATED_NAME_TOAST_PREFIX = 'generated-name-toast';
+const GENERATED_NAME_MESSAGE_PREFIX = 'generated-name-message';
 const USERNAME_ADJECTIVES = [
 	'Nova',
 	'Pixel',
@@ -272,8 +275,7 @@ const USERNAME_NOUNS = [
 function generatePlaceholderName() {
 	const adjective = USERNAME_ADJECTIVES[Math.floor(Math.random() * USERNAME_ADJECTIVES.length)];
 	const noun = USERNAME_NOUNS[Math.floor(Math.random() * USERNAME_NOUNS.length)];
-	const suffix = Math.floor(100 + Math.random() * 900);
-	return `${adjective}${noun}${suffix}`;
+	return `${adjective}${noun}`;
 }
 
 function joinBackendPath(base: string, path: string) {
@@ -362,6 +364,7 @@ export function Player({ data }: { data: ServerData }) {
 	const [roomPlayers, setRoomPlayers] = useState<RoomPlayer[]>([]);
 	const [historicalPlayers, setHistoricalPlayers] = useState<Record<string, RoomPlayer>>({});
 	const [roomMessages, setRoomMessages] = useState<Chat[]>([]);
+	const [localSystemMessages, setLocalSystemMessages] = useState<LocalSystemMessage[]>([]);
 	const [controlsToDisplay, setControlsToDisplay] = useState<SendPayload[]>([]);
 	const [selectedCodec, setSelectedCodec] = useState('auto');
 	const [selectedAudio, setSelectedAudio] = useState('1-jpn');
@@ -440,8 +443,27 @@ export function Player({ data }: { data: ServerData }) {
 		reconnectTimerRef.current = null;
 	}, []);
 
+	const addSystemMessage = useCallback((message: string) => {
+		const timestamp = Date.now();
+		setLocalSystemMessages((prev) => [
+			...prev.slice(-3),
+			{
+				uid: 'system',
+				message,
+				timestamp,
+				mediaSec: playerElementRef.current?.currentTime || 0,
+				isStateUpdate: true,
+				isSystem: true,
+				timeStr: ''
+			}
+		]);
+	}, []);
+
 	const messagesToDisplay = (() => {
-		let nextMessages = roomMessages.filter((message) => renderNow - message.timestamp < 140000);
+		let nextMessages = [
+			...roomMessages.filter((message) => renderNow - message.timestamp < 140000),
+			...localSystemMessages.filter((message) => renderNow - message.timestamp < 9000)
+		];
 		if (playerEl?.clientHeight < 250) {
 			nextMessages = nextMessages.slice(-4);
 		} else if (playerEl?.clientHeight < 450) {
@@ -577,16 +599,21 @@ export function Player({ data }: { data: ServerData }) {
 				return;
 			}
 			const stored = window.localStorage.getItem('name');
-			if (stored && !stored.startsWith('Anon-')) {
+			const generatedName = window.localStorage.getItem(GENERATED_NAME_STORAGE_KEY);
+			if (
+				stored &&
+				!stored.startsWith('Anon-') &&
+				!(generatedName === stored && /\d/.test(stored))
+			) {
 				lastSavedNameRef.current = stored;
 				setName(stored);
 				return;
 			}
-			const generatedName = generatePlaceholderName();
-			window.localStorage.setItem('name', generatedName);
-			window.localStorage.setItem(GENERATED_NAME_STORAGE_KEY, generatedName);
-			lastSavedNameRef.current = generatedName;
-			setName(generatedName);
+			const nextGeneratedName = generatePlaceholderName();
+			window.localStorage.setItem('name', nextGeneratedName);
+			window.localStorage.setItem(GENERATED_NAME_STORAGE_KEY, nextGeneratedName);
+			lastSavedNameRef.current = nextGeneratedName;
+			setName(nextGeneratedName);
 		}, 0);
 		return () => window.clearTimeout(timer);
 	}, [discord?.user, name]);
@@ -598,16 +625,13 @@ export function Player({ data }: { data: ServerData }) {
 		if (window.localStorage.getItem(GENERATED_NAME_STORAGE_KEY) !== name) {
 			return;
 		}
-		const toastKey = `${GENERATED_NAME_TOAST_PREFIX}:${name}`;
-		if (window.sessionStorage.getItem(toastKey)) {
+		const messageKey = `${GENERATED_NAME_MESSAGE_PREFIX}:${name}`;
+		if (window.sessionStorage.getItem(messageKey)) {
 			return;
 		}
-		window.sessionStorage.setItem(toastKey, '1');
-		toast('Using placeholder name: ' + name, {
-			description: 'Change your name using the input next to your avatar',
-			duration: 9000
-		});
-	}, [discord?.user, name]);
+		window.sessionStorage.setItem(messageKey, '1');
+		addSystemMessage(`Using placeholder name: ${name}.`);
+	}, [addSystemMessage, discord?.user, name]);
 
 	useEffect(() => {
 		if (typeof window === 'undefined') {
@@ -1466,15 +1490,12 @@ export function Player({ data }: { data: ServerData }) {
 			return;
 		}
 		if (!playerId) {
-			toast.error('Avatar upload is not ready yet');
+			addSystemMessage('Avatar upload is not ready yet.');
 			input.value = '';
 			return;
 		}
 		if (pfp.size > 12000000) {
-			toast.error('File size too large', {
-				description: 'Max file size: 10MB',
-				duration: 5000
-			});
+			addSystemMessage('Avatar file is too large. Max size is 10MB.');
 			input.value = '';
 			return;
 		}
@@ -1490,12 +1511,10 @@ export function Player({ data }: { data: ServerData }) {
 			}
 			updatePfp(playerId);
 			send({ type: SyncTypes.PfpSync });
-			toast.success('Avatar updated');
+			addSystemMessage('Avatar updated.');
 		} catch (error) {
 			console.error(error);
-			toast.error('Avatar upload failed', {
-				description: 'Please try another image.'
-			});
+			addSystemMessage('Avatar upload failed. Please try another image.');
 		} finally {
 			input.value = '';
 		}
@@ -1512,7 +1531,7 @@ export function Player({ data }: { data: ServerData }) {
 		const nextName = name.trim();
 		if (!nextName) {
 			setName(lastSavedNameRef.current);
-			toast.error('Name cannot be empty');
+			addSystemMessage('Name cannot be empty.');
 			return;
 		}
 		if (nextName !== name) {
@@ -1526,7 +1545,7 @@ export function Player({ data }: { data: ServerData }) {
 		if (nextName !== lastSavedNameRef.current) {
 			lastSavedNameRef.current = nextName;
 			window.localStorage.removeItem(GENERATED_NAME_STORAGE_KEY);
-			toast.success('Name updated');
+			addSystemMessage('Name updated.');
 		}
 	}
 

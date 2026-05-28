@@ -82,6 +82,7 @@ export type Chat = {
 	mediaSec: number;
 	uid: string;
 	isStateUpdate: boolean;
+	isSystem?: boolean;
 	timeStr: string;
 };
 
