@@ -561,6 +561,19 @@ export function Player({ data }: { data: ServerData }) {
 	const effectiveAudio = videoSrc?.audio || selectedAudio;
 	const autoCodec =
 		videoSrc?.sCodec && selectedCodec === 'auto' ? `(${codecDisplayMap[videoSrc.sCodec]})` : '';
+	const effectiveAudioStream = videoSrc?.sCodec
+		? job.MappedAudio[videoSrc.sCodec]?.find(
+				(stream) => `${stream.Index}-${stream.Language}` === effectiveAudio
+			)
+		: null;
+	const videoSettingsAudioLabel = effectiveAudioStream
+		? `${formatPair(effectiveAudioStream)} (${effectiveAudioStream.Index})`
+		: effectiveAudio;
+	const videoSettingsCodecLabel =
+		selectedCodec === 'auto'
+			? `Auto ${autoCodec}`.trim()
+			: `${codecDisplayMap[selectedCodec] ?? selectedCodec}${formatMbps(job, selectedCodec)}`;
+	const videoSettingsSummary = `${videoSettingsAudioLabel} • ${videoSettingsCodecLabel}`;
 	const chatHidden = chatLayout === 'hide';
 	const setPlayerElement = useCallback((element: MediaPlayerInstance | null) => {
 		playerElementRef.current = element;
@@ -2171,9 +2184,17 @@ export function Player({ data }: { data: ServerData }) {
 							</div>
 							<DropdownMenu.Root>
 								<DropdownMenu.Trigger asChild>
-									<Button variant={theme === 'dark' ? 'outline' : 'default'}>
-										<IconSettings2 className="mr-2 max-sm:hidden" size={16} stroke={2} />
-										Video <span className="max-sm:hidden">&nbsp;Settings</span>
+									<Button
+										variant={theme === 'dark' ? 'outline' : 'default'}
+										className="h-auto min-h-9 max-w-full justify-start gap-2 px-3 py-2 text-left sm:max-w-[24rem]"
+									>
+										<IconSettings2 className="shrink-0 max-sm:hidden" size={16} stroke={2} />
+										<span className="flex min-w-0 flex-col items-start gap-0.5">
+											<span className="leading-none">Video Settings</span>
+											<span className="block max-w-full truncate text-xs leading-none opacity-75">
+												{videoSettingsSummary}
+											</span>
+										</span>
 									</Button>
 								</DropdownMenu.Trigger>
 								<DropdownMenu.Content className="w-56">
