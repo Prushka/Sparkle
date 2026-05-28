@@ -481,7 +481,9 @@ export function Player({ data }: { data: ServerData }) {
 	const prevTrackSrcRef = useRef<string | null>('');
 	const lastTickedRef = useRef(0);
 	const roomPlayersCountRef = useRef(0);
+	const roomPlayersRef = useRef<RoomPlayer[]>([]);
 	const lastSentTimeRef = useRef(-100);
+	const suppressNextPlaybackSyncRef = useRef(false);
 	const inBgRef = useRef(false);
 	const exitedRef = useRef(false);
 	const interactedRef = useRef(interacted);
@@ -694,7 +696,8 @@ export function Player({ data }: { data: ServerData }) {
 
 	useEffect(() => {
 		roomPlayersCountRef.current = roomPlayers.length;
-	}, [roomPlayers.length]);
+		roomPlayersRef.current = roomPlayers;
+	}, [roomPlayers]);
 
 	useEffect(() => {
 		if (!playerEl || typeof customElements === 'undefined') {
@@ -1191,32 +1194,30 @@ export function Player({ data }: { data: ServerData }) {
 						case SyncTypes.PlayersStatusSync:
 							reconnectAttemptRef.current = 0;
 							roomPlayersCountRef.current = state.players.length;
-							setRoomPlayers((prev) => {
-								if (prev.length > 0) {
-									const { left, joined } = getLeftAndJoined(prev, state.players, playerId);
-									for (const player of left) {
-										setControlsToDisplay((controls) => [
-											...controls,
-											{
-												...state,
-												type: SyncTypes.PlayerLeft,
-												firedBy: player
-											}
-										]);
-									}
-									for (const player of joined) {
-										setControlsToDisplay((controls) => [
-											...controls,
-											{
-												...state,
-												type: SyncTypes.PlayerJoined,
-												firedBy: player
-											}
-										]);
-									}
+							if (roomPlayersRef.current.length > 0) {
+								const { left, joined } = getLeftAndJoined(
+									roomPlayersRef.current,
+									state.players,
+									playerId
+								);
+								const playerEvents = [
+									...left.map((player) => ({
+										...state,
+										type: SyncTypes.PlayerLeft,
+										firedBy: player
+									})),
+									...joined.map((player) => ({
+										...state,
+										type: SyncTypes.PlayerJoined,
+										firedBy: player
+									}))
+								];
+								if (playerEvents.length > 0) {
+									setControlsToDisplay((controls) => [...controls, ...playerEvents]);
 								}
-								return state.players;
-							});
+							}
+							roomPlayersRef.current = state.players;
+							setRoomPlayers(state.players);
 							setHistoricalPlayers((prev) => {
 								const next = { ...prev };
 								for (const player of state.players) {
@@ -1236,6 +1237,7 @@ export function Player({ data }: { data: ServerData }) {
 							break;
 						case SyncTypes.PauseSync:
 							if (state.paused === true && player.paused === false) {
+								suppressNextPlaybackSyncRef.current = true;
 								player.pause();
 								persistControlState(state);
 							} else if (
@@ -1243,7 +1245,10 @@ export function Player({ data }: { data: ServerData }) {
 								player.paused === true &&
 								(!inBgRef.current || (inBgRef.current && roomPlayersCountRef.current > 1))
 							) {
-								player.play();
+								suppressNextPlaybackSyncRef.current = true;
+								Promise.resolve(player.play()).catch(() => {
+									suppressNextPlaybackSyncRef.current = false;
+								});
 								persistControlState(state);
 							}
 							break;
@@ -1868,7 +1873,11 @@ export function Player({ data }: { data: ServerData }) {
 							onPause={() => {
 								supRef.current?.pauseHandler();
 								supPlayingRef.current = false;
-								send({ paused: true, type: SyncTypes.PauseSync });
+								if (suppressNextPlaybackSyncRef.current) {
+									suppressNextPlaybackSyncRef.current = false;
+								} else {
+									send({ paused: true, type: SyncTypes.PauseSync });
+								}
 								setCurrentlyWatching((value) => (value ? { ...value, paused: true } : null));
 							}}
 							onPlay={() => {
@@ -1877,10 +1886,12 @@ export function Player({ data }: { data: ServerData }) {
 									supPlayingRef.current = true;
 								}
 								startWatchRoomConnection();
-								if (interactedRef.current) {
+								if (suppressNextPlaybackSyncRef.current) {
+									suppressNextPlaybackSyncRef.current = false;
+								} else if (interactedRef.current) {
 									send({ paused: false, type: SyncTypes.PauseSync });
-									setCurrentlyWatching((value) => (value ? { ...value, paused: false } : null));
 								}
+								setCurrentlyWatching((value) => (value ? { ...value, paused: false } : null));
 							}}
 						>
 							<media-provider className="media-provider h-full w-full">

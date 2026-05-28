@@ -471,7 +471,10 @@ func (r *Room) syncTime(sender *Player, next *float64) {
 	r.state.Time = sender.state.Time
 	firedBy = sender.state
 	if shouldBroadcast {
-		targets = r.otherPlayersLocked(sender)
+		targets = r.playersLocked()
+		for _, player := range targets {
+			player.state.Time = sender.state.Time
+		}
 	}
 	r.mu.Unlock()
 
@@ -502,7 +505,10 @@ func (r *Room) syncPause(sender *Player, paused *bool) {
 	r.state.Paused = *paused
 	firedBy = sender.state
 	if !sender.state.InBg {
-		targets = r.otherPlayersLocked(sender)
+		targets = r.playersLocked()
+		for _, player := range targets {
+			player.state.Paused = *paused
+		}
 	}
 	r.mu.Unlock()
 
@@ -517,9 +523,8 @@ func (r *Room) syncPause(sender *Player, paused *bool) {
 
 func (r *Room) newPlayer(sender *Player) {
 	var roomTime float64
+	var roomPaused bool
 	var chats []Chat
-	var firedBy PlayerSnapshot
-	var targets []*Player
 
 	r.mu.Lock()
 	if r.players[sender.state.Id] != sender {
@@ -528,19 +533,12 @@ func (r *Room) newPlayer(sender *Player) {
 	}
 	sender.state.LastSeen = time.Now().Unix()
 	roomTime = r.state.Time
+	roomPaused = r.state.Paused
 	chats = append([]Chat(nil), r.chats...)
-	firedBy = sender.state
-	if !sender.state.InBg {
-		targets = r.otherPlayersLocked(sender)
-	}
 	r.mu.Unlock()
 
-	paused := false
 	sender.sendJSON(SendPayload{Type: TimeSync, Time: &roomTime, Timestamp: time.Now().UnixMilli()})
-	sender.sendJSON(SendPayload{Type: PauseSync, Paused: &paused, Timestamp: time.Now().UnixMilli()})
-	for _, player := range targets {
-		player.sendJSON(SendPayload{Type: PauseSync, Paused: &paused, FiredBy: &firedBy, Timestamp: time.Now().UnixMilli()})
-	}
+	sender.sendJSON(SendPayload{Type: PauseSync, Paused: &roomPaused, Timestamp: time.Now().UnixMilli()})
 	if len(chats) > 0 {
 		sender.sendJSON(SendPayload{Type: ChatSync, Chats: chats, Timestamp: time.Now().UnixMilli()})
 	}
