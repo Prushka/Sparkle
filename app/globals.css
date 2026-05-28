@@ -179,6 +179,18 @@
 		transition: all 0.1s cubic-bezier(0.32, 0.08, 0.24, 1);
 	}
 
+	button:not(:disabled),
+	[role='button']:not([aria-disabled='true']),
+	.vds-button {
+		cursor: pointer;
+	}
+
+	button:disabled,
+	[aria-disabled='true'],
+	[data-disabled] {
+		cursor: not-allowed;
+	}
+
 	input[type='file'] {
 		display: none;
 	}
@@ -273,6 +285,12 @@
 
 .player-chat-control {
 	display: block;
+}
+
+@media (max-width: 767px) {
+	.player-chat-control {
+		display: none !important;
+	}
 }
 
 @media (max-width: 1000px) {
@@ -376,7 +394,21 @@
 	box-shadow: none !important;
 }
 
+.group.toaster [data-sonner-toast] {
+	background: hsl(var(--background) / 0.55) !important;
+	backdrop-filter: blur(16px);
+	-webkit-backdrop-filter: blur(16px);
+	border-color: hsl(var(--border) / 0.6) !important;
+	box-shadow: none !important;
+}
+
 .vds-chapters-menu {
+	display: none !important;
+}
+
+.vds-google-cast-tooltip,
+.vds-google-cast-button,
+media-google-cast-button {
 	display: none !important;
 }
 

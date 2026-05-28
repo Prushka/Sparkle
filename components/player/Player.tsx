@@ -4,20 +4,18 @@ import 'vidstack/player';
 import 'vidstack/player/ui';
 import 'vidstack/player/layouts/default';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { TextTrack, type MediaKeyShortcuts } from 'vidstack';
 import JASSUB from 'jassub';
 import {
 	IconAlertOctagonFilled,
-	IconArrowBounce,
 	IconCheck,
 	IconMoon,
 	IconPlayerPauseFilled,
 	IconPlayerPlayFilled,
 	IconSettings2,
-	IconShare3,
 	IconSun,
 	IconTableExport
 } from '@tabler/icons-react';
@@ -42,7 +40,6 @@ import {
 	moveSeconds,
 	randomString,
 	audiosExistForCodec,
-	setGetLsBoolean,
 	setGetLsNumber,
 	sortTracks,
 	SyncTypes,
@@ -241,6 +238,44 @@ function getLatestMessageTimestamp(messages: Chat[]) {
 	return 0;
 }
 
+const GENERATED_NAME_STORAGE_KEY = 'generatedName';
+const GENERATED_NAME_TOAST_PREFIX = 'generated-name-toast';
+const USERNAME_ADJECTIVES = [
+	'Nova',
+	'Pixel',
+	'Cosmic',
+	'Velvet',
+	'Solar',
+	'Neon',
+	'Azure',
+	'Midnight',
+	'Lucky',
+	'Kindred',
+	'Echo',
+	'Orbit'
+];
+const USERNAME_NOUNS = [
+	'Voyager',
+	'Pilot',
+	'Sage',
+	'Runner',
+	'Beacon',
+	'Tempo',
+	'Comet',
+	'Mosaic',
+	'Pulse',
+	'Bloom',
+	'Drift',
+	'Harbor'
+];
+
+function generatePlaceholderName() {
+	const adjective = USERNAME_ADJECTIVES[Math.floor(Math.random() * USERNAME_ADJECTIVES.length)];
+	const noun = USERNAME_NOUNS[Math.floor(Math.random() * USERNAME_NOUNS.length)];
+	const suffix = Math.floor(100 + Math.random() * 900);
+	return `${adjective}${noun}${suffix}`;
+}
+
 function joinBackendPath(base: string, path: string) {
 	if (!base) {
 		return path.startsWith('/') ? path : `/${path}`;
@@ -330,13 +365,13 @@ export function Player({ data }: { data: ServerData }) {
 	const [controlsToDisplay, setControlsToDisplay] = useState<SendPayload[]>([]);
 	const [selectedCodec, setSelectedCodec] = useState('auto');
 	const [selectedAudio, setSelectedAudio] = useState('1-jpn');
-	const [syncGoto, setSyncGoto] = useState(() => setGetLsBoolean('syncGoto', true));
 	const [supportedCodecs, setSupportedCodecs] = useState<string[]>([]);
 	const [copiedRoomLink, setCopiedRoomLink] = useState(false);
 	const [exited, setExited] = useState(false);
 	const [moveToast, setMoveToast] = useState<MoveToastState | null>(null);
 	const [name, setName] = useState('');
 	const [playerId, setPlayerId] = useState('');
+	const lastSavedNameRef = useRef('');
 	const [initialVolume] = useState(() => setGetLsNumber('volume', 1));
 	const [renderNow, setRenderNow] = useState(0);
 	const BASE_STATIC = `${data.staticBaseUrl}/${job.Id}`;
@@ -533,29 +568,37 @@ export function Player({ data }: { data: ServerData }) {
 		}
 		const timer = window.setTimeout(() => {
 			if (discord?.user) {
-				setName(getName(discord.user) || '');
+				const nextName = getName(discord.user) || '';
+				lastSavedNameRef.current = nextName;
+				setName(nextName);
 				return;
 			}
 			if (name) {
 				return;
 			}
 			const stored = window.localStorage.getItem('name');
-			if (stored) {
+			if (stored && !stored.startsWith('Anon-')) {
+				lastSavedNameRef.current = stored;
 				setName(stored);
 				return;
 			}
-			const anon = `Anon-${randomString(4)}`;
-			window.localStorage.setItem('name', anon);
-			setName(anon);
+			const generatedName = generatePlaceholderName();
+			window.localStorage.setItem('name', generatedName);
+			window.localStorage.setItem(GENERATED_NAME_STORAGE_KEY, generatedName);
+			lastSavedNameRef.current = generatedName;
+			setName(generatedName);
 		}, 0);
 		return () => window.clearTimeout(timer);
 	}, [discord?.user, name]);
 
 	useEffect(() => {
-		if (discord?.user || typeof window === 'undefined' || !name.startsWith('Anon-')) {
+		if (discord?.user || typeof window === 'undefined' || !name) {
 			return;
 		}
-		const toastKey = `anon-name-toast:${name}`;
+		if (window.localStorage.getItem(GENERATED_NAME_STORAGE_KEY) !== name) {
+			return;
+		}
+		const toastKey = `${GENERATED_NAME_TOAST_PREFIX}:${name}`;
 		if (window.sessionStorage.getItem(toastKey)) {
 			return;
 		}
@@ -1416,6 +1459,77 @@ export function Player({ data }: { data: ServerData }) {
 		}
 	}
 
+	async function handleAvatarChange(event: ChangeEvent<HTMLInputElement>) {
+		const input = event.currentTarget;
+		const pfp = input.files?.[0];
+		if (!pfp) {
+			return;
+		}
+		if (!playerId) {
+			toast.error('Avatar upload is not ready yet');
+			input.value = '';
+			return;
+		}
+		if (pfp.size > 12000000) {
+			toast.error('File size too large', {
+				description: 'Max file size: 10MB',
+				duration: 5000
+			});
+			input.value = '';
+			return;
+		}
+		const formData = new FormData();
+		formData.append('pfp', pfp);
+		try {
+			const response = await fetch(joinBackendPath(backendBaseUrl, `/pfp/${playerId}`), {
+				method: 'POST',
+				body: formData
+			});
+			if (!response.ok) {
+				throw new Error(`Avatar upload failed: ${response.status}`);
+			}
+			updatePfp(playerId);
+			send({ type: SyncTypes.PfpSync });
+			toast.success('Avatar updated');
+		} catch (error) {
+			console.error(error);
+			toast.error('Avatar upload failed', {
+				description: 'Please try another image.'
+			});
+		} finally {
+			input.value = '';
+		}
+	}
+
+	function handleNameBlur() {
+		if (discord?.user) {
+			send({
+				type: SyncTypes.ProfileSync,
+				name: displayName
+			});
+			return;
+		}
+		const nextName = name.trim();
+		if (!nextName) {
+			setName(lastSavedNameRef.current);
+			toast.error('Name cannot be empty');
+			return;
+		}
+		if (nextName !== name) {
+			setName(nextName);
+		}
+		send({
+			type: SyncTypes.ProfileSync,
+			name: nextName
+		});
+		window.localStorage.setItem('name', nextName);
+		if (nextName !== lastSavedNameRef.current) {
+			lastSavedNameRef.current = nextName;
+			window.localStorage.removeItem(GENERATED_NAME_STORAGE_KEY);
+			toast.success('Name updated');
+		}
+	}
+
 	function handleCopyRoomLink() {
 		let link = window.location.href;
 		if (searchParams.has('room') || searchParams.has('channel_id')) {
@@ -1531,8 +1645,8 @@ export function Player({ data }: { data: ServerData }) {
 			</div>
 
 			<div className="flex w-full flex-col gap-4 p-4 font-semibold">
-				<div className="mx-auto flex w-full max-w-[90rem] flex-col gap-3 sm:flex-row sm:items-center">
-					<div className="flex w-full min-w-0 items-center gap-3 sm:w-auto sm:min-w-[21rem]">
+				<div className="mx-auto flex w-full max-w-[90rem] flex-col gap-2 sm:flex-row sm:items-center">
+					<div className="flex w-full min-w-0 items-center gap-2 sm:w-auto sm:flex-[0_1_17rem]">
 						<label className="custom-file-upload shrink-0">
 							<Pfp
 								id={playerId}
@@ -1542,53 +1656,17 @@ export function Player({ data }: { data: ServerData }) {
 							/>
 							<input
 								accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
-								onChange={(event) => {
-									const ppfp = event.currentTarget.files;
-									if (ppfp && ppfp[0]) {
-										if (ppfp[0].size > 12000000) {
-											toast.error('File size too large', {
-												description: 'Max file size: 10MB',
-												duration: 5000
-											});
-											event.currentTarget.value = '';
-											return;
-										}
-										const pfp = ppfp[0];
-										const reader = new FileReader();
-										reader.onload = function (e) {
-											const res = e.target?.result;
-											if (res && typeof res === 'string') {
-												const formData = new FormData();
-												formData.append('pfp', pfp);
-												fetch(joinBackendPath(backendBaseUrl, `/pfp/${playerId}`), {
-													method: 'POST',
-													body: formData
-												}).then(() => {
-													updatePfp(playerId);
-												});
-											}
-										};
-										reader.readAsDataURL(pfp);
-									}
-								}}
+								onChange={handleAvatarChange}
 								type="file"
 							/>
 						</label>
 						<Input
 							disabled={discord?.user !== undefined}
-							onBlur={() => {
-								send({
-									type: SyncTypes.ProfileSync,
-									name: displayName
-								});
-								if (!discord?.user) {
-									window.localStorage.setItem('name', name);
-								}
-							}}
+							onBlur={handleNameBlur}
 							value={displayName}
 							onChange={(event) => setName(event.target.value)}
 							type="text"
-							className="h-10 min-w-0 flex-1 focus-visible:ring-transparent sm:w-64 sm:flex-none"
+							className="h-10 min-w-0 flex-1 focus-visible:ring-transparent"
 							placeholder="Name"
 						/>
 					</div>
@@ -1596,7 +1674,7 @@ export function Player({ data }: { data: ServerData }) {
 						send={send}
 						chatFocused={chatFocused}
 						controlsShowing={null}
-						className="w-full min-w-0 flex-1"
+						className="w-full min-w-0 sm:flex-[1_1_36rem]"
 						inputId="chat-page-input"
 						formId="chat-page-form"
 						useButton
@@ -1637,43 +1715,22 @@ export function Player({ data }: { data: ServerData }) {
 									<Tooltip.Root>
 										<Tooltip.Trigger asChild>
 											<Button
-												variant={!socketCommunicating || !syncGoto ? 'ghost' : 'outline'}
-												className={`h-9 w-9 p-1 ${!socketCommunicating || !syncGoto ? 'opacity-50' : ''}`}
-												onClick={() => {
-													setSyncGoto((value) => {
-														const next = !value;
-														window.localStorage.setItem('syncGoto', next.toString());
-														return next;
-													});
-												}}
-												disabled={!socketCommunicating}
-											>
-												<IconArrowBounce size={syncGoto ? 20 : 18} stroke={2} />
-											</Button>
-										</Tooltip.Trigger>
-										<Tooltip.Content>
-											<p>Move users in room with you (on media change)</p>
-										</Tooltip.Content>
-									</Tooltip.Root>
-								</Tooltip.Provider>
-
-								<Tooltip.Provider delayDuration={0}>
-									<Tooltip.Root>
-										<Tooltip.Trigger asChild>
-											<Button
 												variant="outline"
-												className="h-9 w-9 p-1"
+												className="h-9 px-3 font-bold"
 												onClick={handleCopyRoomLink}
 											>
 												{copiedRoomLink ? (
-													<IconCheck size={18} stroke={2} />
+													<>
+														<IconCheck className="mr-1.5 h-4 w-4" stroke={2} />
+														Copied
+													</>
 												) : (
-													<IconShare3 size={18} stroke={2} />
+													'Share Room'
 												)}
 											</Button>
 										</Tooltip.Trigger>
 										<Tooltip.Content>
-											{copiedRoomLink ? <p>Copied!</p> : <p>Copy room link to clipboard!</p>}
+											{copiedRoomLink ? <p>Copied!</p> : <p>Copy the watch room link</p>}
 										</Tooltip.Content>
 									</Tooltip.Root>
 								</Tooltip.Provider>
@@ -1760,7 +1817,7 @@ export function Player({ data }: { data: ServerData }) {
 							staticBaseUrl={data.staticBaseUrl}
 							backendBaseUrl={backendBaseUrl}
 							bounceToOverride={(id) => {
-								if (syncGoto && socketCommunicating && roomPlayers.length > 1 && id !== job.Id) {
+								if (socketCommunicating && roomPlayers.length > 1 && id !== job.Id) {
 									send({
 										type: SyncTypes.BroadcastSync,
 										broadcast: { type: BroadcastTypes.MoveTo, moveTo: id }

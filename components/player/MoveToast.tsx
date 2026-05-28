@@ -45,7 +45,7 @@ export function MoveToast({
 	}
 
 	return (
-		<Card className="w-full">
+		<Card className="w-full border-white/20 bg-background/55 shadow-xl backdrop-blur-md supports-[backdrop-filter]:bg-background/40">
 			<CardHeader>
 				<CardTitle className="flex items-center">
 					{firedBy?.id ? (

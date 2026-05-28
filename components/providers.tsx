@@ -14,7 +14,17 @@ export function AppProviders({ children }: { children: ReactNode }) {
 				<Suspense fallback={null}>
 					<DiscordBridge />
 				</Suspense>
-				<Toaster position="top-center" richColors />
+				<Toaster
+					position="top-center"
+					richColors
+					toastOptions={{
+						classNames: {
+							toast:
+								'border-border/60 bg-background/55 shadow-none backdrop-blur-md supports-[backdrop-filter]:bg-background/45',
+							description: 'text-muted-foreground'
+						}
+					}}
+				/>
 				<Suspense fallback={<AppShellFallback>{children}</AppShellFallback>}>
 					<AppShell>{children}</AppShell>
 				</Suspense>

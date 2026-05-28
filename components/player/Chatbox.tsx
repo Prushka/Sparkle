@@ -178,6 +178,7 @@ export function Chatbox({
 						<Dialog.Root>
 							<Dialog.Trigger
 								disabled={!connected}
+								type="button"
 								className={`${buttonVariants({ variant: 'outline' })} h-10 rounded-l-none rounded-r-none border-l-0 border-r-0`}
 							>
 								History
