@@ -10,7 +10,7 @@ import {
 	useState
 } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'motion/react';
 import {
 	MediaPlayer,
 	MediaProvider,
@@ -114,6 +114,9 @@ type SelectedSubtitleTrack = Pick<SubtitleTrackInfo, 'format' | 'label' | 'langu
 	mode?: TextTrackMode;
 };
 
+const PLAYER_VOLUME_STORAGE_KEY = 'volume';
+const DEFAULT_PLAYER_VOLUME = 1;
+
 const PLAYER_KEY_SHORTCUTS: MediaKeyShortcuts = {
 	togglePaused: 'k Space',
 	toggleMuted: 'm',
@@ -124,6 +127,21 @@ const PLAYER_KEY_SHORTCUTS: MediaKeyShortcuts = {
 	volumeUp: 'ArrowUp',
 	volumeDown: 'ArrowDown'
 };
+
+function normalizePlayerVolume(volume: number): number {
+	if (!Number.isFinite(volume)) {
+		return DEFAULT_PLAYER_VOLUME;
+	}
+	return Math.min(1, Math.max(0, volume));
+}
+
+function savePlayerVolume(volume: number) {
+	if (typeof window === 'undefined') {
+		return;
+	}
+	window.localStorage.setItem(PLAYER_VOLUME_STORAGE_KEY, normalizePlayerVolume(volume).toString());
+}
+
 function getSubtitleFormat(src: string): SubtitleTrackFormat {
 	const cleanSrc = src.split(/[?#]/)[0].toLowerCase();
 	if (cleanSrc.endsWith('.ass')) {
@@ -508,7 +526,9 @@ export function Player({ data }: { data: ServerData }) {
 	const [name, setName] = useState('');
 	const [playerId, setPlayerId] = useState('');
 	const lastSavedNameRef = useRef('');
-	const [initialVolume] = useState(() => setGetLsNumber('volume', 1));
+	const [initialVolume] = useState(() =>
+		normalizePlayerVolume(setGetLsNumber(PLAYER_VOLUME_STORAGE_KEY, DEFAULT_PLAYER_VOLUME))
+	);
 	const [renderNow, setRenderNow] = useState(0);
 	const BASE_STATIC = `${data.staticBaseUrl}/${job.Id}`;
 	const [tickedSecsAgo, setTickedSecsAgo] = useState(-1);
@@ -576,6 +596,9 @@ export function Player({ data }: { data: ServerData }) {
 	const videoSettingsSummary = `${videoSettingsAudioLabel} • ${videoSettingsCodecLabel}`;
 	const chatHidden = chatLayout === 'hide';
 	const setPlayerElement = useCallback((element: MediaPlayerInstance | null) => {
+		if (element !== playerElementRef.current) {
+			volumeInitializedRef.current = false;
+		}
 		playerElementRef.current = element;
 		setPlayerEl(element);
 	}, []);
@@ -1492,6 +1515,10 @@ export function Player({ data }: { data: ServerData }) {
 			return;
 		}
 		const player = playerEl;
+		if (!volumeInitializedRef.current) {
+			player.volume = initialVolume;
+			volumeInitializedRef.current = true;
+		}
 		const playerUnsubscribe = player.subscribe?.(
 			({ controlsVisible }: { controlsVisible: boolean }) => {
 				setControlsShowing(controlsVisible);
@@ -1502,17 +1529,13 @@ export function Player({ data }: { data: ServerData }) {
 			if (canPlay && interactedRef.current && !socketRef.current) {
 				connectRef.current?.();
 			}
-		});
-		const playerSoundUnsubscribe = player.subscribe?.(
-			({ volume, muted }: { volume: number; muted: boolean }) => {
+			if (canPlay) {
 				if (!volumeInitializedRef.current) {
-					player.volume = initialVolume >= 0 && initialVolume <= 1 ? initialVolume : 1;
+					player.volume = initialVolume;
 					volumeInitializedRef.current = true;
-				} else {
-					window.localStorage.setItem('volume', muted ? '0' : volume.toString());
 				}
 			}
-		);
+		});
 
 		const visibilityChange = () => {
 			if (document.hidden) {
@@ -1648,7 +1671,6 @@ export function Player({ data }: { data: ServerData }) {
 			playerCanPlayRef.current = false;
 			playerUnsubscribe?.();
 			playerCanPlayUnsubscribe?.();
-			playerSoundUnsubscribe?.();
 		};
 	}, [
 		chatFocused,
@@ -1910,6 +1932,9 @@ export function Player({ data }: { data: ServerData }) {
 									send({ paused: false, type: SyncTypes.PauseSync });
 								}
 								setCurrentlyWatching((value) => (value ? { ...value, paused: false } : null));
+							}}
+							onVolumeChange={({ volume }: { muted: boolean; volume: number }) => {
+								savePlayerVolume(volume);
 							}}
 						>
 							<MediaProvider className="media-provider h-full w-full">

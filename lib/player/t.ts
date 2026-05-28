@@ -386,8 +386,11 @@ export function setGetLsNumber(key: string, value: number): number {
 		return value;
 	}
 	const v = localStorage.getItem(key);
-	if (v) {
-		return parseFloat(v);
+	if (v !== null) {
+		const parsed = parseFloat(v);
+		if (Number.isFinite(parsed)) {
+			return parsed;
+		}
 	}
 	localStorage.setItem(key, value.toString());
 	return value;
