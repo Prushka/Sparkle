@@ -2035,7 +2035,7 @@ export function Player({ data }: { data: ServerData }) {
 									isSpeaking
 										? 'border-emerald-500 bg-emerald-500/10 shadow-[0_0_18px_rgba(16,185,129,0.28)]'
 										: 'border-input'
-								}`}
+								} ${isCurrentUser ? '' : 'cursor-default'}`}
 							>
 								<span className="relative mr-0.5 shrink-0">
 									<Pfp
@@ -2058,8 +2058,15 @@ export function Player({ data }: { data: ServerData }) {
 									</span>
 								</span>
 								<span className="player-status-text flex flex-col items-center justify-center gap-0.5 font-semibold">
-									<span className="w-16 overflow-hidden text-ellipsis font-bold">
-										{player.name}
+									<span className="flex w-16 items-center justify-center gap-1 overflow-hidden">
+										<span className="min-w-0 overflow-hidden text-ellipsis font-bold">
+											{player.name}
+										</span>
+										{isCurrentUser ? (
+											<span className="shrink-0 rounded-[0.25rem] border border-border/70 bg-muted/70 px-1 text-[0.55rem] font-extrabold leading-3 text-muted-foreground">
+												You
+											</span>
+										) : null}
 									</span>
 									{player.inBg ? (
 										<div className="flex items-center justify-center gap-1">
