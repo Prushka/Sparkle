@@ -512,7 +512,6 @@ export function Player({ data }: { data: ServerData }) {
 	const [renderNow, setRenderNow] = useState(0);
 	const BASE_STATIC = `${data.staticBaseUrl}/${job.Id}`;
 	const [tickedSecsAgo, setTickedSecsAgo] = useState(-1);
-	const [tickedSecsAgoStr, setTickedSecsAgoStr] = useState('0.00');
 	const [chatFocusedSecs, setChatFocusedSecs] = useState(0);
 	const thumbnailVttSrc = `${data.staticBaseUrl}/${job.Id}/storyboard.vtt`;
 	const backendBaseUrl = data.backendBaseUrl;
@@ -1071,9 +1070,8 @@ export function Player({ data }: { data: ServerData }) {
 					? (Date.now() - lastTickedRef.current) / 1000
 					: -1;
 			setTickedSecsAgo(nextTickedSecsAgo);
-			setTickedSecsAgoStr((Math.round(nextTickedSecsAgo * 100) / 100).toFixed(2));
 		},
-		[setTickedSecsAgo, setTickedSecsAgoStr]
+		[setTickedSecsAgo]
 	);
 
 	const updateTime = useCallback(() => {
@@ -1920,13 +1918,12 @@ export function Player({ data }: { data: ServerData }) {
 							animate={{ opacity: 1 }}
 							exit={{ opacity: 0 }}
 							transition={{ duration: 0.2, ease: 'easeOut' }}
-							className="absolute inset-0 z-[70] flex items-center justify-center bg-black/10 px-4"
+							className="absolute inset-0 z-40 flex items-center justify-center bg-black/10 px-4"
 						>
 							<ConnectButton
 								socketCommunicating={socketCommunicating}
 								interacted={interacted}
 								exited={exited}
-								tickedSecsAgoStr={tickedSecsAgoStr}
 								className="border-white/35 !bg-white/10 px-5 py-5 !text-white shadow-xl shadow-black/20 backdrop-blur-md hover:!bg-white/15 hover:!text-white"
 								onClick={handleJoinWatchRoom}
 							/>
@@ -1939,33 +1936,10 @@ export function Player({ data }: { data: ServerData }) {
 				className="flex w-full flex-col gap-4 p-4 font-semibold"
 				style={!discord ? { minHeight: 'calc(100dvh - min(100dvh, 56.25vw))' } : undefined}
 			>
-				<div className="mx-auto flex w-full max-w-[90rem] flex-col gap-2 sm:flex-row sm:items-center">
-					<div className="flex w-full justify-center sm:w-auto sm:justify-start">
+				<div className="mx-auto flex w-full max-w-[90rem] items-center justify-between gap-2">
+					<div className="flex shrink-0 justify-start">
 						<VoiceControls voice={voice} />
 					</div>
-					<Chatbox
-						send={send}
-						chatFocused={chatFocused}
-						controlsShowing={null}
-						className="w-full min-w-0 sm:flex-[1_1_36rem]"
-						inputId="chat-page-input"
-						formId="chat-page-form"
-						useButton
-						messages={roomMessages}
-						historicalPlayers={historicalPlayers}
-						staticBaseUrl={data.staticBaseUrl}
-						onFocus={() => {
-							setChatFocused(true);
-						}}
-						onBlur={() => {
-							setChatFocused(false);
-							chatFocusedSecsRef.current = 0;
-							setChatFocusedSecs(0);
-						}}
-					/>
-				</div>
-
-				<div className="mx-auto flex w-full max-w-[90rem] items-center justify-end gap-2">
 					<div className="flex shrink-0 items-center justify-end gap-2">
 						<Tooltip.Provider delayDuration={0}>
 							<Tooltip.Root>
@@ -2011,6 +1985,29 @@ export function Player({ data }: { data: ServerData }) {
 							</Tooltip.Root>
 						</Tooltip.Provider>
 					</div>
+				</div>
+
+				<div className="mx-auto flex w-full max-w-[90rem] items-center gap-2">
+					<Chatbox
+						send={send}
+						chatFocused={chatFocused}
+						controlsShowing={null}
+						className="w-full min-w-0"
+						inputId="chat-page-input"
+						formId="chat-page-form"
+						useButton
+						messages={roomMessages}
+						historicalPlayers={historicalPlayers}
+						staticBaseUrl={data.staticBaseUrl}
+						onFocus={() => {
+							setChatFocused(true);
+						}}
+						onBlur={() => {
+							setChatFocused(false);
+							chatFocusedSecsRef.current = 0;
+							setChatFocusedSecs(0);
+						}}
+					/>
 				</div>
 
 				<div className="mb-3 flex flex-wrap justify-center gap-4">
@@ -2068,7 +2065,7 @@ export function Player({ data }: { data: ServerData }) {
 									<IconPlayerPauseFilled size={18} stroke={2} />
 								)}
 								{isCurrentUser ? (
-									<span className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background/95 text-muted-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
+									<span className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background/95 text-muted-foreground shadow-sm transition-transform duration-200 group-hover:scale-110 group-hover:rotate-45 group-focus-visible:scale-110 group-focus-visible:rotate-45">
 										<IconSettings2 size={13} stroke={2} />
 									</span>
 								) : null}

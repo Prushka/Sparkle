@@ -494,11 +494,9 @@ export function useVoiceChat({
 			const stream = await ensureMicrophone();
 			attachLocalStreamToPeers(stream);
 			setStatus('ready');
-			addSystemMessage('Voice chat joined muted');
 		} catch (error) {
 			console.warn('Voice microphone unavailable', error);
 			setStatus('listen-only');
-			addSystemMessage('Voice chat joined listen-only');
 		}
 
 		sendVoiceSignal(undefined, {
@@ -506,7 +504,7 @@ export function useVoiceChat({
 			sessionId: sessionIdRef.current,
 			muted: mutedRef.current
 		});
-	}, [addSystemMessage, attachLocalStreamToPeers, ensureMicrophone, sendVoiceSignal]);
+	}, [attachLocalStreamToPeers, ensureMicrophone, sendVoiceSignal]);
 
 	const leave = useCallback(() => {
 		sendVoiceSignal(undefined, {
