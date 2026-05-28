@@ -376,6 +376,7 @@ func (r *Room) broadcast(sender *Player, broadcast map[string]any) {
 	now := time.Now().UnixMilli()
 	var firedBy PlayerSnapshot
 	var targets []*Player
+	targetID, targeted := broadcastTargetID(broadcast)
 
 	r.mu.Lock()
 	if r.players[sender.state.Id] != sender {
@@ -384,13 +385,30 @@ func (r *Room) broadcast(sender *Player, broadcast map[string]any) {
 	}
 	sender.state.LastSeen = time.Now().Unix()
 	firedBy = sender.state
-	targets = r.playersLocked()
+	if targeted {
+		if target := r.players[targetID]; target != nil {
+			targets = append(targets, target)
+		}
+	} else {
+		targets = r.playersLocked()
+	}
 	r.mu.Unlock()
 
 	payload := SendPayload{Type: BroadcastSync, FiredBy: &firedBy, Timestamp: now, Broadcast: broadcast}
 	for _, player := range targets {
 		player.sendJSON(payload)
 	}
+}
+
+func broadcastTargetID(broadcast map[string]any) (string, bool) {
+	if broadcast["type"] != "voiceSignal" {
+		return "", false
+	}
+	targetID, ok := broadcast["targetId"].(string)
+	if !ok || strings.TrimSpace(targetID) == "" {
+		return "", false
+	}
+	return strings.TrimSpace(targetID), true
 }
 
 func (r *Room) chat(sender *Player, message string) {

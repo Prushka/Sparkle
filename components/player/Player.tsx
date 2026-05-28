@@ -4,20 +4,33 @@ import 'vidstack/player';
 import 'vidstack/player/ui';
 import 'vidstack/player/layouts/default';
 
-import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+	type ChangeEvent,
+	type ReactNode,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState
+} from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { AnimatePresence, motion } from 'framer-motion';
 import { TextTrack, type MediaKeyShortcuts } from 'vidstack';
 import JASSUB from 'jassub';
 import {
 	IconAlertOctagonFilled,
 	IconCheck,
+	IconMicrophone,
+	IconMicrophoneOff,
 	IconMoon,
 	IconPlayerPauseFilled,
 	IconPlayerPlayFilled,
 	IconSettings2,
 	IconSun,
-	IconTableExport
+	IconTableExport,
+	IconVolume,
+	IconVolumeOff
 } from '@tabler/icons-react';
 import { useAppState } from '@/lib/app-state';
 import { useTheme } from '@/lib/theme';
@@ -61,6 +74,7 @@ import { ConnectButton } from '@/components/player/ConnectButton';
 import { MediaSelection, type MediaSelectionHandle } from '@/components/player/MediaSelection';
 import { MoveToast } from '@/components/player/MoveToast';
 import { Chats } from '@/components/player/Chats';
+import { useVoiceChat } from '@/components/player/useVoiceChat';
 
 type VideoSource = {
 	src: string;
@@ -294,6 +308,141 @@ function getBackendWebSocketUrl(base: string, path: string) {
 	}
 	const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 	return `${wsProtocol}//${window.location.host}${fullPath}`;
+}
+
+type VoiceChatController = ReturnType<typeof useVoiceChat>;
+
+function RemoteVoiceAudio({ stream, deafened }: { stream: MediaStream; deafened: boolean }) {
+	const audioRef = useRef<HTMLAudioElement | null>(null);
+
+	useEffect(() => {
+		if (!audioRef.current || audioRef.current.srcObject === stream) {
+			return;
+		}
+		audioRef.current.srcObject = stream;
+	}, [stream]);
+
+	useEffect(() => {
+		if (audioRef.current) {
+			audioRef.current.muted = deafened;
+		}
+	}, [deafened]);
+
+	return <audio ref={audioRef} autoPlay playsInline className="hidden" />;
+}
+
+function VoiceToggleButton({
+	active,
+	disabled,
+	label,
+	onClick,
+	children
+}: {
+	active: boolean;
+	disabled?: boolean;
+	label: string;
+	onClick: () => void;
+	children: ReactNode;
+}) {
+	return (
+		<Tooltip.Provider delayDuration={0}>
+			<Tooltip.Root>
+				<Tooltip.Trigger asChild>
+					<motion.button
+						type="button"
+						aria-label={label}
+						aria-pressed={active}
+						disabled={disabled}
+						onClick={onClick}
+						whileTap={{ scale: disabled ? 1 : 0.94 }}
+						className={`inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border text-sm transition-colors disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 ${
+							active
+								? 'border-primary/40 bg-primary text-primary-foreground shadow-sm'
+								: 'border-input bg-background hover:bg-accent hover:text-accent-foreground'
+						}`}
+					>
+						<AnimatePresence mode="wait" initial={false}>
+							<motion.span
+								key={label}
+								initial={{ opacity: 0, rotate: -8, scale: 0.82 }}
+								animate={{ opacity: 1, rotate: 0, scale: 1 }}
+								exit={{ opacity: 0, rotate: 8, scale: 0.82 }}
+								transition={{ duration: 0.16, ease: 'easeOut' }}
+							>
+								{children}
+							</motion.span>
+						</AnimatePresence>
+					</motion.button>
+				</Tooltip.Trigger>
+				<Tooltip.Content>
+					<p>{label}</p>
+				</Tooltip.Content>
+			</Tooltip.Root>
+		</Tooltip.Provider>
+	);
+}
+
+function VoiceControls({ voice }: { voice: VoiceChatController }) {
+	const statusText =
+		voice.status === 'joining'
+			? 'Connecting'
+			: voice.status === 'listen-only'
+				? 'Listen only'
+				: voice.status === 'ready'
+					? voice.connectedPeers > 0
+						? `${voice.connectedPeers} voice`
+						: 'Voice ready'
+					: voice.status === 'error'
+						? 'Voice issue'
+						: 'Voice idle';
+	const isMuted = voice.muted || voice.status === 'listen-only';
+	const isDeafened = voice.deafened;
+	const disabled = voice.status === 'joining' || !voice.desiredJoined;
+
+	return (
+		<motion.div
+			layout
+			initial={{ opacity: 0, y: 4 }}
+			animate={{ opacity: 1, y: 0 }}
+			transition={{ duration: 0.22, ease: 'easeOut' }}
+			className="flex items-center gap-1 rounded-lg border bg-muted/35 p-1 shadow-sm"
+		>
+			<motion.div layout className="flex min-w-[7.25rem] items-center gap-2 px-2 text-xs">
+				<span
+					className={`h-2 w-2 rounded-full ${
+						voice.desiredJoined
+							? voice.status === 'listen-only'
+								? 'bg-amber-500'
+								: 'bg-emerald-500'
+							: 'bg-muted-foreground/45'
+					}`}
+				/>
+				<span className="truncate font-medium text-muted-foreground">{statusText}</span>
+			</motion.div>
+			<VoiceToggleButton
+				active={!isMuted}
+				disabled={disabled}
+				label={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+				onClick={() => {
+					void voice.toggleMuted();
+				}}
+			>
+				{isMuted ? (
+					<IconMicrophoneOff size={18} stroke={2} />
+				) : (
+					<IconMicrophone size={18} stroke={2} />
+				)}
+			</VoiceToggleButton>
+			<VoiceToggleButton
+				active={!isDeafened}
+				disabled={disabled}
+				label={isDeafened ? 'Undeafen' : 'Deafen'}
+				onClick={voice.toggleDeafened}
+			>
+				{isDeafened ? <IconVolumeOff size={18} stroke={2} /> : <IconVolume size={18} stroke={2} />}
+			</VoiceToggleButton>
+		</motion.div>
+	);
 }
 
 async function waitForTextTracks(player: any) {
@@ -783,6 +932,15 @@ export function Player({ data }: { data: ServerData }) {
 		sendSettings();
 	}, [job.Input, playerEl, sendSettings, videoSrc]);
 
+	const voice = useVoiceChat({
+		playerId,
+		roomPlayers,
+		socketCommunicating,
+		send,
+		addSystemMessage
+	});
+	const { handleVoiceBroadcast, join: joinVoice } = voice;
+
 	useEffect(() => {
 		if (!playerEl) {
 			return;
@@ -1091,6 +1249,9 @@ export function Player({ data }: { data: ServerData }) {
 										initiateMoveTo(jobs);
 									});
 									break;
+								case BroadcastTypes.VoiceSignal:
+									void handleVoiceBroadcast(state.firedBy?.id, broadcast);
+									break;
 							}
 							break;
 						case SyncTypes.ExitSync:
@@ -1150,7 +1311,8 @@ export function Player({ data }: { data: ServerData }) {
 			setInteracted,
 			setPageReloadCounter,
 			updateLastTicked,
-			updatePfp
+			updatePfp,
+			handleVoiceBroadcast
 		]
 	);
 
@@ -1162,8 +1324,9 @@ export function Player({ data }: { data: ServerData }) {
 		reconnectAttemptRef.current = 0;
 		interactedRef.current = true;
 		setInteracted(true);
+		void joinVoice();
 		connect(true);
-	}, [connect, setInteracted]);
+	}, [connect, joinVoice, setInteracted]);
 
 	useEffect(() => {
 		if (
@@ -1666,6 +1829,9 @@ export function Player({ data }: { data: ServerData }) {
 
 	return (
 		<>
+			{voice.remoteAudioStreams.map(({ id, stream }) => (
+				<RemoteVoiceAudio key={id} stream={stream} deafened={voice.deafened} />
+			))}
 			<div className="relative w-full">
 				{mounted ? (
 					<media-player
@@ -1778,23 +1944,36 @@ export function Player({ data }: { data: ServerData }) {
 
 				<Card className="w-full max-w-[90rem] self-center">
 					<CardHeader className="max-sm:pb-0 max-sm:pl-4 max-sm:pr-4 max-sm:pt-4">
-						<div className="flex items-center justify-center gap-3">
-							<div className="flex flex-1 flex-col gap-1 max-sm:mr-4">
+						<motion.div
+							layout
+							className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between"
+							transition={{ duration: 0.24, ease: 'easeOut' }}
+						>
+							<div className="flex min-w-0 flex-1 flex-col gap-1">
 								<CardTitle>Media</CardTitle>
 								<CardDescription className="max-sm:hidden">
 									Codec: {selectedCodec} {autoCodec ?? ''} {job.ExtractedQuality}; Audio:{' '}
 									{effectiveAudio}
 								</CardDescription>
 							</div>
-							<ConnectButton
-								socketCommunicating={socketCommunicating}
-								interacted={interacted}
-								exited={exited}
-								tickedSecsAgoStr={tickedSecsAgoStr}
-								className="max-md:hidden"
-								onClick={handleJoinWatchRoom}
-							/>
-							<div className="flex flex-1 items-center justify-end gap-3 max-sm:gap-2">
+							<motion.div
+								layout
+								className="flex flex-wrap items-center justify-start gap-2 xl:justify-center"
+							>
+								<ConnectButton
+									socketCommunicating={socketCommunicating}
+									interacted={interacted}
+									exited={exited}
+									tickedSecsAgoStr={tickedSecsAgoStr}
+									className="max-md:hidden"
+									onClick={handleJoinWatchRoom}
+								/>
+								<VoiceControls voice={voice} />
+							</motion.div>
+							<motion.div
+								layout
+								className="flex flex-wrap items-center justify-start gap-2 xl:justify-end"
+							>
 								<Tooltip.Provider delayDuration={0}>
 									<Tooltip.Root>
 										<Tooltip.Trigger asChild>
@@ -1890,8 +2069,8 @@ export function Player({ data }: { data: ServerData }) {
 										</DropdownMenu.Group>
 									</DropdownMenu.Content>
 								</DropdownMenu.Root>
-							</div>
-						</div>
+							</motion.div>
+						</motion.div>
 					</CardHeader>
 					<CardContent className="max-sm:p-4">
 						<MediaSelection

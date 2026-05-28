@@ -149,7 +149,8 @@ export enum SyncTypes {
 }
 
 export enum BroadcastTypes {
-	MoveTo = 'moveTo'
+	MoveTo = 'moveTo',
+	VoiceSignal = 'voiceSignal'
 }
 
 export interface SendPayload {
@@ -170,6 +171,17 @@ export interface SendPayload {
 export interface BroadcastPayload {
 	type: string;
 	moveTo?: string;
+	targetId?: string;
+	signal?: VoiceSignalPayload;
+}
+
+export type VoiceSignalKind = 'hello' | 'offer' | 'answer' | 'ice' | 'leave';
+
+export interface VoiceSignalPayload {
+	kind: VoiceSignalKind;
+	sessionId: string;
+	description?: RTCSessionDescriptionInit;
+	candidate?: RTCIceCandidateInit;
 }
 
 export interface Job {
