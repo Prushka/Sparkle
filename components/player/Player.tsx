@@ -743,6 +743,7 @@ export function Player({ data }: { data: ServerData }) {
 			? `Auto ${autoCodec}`.trim()
 			: `${codecDisplayMap[selectedCodec] ?? selectedCodec}${formatMbps(job, selectedCodec)}`;
 	const videoSettingsSummary = `${videoSettingsAudioLabel} • ${videoSettingsCodecLabel}`;
+	const videoSettingsCodecHeader = ['Codec', job.ExtractedQuality].filter(Boolean).join(' • ');
 	const videoSettingsAudioOptions =
 		videoSrc?.sCodec && audiosExistForCodec(job, videoSrc.sCodec)
 			? (job.MappedAudio[videoSrc.sCodec] ?? []).map((stream) => {
@@ -2336,7 +2337,7 @@ export function Player({ data }: { data: ServerData }) {
 						/>
 					</DefaultMenuSection>
 				) : null}
-				<DefaultMenuSection label="Codec" value={videoSettingsCodecLabel}>
+				<DefaultMenuSection label={videoSettingsCodecHeader} value={videoSettingsCodecLabel}>
 					<DefaultMenuRadioGroup
 						value={selectedCodec}
 						options={videoSettingsCodecOptions}

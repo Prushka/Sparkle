@@ -482,6 +482,16 @@
 	white-space: nowrap;
 }
 
+.vds-video-layout .vds-settings-menu-items,
+.vds-video-layout .vds-settings-menu-items .vds-menu-items {
+	scrollbar-width: none;
+}
+
+.vds-video-layout .vds-settings-menu-items::-webkit-scrollbar,
+.vds-video-layout .vds-settings-menu-items .vds-menu-items::-webkit-scrollbar {
+	display: none;
+}
+
 .vds-gesture[action='toggle:paused'] {
 	display: none !important;
 }

@@ -555,11 +555,6 @@ export function Chatbox({
 									setInputFocused(true);
 									onFocus();
 									syncActiveEmojiToken();
-									if (useButton) {
-										window.setTimeout(() => {
-											window.scrollTo(0, 0);
-										}, 100);
-									}
 								}}
 								onBlur={() => {
 									setInputFocused(false);
