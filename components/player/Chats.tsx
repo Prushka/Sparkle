@@ -41,7 +41,7 @@ export function Chats({
 							<span>{message.timeStr ? `[${message.timeStr}]` : ''}</span>
 							<span>{getRealName(historicalPlayers[message.uid])}</span>
 							<Pfp
-								id={message.uid}
+								id={historicalPlayers[message.uid]?.profileId || message.uid}
 								className="avatar"
 								discordUser={historicalPlayers[message.uid]?.discordUser}
 								staticBaseUrl={staticBaseUrl}

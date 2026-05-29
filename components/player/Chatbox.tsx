@@ -361,7 +361,7 @@ export function Chatbox({
 												className={`flex w-full flex-wrap items-center gap-1.5 text-center ${message.isStateUpdate ? 'font-semibold' : ''}`}
 											>
 												<Pfp
-													id={message.uid}
+													id={historicalPlayers[message.uid]?.profileId || message.uid}
 													className="avatar shrink-0 !h-6 !w-6"
 													discordUser={historicalPlayers[message.uid]?.discordUser}
 													staticBaseUrl={staticBaseUrl}

@@ -23,6 +23,7 @@ import { DefaultVideoLayout, defaultLayoutIcons } from '@vidstack/react/player/l
 import JASSUB from 'jassub';
 import {
 	IconAlertOctagonFilled,
+	IconBrandYoutubeFilled,
 	IconCheck,
 	IconHeadphones,
 	IconHeadphonesOff,
@@ -64,7 +65,8 @@ import {
 	type Job,
 	type Player as RoomPlayer,
 	type SendPayload,
-	type ServerData
+	type ServerData,
+	type YouTubeSyncState
 } from '@/lib/player/t';
 import SUPtitles from '@/lib/suptitles/suptitles';
 import { Button } from '@/components/ui/button';
@@ -80,6 +82,7 @@ import { MediaSelection, type MediaSelectionHandle } from '@/components/player/M
 import { MoveToast } from '@/components/player/MoveToast';
 import { Chats } from '@/components/player/Chats';
 import { useVoiceChat } from '@/components/player/useVoiceChat';
+import { YouTubeFloatingTab } from '@/components/player/YouTubeFloatingTab';
 
 type VideoSource = {
 	src: string;
@@ -128,6 +131,68 @@ const PLAYER_KEY_SHORTCUTS: MediaKeyShortcuts = {
 	volumeUp: 'ArrowUp',
 	volumeDown: 'ArrowDown'
 };
+
+const DEFAULT_YOUTUBE_SYNC_STATE: YouTubeSyncState = {
+	open: false,
+	url: '',
+	videoId: '',
+	time: 0,
+	paused: true,
+	playbackRate: 1,
+	updatedAt: 0
+};
+
+const YOUTUBE_VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
+
+function normalizeYouTubeSyncState(state: Partial<YouTubeSyncState> | null | undefined) {
+	const playbackRate =
+		typeof state?.playbackRate === 'number' && Number.isFinite(state.playbackRate)
+			? Math.max(0.25, Math.min(4, state.playbackRate))
+			: DEFAULT_YOUTUBE_SYNC_STATE.playbackRate;
+	const videoId =
+		typeof state?.videoId === 'string' && YOUTUBE_VIDEO_ID_PATTERN.test(state.videoId)
+			? state.videoId
+			: '';
+	return {
+		open: Boolean(state?.open),
+		url: typeof state?.url === 'string' ? state.url : '',
+		videoId,
+		time:
+			typeof state?.time === 'number' && Number.isFinite(state.time) && state.time > 0
+				? state.time
+				: 0,
+		paused: state?.paused === false ? false : true,
+		playbackRate,
+		updatedAt:
+			typeof state?.updatedAt === 'number' && Number.isFinite(state.updatedAt) ? state.updatedAt : 0
+	};
+}
+
+function readStoredYouTubeSyncState(storageKey: string): YouTubeSyncState {
+	if (typeof window === 'undefined') {
+		return DEFAULT_YOUTUBE_SYNC_STATE;
+	}
+	try {
+		const stored = window.localStorage.getItem(storageKey);
+		if (!stored) {
+			return DEFAULT_YOUTUBE_SYNC_STATE;
+		}
+		return normalizeYouTubeSyncState(JSON.parse(stored) as Partial<YouTubeSyncState>);
+	} catch {
+		return DEFAULT_YOUTUBE_SYNC_STATE;
+	}
+}
+
+function saveStoredYouTubeSyncState(storageKey: string, state: YouTubeSyncState) {
+	if (typeof window === 'undefined') {
+		return;
+	}
+	window.localStorage.setItem(storageKey, JSON.stringify(state));
+}
+
+function isMeaningfulYouTubeState(state: YouTubeSyncState) {
+	return state.open || state.videoId !== '' || state.url !== '';
+}
 
 function normalizePlayerVolume(volume: number): number {
 	if (!Number.isFinite(volume)) {
@@ -492,6 +557,10 @@ export function Player({ data }: { data: ServerData }) {
 	const socketUrlRef = useRef<string | null>(null);
 	const reconnectTimerRef = useRef<number | null>(null);
 	const reconnectAttemptRef = useRef(0);
+	const youtubeSocketRef = useRef<WebSocket | null>(null);
+	const pendingYouTubeStateRef = useRef<YouTubeSyncState | null>(null);
+	const youtubeStateRef = useRef<YouTubeSyncState>(DEFAULT_YOUTUBE_SYNC_STATE);
+	const youtubeStateStorageKeyRef = useRef('');
 	const connectRef = useRef<((_forceInteracted?: boolean) => void) | null>(null);
 	const profileSyncedRef = useRef(false);
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -538,6 +607,7 @@ export function Player({ data }: { data: ServerData }) {
 	const [exited, setExited] = useState(false);
 	const [moveToast, setMoveToast] = useState<MoveToastState | null>(null);
 	const [name, setName] = useState('');
+	const [profileId, setProfileId] = useState('');
 	const [playerId, setPlayerId] = useState('');
 	const lastSavedNameRef = useRef('');
 	const [initialVolume] = useState(() =>
@@ -553,6 +623,13 @@ export function Player({ data }: { data: ServerData }) {
 	const backendBaseUrl = data.backendBaseUrl;
 	const roomBase = searchParams.get('room') || searchParams.get('channel_id') || '';
 	const room = roomBase ? `${roomBase}${job.Id}` : job.Id;
+	const youtubeRoomId = roomBase || job.Id;
+	const youtubeSyncRoom = `youtube:${youtubeRoomId}`;
+	const youtubeStateStorageKey = `sparkle:youtube-sync-state:${youtubeRoomId}`;
+	const [youtubeState, setYoutubeState] = useState<YouTubeSyncState>(() =>
+		readStoredYouTubeSyncState(youtubeStateStorageKey)
+	);
+	youtubeStateStorageKeyRef.current = youtubeStateStorageKey;
 	const getRoomPath = useCallback(
 		(id: string) => (roomBase ? `/${id}?room=${encodeURIComponent(roomBase)}` : `/${id}`),
 		[roomBase]
@@ -836,12 +913,16 @@ export function Player({ data }: { data: ServerData }) {
 		const timer = window.setTimeout(() => {
 			const storedId = window.localStorage.getItem('id');
 			if (storedId) {
-				setPlayerId(storedId);
-				return;
+				setProfileId(storedId);
+			} else {
+				const nextId = randomString(14);
+				window.localStorage.setItem('id', nextId);
+				setProfileId(nextId);
 			}
-			const nextId = randomString(14);
-			window.localStorage.setItem('id', nextId);
-			setPlayerId(nextId);
+
+			const sessionPlayerId = randomString(14);
+			window.sessionStorage.setItem('playerId', sessionPlayerId);
+			setPlayerId(sessionPlayerId);
 		}, 0);
 		return () => window.clearTimeout(timer);
 	}, []);
@@ -929,16 +1010,17 @@ export function Player({ data }: { data: ServerData }) {
 	}, []);
 
 	const sendProfile = useCallback(() => {
-		if (displayName === '' || socketRef.current?.readyState !== WebSocket.OPEN) {
+		if (displayName === '' || !profileId || socketRef.current?.readyState !== WebSocket.OPEN) {
 			return false;
 		}
 		send({
 			name: displayName,
+			profileId,
 			type: SyncTypes.ProfileSync,
 			discordUser: discord?.user
 		});
 		return true;
-	}, [discord?.user, displayName, send]);
+	}, [discord?.user, displayName, profileId, send]);
 
 	const sendSettings = useCallback(() => {
 		const selectedTrack = getSelectedSubtitleTrack(
@@ -974,6 +1056,163 @@ export function Player({ data }: { data: ServerData }) {
 		sendSettings();
 	}, [playerEl, sendSettings, videoSrc]);
 
+	const applyYouTubeState = useCallback((nextState: YouTubeSyncState) => {
+		const normalized = normalizeYouTubeSyncState(nextState);
+		youtubeStateRef.current = normalized;
+		setYoutubeState(normalized);
+		saveStoredYouTubeSyncState(youtubeStateStorageKeyRef.current, normalized);
+	}, []);
+
+	const sendYouTubeSnapshot = useCallback((nextState: YouTubeSyncState, queue = true) => {
+		const socket = youtubeSocketRef.current;
+		if (queue) {
+			pendingYouTubeStateRef.current = nextState;
+		}
+		if (socket?.readyState !== WebSocket.OPEN) {
+			return;
+		}
+		socket.send(
+			JSON.stringify({
+				type: SyncTypes.YouTubeSync,
+				youtube: nextState
+			})
+		);
+		if (pendingYouTubeStateRef.current === nextState) {
+			pendingYouTubeStateRef.current = null;
+		}
+	}, []);
+
+	const updateYouTubeState = useCallback(
+		(patch: Partial<YouTubeSyncState>) => {
+			const nextState = normalizeYouTubeSyncState({
+				...youtubeStateRef.current,
+				...patch,
+				updatedAt: Date.now()
+			});
+			applyYouTubeState(nextState);
+			sendYouTubeSnapshot(nextState);
+		},
+		[applyYouTubeState, sendYouTubeSnapshot]
+	);
+
+	useEffect(() => {
+		const stored = readStoredYouTubeSyncState(youtubeStateStorageKey);
+		applyYouTubeState(stored);
+		pendingYouTubeStateRef.current = null;
+	}, [applyYouTubeState, youtubeStateStorageKey]);
+
+	useEffect(() => {
+		if (!playerId) {
+			return;
+		}
+
+		let reconnectTimer: number | null = null;
+		let reconnectAttempt = 0;
+		let disposed = false;
+		const playerYouTubeId = `${playerId}-youtube`;
+		const socketUrl = getBackendWebSocketUrl(
+			backendBaseUrl,
+			`/sync/${encodeURIComponent(youtubeSyncRoom)}/${encodeURIComponent(playerYouTubeId)}`
+		);
+
+		const clearReconnectTimer = () => {
+			if (reconnectTimer !== null) {
+				window.clearTimeout(reconnectTimer);
+				reconnectTimer = null;
+			}
+		};
+
+		const connectYouTubeSocket = () => {
+			if (disposed) {
+				return;
+			}
+			const existingSocket = youtubeSocketRef.current;
+			if (
+				existingSocket &&
+				(existingSocket.readyState === WebSocket.CONNECTING ||
+					existingSocket.readyState === WebSocket.OPEN)
+			) {
+				return;
+			}
+			clearReconnectTimer();
+			const socket = new WebSocket(socketUrl);
+			youtubeSocketRef.current = socket;
+
+			socket.onopen = () => {
+				if (youtubeSocketRef.current !== socket) {
+					socket.close();
+					return;
+				}
+				reconnectAttempt = 0;
+				const pendingState = pendingYouTubeStateRef.current;
+				if (pendingState) {
+					socket.send(JSON.stringify({ type: SyncTypes.YouTubeSync, youtube: pendingState }));
+					pendingYouTubeStateRef.current = null;
+				}
+				socket.send(JSON.stringify({ type: SyncTypes.NewPlayer }));
+			};
+
+			socket.onmessage = (event: MessageEvent) => {
+				if (youtubeSocketRef.current !== socket) {
+					return;
+				}
+				const payload: SendPayload = JSON.parse(event.data);
+				if (payload.type !== SyncTypes.YouTubeSync || !payload.youtube) {
+					return;
+				}
+				const incoming = normalizeYouTubeSyncState(payload.youtube);
+				const current = youtubeStateRef.current;
+				if (incoming.updatedAt === 0 && isMeaningfulYouTubeState(current)) {
+					sendYouTubeSnapshot(current, false);
+					return;
+				}
+				applyYouTubeState(incoming);
+			};
+
+			socket.onerror = () => {
+				if (youtubeSocketRef.current === socket) {
+					socket.close();
+				}
+			};
+
+			socket.onclose = () => {
+				if (youtubeSocketRef.current !== socket) {
+					return;
+				}
+				youtubeSocketRef.current = null;
+				if (disposed) {
+					return;
+				}
+				const delay = Math.min(30000, 1000 * 2 ** Math.min(reconnectAttempt, 5));
+				reconnectAttempt += 1;
+				reconnectTimer = window.setTimeout(() => {
+					reconnectTimer = null;
+					connectYouTubeSocket();
+				}, delay);
+			};
+		};
+
+		connectYouTubeSocket();
+
+		return () => {
+			disposed = true;
+			clearReconnectTimer();
+			const socket = youtubeSocketRef.current;
+			if (socket) {
+				socket.onopen = null;
+				socket.onmessage = null;
+				socket.onerror = null;
+				socket.onclose = null;
+				if (socket.readyState !== WebSocket.CLOSED) {
+					socket.close();
+				}
+			}
+			if (youtubeSocketRef.current === socket) {
+				youtubeSocketRef.current = null;
+			}
+		};
+	}, [applyYouTubeState, backendBaseUrl, playerId, sendYouTubeSnapshot, youtubeSyncRoom]);
+
 	const voice = useVoiceChat({
 		playerId,
 		roomPlayers,
@@ -990,6 +1229,7 @@ export function Player({ data }: { data: ServerData }) {
 		const currentRoomPlayer = roomPlayers.find((player) => player.id === playerId);
 		const selfPlayer: RoomPlayer = currentRoomPlayer ?? {
 			id: playerId,
+			profileId,
 			name: displayName || 'You',
 			time: 0,
 			paused: true,
@@ -1008,6 +1248,7 @@ export function Player({ data }: { data: ServerData }) {
 		displayName,
 		effectiveAudio,
 		playerId,
+		profileId,
 		roomPlayers,
 		selectedCodec,
 		videoSrc?.sCodec
@@ -1279,7 +1520,7 @@ export function Player({ data }: { data: ServerData }) {
 					switch (state.type) {
 						case SyncTypes.PfpSync:
 							if (state.firedBy?.id) {
-								updatePfp(state.firedBy.id, state.timestamp);
+								updatePfp(state.firedBy.profileId || state.firedBy.id, state.timestamp);
 							}
 							break;
 						case SyncTypes.ChatSync:
@@ -1817,7 +2058,7 @@ export function Player({ data }: { data: ServerData }) {
 		if (!pfp) {
 			return;
 		}
-		if (!playerId) {
+		if (!profileId) {
 			addSystemMessage('Avatar upload is not ready yet');
 			input.value = '';
 			return;
@@ -1830,7 +2071,7 @@ export function Player({ data }: { data: ServerData }) {
 		const formData = new FormData();
 		formData.append('pfp', pfp);
 		try {
-			const response = await fetch(joinBackendPath(backendBaseUrl, `/pfp/${playerId}`), {
+			const response = await fetch(joinBackendPath(backendBaseUrl, `/pfp/${profileId}`), {
 				method: 'POST',
 				body: formData
 			});
@@ -1846,7 +2087,7 @@ export function Player({ data }: { data: ServerData }) {
 					console.warn('Avatar upload response did not include a revision', error);
 				}
 			}
-			updatePfp(playerId, avatarRevision);
+			updatePfp(profileId, avatarRevision);
 			addSystemMessage('Avatar updated');
 		} catch (error) {
 			console.error(error);
@@ -1860,7 +2101,8 @@ export function Player({ data }: { data: ServerData }) {
 		if (discord?.user) {
 			send({
 				type: SyncTypes.ProfileSync,
-				name: displayName
+				name: displayName,
+				profileId
 			});
 			return;
 		}
@@ -1875,7 +2117,8 @@ export function Player({ data }: { data: ServerData }) {
 		}
 		send({
 			type: SyncTypes.ProfileSync,
-			name: nextName
+			name: nextName,
+			profileId
 		});
 		window.localStorage.setItem('name', nextName);
 		if (nextName !== lastSavedNameRef.current) {
@@ -2140,6 +2383,7 @@ export function Player({ data }: { data: ServerData }) {
 				<div className="mb-3 flex flex-wrap justify-center gap-4 pt-2 sm:pt-3">
 					{displayedRoomPlayers.map((player) => {
 						const isCurrentUser = player.id === playerId;
+						const playerProfileId = player.profileId || player.id;
 						const isSpeaking = speakingPlayerIds.has(player.id);
 						const playerMuted = isCurrentUser
 							? !voice.desiredJoined || voice.status === 'listen-only' || voice.muted
@@ -2156,7 +2400,7 @@ export function Player({ data }: { data: ServerData }) {
 								<span className="relative mr-0.5 shrink-0">
 									<Pfp
 										className="h-12 w-12"
-										id={player.id}
+										id={playerProfileId}
 										discordUser={historicalPlayers[player.id]?.discordUser ?? player.discordUser}
 										staticBaseUrl={data.staticBaseUrl}
 									/>
@@ -2226,7 +2470,7 @@ export function Player({ data }: { data: ServerData }) {
 									<div className="flex items-center gap-3">
 										<label className="custom-file-upload shrink-0">
 											<Pfp
-												id={playerId}
+												id={profileId || playerProfileId}
 												className="h-14 w-14"
 												discordUser={discord?.user}
 												staticBaseUrl={data.staticBaseUrl}
@@ -2268,60 +2512,82 @@ export function Player({ data }: { data: ServerData }) {
 							<div className="flex min-w-0 flex-1 flex-col gap-1">
 								<CardTitle>Media</CardTitle>
 							</div>
-							<DropdownMenu.Root>
-								<DropdownMenu.Trigger asChild>
-									<Button
-										variant={theme === 'dark' ? 'outline' : 'default'}
-										className="h-auto min-h-9 max-w-full justify-start gap-2 px-3 py-2 text-left sm:max-w-[24rem]"
-									>
-										<IconSettings2 className="shrink-0 max-sm:hidden" size={16} stroke={2} />
-										<span className="flex min-w-0 flex-col items-start gap-0.5">
-											<span className="leading-none">Video Settings</span>
-											<span className="block max-w-full truncate text-xs leading-none opacity-75">
-												{videoSettingsSummary}
+							<div className="flex flex-wrap items-center gap-2 sm:justify-end">
+								<Tooltip.Provider delayDuration={0}>
+									<Tooltip.Root>
+										<Tooltip.Trigger asChild>
+											<Button
+												type="button"
+												variant="outline"
+												className="h-auto min-h-9 gap-2 px-3 py-2"
+												onClick={() => updateYouTubeState({ open: true })}
+											>
+												<IconBrandYoutubeFilled className="text-red-600" size={18} />
+												<span>YouTube</span>
+											</Button>
+										</Tooltip.Trigger>
+										<Tooltip.Content>
+											<p>Open synced YouTube tab</p>
+										</Tooltip.Content>
+									</Tooltip.Root>
+								</Tooltip.Provider>
+								<DropdownMenu.Root>
+									<DropdownMenu.Trigger asChild>
+										<Button
+											variant={theme === 'dark' ? 'outline' : 'default'}
+											className="h-auto min-h-9 max-w-full justify-start gap-2 px-3 py-2 text-left sm:max-w-[24rem]"
+										>
+											<IconSettings2 className="shrink-0 max-sm:hidden" size={16} stroke={2} />
+											<span className="flex min-w-0 flex-col items-start gap-0.5">
+												<span className="leading-none">Video Settings</span>
+												<span className="block max-w-full truncate text-xs leading-none opacity-75">
+													{videoSettingsSummary}
+												</span>
 											</span>
-										</span>
-									</Button>
-								</DropdownMenu.Trigger>
-								<DropdownMenu.Content className="w-56">
-									<DropdownMenu.Label className="flex items-center justify-between gap-3">
-										<span>Video Settings</span>
-										<span className="truncate text-xs font-medium text-muted-foreground">
-											{job.ExtractedQuality}
-										</span>
-									</DropdownMenu.Label>
-									<DropdownMenu.Separator />
-									<DropdownMenu.Group>
-										{audiosExistForCodec(job, videoSrc?.sCodec || '') ? (
-											<DropdownMenu.RadioGroup value={effectiveAudio} onValueChange={changeAudio}>
-												{job.MappedAudio[videoSrc?.sCodec || '']?.map((stream) => {
-													const curr = `${stream.Index}-${stream.Language}`;
-													return (
-														<DropdownMenu.RadioItem key={curr} value={curr}>
-															{formatPair(stream)} ({stream.Index})
-														</DropdownMenu.RadioItem>
-													);
-												})}
-											</DropdownMenu.RadioGroup>
-										) : null}
-									</DropdownMenu.Group>
-									<DropdownMenu.Separator />
-									<DropdownMenu.Group>
-										<DropdownMenu.RadioGroup value={selectedCodec} onValueChange={changeCodec}>
-											<DropdownMenu.RadioItem value="auto">Auto {autoCodec}</DropdownMenu.RadioItem>
-											{job.EncodedCodecs.map((codec) => (
-												<DropdownMenu.RadioItem key={codec} value={codec}>
-													{codecDisplayMap[codec]}
-													{formatMbps(job, codec)}
-													{!supportedCodecs.includes(codec) ? (
-														<IconAlertOctagonFilled className="ml-2" size={16} stroke={2} />
-													) : null}
+										</Button>
+									</DropdownMenu.Trigger>
+									<DropdownMenu.Content className="w-56">
+										<DropdownMenu.Label className="flex items-center justify-between gap-3">
+											<span>Video Settings</span>
+											<span className="truncate text-xs font-medium text-muted-foreground">
+												{job.ExtractedQuality}
+											</span>
+										</DropdownMenu.Label>
+										<DropdownMenu.Separator />
+										<DropdownMenu.Group>
+											{audiosExistForCodec(job, videoSrc?.sCodec || '') ? (
+												<DropdownMenu.RadioGroup value={effectiveAudio} onValueChange={changeAudio}>
+													{job.MappedAudio[videoSrc?.sCodec || '']?.map((stream) => {
+														const curr = `${stream.Index}-${stream.Language}`;
+														return (
+															<DropdownMenu.RadioItem key={curr} value={curr}>
+																{formatPair(stream)} ({stream.Index})
+															</DropdownMenu.RadioItem>
+														);
+													})}
+												</DropdownMenu.RadioGroup>
+											) : null}
+										</DropdownMenu.Group>
+										<DropdownMenu.Separator />
+										<DropdownMenu.Group>
+											<DropdownMenu.RadioGroup value={selectedCodec} onValueChange={changeCodec}>
+												<DropdownMenu.RadioItem value="auto">
+													Auto {autoCodec}
 												</DropdownMenu.RadioItem>
-											))}
-										</DropdownMenu.RadioGroup>
-									</DropdownMenu.Group>
-								</DropdownMenu.Content>
-							</DropdownMenu.Root>
+												{job.EncodedCodecs.map((codec) => (
+													<DropdownMenu.RadioItem key={codec} value={codec}>
+														{codecDisplayMap[codec]}
+														{formatMbps(job, codec)}
+														{!supportedCodecs.includes(codec) ? (
+															<IconAlertOctagonFilled className="ml-2" size={16} stroke={2} />
+														) : null}
+													</DropdownMenu.RadioItem>
+												))}
+											</DropdownMenu.RadioGroup>
+										</DropdownMenu.Group>
+									</DropdownMenu.Content>
+								</DropdownMenu.Root>
+							</div>
 						</motion.div>
 					</CardHeader>
 					<CardContent className="max-sm:p-4">
@@ -2344,6 +2610,13 @@ export function Player({ data }: { data: ServerData }) {
 					</CardContent>
 				</Card>
 			</div>
+
+			<YouTubeFloatingTab
+				key={youtubeRoomId}
+				roomId={youtubeRoomId}
+				state={youtubeState}
+				onStateChange={updateYouTubeState}
+			/>
 
 			{moveToast ? (
 				<div className="fixed bottom-4 left-1/2 z-[100] w-[90%] max-w-xl -translate-x-1/2">

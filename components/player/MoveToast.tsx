@@ -50,7 +50,7 @@ export function MoveToast({
 				<CardTitle className="flex items-center">
 					{firedBy?.id ? (
 						<Pfp
-							id={firedBy.id}
+							id={historicalPlayers[firedBy.id]?.profileId || firedBy.profileId || firedBy.id}
 							className="avatar mr-2"
 							discordUser={historicalPlayers[firedBy.id]?.discordUser}
 							staticBaseUrl={staticBaseUrl}

@@ -71,11 +71,22 @@ export interface Player {
 	time?: number;
 	name: string;
 	id: string;
+	profileId?: string;
 	inBg: boolean;
 	audio: string;
 	codec: string;
 	subtitle: string;
 	discordUser: DiscordUser | null | undefined;
+}
+
+export interface YouTubeSyncState {
+	open: boolean;
+	url: string;
+	videoId: string;
+	time: number;
+	paused: boolean;
+	playbackRate: number;
+	updatedAt: number;
 }
 
 export type Chat = {
@@ -144,6 +155,7 @@ export enum SyncTypes {
 	PfpSync = 'pfp',
 	StateSync = 'state',
 	BroadcastSync = 'broadcast',
+	YouTubeSync = 'youtube',
 	AudioSwitch = 'audio',
 	CodecSwitch = 'codec',
 	SubtitleSwitch = 'subtitle',
@@ -171,6 +183,7 @@ export interface SendPayload {
 	codec?: string;
 	subtitle?: string;
 	moveToText?: string;
+	youtube?: YouTubeSyncState;
 }
 
 export interface BroadcastPayload {

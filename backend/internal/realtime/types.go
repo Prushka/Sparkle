@@ -11,6 +11,7 @@ const (
 	StateSync         = "state"
 	BroadcastSync     = "broadcast"
 	SoundEffectSync   = "soundEffect"
+	YouTubeSync       = "youtube"
 	ExitSync          = "exit"
 	CodecSwitch       = "codec"
 	AudioSwitch       = "audio"
@@ -42,9 +43,20 @@ type VideoState struct {
 	Paused bool    `json:"paused"`
 }
 
+type YouTubeState struct {
+	Open         bool    `json:"open"`
+	URL          string  `json:"url,omitempty"`
+	VideoID      string  `json:"videoId,omitempty"`
+	Time         float64 `json:"time"`
+	Paused       bool    `json:"paused"`
+	PlaybackRate float64 `json:"playbackRate"`
+	UpdatedAt    int64   `json:"updatedAt"`
+}
+
 type PlayerState struct {
 	Name        string       `json:"name"`
 	Id          string       `json:"id"`
+	ProfileId   string       `json:"profileId,omitempty"`
 	InBg        bool         `json:"inBg,omitempty"`
 	LastSeen    int64        `json:"lastSeen"`
 	Codec       string       `json:"codec,omitempty"`
@@ -82,6 +94,7 @@ type ClientPayload struct {
 	Type        string         `json:"type"`
 	Time        *float64       `json:"time,omitempty"`
 	Name        string         `json:"name,omitempty"`
+	ProfileId   string         `json:"profileId,omitempty"`
 	DiscordUser *DiscordUser   `json:"discordUser,omitempty"`
 	Paused      *bool          `json:"paused,omitempty"`
 	Chat        string         `json:"chat,omitempty"`
@@ -92,6 +105,7 @@ type ClientPayload struct {
 	Codec       string         `json:"codec,omitempty"`
 	Audio       string         `json:"audio,omitempty"`
 	Subtitle    string         `json:"subtitle,omitempty"`
+	YouTube     *YouTubeState  `json:"youtube,omitempty"`
 }
 
 type SendPayload struct {
@@ -103,8 +117,13 @@ type SendPayload struct {
 	Players   []PlayerSnapshot `json:"players,omitempty"`
 	Timestamp int64            `json:"timestamp"`
 	Broadcast map[string]any   `json:"broadcast,omitempty"`
+	YouTube   *YouTubeState    `json:"youtube,omitempty"`
 }
 
 func defaultVideoState() VideoState {
 	return VideoState{Time: 0, Paused: true}
+}
+
+func defaultYouTubeState() YouTubeState {
+	return YouTubeState{Time: 0, Paused: true, PlaybackRate: 1}
 }

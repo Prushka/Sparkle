@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"log"
 	"math"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -21,9 +23,10 @@ import (
 )
 
 var (
-	safeID            = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
-	emojiTokenPattern = regexp.MustCompile(`:([a-z0-9][a-z0-9_+-]{1,39}):`)
-	safeEmojiID       = regexp.MustCompile(`^[a-z0-9][a-z0-9_+-]{1,39}$`)
+	safeID             = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+	emojiTokenPattern  = regexp.MustCompile(`:([a-z0-9][a-z0-9_+-]{1,39}):`)
+	safeEmojiID        = regexp.MustCompile(`^[a-z0-9][a-z0-9_+-]{1,39}$`)
+	safeYouTubeVideoID = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 )
 
 type Hub struct {
@@ -42,6 +45,7 @@ type Room struct {
 	chats    []Chat
 	lastSeek time.Time
 	state    VideoState
+	youtube  YouTubeState
 	mu       sync.RWMutex
 }
 
@@ -172,6 +176,7 @@ func (h *Hub) getOrCreateRoom(id string) *Room {
 		players: make(map[string]*Player),
 		chats:   make([]Chat, 0),
 		state:   defaultVideoState(),
+		youtube: defaultYouTubeState(),
 	}
 	h.rooms[id] = room
 	return room
@@ -206,13 +211,22 @@ func (h *Hub) readPump(room *Room, player *Player) {
 	for {
 		var payload ClientPayload
 		if err := player.conn.ReadJSON(&payload); err != nil {
-			if !websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+			if !isExpectedWebSocketReadClose(err) {
 				log.Printf("[%s] websocket read: %v", player.state.Id, err)
 			}
 			return
 		}
 		room.handlePayload(player, payload)
 	}
+}
+
+func isExpectedWebSocketReadClose(err error) bool {
+	return websocket.IsCloseError(
+		err,
+		websocket.CloseNormalClosure,
+		websocket.CloseGoingAway,
+		websocket.CloseNoStatusReceived,
+	) || errors.Is(err, net.ErrClosed) || strings.Contains(err.Error(), "use of closed network connection")
 }
 
 func (h *Hub) broadcastPFP(id string, timestamp int64) {
@@ -283,6 +297,7 @@ func (r *Room) remove(player *Player) {
 	delete(r.players, player.state.Id)
 	if len(r.players) == 0 {
 		r.state = defaultVideoState()
+		r.youtube = defaultYouTubeState()
 		r.lastSeek = time.Time{}
 	}
 }
@@ -314,16 +329,23 @@ func (r *Room) handlePayload(current *Player, payload ClientPayload) {
 		r.updatePlayer(current, now, func(state *PlayerSnapshot) { state.Subtitle = payload.Subtitle })
 	case ProfileSync:
 		name := strings.TrimSpace(payload.Name)
+		profileID := strings.TrimSpace(payload.ProfileId)
+		if !safeID.MatchString(profileID) {
+			profileID = current.state.Id
+		}
 		nameRunes := []rune(name)
 		if len(nameRunes) > 80 {
 			name = string(nameRunes[:80])
 		}
 		r.updatePlayer(current, now, func(state *PlayerSnapshot) {
 			state.Name = name
+			state.ProfileId = profileID
 			state.DiscordUser = payload.DiscordUser
 		})
 	case BroadcastSync:
 		r.broadcast(current, sanitizeBroadcast(payload.Broadcast))
+	case YouTubeSync:
+		r.syncYouTube(current, payload.YouTube)
 	case ChatSync:
 		r.chat(current, payload.Chat, payload.EmojiRefs)
 	case TimeSync:
@@ -331,7 +353,11 @@ func (r *Room) handlePayload(current *Player, payload ClientPayload) {
 	case PauseSync:
 		r.syncPause(current, payload.Paused)
 	case PfpSync:
-		r.broadcastPFP(current.state.Id, now.UnixMilli())
+		id := current.state.ProfileId
+		if id == "" {
+			id = current.state.Id
+		}
+		r.broadcastPFP(id, now.UnixMilli())
 	case NewPlayer:
 		r.newPlayer(current)
 	default:
@@ -442,6 +468,81 @@ func sanitizeBroadcast(broadcast map[string]any) map[string]any {
 			"id": id,
 		},
 	}
+}
+
+func (r *Room) syncYouTube(sender *Player, incoming *YouTubeState) {
+	now := time.Now()
+	state, ok := sanitizeYouTubeState(incoming, now.UnixMilli())
+	if !ok {
+		return
+	}
+
+	var firedBy PlayerSnapshot
+	var targets []*Player
+	shouldBroadcast := false
+
+	r.mu.Lock()
+	if r.players[sender.state.Id] != sender {
+		r.mu.Unlock()
+		return
+	}
+	sender.state.LastSeen = now.Unix()
+	shouldBroadcast = shouldBroadcastYouTubeState(r.youtube, state)
+	r.youtube = state
+	firedBy = sender.state
+	if shouldBroadcast {
+		targets = r.playersLocked()
+	}
+	r.mu.Unlock()
+
+	if !shouldBroadcast {
+		return
+	}
+	payload := SendPayload{Type: YouTubeSync, YouTube: &state, FiredBy: &firedBy, Timestamp: now.UnixMilli()}
+	for _, player := range targets {
+		player.sendJSON(payload)
+	}
+}
+
+func shouldBroadcastYouTubeState(previous YouTubeState, next YouTubeState) bool {
+	if previous.Open != next.Open ||
+		previous.VideoID != next.VideoID ||
+		previous.Paused != next.Paused ||
+		math.Abs(previous.PlaybackRate-next.PlaybackRate) > 0.01 {
+		return true
+	}
+	if next.Paused {
+		return math.Abs(previous.Time-next.Time) > 0.5
+	}
+	return math.Abs(previous.Time-next.Time) > 3
+}
+
+func sanitizeYouTubeState(incoming *YouTubeState, timestamp int64) (YouTubeState, bool) {
+	if incoming == nil {
+		return YouTubeState{}, false
+	}
+
+	state := defaultYouTubeState()
+	state.Open = incoming.Open
+	state.VideoID = strings.TrimSpace(incoming.VideoID)
+	if state.VideoID != "" {
+		if !safeYouTubeVideoID.MatchString(state.VideoID) {
+			return YouTubeState{}, false
+		}
+		state.URL = "https://www.youtube.com/watch?v=" + state.VideoID
+	} else {
+		state.URL = ""
+	}
+
+	if !math.IsNaN(incoming.Time) && !math.IsInf(incoming.Time, 0) && incoming.Time > 0 {
+		state.Time = math.Min(incoming.Time, 7*24*60*60)
+	}
+	if incoming.PlaybackRate > 0 && !math.IsNaN(incoming.PlaybackRate) && !math.IsInf(incoming.PlaybackRate, 0) {
+		state.PlaybackRate = math.Min(incoming.PlaybackRate, 4)
+	}
+	state.Paused = incoming.Paused
+	state.UpdatedAt = timestamp
+	return state, true
 }
 
 func (r *Room) chat(sender *Player, message string, emojiRefs []ChatEmojiRef) {
@@ -682,6 +783,7 @@ func (r *Room) syncPause(sender *Player, paused *bool) {
 func (r *Room) newPlayer(sender *Player) {
 	var roomTime float64
 	var roomPaused bool
+	var youtube YouTubeState
 	var chats []Chat
 
 	r.mu.Lock()
@@ -692,11 +794,13 @@ func (r *Room) newPlayer(sender *Player) {
 	sender.state.LastSeen = time.Now().Unix()
 	roomTime = r.state.Time
 	roomPaused = r.state.Paused
+	youtube = r.youtube
 	chats = append([]Chat(nil), r.chats...)
 	r.mu.Unlock()
 
 	sender.sendJSON(SendPayload{Type: TimeSync, Time: &roomTime, Timestamp: time.Now().UnixMilli()})
 	sender.sendJSON(SendPayload{Type: PauseSync, Paused: &roomPaused, Timestamp: time.Now().UnixMilli()})
+	sender.sendJSON(SendPayload{Type: YouTubeSync, YouTube: &youtube, Timestamp: time.Now().UnixMilli()})
 	if len(chats) > 0 {
 		sender.sendJSON(SendPayload{Type: ChatSync, Chats: chats, Timestamp: time.Now().UnixMilli()})
 	}
@@ -711,9 +815,18 @@ func (r *Room) broadcastPFP(id string, timestamp int64) {
 	var targets []*Player
 
 	r.mu.RLock()
-	if player := r.players[id]; player != nil {
+	for _, player := range r.players {
+		if player.state.Id != id && player.state.ProfileId != id {
+			continue
+		}
 		snapshot := player.state
+		if snapshot.ProfileId == "" {
+			snapshot.ProfileId = id
+		}
 		firedBy = &snapshot
+		break
+	}
+	if firedBy != nil {
 		targets = r.playersLocked()
 	}
 	r.mu.RUnlock()
