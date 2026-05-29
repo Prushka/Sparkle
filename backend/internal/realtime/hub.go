@@ -24,6 +24,8 @@ import (
 
 var (
 	safeID             = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+	safeDiscordID      = regexp.MustCompile(`^[0-9]{1,32}$`)
+	safeDiscordAvatar  = regexp.MustCompile(`^(a_)?[A-Za-z0-9_]{2,128}$`)
 	emojiTokenPattern  = regexp.MustCompile(`:([a-z0-9][a-z0-9_+-]{1,39}):`)
 	safeEmojiID        = regexp.MustCompile(`^[a-z0-9][a-z0-9_+-]{1,39}$`)
 	safeYouTubeVideoID = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
@@ -333,14 +335,11 @@ func (r *Room) handlePayload(current *Player, payload ClientPayload) {
 		if !safeID.MatchString(profileID) {
 			profileID = current.state.Id
 		}
-		nameRunes := []rune(name)
-		if len(nameRunes) > 80 {
-			name = string(nameRunes[:80])
-		}
+		name = trimRunes(name, 80)
 		r.updatePlayer(current, now, func(state *PlayerSnapshot) {
 			state.Name = name
 			state.ProfileId = profileID
-			state.DiscordUser = payload.DiscordUser
+			state.DiscordUser = sanitizeDiscordUser(payload.DiscordUser)
 		})
 	case BroadcastSync:
 		r.broadcast(current, sanitizeBroadcast(payload.Broadcast))
@@ -468,6 +467,62 @@ func sanitizeBroadcast(broadcast map[string]any) map[string]any {
 			"id": id,
 		},
 	}
+}
+
+func sanitizeDiscordUser(user *DiscordUser) *DiscordUser {
+	if user == nil {
+		return nil
+	}
+	id := strings.TrimSpace(user.ID)
+	if !safeDiscordID.MatchString(id) {
+		return nil
+	}
+	username := trimRunes(strings.TrimSpace(user.Username), 80)
+	if username == "" {
+		return nil
+	}
+	discriminator := trimRunes(strings.TrimSpace(user.Discriminator), 8)
+	if discriminator == "" {
+		discriminator = "0"
+	}
+	return &DiscordUser{
+		Username:      username,
+		Discriminator: discriminator,
+		ID:            id,
+		PublicFlags:   user.PublicFlags,
+		Avatar:        sanitizeDiscordAvatar(user.Avatar),
+		GlobalName:    sanitizeOptionalString(user.GlobalName, 80),
+	}
+}
+
+func sanitizeDiscordAvatar(value *string) *string {
+	if value == nil {
+		return nil
+	}
+	avatar := strings.TrimSpace(*value)
+	if !safeDiscordAvatar.MatchString(avatar) {
+		return nil
+	}
+	return &avatar
+}
+
+func sanitizeOptionalString(value *string, maxRunes int) *string {
+	if value == nil {
+		return nil
+	}
+	trimmed := trimRunes(strings.TrimSpace(*value), maxRunes)
+	if trimmed == "" {
+		return nil
+	}
+	return &trimmed
+}
+
+func trimRunes(value string, maxRunes int) string {
+	runes := []rune(value)
+	if len(runes) <= maxRunes {
+		return value
+	}
+	return string(runes[:maxRunes])
 }
 
 func (r *Room) syncYouTube(sender *Player, incoming *YouTubeState) {

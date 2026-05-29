@@ -39,6 +39,7 @@ type UseVoiceChatOptions = {
 	playerId: string;
 	roomPlayers: Player[];
 	socketCommunicating: boolean;
+	disabled?: boolean;
 	send: (_payload: any) => void;
 	addSystemMessage: (_message: string) => void;
 };
@@ -82,6 +83,7 @@ export function useVoiceChat({
 	playerId,
 	roomPlayers,
 	socketCommunicating,
+	disabled = false,
 	send,
 	addSystemMessage
 }: UseVoiceChatOptions) {
@@ -259,7 +261,7 @@ export function useVoiceChat({
 
 	const sendVoiceSignal = useCallback(
 		(targetId: string | undefined, signal: VoiceSignalPayload) => {
-			if (!desiredJoinedRef.current) {
+			if (disabled || !desiredJoinedRef.current) {
 				return;
 			}
 			send({
@@ -271,7 +273,7 @@ export function useVoiceChat({
 				}
 			});
 		},
-		[send]
+		[disabled, send]
 	);
 
 	const broadcastVoiceStatus = useCallback(() => {
@@ -304,6 +306,27 @@ export function useVoiceChat({
 		},
 		[stopSpeakingMonitor]
 	);
+
+	useEffect(() => {
+		if (!disabled) {
+			return;
+		}
+		desiredJoinedRef.current = false;
+		mutedRef.current = true;
+		const cleanupTimer = window.setTimeout(() => {
+			setDesiredJoined(false);
+			setMuted(true);
+			setDeafened(false);
+			setStatus('idle');
+			for (const remoteId of Array.from(peersRef.current.keys())) {
+				closePeer(remoteId);
+			}
+			stopSpeakingMonitor(playerIdRef.current);
+			localStreamRef.current?.getTracks().forEach((track) => track.stop());
+			localStreamRef.current = null;
+		}, 0);
+		return () => window.clearTimeout(cleanupTimer);
+	}, [closePeer, disabled, stopSpeakingMonitor]);
 
 	const schedulePeerRetry = useCallback(
 		(remoteId: string) => {
@@ -421,7 +444,7 @@ export function useVoiceChat({
 
 	const ensurePeer = useCallback(
 		async (remoteId: string, forceOffer = false) => {
-			if (!desiredJoinedRef.current || !playerId || remoteId === playerId) {
+			if (disabled || !desiredJoinedRef.current || !playerId || remoteId === playerId) {
 				return;
 			}
 			let record = peersRef.current.get(remoteId);
@@ -432,7 +455,7 @@ export function useVoiceChat({
 				await createOffer(record);
 			}
 		},
-		[createOffer, createPeerConnection, playerId]
+		[createOffer, createPeerConnection, disabled, playerId]
 	);
 
 	useEffect(() => {
@@ -480,6 +503,9 @@ export function useVoiceChat({
 	);
 
 	const join = useCallback(async () => {
+		if (disabled) {
+			return;
+		}
 		if (desiredJoinedRef.current) {
 			return;
 		}
@@ -495,9 +521,12 @@ export function useVoiceChat({
 			sessionId: sessionIdRef.current,
 			muted: mutedRef.current
 		});
-	}, [sendVoiceSignal]);
+	}, [disabled, sendVoiceSignal]);
 
 	const leave = useCallback(() => {
+		if (disabled) {
+			return;
+		}
 		sendVoiceSignal(undefined, {
 			kind: 'leave',
 			sessionId: sessionIdRef.current
@@ -511,9 +540,12 @@ export function useVoiceChat({
 		stopSpeakingMonitor(playerIdRef.current);
 		localStreamRef.current?.getTracks().forEach((track) => track.stop());
 		localStreamRef.current = null;
-	}, [closePeer, sendVoiceSignal, stopSpeakingMonitor]);
+	}, [closePeer, disabled, sendVoiceSignal, stopSpeakingMonitor]);
 
 	const toggleMuted = useCallback(async () => {
+		if (disabled) {
+			return;
+		}
 		if (!desiredJoinedRef.current) {
 			await join();
 			return;
@@ -546,16 +578,21 @@ export function useVoiceChat({
 		broadcastVoiceStatus,
 		ensureMicrophone,
 		join,
-		markSpeaking
+		markSpeaking,
+		disabled
 	]);
 
 	const toggleDeafened = useCallback(() => {
+		if (disabled) {
+			return;
+		}
 		setDeafened((value) => !value);
-	}, []);
+	}, [disabled]);
 
 	const handleVoiceBroadcast = useCallback(
 		async (fromId: string | undefined, broadcast: BroadcastPayload | undefined) => {
 			if (
+				disabled ||
 				!fromId ||
 				fromId === playerId ||
 				broadcast?.type !== BroadcastTypes.VoiceSignal ||
@@ -629,12 +666,13 @@ export function useVoiceChat({
 			ensurePeer,
 			playerId,
 			schedulePeerRetry,
-			sendVoiceSignal
+			sendVoiceSignal,
+			disabled
 		]
 	);
 
 	useEffect(() => {
-		if (!desiredJoined || !socketCommunicating || !playerId) {
+		if (disabled || !desiredJoined || !socketCommunicating || !playerId) {
 			return;
 		}
 		const remoteIds = new Set(
@@ -648,7 +686,7 @@ export function useVoiceChat({
 		for (const remoteId of remoteIds) {
 			void ensurePeer(remoteId);
 		}
-	}, [closePeer, desiredJoined, ensurePeer, playerId, roomPlayers, socketCommunicating]);
+	}, [closePeer, desiredJoined, disabled, ensurePeer, playerId, roomPlayers, socketCommunicating]);
 
 	useEffect(() => {
 		const peers = peersRef.current;

@@ -92,6 +92,54 @@ func TestSanitizeSoundEffectBroadcastRejectsInvalidID(t *testing.T) {
 	}
 }
 
+func TestSanitizeDiscordUser(t *testing.T) {
+	avatar := "a_123abc"
+	globalName := strings.Repeat("Sparkle", 20)
+	got := sanitizeDiscordUser(&DiscordUser{
+		Username:      "  dan  ",
+		Discriminator: "0",
+		ID:            "123456789012345678",
+		PublicFlags:   1,
+		Avatar:        &avatar,
+		GlobalName:    &globalName,
+	})
+	if got == nil {
+		t.Fatal("sanitizeDiscordUser() rejected valid user")
+	}
+	if got.Username != "dan" || got.ID != "123456789012345678" || got.Avatar == nil || *got.Avatar != avatar {
+		t.Fatalf("sanitizeDiscordUser() = %#v", got)
+	}
+	if got.GlobalName == nil || len([]rune(*got.GlobalName)) != 80 {
+		t.Fatalf("sanitizeDiscordUser() global name = %#v, want 80 runes", got.GlobalName)
+	}
+}
+
+func TestSanitizeDiscordUserRejectsUnsafeFields(t *testing.T) {
+	avatar := "../bad"
+	got := sanitizeDiscordUser(&DiscordUser{
+		Username:      "dan",
+		Discriminator: "0",
+		ID:            "not-a-snowflake",
+		Avatar:        &avatar,
+	})
+	if got != nil {
+		t.Fatalf("sanitizeDiscordUser() = %#v, want nil", got)
+	}
+
+	got = sanitizeDiscordUser(&DiscordUser{
+		Username:      "dan",
+		Discriminator: "0",
+		ID:            "123456789012345678",
+		Avatar:        &avatar,
+	})
+	if got == nil {
+		t.Fatal("sanitizeDiscordUser() rejected valid user with unsafe avatar")
+	}
+	if got.Avatar != nil {
+		t.Fatalf("sanitizeDiscordUser() avatar = %#v, want nil", *got.Avatar)
+	}
+}
+
 func TestSanitizeYouTubeState(t *testing.T) {
 	got, ok := sanitizeYouTubeState(&YouTubeState{
 		Tabs: []YouTubeTabState{{

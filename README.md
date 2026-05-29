@@ -21,20 +21,59 @@ A fully synced web-based watch party that supports (both on desktop & mobile):
 
 # Discord Activity Support
 
-The same site can serve both Discord and Website users.
+The same site can serve both Discord and website users. In Discord, the app uses
+the Embedded App SDK auth flow, then treats the authenticated Discord user as the
+Sparkle user:
 
-Discord recently introduced public developer preview activities.
-This site can be added into your custom Discord activity in developer portal.
-Doing so will use Discord OAuth2 for username and profile picture syncing.
-Channel id will be used as the room id. All functionalities mentioned above are supported in Discord activity.
+- The SDK is initialized only when the app is opened in a Discord Activity frame.
+- Users authorize `identify` and `rpc.activities.write`.
+- `/api/token` exchanges the authorization code for an access token.
+- `authenticate()` returns the Discord user, whose id is used as both
+  `profileId` and `playerId`.
+- Discord display names and avatars are shown in chat, player lists, and profile
+  UI; profile name/avatar editing is disabled for Discord users.
+- Rich Presence is updated with `setActivity()` while users watch media.
+
+Discord Activities route browser traffic through the Activity proxy. WebSockets
+are supported through the proxy, but WebRTC is not, so Sparkle's browser voice
+chat is disabled inside Discord Activities.
 
 ### Activity Setup
 
 - Create a new application in [Discord Developer Portal](https://discord.com/developers/applications)
-- Enable activities
-- Add the site url as the redirect url and root url
+- Add `https://127.0.0.1` as an OAuth2 redirect URI. The Embedded App SDK handles
+  returning users to the Activity after `authorize()`.
+- Enable Activities.
+- Add an Activity URL Mapping for the frontend root, for example `/` to your
+  deployed frontend or local tunnel target.
+- Add Activity URL Mappings for the backend and static assets. The mapping
+  prefixes must match the pathnames configured in `SERVER_BE` and
+  `SERVER_STATIC`; for example `/be` and `/static`.
 - Add Discord users to Application Testers (they do not need to accept invites)
-- Users will be prompted to authorize with `identify` and `rpc.activities.write` scope on joining the activity
+- Set `PUBLIC_DISCORD_CLIENT_ID` and `SERVER_DISCORD_CLIENT_SECRET` for the
+  frontend server.
+
+Example production-style Activity mapping. Discord portal targets omit the
+protocol, while Sparkle environment variables stay absolute URLs.
+
+| Prefix    | Target                       |
+| --------- | ---------------------------- |
+| `/`       | `sparkle.example.com`        |
+| `/be`     | `sparkle.example.com/be`     |
+| `/static` | `sparkle.example.com/static` |
+
+With that mapping, configure:
+
+```env
+SERVER_BE=https://sparkle.example.com/be
+SERVER_STATIC=https://sparkle.example.com/static
+PUBLIC_DISCORD_CLIENT_ID=123456789012345678
+SERVER_DISCORD_CLIENT_SECRET=...
+```
+
+When Discord serves the Activity at `https://123456789012345678.discordsays.com`,
+Sparkle rewrites browser-facing backend/static URLs to the proxy host while
+server-side metadata fetches keep using the configured origins.
 
 ### Desktop Activity
 

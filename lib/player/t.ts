@@ -10,7 +10,7 @@ export interface DiscordUser {
 }
 
 export interface Discord {
-	access_token: string;
+	access_token?: string;
 	user: DiscordUser;
 	scopes: string[];
 	expires: string;
@@ -22,6 +22,7 @@ export interface Discord {
 		rpc_origins?: string[] | undefined;
 	};
 	channelId: string;
+	guildId?: string | null;
 }
 
 export function getName(discord: DiscordUser | null | undefined): string | undefined {
@@ -39,9 +40,13 @@ export function getAvatarUrl(discord: DiscordUser) {
 		return `https://cdn.discordapp.com/avatars/${discord.id}/${discord.avatar}.webp`;
 	}
 	if (discord.username) {
-		return `https://cdn.discordapp.com/embed/avatars/${(parseInt(discord.id) >> 22) % 6}.png`;
+		try {
+			return `https://cdn.discordapp.com/embed/avatars/${Number((BigInt(discord.id) >> 22n) % 6n)}.png`;
+		} catch {
+			return `https://cdn.discordapp.com/embed/avatars/${Number.parseInt(discord.id, 10) % 6}.png`;
+		}
 	}
-	return `https://cdn.discordapp.com/embed/avatars/${parseInt(discord.discriminator) % 5}.png`;
+	return `https://cdn.discordapp.com/embed/avatars/${Number.parseInt(discord.discriminator, 10) % 5}.png`;
 }
 
 export function isExpired(datetimeString: string): boolean {

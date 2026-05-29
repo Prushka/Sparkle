@@ -10,6 +10,25 @@ function getRequiredEnv(key: string) {
 	return value;
 }
 
+function isDiscordProxyHost(host: string | undefined) {
+	return Boolean(host && /^[0-9]+\.discordsays\.com(?::\d+)?$/.test(host));
+}
+
+function getPathnameBase(value: string) {
+	try {
+		return trimTrailingSlash(new URL(value).pathname || '/');
+	} catch {
+		return trimTrailingSlash(value.startsWith('/') ? value : `/${value}`);
+	}
+}
+
+function getBrowserBaseUrl(value: string, host?: string) {
+	if (!isDiscordProxyHost(host)) {
+		return value;
+	}
+	return `https://${host}${getPathnameBase(value)}`;
+}
+
 export function getBackendBaseUrl() {
 	return getRequiredEnv('SERVER_BE');
 }
@@ -19,5 +38,9 @@ export function getStaticBaseUrl() {
 }
 
 export function getBrowserBackendBaseUrl(_host?: string) {
-	return getBackendBaseUrl();
+	return getBrowserBaseUrl(getBackendBaseUrl(), _host);
+}
+
+export function getBrowserStaticBaseUrl(_host?: string) {
+	return getBrowserBaseUrl(getStaticBaseUrl(), _host);
 }

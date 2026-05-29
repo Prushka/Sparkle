@@ -757,7 +757,11 @@ export function Player({ data }: { data: ServerData }) {
 		[roomBase]
 	);
 	const discord = discordAuth as Discord | null;
-	const displayName = discord?.user ? getName(discord.user) || '' : name;
+	const discordUser = discord?.user;
+	const discordUserId = discordUser?.id || '';
+	const isDiscordActivityFrame = searchParams.has('frame_id') || searchParams.has('instance_id');
+	const displayName = discordUser ? getName(discordUser) || '' : name;
+	const voiceSupported = !isDiscordActivityFrame && !discordUser;
 	const socketCommunicating = socketConnected && tickedSecsAgo >= 0 && tickedSecsAgo < 5;
 	const videoSrc = useMemo<VideoSource | null>(() => {
 		const encodedCodecs = job.EncodedCodecs || [];
@@ -1071,8 +1075,8 @@ export function Player({ data }: { data: ServerData }) {
 			return;
 		}
 		const timer = window.setTimeout(() => {
-			if (discord?.user) {
-				const nextName = getName(discord.user) || '';
+			if (discordUser) {
+				const nextName = getName(discordUser) || '';
 				lastSavedNameRef.current = nextName;
 				setName(nextName);
 				return;
@@ -1098,10 +1102,10 @@ export function Player({ data }: { data: ServerData }) {
 			setName(nextGeneratedName);
 		}, 0);
 		return () => window.clearTimeout(timer);
-	}, [discord?.user, name]);
+	}, [discordUser, name]);
 
 	useEffect(() => {
-		if (discord?.user || typeof window === 'undefined' || !name) {
+		if (discordUser || typeof window === 'undefined' || !name) {
 			return;
 		}
 		if (window.localStorage.getItem(GENERATED_NAME_STORAGE_KEY) !== name) {
@@ -1113,13 +1117,19 @@ export function Player({ data }: { data: ServerData }) {
 		}
 		window.sessionStorage.setItem(messageKey, '1');
 		addSystemMessage(`Using placeholder name: ${name}`);
-	}, [addSystemMessage, discord?.user, name]);
+	}, [addSystemMessage, discordUser, name]);
 
 	useEffect(() => {
 		if (typeof window === 'undefined') {
 			return;
 		}
 		const timer = window.setTimeout(() => {
+			if (discordUserId) {
+				window.sessionStorage.setItem('playerId', discordUserId);
+				setProfileId(discordUserId);
+				setPlayerId(discordUserId);
+				return;
+			}
 			const storedId = window.localStorage.getItem('id');
 			if (storedId) {
 				setProfileId(storedId);
@@ -1134,7 +1144,7 @@ export function Player({ data }: { data: ServerData }) {
 			setPlayerId(sessionPlayerId);
 		}, 0);
 		return () => window.clearTimeout(timer);
-	}, []);
+	}, [discordUserId]);
 
 	useEffect(() => {
 		if (typeof window === 'undefined') {
@@ -1215,10 +1225,10 @@ export function Player({ data }: { data: ServerData }) {
 			name: displayName,
 			profileId,
 			type: SyncTypes.ProfileSync,
-			discordUser: discord?.user
+			discordUser
 		});
 		return true;
-	}, [discord?.user, displayName, profileId, send]);
+	}, [discordUser, displayName, profileId, send]);
 
 	const sendSettings = useCallback(() => {
 		const selectedTrack = getSelectedSubtitleTrack(
@@ -1455,6 +1465,7 @@ export function Player({ data }: { data: ServerData }) {
 		playerId,
 		roomPlayers,
 		socketCommunicating,
+		disabled: !voiceSupported,
 		send,
 		addSystemMessage
 	});
@@ -1475,14 +1486,14 @@ export function Player({ data }: { data: ServerData }) {
 			audio: effectiveAudio,
 			codec: videoSrc?.sCodec || selectedCodec,
 			subtitle: '',
-			discordUser: discord?.user
+			discordUser
 		};
 		return [
 			{ ...selfPlayer, name: selfPlayer.name || displayName || 'You' },
 			...roomPlayers.filter((player) => player.id !== playerId)
 		];
 	}, [
-		discord?.user,
+		discordUser,
 		displayName,
 		effectiveAudio,
 		playerId,
@@ -1942,22 +1953,22 @@ export function Player({ data }: { data: ServerData }) {
 		}
 		interactedRef.current = true;
 		setInteracted(true);
-		void joinVoice();
+		if (voiceSupported) {
+			void joinVoice();
+		}
 		connect(true);
-	}, [connect, joinVoice, setInteracted]);
+	}, [connect, joinVoice, setInteracted, voiceSupported]);
 
 	useEffect(() => {
-		if (
-			!playerEl ||
-			!playerId ||
-			!interactedRef.current ||
-			!playerCanPlayRef.current ||
-			socketRef.current
-		) {
+		if (!playerEl || !playerId || !interactedRef.current || !playerCanPlayRef.current) {
 			return;
 		}
 		connect();
 	}, [connect, interacted, playerEl, playerId]);
+
+	useEffect(() => {
+		profileSyncedRef.current = false;
+	}, [discordUser, displayName, profileId]);
 
 	useEffect(() => {
 		if (!socketConnected || profileSyncedRef.current) {
@@ -2328,11 +2339,12 @@ export function Player({ data }: { data: ServerData }) {
 	}
 
 	function handleNameBlur() {
-		if (discord?.user) {
+		if (discordUser) {
 			send({
 				type: SyncTypes.ProfileSync,
 				name: displayName,
-				profileId
+				profileId,
+				discordUser
 			});
 			return;
 		}
@@ -2566,7 +2578,7 @@ export function Player({ data }: { data: ServerData }) {
 			>
 				<div className="mx-auto flex w-full max-w-[90rem] flex-wrap items-center justify-between gap-2 max-[760px]:justify-center">
 					<div className="flex min-w-0 justify-start">
-						<VoiceControls voice={voice} />
+						{voiceSupported ? <VoiceControls voice={voice} /> : null}
 					</div>
 					<div className="flex min-w-0 items-center justify-end gap-2">
 						<Tooltip.Provider delayDuration={0}>
@@ -2647,9 +2659,11 @@ export function Player({ data }: { data: ServerData }) {
 						const playerProfileId = player.profileId || player.id;
 						const isSpeaking = speakingPlayerIds.has(player.id);
 						const isUsingSoundEffect = soundEffectPlayerIds.has(player.id);
-						const playerMuted = isCurrentUser
-							? !voice.desiredJoined || voice.status === 'listen-only' || voice.muted
-							: (voice.peerMuted[player.id] ?? true);
+						const playerMuted = voiceSupported
+							? isCurrentUser
+								? !voice.desiredJoined || voice.status === 'listen-only' || voice.muted
+								: (voice.peerMuted[player.id] ?? true)
+							: true;
 						const playerBadge = (
 							<Button
 								variant="outline"
@@ -2669,18 +2683,20 @@ export function Player({ data }: { data: ServerData }) {
 										name={player.name}
 										staticBaseUrl={data.staticBaseUrl}
 									/>
-									<span
-										aria-label={playerMuted ? `${player.name} muted` : `${player.name} unmuted`}
-										className={`absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-background text-white shadow-[0_0.35rem_1rem_rgba(0,0,0,0.24)] transition-colors ${
-											playerMuted ? 'bg-rose-500' : 'bg-emerald-500'
-										}`}
-									>
-										{playerMuted ? (
-											<IconMicrophoneOff size={12} stroke={2.15} />
-										) : (
-											<IconMicrophone size={12} stroke={2.15} />
-										)}
-									</span>
+									{voiceSupported ? (
+										<span
+											aria-label={playerMuted ? `${player.name} muted` : `${player.name} unmuted`}
+											className={`absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-background text-white shadow-[0_0.35rem_1rem_rgba(0,0,0,0.24)] transition-colors ${
+												playerMuted ? 'bg-rose-500' : 'bg-emerald-500'
+											}`}
+										>
+											{playerMuted ? (
+												<IconMicrophoneOff size={12} stroke={2.15} />
+											) : (
+												<IconMicrophone size={12} stroke={2.15} />
+											)}
+										</span>
+									) : null}
 								</span>
 								<span className="player-status-text flex flex-col items-center justify-center gap-0.5 font-semibold">
 									<span className="flex w-24 items-center justify-center gap-1 overflow-hidden sm:w-28">
@@ -2737,12 +2753,13 @@ export function Player({ data }: { data: ServerData }) {
 											<Pfp
 												id={profileId || playerProfileId}
 												className="h-14 w-14"
-												discordUser={discord?.user}
+												discordUser={discordUser}
 												name={displayName}
 												staticBaseUrl={data.staticBaseUrl}
 											/>
 											<input
 												accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
+												disabled={Boolean(discordUser)}
 												onChange={handleAvatarChange}
 												type="file"
 											/>
@@ -2752,7 +2769,7 @@ export function Player({ data }: { data: ServerData }) {
 												Username
 											</label>
 											<Input
-												disabled={discord?.user !== undefined}
+												disabled={Boolean(discordUser)}
 												onBlur={handleNameBlur}
 												value={displayName}
 												onChange={(event) => setName(event.target.value)}

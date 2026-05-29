@@ -2,7 +2,11 @@ import * as cheerio from 'cheerio';
 import { cache } from 'react';
 import { redirect } from 'next/navigation';
 import { getJobs, roomMapping } from '@/lib/server/jobs';
-import { getBackendBaseUrl, getBrowserBackendBaseUrl, getStaticBaseUrl } from '@/lib/server/env';
+import {
+	getBackendBaseUrl,
+	getBrowserBackendBaseUrl,
+	getBrowserStaticBaseUrl
+} from '@/lib/server/env';
 import type { Job, ServerData } from '@/lib/player/t';
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -21,7 +25,7 @@ export const loadHomePageData = cache(
 		const jobs = await getJobs(fetchFn);
 		return {
 			jobs,
-			staticBaseUrl: getStaticBaseUrl(),
+			staticBaseUrl: getBrowserStaticBaseUrl(host),
 			backendBaseUrl: getBrowserBackendBaseUrl(host)
 		};
 	}
@@ -36,8 +40,8 @@ export const loadMediaPageData = cache(
 	): Promise<ServerData> => {
 		let job: Job | undefined;
 		let codec = 'h264';
-		const staticBaseUrl = getStaticBaseUrl();
-		let base = `${staticBaseUrl}/${id}`;
+		const browserStaticBaseUrl = getBrowserStaticBaseUrl(host);
+		let base = `${browserStaticBaseUrl}/${id}`;
 		let plot = '';
 		let rating = -1;
 		let jobs: Job[] = [];
@@ -65,7 +69,7 @@ export const loadMediaPageData = cache(
 		}
 
 		id = job.Id;
-		base = `${staticBaseUrl}/${id}`;
+		base = `${browserStaticBaseUrl}/${id}`;
 
 		try {
 			if (!job?.EncodedCodecs?.includes('h264')) {
@@ -106,7 +110,7 @@ export const loadMediaPageData = cache(
 			title: titleStr,
 			displayTitle,
 			plot,
-			staticBaseUrl,
+			staticBaseUrl: browserStaticBaseUrl,
 			oembedJson: room
 				? `https://${host}/json/${job?.Id}?room=${room}`
 				: `https://${host}/json/${job?.Id}`,
