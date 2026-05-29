@@ -185,6 +185,18 @@ function normalizeYouTubeURL(videoId: string) {
 	return `https://www.youtube.com/watch?v=${videoId}`;
 }
 
+function isDiscordActivityEnvironment() {
+	if (typeof window === 'undefined') {
+		return false;
+	}
+	const params = new URLSearchParams(window.location.search);
+	return (
+		params.has('frame_id') ||
+		params.has('instance_id') ||
+		/^[0-9]+\.discordsays\.com(?::\d+)?$/.test(window.location.host)
+	);
+}
+
 function readStoredLayout(storageKey: string): YouTubeTabLayout | null {
 	if (typeof window === 'undefined') {
 		return null;
@@ -296,6 +308,7 @@ export function YouTubeFloatingTab({
 	const [zIndex, setZIndex] = useState(() => ++youtubeTabZIndexCounter);
 	const [urlInput, setUrlInput] = useState(state.url);
 	const [urlError, setUrlError] = useState('');
+	const [playerError, setPlayerError] = useState('');
 
 	useEffect(() => {
 		stateRef.current = state;
@@ -452,6 +465,9 @@ export function YouTubeFloatingTab({
 		if (!state.open || !state.videoId) {
 			return;
 		}
+		if (isDiscordActivityEnvironment()) {
+			return;
+		}
 		let cancelled = false;
 		loadYouTubeApi()
 			.then((YT) => {
@@ -478,6 +494,9 @@ export function YouTubeFloatingTab({
 			})
 			.catch((error) => {
 				console.error(error);
+				if (!cancelled) {
+					setPlayerError('Unable to load the YouTube player.');
+				}
 			});
 		return () => {
 			cancelled = true;
@@ -488,7 +507,7 @@ export function YouTubeFloatingTab({
 		if (!state.open || !state.videoId) {
 			return;
 		}
-		applyStateToPlayer(state);
+		applyStateToPlayer(stateRef.current);
 	}, [
 		applyStateToPlayer,
 		state.open,
@@ -551,6 +570,7 @@ export function YouTubeFloatingTab({
 			return;
 		}
 		setUrlError('');
+		setPlayerError('');
 		onStateChange({
 			open: true,
 			url: normalizeYouTubeURL(parsed.videoId),
@@ -641,6 +661,11 @@ export function YouTubeFloatingTab({
 		return null;
 	}
 
+	const playerUnavailableMessage =
+		state.videoId && isDiscordActivityEnvironment()
+			? 'YouTube embeds are blocked inside Discord Activities.'
+			: playerError;
+
 	return (
 		<div
 			ref={panelRef}
@@ -705,7 +730,22 @@ export function YouTubeFloatingTab({
 				) : null}
 				<div className="relative min-h-0 flex-1 bg-black">
 					{state.videoId ? (
-						<div id={playerElementId} className="h-full w-full" />
+						playerUnavailableMessage ? (
+							<div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-sm font-semibold text-white/70">
+								<p>{playerUnavailableMessage}</p>
+								<Button asChild size="sm" variant="secondary">
+									<a
+										href={state.url || normalizeYouTubeURL(state.videoId)}
+										target="_blank"
+										rel="noreferrer"
+									>
+										Open YouTube
+									</a>
+								</Button>
+							</div>
+						) : (
+							<div id={playerElementId} className="h-full w-full" />
+						)
 					) : (
 						<div className="flex h-full items-center justify-center px-6 text-center text-sm font-semibold text-white/70">
 							Enter a YouTube URL
