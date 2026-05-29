@@ -502,18 +502,6 @@ video {
 	vertical-align: -0.24em;
 }
 
-.chat-sticker {
-	width: 2.55em;
-	height: 2.55em;
-	min-width: 2.55em;
-}
-
-.chat-history .chat-sticker {
-	width: 2.25em;
-	height: 2.25em;
-	min-width: 2.25em;
-}
-
 .chat-line:hover {
 	background-color: rgba(0, 0, 0, 0.52) !important;
 }

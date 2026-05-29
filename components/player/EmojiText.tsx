@@ -29,7 +29,7 @@ export function EmojiText({ text, emojiRefs = [] }: { text: string; emojiRefs?: 
 				title={emoji.label}
 				loading="lazy"
 				decoding="async"
-				className={`chat-emoji ${emoji.kind === 'sticker' ? 'chat-sticker' : ''}`}
+				className="chat-emoji"
 			/>
 		);
 		lastIndex = index + token.length;

@@ -1,4 +1,4 @@
-export type ChatEmojiCategory = 'pepe' | 'reactions' | 'anime' | 'stickers';
+export type ChatEmojiCategory = 'pepe' | 'peepo' | 'anime' | 'animals' | 'gaming' | 'memes';
 export type ChatEmojiSource = '7TV' | 'BetterTTV' | 'FrankerFaceZ' | 'Tenor';
 export type ChatEmojiKind = 'emoji' | 'sticker';
 
@@ -20,9 +20,11 @@ export type ChatEmoji = ChatEmojiRef & {
 
 export const emojiCategories: { id: ChatEmojiCategory; label: string }[] = [
 	{ id: 'pepe', label: 'Pepe' },
-	{ id: 'reactions', label: 'Reactions' },
+	{ id: 'peepo', label: 'Peepo' },
 	{ id: 'anime', label: 'Anime' },
-	{ id: 'stickers', label: 'Stickers' }
+	{ id: 'animals', label: 'Animals' },
+	{ id: 'gaming', label: 'Gaming' },
+	{ id: 'memes', label: 'Memes' }
 ];
 
 export const chatEmojis: ChatEmoji[] = [
@@ -109,7 +111,7 @@ export const chatEmojis: ChatEmoji[] = [
 	{
 		id: 'peepo_happy',
 		label: 'Peepo Happy',
-		category: 'reactions',
+		category: 'peepo',
 		src: 'https://cdn.betterttv.net/emote/5a16ee718c22a247ead62d4a/2x',
 		source: 'BetterTTV',
 		animated: false,
@@ -119,7 +121,7 @@ export const chatEmojis: ChatEmoji[] = [
 	{
 		id: 'peepo_sad',
 		label: 'Peepo Sad',
-		category: 'reactions',
+		category: 'peepo',
 		src: 'https://cdn.betterttv.net/emote/5a16ddca8c22a247ead62ceb/2x',
 		source: 'BetterTTV',
 		animated: false,
@@ -129,7 +131,7 @@ export const chatEmojis: ChatEmoji[] = [
 	{
 		id: 'widepeepo_happy',
 		label: 'Wide Peepo Happy',
-		category: 'reactions',
+		category: 'peepo',
 		src: 'https://cdn.betterttv.net/emote/5e1a76dd8af14b5f1b438c04/2x',
 		source: 'BetterTTV',
 		animated: false,
@@ -137,9 +139,99 @@ export const chatEmojis: ChatEmoji[] = [
 		tags: ['peepo', 'happy', 'wide']
 	},
 	{
+		id: 'peepo_clap',
+		label: 'Peepo Clap',
+		category: 'peepo',
+		src: 'https://cdn.betterttv.net/emote/5d38aaa592fc550c2d5996b8/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['peepo', 'clap', 'applause']
+	},
+	{
+		id: 'peepo_leave',
+		label: 'Peepo Leave',
+		category: 'peepo',
+		src: 'https://cdn.betterttv.net/emote/5d324913ff6ed36801311fd2/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['peepo', 'leave', 'run']
+	},
+	{
+		id: 'peepo_shy',
+		label: 'Peepo Shy',
+		category: 'peepo',
+		src: 'https://cdn.betterttv.net/emote/5eaa12a074046462f768344b/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['peepo', 'shy', 'cute']
+	},
+	{
+		id: 'peepo_arrive',
+		label: 'Peepo Arrive',
+		category: 'peepo',
+		src: 'https://cdn.betterttv.net/emote/5d922afbc0652668c9e52ead/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['peepo', 'arrive', 'hello']
+	},
+	{
+		id: 'peepo_hey',
+		label: 'Peepo Hey',
+		category: 'peepo',
+		src: 'https://cdn.betterttv.net/emote/5c0e1a3c6c146e7be4ff5c0c/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['peepo', 'hey', 'wave']
+	},
+	{
+		id: 'peepo_run',
+		label: 'Peepo Run',
+		category: 'peepo',
+		src: 'https://cdn.betterttv.net/emote/5bc7ff14664a3b079648dd66/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['peepo', 'run', 'fast']
+	},
+	{
+		id: 'peepo_love',
+		label: 'Peepo Love',
+		category: 'peepo',
+		src: 'https://cdn.betterttv.net/emote/5a5e0e8d80f53146a54a516b/2x',
+		source: 'BetterTTV',
+		animated: false,
+		kind: 'emoji',
+		tags: ['peepo', 'love', 'heart']
+	},
+	{
+		id: 'pet_the_peepo',
+		label: 'Pet The Peepo',
+		category: 'peepo',
+		src: 'https://cdn.betterttv.net/emote/5ec059009af1ea16863b2dec/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['peepo', 'pet', 'cute']
+	},
+	{
+		id: 'peepo_comfy',
+		label: 'Peepo Comfy',
+		category: 'peepo',
+		src: 'https://cdn.betterttv.net/emote/5e0502e69e2cd00d968d5677/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['peepo', 'comfy', 'cozy']
+	},
+	{
 		id: 'kekw',
 		label: 'KEKW',
-		category: 'reactions',
+		category: 'memes',
 		src: 'https://cdn.betterttv.net/emote/5e9c6c187e090362f8b0b9e8/2x',
 		source: 'BetterTTV',
 		animated: false,
@@ -149,7 +241,7 @@ export const chatEmojis: ChatEmoji[] = [
 	{
 		id: 'omegalul',
 		label: 'OMEGALUL',
-		category: 'reactions',
+		category: 'memes',
 		src: 'https://cdn.betterttv.net/emote/583089f4737a8e61abb0186b/2x',
 		source: 'BetterTTV',
 		animated: false,
@@ -159,7 +251,7 @@ export const chatEmojis: ChatEmoji[] = [
 	{
 		id: 'sadge',
 		label: 'Sadge',
-		category: 'reactions',
+		category: 'pepe',
 		src: 'https://cdn.betterttv.net/emote/5e0fa9d40550d42106b8a489/2x',
 		source: 'BetterTTV',
 		animated: false,
@@ -169,17 +261,17 @@ export const chatEmojis: ChatEmoji[] = [
 	{
 		id: 'prayge',
 		label: 'Prayge',
-		category: 'reactions',
+		category: 'pepe',
 		src: 'https://cdn.betterttv.net/emote/5f3ef6123212445d6fb49f1a/2x',
 		source: 'BetterTTV',
 		animated: false,
 		kind: 'emoji',
-		tags: ['pray', 'hope']
+		tags: ['pray', 'hope', 'pepe']
 	},
 	{
 		id: 'catjam',
 		label: 'Cat Jam',
-		category: 'reactions',
+		category: 'animals',
 		src: 'https://cdn.betterttv.net/emote/5f1b0186cf6d2144653d2970/2x',
 		source: 'BetterTTV',
 		animated: true,
@@ -269,7 +361,7 @@ export const chatEmojis: ChatEmoji[] = [
 	{
 		id: 'banana_cat',
 		label: 'Banana Cat',
-		category: 'stickers',
+		category: 'animals',
 		src: 'https://cdn.betterttv.net/emote/603fb515306b602acc596446/2x',
 		source: 'BetterTTV',
 		animated: true,
@@ -279,7 +371,7 @@ export const chatEmojis: ChatEmoji[] = [
 	{
 		id: 'pepe_meltdown',
 		label: 'Pepe Meltdown',
-		category: 'stickers',
+		category: 'pepe',
 		src: 'https://cdn.betterttv.net/emote/5ba84271c9f0f66a9efc1c86/2x',
 		source: 'BetterTTV',
 		animated: true,
@@ -289,7 +381,7 @@ export const chatEmojis: ChatEmoji[] = [
 	{
 		id: 'pepe_dance',
 		label: 'Pepe Dance',
-		category: 'stickers',
+		category: 'pepe',
 		src: 'https://cdn.betterttv.net/emote/5b1740221c5a6065a7bad4b5/2x',
 		source: 'BetterTTV',
 		animated: true,
@@ -299,7 +391,7 @@ export const chatEmojis: ChatEmoji[] = [
 	{
 		id: 'sadge_cry',
 		label: 'Sadge Cry',
-		category: 'stickers',
+		category: 'pepe',
 		src: 'https://cdn.betterttv.net/emote/5efd9d2572ac200523c5e455/2x',
 		source: 'BetterTTV',
 		animated: true,
@@ -309,12 +401,272 @@ export const chatEmojis: ChatEmoji[] = [
 	{
 		id: 'prayge_dance',
 		label: 'Prayge Dance',
-		category: 'stickers',
+		category: 'pepe',
 		src: 'https://cdn.betterttv.net/emote/61145aca76ea4e2b9f76b228/2x',
 		source: 'BetterTTV',
 		animated: true,
 		kind: 'sticker',
 		tags: ['prayge', 'dance', 'pray']
+	},
+	{
+		id: 'pepe_clap',
+		label: 'Pepe Clap',
+		category: 'pepe',
+		src: 'https://cdn.betterttv.net/emote/59688b35172b8b255ec3f6ac/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['pepe', 'clap', 'applause']
+	},
+	{
+		id: 'pepe_why',
+		label: 'Pepe Why',
+		category: 'pepe',
+		src: 'https://cdn.betterttv.net/emote/5a9def77b7319a74f5bbdeda/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['pepe', 'why', 'question']
+	},
+	{
+		id: 'anime_lick',
+		label: 'Anime Lick',
+		category: 'anime',
+		src: 'https://cdn.betterttv.net/emote/5d6a9a5a4932b21d9c335e31/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['anime', 'lick']
+	},
+	{
+		id: 'anime_cry',
+		label: 'Anime Cry',
+		category: 'anime',
+		src: 'https://cdn.betterttv.net/emote/60b084dff8b3f62601c34767/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['anime', 'cry', 'sad']
+	},
+	{
+		id: 'anime_wow',
+		label: 'Anime Wow',
+		category: 'anime',
+		src: 'https://cdn.betterttv.net/emote/60eff8888ed8b373e4222b5d/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['anime', 'wow', 'surprise']
+	},
+	{
+		id: 'hyper_chika_crazy',
+		label: 'Hyper Chika Crazy',
+		category: 'anime',
+		src: 'https://cdn.betterttv.net/emote/5c7986feee6ff62c3d92905d/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['anime', 'chika', 'dance', 'crazy']
+	},
+	{
+		id: 'pop_cat',
+		label: 'Pop Cat',
+		category: 'animals',
+		src: 'https://cdn.betterttv.net/emote/5fa8f232eca18f6455c2b2e1/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['cat', 'pop', 'animal']
+	},
+	{
+		id: 'cat_kiss',
+		label: 'Cat Kiss',
+		category: 'animals',
+		src: 'https://cdn.betterttv.net/emote/5f455410b2efd65d77e8cb14/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['cat', 'kiss', 'animal']
+	},
+	{
+		id: 'confused_cat',
+		label: 'Confused Cat',
+		category: 'animals',
+		src: 'https://cdn.betterttv.net/emote/5d5d9fe322f52e1d9b41ac91/2x',
+		source: 'BetterTTV',
+		animated: false,
+		kind: 'emoji',
+		tags: ['cat', 'confused', 'animal']
+	},
+	{
+		id: 'sad_cat',
+		label: 'Sad Cat',
+		category: 'animals',
+		src: 'https://cdn.betterttv.net/emote/5b96e7f1bbf4663f648795b1/2x',
+		source: 'BetterTTV',
+		animated: false,
+		kind: 'emoji',
+		tags: ['cat', 'sad', 'animal']
+	},
+	{
+		id: 'doge_dance',
+		label: 'Doge Dance',
+		category: 'animals',
+		src: 'https://cdn.betterttv.net/emote/592ed12be9f5aa0463767b7f/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['doge', 'dog', 'dance', 'animal']
+	},
+	{
+		id: 'dog_jam',
+		label: 'Dog Jam',
+		category: 'animals',
+		src: 'https://cdn.betterttv.net/emote/5f2e2fcf6f378244660275ae/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['dog', 'jam', 'music', 'animal']
+	},
+	{
+		id: 'doge_pls',
+		label: 'Doge Pls',
+		category: 'animals',
+		src: 'https://cdn.betterttv.net/emote/55c7eb723d8fd22f20ac9cc1/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['doge', 'dog', 'dance', 'animal']
+	},
+	{
+		id: 'cute_dog',
+		label: 'Cute Dog',
+		category: 'animals',
+		src: 'https://cdn.betterttv.net/emote/56d6fbb4d5d429963e27410c/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['dog', 'cute', 'animal']
+	},
+	{
+		id: 'duck_pls',
+		label: 'Duck Pls',
+		category: 'animals',
+		src: 'https://cdn.betterttv.net/emote/607ee5f939b5010444d02dd4/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['duck', 'dance', 'animal']
+	},
+	{
+		id: 'duck_dance',
+		label: 'Duck Dance',
+		category: 'animals',
+		src: 'https://cdn.betterttv.net/emote/609b07c467644f1d67e84603/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['duck', 'dance', 'animal']
+	},
+	{
+		id: 'party_kirby',
+		label: 'Party Kirby',
+		category: 'gaming',
+		src: 'https://cdn.betterttv.net/emote/5c3a9d8bbaa7ba09c9cfca37/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['gaming', 'kirby', 'party']
+	},
+	{
+		id: 'kirby_dance',
+		label: 'Kirby Dance',
+		category: 'gaming',
+		src: 'https://cdn.betterttv.net/emote/5f3323cf4510395d822b557a/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['gaming', 'kirby', 'dance']
+	},
+	{
+		id: 'mario_blj',
+		label: 'Mario BLJ',
+		category: 'gaming',
+		src: 'https://cdn.betterttv.net/emote/5f8153df2bd46e4a86b12955/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['gaming', 'mario']
+	},
+	{
+		id: 'toad_pls',
+		label: 'Toad Pls',
+		category: 'gaming',
+		src: 'https://cdn.betterttv.net/emote/5dcbbf2fab289c5efc1665bc/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['gaming', 'toad', 'dance']
+	},
+	{
+		id: 'pokemon_trainer',
+		label: 'Pokemon Trainer',
+		category: 'gaming',
+		src: 'https://cdn.betterttv.net/emote/5ba76e716ee0c23989d53088/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['gaming', 'pokemon', 'trainer']
+	},
+	{
+		id: 'pokemon_pog',
+		label: 'Pokemon Pog',
+		category: 'gaming',
+		src: 'https://cdn.betterttv.net/emote/6411fdf4746c2603905a3eeb/2x',
+		source: 'BetterTTV',
+		animated: false,
+		kind: 'emoji',
+		tags: ['gaming', 'pokemon', 'pog']
+	},
+	{
+		id: 'kekw_laugh',
+		label: 'KEKW Laugh',
+		category: 'memes',
+		src: 'https://cdn.betterttv.net/emote/5d793f2e14011815db9377d2/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['laugh', 'lol', 'meme', 'kekw']
+	},
+	{
+		id: 'poggers',
+		label: 'POGGERS',
+		category: 'memes',
+		src: 'https://cdn.betterttv.net/emote/58ae8407ff7b7276f8e594f2/2x',
+		source: 'BetterTTV',
+		animated: false,
+		kind: 'emoji',
+		tags: ['pog', 'hype', 'meme']
+	},
+	{
+		id: 'pog_u',
+		label: 'PogU',
+		category: 'memes',
+		src: 'https://cdn.betterttv.net/emote/5e4e7a1f08b4447d56a92967/2x',
+		source: 'BetterTTV',
+		animated: false,
+		kind: 'emoji',
+		tags: ['pog', 'hype', 'meme']
+	},
+	{
+		id: 'rick_roll',
+		label: 'Rick Roll',
+		category: 'memes',
+		src: 'https://cdn.betterttv.net/emote/5fdcbdb0f0c5583492694d44/2x',
+		source: 'BetterTTV',
+		animated: true,
+		kind: 'sticker',
+		tags: ['meme', 'rickroll', 'dance']
 	}
 ];
 

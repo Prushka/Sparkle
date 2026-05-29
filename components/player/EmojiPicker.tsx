@@ -3,7 +3,8 @@
 /* eslint-disable @next/next/no-img-element -- Emotes can be animated third-party images. */
 
 import { useEffect, useMemo, useState } from 'react';
-import { IconMovie, IconMoodSmile, IconSparkles } from '@tabler/icons-react';
+import { motion } from 'motion/react';
+import { IconMoodSmile, IconSearch } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
 import * as Popover from '@/components/ui/popover';
 import * as Tooltip from '@/components/ui/tooltip';
@@ -21,29 +22,51 @@ type Props = {
 	onSelect: (emoji: ChatEmojiRef) => void;
 };
 
-type PickerMode = 'gifs' | ChatEmojiCategory;
+type EmojiSection = {
+	id: ChatEmojiCategory | 'gifs';
+	label: string;
+	items: ChatEmojiRef[];
+};
 
 export function EmojiPicker({ disabled = false, triggerClassName = '', onSelect }: Props) {
 	const [open, setOpen] = useState(false);
-	const [mode, setMode] = useState<PickerMode>('gifs');
 	const [query, setQuery] = useState('');
 	const [tenorResults, setTenorResults] = useState<ChatEmojiRef[]>([]);
 	const [tenorLoading, setTenorLoading] = useState(false);
 	const [tenorError, setTenorError] = useState('');
 
-	const tabs = useMemo(() => [{ id: 'gifs' as const, label: 'GIFs' }, ...emojiCategories], []);
-	const visibleEmoji: ChatEmojiRef[] = useMemo(() => {
-		if (mode === 'gifs') {
-			return tenorResults;
+	const emojiSections = useMemo<EmojiSection[]>(() => {
+		const normalizedQuery = query.trim();
+		const searchedEmoji = normalizedQuery ? searchChatEmojis(normalizedQuery, 80) : chatEmojis;
+		const sections: EmojiSection[] = [];
+
+		if (tenorResults.length || tenorLoading || tenorError) {
+			sections.push({
+				id: 'gifs',
+				label: normalizedQuery ? 'Live GIFs' : 'Featured GIFs',
+				items: tenorResults
+			});
 		}
-		if (query.trim()) {
-			return searchChatEmojis(query, 32);
+
+		for (const category of emojiCategories) {
+			const items = searchedEmoji.filter((emoji) => emoji.category === category.id);
+			if (items.length) {
+				sections.push({
+					id: category.id,
+					label: category.label,
+					items
+				});
+			}
 		}
-		return chatEmojis.filter((emoji) => emoji.category === mode);
-	}, [mode, query, tenorResults]);
+
+		return sections;
+	}, [query, tenorError, tenorLoading, tenorResults]);
+
+	const showEmptyState =
+		!tenorLoading && !tenorError && emojiSections.every((section) => section.items.length === 0);
 
 	useEffect(() => {
-		if (!open || mode !== 'gifs') {
+		if (!open) {
 			return;
 		}
 
@@ -51,7 +74,7 @@ export function EmojiPicker({ disabled = false, triggerClassName = '', onSelect 
 		const timeout = window.setTimeout(() => {
 			setTenorLoading(true);
 			setTenorError('');
-			const params = new URLSearchParams({ limit: '30' });
+			const params = new URLSearchParams({ limit: query.trim() ? '24' : '12' });
 			if (query.trim()) {
 				params.set('q', query.trim());
 			}
@@ -62,11 +85,11 @@ export function EmojiPicker({ disabled = false, triggerClassName = '', onSelect 
 						return;
 					}
 					setTenorResults(payload.results ?? []);
-					setTenorError(payload.error ?? '');
+					setTenorError(payload.error ? 'GIF search unavailable' : '');
 				})
 				.catch((error: Error) => {
 					if (!controller.signal.aborted) {
-						setTenorError(error.message || 'GIF search failed');
+						setTenorError(error.message ? 'GIF search unavailable' : 'GIF search failed');
 						setTenorResults([]);
 					}
 				})
@@ -81,7 +104,7 @@ export function EmojiPicker({ disabled = false, triggerClassName = '', onSelect 
 			controller.abort();
 			window.clearTimeout(timeout);
 		};
-	}, [mode, open, query]);
+	}, [open, query]);
 
 	function selectEmoji(emoji: ChatEmojiRef) {
 		onSelect(emoji);
@@ -113,77 +136,78 @@ export function EmojiPicker({ disabled = false, triggerClassName = '', onSelect 
 				align="start"
 				side="top"
 				sideOffset={8}
-				className="w-[min(19rem,calc(100vw-1.25rem))] rounded-md border-white/15 bg-background/95 p-2 shadow-xl backdrop-blur-md"
+				className="w-[min(32rem,calc(100vw-1.25rem))] overflow-hidden rounded-lg border border-white/10 bg-background/95 p-0 shadow-2xl backdrop-blur-md"
 			>
-				<div className="grid grid-cols-5 gap-1">
-					{tabs.map((item) => (
-						<button
-							key={item.id}
-							type="button"
-							className={`rounded-md px-2 py-1.5 text-xs font-bold ${
-								mode === item.id
-									? 'bg-primary text-primary-foreground'
-									: 'bg-muted/70 text-muted-foreground hover:bg-accent hover:text-accent-foreground'
-							}`}
-							onClick={() => {
-								setMode(item.id);
-								setQuery('');
-							}}
+				<div className="border-b border-white/10 bg-black/20 p-2">
+					<div className="flex h-11 items-center rounded-md border border-white/15 bg-black/30 px-3 ring-offset-background focus-within:border-primary/80 focus-within:ring-2 focus-within:ring-primary/45 focus-within:ring-offset-0">
+						<IconSearch size={18} stroke={2} className="shrink-0 text-muted-foreground" />
+						<input
+							value={query}
+							onChange={(event) => setQuery(event.target.value)}
+							className="h-full min-w-0 flex-1 bg-transparent px-3 text-sm font-medium outline-none placeholder:text-muted-foreground"
+							placeholder="Search emoji and GIFs"
+						/>
+					</div>
+				</div>
+				<div className="max-h-[22rem] space-y-3 overflow-y-auto p-2">
+					{emojiSections.map((section, sectionIndex) => (
+						<motion.section
+							key={section.id}
+							initial={{ opacity: 0, y: 6 }}
+							animate={{ opacity: 1, y: 0 }}
+							transition={{ duration: 0.16, delay: sectionIndex * 0.025, ease: 'easeOut' }}
 						>
-							{item.label}
-						</button>
+							<div className="mb-1.5 flex items-center justify-between px-1">
+								<h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+									{section.label}
+								</h3>
+								{section.items.length ? (
+									<span className="rounded-full bg-muted/45 px-2 py-0.5 text-[0.65rem] font-bold text-muted-foreground">
+										{section.items.length}
+									</span>
+								) : null}
+							</div>
+							{section.items.length ? (
+								<div className="grid grid-cols-8 gap-1 sm:grid-cols-10">
+									{section.items.map((emoji) => (
+										<Tooltip.Provider key={emoji.id} delayDuration={150}>
+											<Tooltip.Root>
+												<Tooltip.Trigger asChild>
+													<motion.button
+														type="button"
+														aria-label={`:${emoji.id}:`}
+														className="group flex aspect-square items-center justify-center rounded-md border border-transparent bg-muted/35 p-0.5 transition-colors hover:border-primary/35 hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+														whileHover={{ y: -1, scale: 1.04 }}
+														whileTap={{ scale: 0.96 }}
+														transition={{ duration: 0.12, ease: 'easeOut' }}
+														onClick={() => selectEmoji(emoji)}
+													>
+														<img
+															src={emoji.src}
+															alt=""
+															loading="lazy"
+															decoding="async"
+															className="h-full max-h-5 w-full object-contain transition-transform duration-150 group-hover:scale-110"
+														/>
+													</motion.button>
+												</Tooltip.Trigger>
+												<Tooltip.Content side="bottom">
+													<p>{`:${emoji.id}:`}</p>
+												</Tooltip.Content>
+											</Tooltip.Root>
+										</Tooltip.Provider>
+									))}
+								</div>
+							) : (
+								<div className="rounded-md border border-dashed border-white/10 px-3 py-5 text-center text-xs text-muted-foreground">
+									{tenorLoading ? 'Loading GIFs' : tenorError}
+								</div>
+							)}
+						</motion.section>
 					))}
-				</div>
-				<div className="mt-2 flex items-center rounded-md border bg-background px-2">
-					<IconSparkles size={15} stroke={2} className="shrink-0 text-muted-foreground" />
-					<input
-						value={query}
-						onChange={(event) => setQuery(event.target.value)}
-						className="h-9 min-w-0 flex-1 bg-transparent px-2 text-sm outline-none placeholder:text-muted-foreground"
-						placeholder={mode === 'gifs' ? 'Search GIFs' : 'Search'}
-					/>
-				</div>
-				<div className="mt-2 grid max-h-60 grid-cols-7 gap-1 overflow-y-auto pr-1">
-					{visibleEmoji.map((emoji) => (
-						<Tooltip.Provider key={emoji.id} delayDuration={150}>
-							<Tooltip.Root>
-								<Tooltip.Trigger asChild>
-									<button
-										type="button"
-										aria-label={`:${emoji.id}:`}
-										className="group relative flex aspect-square items-center justify-center rounded-md border border-transparent bg-muted/45 p-0.5 hover:border-primary/30 hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-										onClick={() => selectEmoji(emoji)}
-									>
-										<img
-											src={emoji.src}
-											alt=""
-											loading="lazy"
-											decoding="async"
-											className="h-full max-h-7 w-full object-contain"
-										/>
-										{emoji.kind === 'sticker' || emoji.source === 'Tenor' ? (
-											<IconMovie
-												size={11}
-												stroke={2}
-												className="absolute bottom-0.5 right-0.5 rounded-sm bg-background/80 p-0.5 text-muted-foreground"
-											/>
-										) : null}
-									</button>
-								</Tooltip.Trigger>
-								<Tooltip.Content side="bottom">
-									<p>{`:${emoji.id}:`}</p>
-								</Tooltip.Content>
-							</Tooltip.Root>
-						</Tooltip.Provider>
-					))}
-					{tenorLoading && mode === 'gifs' ? (
-						<div className="col-span-7 px-2 py-6 text-center text-xs text-muted-foreground">
-							Loading
-						</div>
-					) : null}
-					{tenorError && mode === 'gifs' && !tenorLoading ? (
-						<div className="col-span-7 px-2 py-6 text-center text-xs text-muted-foreground">
-							{tenorError}
+					{showEmptyState ? (
+						<div className="rounded-md border border-dashed border-white/10 px-3 py-8 text-center text-xs text-muted-foreground">
+							No emoji found
 						</div>
 					) : null}
 				</div>
