@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Job, Player } from '@/lib/player/t';
+import { getRealName } from '@/lib/player/t';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Pfp } from '@/components/player/Pfp';
@@ -53,6 +54,7 @@ export function MoveToast({
 							id={historicalPlayers[firedBy.id]?.profileId || firedBy.profileId || firedBy.id}
 							className="avatar mr-2"
 							discordUser={historicalPlayers[firedBy.id]?.discordUser}
+							name={getRealName(historicalPlayers[firedBy.id] ?? firedBy)}
 							staticBaseUrl={staticBaseUrl}
 						/>
 					) : null}

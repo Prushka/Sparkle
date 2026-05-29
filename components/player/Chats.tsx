@@ -44,6 +44,7 @@ export function Chats({
 								id={historicalPlayers[message.uid]?.profileId || message.uid}
 								className="avatar"
 								discordUser={historicalPlayers[message.uid]?.discordUser}
+								name={getRealName(historicalPlayers[message.uid])}
 								staticBaseUrl={staticBaseUrl}
 							/>
 						</>

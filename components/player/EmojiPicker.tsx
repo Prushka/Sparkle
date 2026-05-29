@@ -17,6 +17,7 @@ import {
 
 type Props = {
 	disabled?: boolean;
+	showTriggerTooltip?: boolean;
 	triggerClassName?: string;
 	onSelect: (emoji: ChatEmojiRef) => void;
 };
@@ -48,7 +49,12 @@ const emojiRowGap = 8;
 const emojiOverscanPx = 240;
 const emojiPanelHeight = 352;
 
-export function EmojiPicker({ disabled = false, triggerClassName = '', onSelect }: Props) {
+export function EmojiPicker({
+	disabled = false,
+	showTriggerTooltip = true,
+	triggerClassName = '',
+	onSelect
+}: Props) {
 	const [open, setOpen] = useState(false);
 	const [query, setQuery] = useState('');
 	const [scrollTop, setScrollTop] = useState(0);
@@ -164,26 +170,32 @@ export function EmojiPicker({ disabled = false, triggerClassName = '', onSelect 
 		resetScroll();
 	}
 
+	const trigger = (
+		<Popover.Trigger asChild>
+			<Button
+				disabled={disabled}
+				variant="outline"
+				className={triggerClassName}
+				aria-label="Browse emoji"
+			>
+				<IconMoodSmile size={18} stroke={2} />
+			</Button>
+		</Popover.Trigger>
+	);
+
 	return (
 		<Tooltip.Provider delayDuration={0}>
 			<Popover.Root open={open} onOpenChange={handleOpenChange}>
-				<Tooltip.Root>
-					<Tooltip.Trigger asChild>
-						<Popover.Trigger asChild>
-							<Button
-								disabled={disabled}
-								variant="outline"
-								className={triggerClassName}
-								aria-label="Browse emoji"
-							>
-								<IconMoodSmile size={18} stroke={2} />
-							</Button>
-						</Popover.Trigger>
-					</Tooltip.Trigger>
-					<Tooltip.Content>
-						<p>Browse emoji</p>
-					</Tooltip.Content>
-				</Tooltip.Root>
+				{showTriggerTooltip ? (
+					<Tooltip.Root>
+						<Tooltip.Trigger asChild>{trigger}</Tooltip.Trigger>
+						<Tooltip.Content>
+							<p>Browse emoji</p>
+						</Tooltip.Content>
+					</Tooltip.Root>
+				) : (
+					trigger
+				)}
 				<Popover.Content
 					align="start"
 					side="top"

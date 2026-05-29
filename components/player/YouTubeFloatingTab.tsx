@@ -89,6 +89,7 @@ const DEFAULT_HEIGHT = 420;
 const YOUTUBE_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 
 let youTubeApiPromise: Promise<YouTubeNamespace> | null = null;
+let youtubeTabZIndexCounter = 120;
 
 function loadYouTubeApi() {
 	if (typeof window === 'undefined') {
@@ -292,6 +293,7 @@ export function YouTubeFloatingTab({
 		width: DEFAULT_WIDTH,
 		height: DEFAULT_HEIGHT
 	});
+	const [zIndex, setZIndex] = useState(() => ++youtubeTabZIndexCounter);
 	const [urlInput, setUrlInput] = useState(state.url);
 	const [urlError, setUrlError] = useState('');
 
@@ -300,8 +302,11 @@ export function YouTubeFloatingTab({
 	}, [state]);
 
 	useEffect(() => {
-		setUrlInput(state.url);
-		setUrlError('');
+		const timer = window.setTimeout(() => {
+			setUrlInput(state.url);
+			setUrlError('');
+		}, 0);
+		return () => window.clearTimeout(timer);
 	}, [state.url]);
 
 	const saveLayout = useCallback(
@@ -328,9 +333,17 @@ export function YouTubeFloatingTab({
 		[saveLayout]
 	);
 
+	const bringToFront = useCallback(() => {
+		youtubeTabZIndexCounter += 1;
+		setZIndex(youtubeTabZIndexCounter);
+	}, []);
+
 	useLayoutEffect(() => {
-		setLayout(clampLayout(readStoredLayout(storageKey) ?? getDefaultLayout(initialIndex)));
-		setLayoutReady(true);
+		const frame = window.requestAnimationFrame(() => {
+			setLayout(clampLayout(readStoredLayout(storageKey) ?? getDefaultLayout(initialIndex)));
+			setLayoutReady(true);
+		});
+		return () => window.cancelAnimationFrame(frame);
 	}, [initialIndex, storageKey]);
 
 	useEffect(() => {
@@ -399,27 +412,41 @@ export function YouTubeFloatingTab({
 		[onStateChange]
 	);
 
-	const handleYouTubeStateChangeRef = useRef<(playerState: number) => void>(() => {});
-	handleYouTubeStateChangeRef.current = (playerState: number) => {
-		const namespace = window.YT;
-		if (!namespace) {
-			return;
-		}
-		if (playerState === namespace.PlayerState.PLAYING) {
-			emitPlayerState({ paused: false });
-		} else if (
-			playerState === namespace.PlayerState.PAUSED ||
-			playerState === namespace.PlayerState.ENDED ||
-			playerState === namespace.PlayerState.CUED
-		) {
-			emitPlayerState({ paused: true });
-		}
-	};
+	const handleYouTubeStateChange = useCallback(
+		(playerState: number) => {
+			const namespace = window.YT;
+			if (!namespace) {
+				return;
+			}
+			if (playerState === namespace.PlayerState.PLAYING) {
+				emitPlayerState({ paused: false });
+			} else if (
+				playerState === namespace.PlayerState.PAUSED ||
+				playerState === namespace.PlayerState.ENDED ||
+				playerState === namespace.PlayerState.CUED
+			) {
+				emitPlayerState({ paused: true });
+			}
+		},
+		[emitPlayerState]
+	);
 
-	const handlePlaybackRateChangeRef = useRef<(playbackRate: number) => void>(() => {});
-	handlePlaybackRateChangeRef.current = (playbackRate: number) => {
-		emitPlayerState({ playbackRate });
-	};
+	const handlePlaybackRateChange = useCallback(
+		(playbackRate: number) => {
+			emitPlayerState({ playbackRate });
+		},
+		[emitPlayerState]
+	);
+	const handleYouTubeStateChangeRef = useRef(handleYouTubeStateChange);
+	const handlePlaybackRateChangeRef = useRef(handlePlaybackRateChange);
+
+	useEffect(() => {
+		handleYouTubeStateChangeRef.current = handleYouTubeStateChange;
+	}, [handleYouTubeStateChange]);
+
+	useEffect(() => {
+		handlePlaybackRateChangeRef.current = handlePlaybackRateChange;
+	}, [handlePlaybackRateChange]);
 
 	useEffect(() => {
 		if (!state.open || !state.videoId) {
@@ -618,12 +645,15 @@ export function YouTubeFloatingTab({
 		<div
 			ref={panelRef}
 			data-youtube-tab={state.id}
-			className="fixed z-[120] flex min-h-[260px] min-w-[320px] overflow-hidden rounded-lg border border-border bg-background shadow-2xl"
+			className="fixed flex min-h-[260px] min-w-[320px] overflow-hidden rounded-lg border border-border bg-background shadow-2xl"
+			onFocusCapture={bringToFront}
+			onPointerDownCapture={bringToFront}
 			style={{
 				left: layout.x,
 				top: layout.y,
 				width: layout.width,
-				height: layout.height
+				height: layout.height,
+				zIndex
 			}}
 		>
 			<div className="flex min-h-0 w-full flex-col">

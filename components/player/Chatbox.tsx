@@ -506,6 +506,7 @@ export function Chatbox({
 				<div className={`relative min-w-0 ${useButton ? 'flex flex-1' : 'chat-input-wrap'}`}>
 					<EmojiPicker
 						disabled={!connected}
+						showTriggerTooltip={useButton}
 						onSelect={(emoji) => insertEmoji(emoji, null)}
 						triggerClassName={
 							useButton
@@ -515,11 +516,12 @@ export function Chatbox({
 					/>
 					<SoundEffectPicker
 						disabled={!connected}
+						showTriggerTooltip={useButton}
 						onPlay={sendSoundEffect}
 						triggerClassName={
 							useButton
 								? 'h-10 w-10 shrink-0 rounded-l-none rounded-r-none border-r-0 px-0'
-								: 'sound-trigger pointer-events-auto absolute left-9 top-0 z-10 h-full w-9 rounded-r-none border-0 bg-transparent px-0 text-white/80 shadow-none hover:bg-white/15 hover:text-white'
+								: 'sound-trigger pointer-events-auto absolute left-9 top-0 z-10 h-full w-9 !rounded-none border-0 bg-transparent px-0 text-white/80 shadow-none hover:bg-white/15 hover:text-white'
 						}
 					/>
 					<div ref={inputShellRef} className="relative min-w-0 flex-1">
@@ -708,6 +710,7 @@ export function Chatbox({
 													id={historicalPlayers[message.uid]?.profileId || message.uid}
 													className="avatar shrink-0 !h-6 !w-6"
 													discordUser={historicalPlayers[message.uid]?.discordUser}
+													name={getRealName(historicalPlayers[message.uid])}
 													staticBaseUrl={staticBaseUrl}
 												/>
 												<span className="shrink-0 font-bold">

@@ -483,6 +483,15 @@
 	height: 1.5rem;
 }
 
+.pfp-fallback {
+	container-type: size;
+	font-size: clamp(0.625rem, 42cqw, 1.25rem);
+	font-weight: 900;
+	line-height: 1;
+	letter-spacing: 0;
+	text-transform: uppercase;
+}
+
 @media (max-width: 1000px) {
 	.avatar {
 		width: 1rem;

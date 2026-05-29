@@ -618,6 +618,7 @@ export function Player({ data }: { data: ServerData }) {
 	const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
 	const soundEffectAudioRef = useRef<HTMLAudioElement | null>(null);
 	const soundEffectBadgeTimersRef = useRef<Record<string, number>>({});
+	const pageChatContainerRef = useRef<HTMLDivElement | null>(null);
 	const supRef = useRef<SUPtitles | null>(null);
 	const supPlayingRef = useRef(false);
 	const jasRef = useRef<any>(null);
@@ -645,6 +646,7 @@ export function Player({ data }: { data: ServerData }) {
 	const [playerCanPlay, setPlayerCanPlay] = useState(false);
 	const [controlsShowing, setControlsShowing] = useState(false);
 	const [playerSmallLayout, setPlayerSmallLayout] = useState(false);
+	const [pageChatInputVisible, setPageChatInputVisible] = useState(false);
 	const [socketConnected, setSocketConnected] = useState(false);
 	const [roomPlayers, setRoomPlayers] = useState<RoomPlayer[]>([]);
 	const [historicalPlayers, setHistoricalPlayers] = useState<Record<string, RoomPlayer>>({});
@@ -885,6 +887,42 @@ export function Player({ data }: { data: ServerData }) {
 	useEffect(() => {
 		const timer = window.setTimeout(() => setMounted(true), 0);
 		return () => window.clearTimeout(timer);
+	}, []);
+
+	useEffect(() => {
+		const element = pageChatContainerRef.current;
+		if (!element) {
+			return;
+		}
+
+		const updateVisibility = () => {
+			const rect = element.getBoundingClientRect();
+			setPageChatInputVisible(
+				rect.top >= 0 &&
+					rect.left >= 0 &&
+					rect.bottom <= window.innerHeight &&
+					rect.right <= window.innerWidth
+			);
+		};
+
+		updateVisibility();
+		if (typeof IntersectionObserver === 'undefined') {
+			window.addEventListener('scroll', updateVisibility, true);
+			window.addEventListener('resize', updateVisibility);
+			return () => {
+				window.removeEventListener('scroll', updateVisibility, true);
+				window.removeEventListener('resize', updateVisibility);
+			};
+		}
+
+		const observer = new IntersectionObserver(
+			() => {
+				updateVisibility();
+			},
+			{ threshold: [0, 1] }
+		);
+		observer.observe(element);
+		return () => observer.disconnect();
 	}, []);
 
 	useEffect(() => {
@@ -1206,8 +1244,11 @@ export function Player({ data }: { data: ServerData }) {
 	useEffect(() => {
 		youtubeStateStorageKeyRef.current = youtubeStateStorageKey;
 		const stored = readStoredYouTubeSyncState(youtubeStateStorageKey);
-		applyYouTubeState(stored);
-		pendingYouTubeStateRef.current = null;
+		const timer = window.setTimeout(() => {
+			applyYouTubeState(stored);
+			pendingYouTubeStateRef.current = null;
+		}, 0);
+		return () => window.clearTimeout(timer);
 	}, [applyYouTubeState, youtubeStateStorageKey]);
 
 	useEffect(() => {
@@ -2251,36 +2292,88 @@ export function Player({ data }: { data: ServerData }) {
 
 	const showJoinOverlay = !socketConnected;
 	const mediaPlayerClassName = `media-player relative w-full bg-slate-900 ${discord ? 'h-[100dvh]' : 'aspect-video'} ${playerEl && !playerEl.paused && chatFocusedSecs > hideControlsOnChatFocused ? 'chat-controls-hidden' : ''}`;
-	const renderControlsChat = (mobileLayout: boolean, suffix: string) => (
-		<div
-			className="player-chat-control"
-			data-player-chat-mount="true"
-			data-mobile-layout={mobileLayout ? 'true' : 'false'}
-		>
-			<Chatbox
-				send={send}
-				chatFocused={chatFocused}
-				focusByShortcut
-				controlsShowing={null}
-				className="chat-pc"
-				inputId={`chat-pc-input-${suffix}`}
-				formId={`chat-pc-form-${suffix}`}
-				messages={[]}
-				historicalPlayers={{}}
-				staticBaseUrl={data.staticBaseUrl}
-				onFocus={() => {
-					playerEl?.controls?.pause?.();
-					setChatFocused(true);
-				}}
-				onBlur={() => {
-					playerEl?.controls?.resume?.();
-					setChatFocused(false);
-					chatFocusedSecsRef.current = 0;
-					setChatFocusedSecs(0);
-				}}
-			/>
-		</div>
+	const videoSettingsDropdown = (
+		<DropdownMenu.Root>
+			<DropdownMenu.Trigger asChild>
+				<Button
+					variant={theme === 'dark' ? 'outline' : 'default'}
+					className="h-10 max-w-[min(24rem,calc(100vw-2rem))] justify-start gap-2 px-3 text-left"
+				>
+					<IconSettings2 className="shrink-0 max-sm:hidden" size={16} stroke={2} />
+					<span className="block max-w-full truncate leading-none">{videoSettingsSummary}</span>
+				</Button>
+			</DropdownMenu.Trigger>
+			<DropdownMenu.Content className="w-56">
+				<DropdownMenu.Label className="flex items-center justify-between gap-3">
+					<span>Video Settings</span>
+					<span className="truncate text-xs font-medium text-muted-foreground">
+						{job.ExtractedQuality}
+					</span>
+				</DropdownMenu.Label>
+				<DropdownMenu.Separator />
+				<DropdownMenu.Group>
+					{audiosExistForCodec(job, videoSrc?.sCodec || '') ? (
+						<DropdownMenu.RadioGroup value={effectiveAudio} onValueChange={changeAudio}>
+							{job.MappedAudio[videoSrc?.sCodec || '']?.map((stream) => {
+								const curr = `${stream.Index}-${stream.Language}`;
+								return (
+									<DropdownMenu.RadioItem key={curr} value={curr}>
+										{formatPair(stream)} ({stream.Index})
+									</DropdownMenu.RadioItem>
+								);
+							})}
+						</DropdownMenu.RadioGroup>
+					) : null}
+				</DropdownMenu.Group>
+				<DropdownMenu.Separator />
+				<DropdownMenu.Group>
+					<DropdownMenu.RadioGroup value={selectedCodec} onValueChange={changeCodec}>
+						<DropdownMenu.RadioItem value="auto">Auto {autoCodec}</DropdownMenu.RadioItem>
+						{job.EncodedCodecs.map((codec) => (
+							<DropdownMenu.RadioItem key={codec} value={codec}>
+								{codecDisplayMap[codec]}
+								{formatMbps(job, codec)}
+								{!supportedCodecs.includes(codec) ? (
+									<IconAlertOctagonFilled className="ml-2" size={16} stroke={2} />
+								) : null}
+							</DropdownMenu.RadioItem>
+						))}
+					</DropdownMenu.RadioGroup>
+				</DropdownMenu.Group>
+			</DropdownMenu.Content>
+		</DropdownMenu.Root>
 	);
+	const renderControlsChat = (mobileLayout: boolean, suffix: string) =>
+		pageChatInputVisible ? null : (
+			<div
+				className="player-chat-control"
+				data-player-chat-mount="true"
+				data-mobile-layout={mobileLayout ? 'true' : 'false'}
+			>
+				<Chatbox
+					send={send}
+					chatFocused={chatFocused}
+					focusByShortcut
+					controlsShowing={null}
+					className="chat-pc"
+					inputId={`chat-pc-input-${suffix}`}
+					formId={`chat-pc-form-${suffix}`}
+					messages={[]}
+					historicalPlayers={{}}
+					staticBaseUrl={data.staticBaseUrl}
+					onFocus={() => {
+						playerEl?.controls?.pause?.();
+						setChatFocused(true);
+					}}
+					onBlur={() => {
+						playerEl?.controls?.resume?.();
+						setChatFocused(false);
+						chatFocusedSecsRef.current = 0;
+						setChatFocusedSecs(0);
+					}}
+				/>
+			</div>
+		);
 
 	return (
 		<>
@@ -2406,11 +2499,12 @@ export function Player({ data }: { data: ServerData }) {
 				className="flex w-full flex-col gap-4 p-4 font-semibold"
 				style={!discord ? { minHeight: 'calc(100dvh - min(100dvh, 56.25vw))' } : undefined}
 			>
-				<div className="mx-auto flex w-full max-w-[90rem] items-center justify-between gap-2">
-					<div className="flex shrink-0 justify-start">
+				<div className="mx-auto grid w-full max-w-[90rem] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 max-[760px]:grid-cols-1 max-[760px]:justify-items-center">
+					<div className="flex min-w-0 justify-start max-[760px]:justify-center">
 						<VoiceControls voice={voice} />
 					</div>
-					<div className="flex shrink-0 items-center justify-end gap-2">
+					<div className="flex min-w-0 justify-center">{videoSettingsDropdown}</div>
+					<div className="flex min-w-0 items-center justify-end gap-2 max-[760px]:justify-center">
 						<Tooltip.Provider delayDuration={0}>
 							<Tooltip.Root>
 								<Tooltip.Trigger asChild>
@@ -2457,7 +2551,10 @@ export function Player({ data }: { data: ServerData }) {
 					</div>
 				</div>
 
-				<div className="mx-auto flex w-full max-w-[90rem] items-center gap-2">
+				<div
+					ref={pageChatContainerRef}
+					className="mx-auto flex w-full max-w-[90rem] items-center gap-2"
+				>
 					<Chatbox
 						send={send}
 						chatFocused={chatFocused}
@@ -2505,6 +2602,7 @@ export function Player({ data }: { data: ServerData }) {
 										className="h-12 w-12"
 										id={playerProfileId}
 										discordUser={historicalPlayers[player.id]?.discordUser ?? player.discordUser}
+										name={player.name}
 										staticBaseUrl={data.staticBaseUrl}
 									/>
 									<span
@@ -2576,6 +2674,7 @@ export function Player({ data }: { data: ServerData }) {
 												id={profileId || playerProfileId}
 												className="h-14 w-14"
 												discordUser={discord?.user}
+												name={displayName}
 												staticBaseUrl={data.staticBaseUrl}
 											/>
 											<input
@@ -2635,62 +2734,6 @@ export function Player({ data }: { data: ServerData }) {
 										</Tooltip.Content>
 									</Tooltip.Root>
 								</Tooltip.Provider>
-								<DropdownMenu.Root>
-									<DropdownMenu.Trigger asChild>
-										<Button
-											variant={theme === 'dark' ? 'outline' : 'default'}
-											className="h-auto min-h-9 max-w-full justify-start gap-2 px-3 py-2 text-left sm:max-w-[24rem]"
-										>
-											<IconSettings2 className="shrink-0 max-sm:hidden" size={16} stroke={2} />
-											<span className="flex min-w-0 flex-col items-start gap-0.5">
-												<span className="leading-none">Video Settings</span>
-												<span className="block max-w-full truncate text-xs leading-none opacity-75">
-													{videoSettingsSummary}
-												</span>
-											</span>
-										</Button>
-									</DropdownMenu.Trigger>
-									<DropdownMenu.Content className="w-56">
-										<DropdownMenu.Label className="flex items-center justify-between gap-3">
-											<span>Video Settings</span>
-											<span className="truncate text-xs font-medium text-muted-foreground">
-												{job.ExtractedQuality}
-											</span>
-										</DropdownMenu.Label>
-										<DropdownMenu.Separator />
-										<DropdownMenu.Group>
-											{audiosExistForCodec(job, videoSrc?.sCodec || '') ? (
-												<DropdownMenu.RadioGroup value={effectiveAudio} onValueChange={changeAudio}>
-													{job.MappedAudio[videoSrc?.sCodec || '']?.map((stream) => {
-														const curr = `${stream.Index}-${stream.Language}`;
-														return (
-															<DropdownMenu.RadioItem key={curr} value={curr}>
-																{formatPair(stream)} ({stream.Index})
-															</DropdownMenu.RadioItem>
-														);
-													})}
-												</DropdownMenu.RadioGroup>
-											) : null}
-										</DropdownMenu.Group>
-										<DropdownMenu.Separator />
-										<DropdownMenu.Group>
-											<DropdownMenu.RadioGroup value={selectedCodec} onValueChange={changeCodec}>
-												<DropdownMenu.RadioItem value="auto">
-													Auto {autoCodec}
-												</DropdownMenu.RadioItem>
-												{job.EncodedCodecs.map((codec) => (
-													<DropdownMenu.RadioItem key={codec} value={codec}>
-														{codecDisplayMap[codec]}
-														{formatMbps(job, codec)}
-														{!supportedCodecs.includes(codec) ? (
-															<IconAlertOctagonFilled className="ml-2" size={16} stroke={2} />
-														) : null}
-													</DropdownMenu.RadioItem>
-												))}
-											</DropdownMenu.RadioGroup>
-										</DropdownMenu.Group>
-									</DropdownMenu.Content>
-								</DropdownMenu.Root>
 							</div>
 						</motion.div>
 					</CardHeader>

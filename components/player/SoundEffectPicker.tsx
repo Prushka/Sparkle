@@ -15,11 +15,17 @@ import {
 
 type Props = {
 	disabled?: boolean;
+	showTriggerTooltip?: boolean;
 	triggerClassName?: string;
 	onPlay: (effect: SoundEffect) => void;
 };
 
-export function SoundEffectPicker({ disabled = false, triggerClassName = '', onPlay }: Props) {
+export function SoundEffectPicker({
+	disabled = false,
+	showTriggerTooltip = true,
+	triggerClassName = '',
+	onPlay
+}: Props) {
 	const [open, setOpen] = useState(false);
 	const [query, setQuery] = useState('');
 
@@ -37,28 +43,33 @@ export function SoundEffectPicker({ disabled = false, triggerClassName = '', onP
 	}, [query]);
 
 	const showEmptyState = soundSections.length === 0;
+	const trigger = (
+		<Popover.Trigger asChild>
+			<Button
+				disabled={disabled}
+				variant="outline"
+				className={triggerClassName}
+				aria-label="Browse sound effects"
+			>
+				<IconMusic size={18} stroke={2} />
+			</Button>
+		</Popover.Trigger>
+	);
 
 	return (
 		<Popover.Root open={open} onOpenChange={setOpen}>
-			<Tooltip.Provider delayDuration={0}>
-				<Tooltip.Root>
-					<Tooltip.Trigger asChild>
-						<Popover.Trigger asChild>
-							<Button
-								disabled={disabled}
-								variant="outline"
-								className={triggerClassName}
-								aria-label="Browse sound effects"
-							>
-								<IconMusic size={18} stroke={2} />
-							</Button>
-						</Popover.Trigger>
-					</Tooltip.Trigger>
-					<Tooltip.Content>
-						<p>Browse sound effects</p>
-					</Tooltip.Content>
-				</Tooltip.Root>
-			</Tooltip.Provider>
+			{showTriggerTooltip ? (
+				<Tooltip.Provider delayDuration={0}>
+					<Tooltip.Root>
+						<Tooltip.Trigger asChild>{trigger}</Tooltip.Trigger>
+						<Tooltip.Content>
+							<p>Browse sound effects</p>
+						</Tooltip.Content>
+					</Tooltip.Root>
+				</Tooltip.Provider>
+			) : (
+				trigger
+			)}
 			<Popover.Content
 				align="start"
 				side="top"
