@@ -9970,16 +9970,32 @@ export function findActiveEmojiToken(text: string, cursorIndex: number) {
 	if (cursorIndex < 0) {
 		return null;
 	}
-	const prefix = text.slice(0, cursorIndex);
-	const match = /(^|\s):([a-z0-9_+-]{0,40})$/i.exec(prefix);
-	if (!match) {
-		return null;
+
+	const cursor = Math.min(cursorIndex, text.length);
+	const tokenPattern = /(^|\s):([a-z0-9_+-]{0,40})(:?)/gi;
+
+	for (const match of text.matchAll(tokenPattern)) {
+		const prefix = match[1] ?? '';
+		const query = match[2] ?? '';
+		const hasClosingColon = match[3] === ':';
+		const tokenStart = (match.index ?? 0) + prefix.length;
+		const tokenEnd = tokenStart + query.length + (hasClosingColon ? 2 : 1);
+		const cursorInsideToken = hasClosingColon
+			? cursor > tokenStart && cursor < tokenEnd
+			: cursor > tokenStart && cursor <= tokenEnd;
+
+		if (!cursorInsideToken) {
+			continue;
+		}
+
+		return {
+			query: query.toLowerCase(),
+			from: tokenStart,
+			to: tokenEnd
+		};
 	}
-	return {
-		query: match[2].toLowerCase(),
-		from: cursorIndex - match[2].length - 1,
-		to: cursorIndex
-	};
+
+	return null;
 }
 
 export function searchChatEmojis(query: string, limit = 8): ChatEmoji[] {

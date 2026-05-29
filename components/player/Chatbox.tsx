@@ -64,6 +64,7 @@ export function Chatbox({
 	const [suggestionsDismissedFor, setSuggestionsDismissedFor] = useState<string | null>(null);
 	const [emojiRefs, setEmojiRefs] = useState<ChatEmojiRef[]>([]);
 	const inputRef = useRef<HTMLInputElement | null>(null);
+	const inputPreviewRef = useRef<HTMLDivElement | null>(null);
 
 	const chatHidden = chatLayout === 'hide';
 	const connected = playersCount > 0;
@@ -71,6 +72,13 @@ export function Chatbox({
 	const emojiSuggestions = useMemo(
 		() => (activeEmojiToken ? searchChatEmojis(activeEmojiToken.query, 6) : []),
 		[activeEmojiToken]
+	);
+	const hasEmojiPreview = useMemo(
+		() =>
+			!activeEmojiToken &&
+			value.length > 0 &&
+			(getEmojiIdsFromText(value).length > 0 || getEmojiRefsFromText(value, emojiRefs).length > 0),
+		[activeEmojiToken, emojiRefs, value]
 	);
 	const showEmojiSuggestions =
 		chatFocused &&
@@ -105,8 +113,27 @@ export function Chatbox({
 		};
 	}, [controlsShowing, focusByShortcut, inputId]);
 
+	useEffect(() => {
+		if (!inputRef.current || !inputPreviewRef.current) {
+			return;
+		}
+		inputPreviewRef.current.scrollLeft = inputRef.current.scrollLeft;
+	}, [value]);
+
+	function syncInputPreviewScroll(input: HTMLInputElement | null = inputRef.current) {
+		if (!input || !inputPreviewRef.current) {
+			return;
+		}
+		inputPreviewRef.current.scrollLeft = input.scrollLeft;
+	}
+
+	function queueInputPreviewScroll(input: HTMLInputElement | null = inputRef.current) {
+		window.requestAnimationFrame(() => syncInputPreviewScroll(input));
+	}
+
 	function updateCursorFromInput(input: HTMLInputElement | null = inputRef.current) {
 		setCursorIndex(input?.selectionStart ?? value.length);
+		queueInputPreviewScroll(input);
 	}
 
 	function insertEmoji(emoji: ChatEmojiRef, range = activeEmojiToken) {
@@ -219,116 +246,137 @@ export function Chatbox({
 								: 'sound-trigger pointer-events-auto absolute left-9 top-0 z-10 h-full w-9 rounded-r-none border-0 bg-transparent px-0 text-white/80 shadow-none hover:bg-white/15 hover:text-white'
 						}
 					/>
-					<Input
-						ref={inputRef}
-						id={inputId}
-						maxLength={250}
-						disabled={!connected}
-						value={value}
-						onFocus={() => {
-							onFocus();
-							updateCursorFromInput();
-							if (useButton) {
-								window.setTimeout(() => {
-									window.scrollTo(0, 0);
-								}, 100);
-							}
-						}}
-						onBlur={onBlur}
-						onClick={(event) => updateCursorFromInput(event.currentTarget)}
-						onSelect={(event) => updateCursorFromInput(event.currentTarget)}
-						onChange={(event) => {
-							setValue(event.target.value);
-							setCursorIndex(event.target.selectionStart ?? event.target.value.length);
-							setSuggestionIndex(0);
-							setSuggestionsDismissedFor(null);
-						}}
-						onKeyDown={(event) => {
-							event.stopPropagation();
-							if (showEmojiSuggestions) {
-								if (event.key === 'ArrowDown') {
-									event.preventDefault();
-									setSuggestionIndex((index) => (index + 1) % emojiSuggestions.length);
-									return;
+					<div className="relative min-w-0 flex-1">
+						{hasEmojiPreview ? (
+							<div
+								className={`chat-input-preview-surface pointer-events-none absolute inset-0 z-0 rounded-md ${useButton ? 'rounded-l-none rounded-r-none' : ''}`}
+							/>
+						) : null}
+						<Input
+							ref={inputRef}
+							id={inputId}
+							maxLength={250}
+							disabled={!connected}
+							value={value}
+							data-has-emoji-preview={hasEmojiPreview ? 'true' : 'false'}
+							onFocus={() => {
+								onFocus();
+								updateCursorFromInput();
+								if (useButton) {
+									window.setTimeout(() => {
+										window.scrollTo(0, 0);
+									}, 100);
 								}
-								if (event.key === 'ArrowUp') {
-									event.preventDefault();
-									setSuggestionIndex(
-										(index) => (index - 1 + emojiSuggestions.length) % emojiSuggestions.length
-									);
-									return;
-								}
-								if (event.key === 'Enter' || event.key === 'Tab') {
-									event.preventDefault();
-									insertEmoji(emojiSuggestions[suggestionIndex] ?? emojiSuggestions[0]);
-									return;
-								}
-							}
-							if (event.key === 'Escape') {
-								event.preventDefault();
+							}}
+							onBlur={onBlur}
+							onClick={(event) => updateCursorFromInput(event.currentTarget)}
+							onSelect={(event) => updateCursorFromInput(event.currentTarget)}
+							onScroll={(event) => syncInputPreviewScroll(event.currentTarget)}
+							onChange={(event) => {
+								setValue(event.target.value);
+								setCursorIndex(event.target.selectionStart ?? event.target.value.length);
+								setSuggestionIndex(0);
+								setSuggestionsDismissedFor(null);
+								queueInputPreviewScroll(event.target);
+							}}
+							onKeyDown={(event) => {
+								event.stopPropagation();
 								if (showEmojiSuggestions) {
-									setSuggestionsDismissedFor(activeEmojiToken?.query ?? '');
-									return;
-								}
-								inputRef.current?.blur();
-							}
-						}}
-						onKeyUp={(event) => {
-							event.stopPropagation();
-							updateCursorFromInput(event.currentTarget);
-						}}
-						onKeyPress={(event) => {
-							event.stopPropagation();
-						}}
-						placeholder={placeholder}
-						type="text"
-						autoComplete="off"
-						className={`min-w-0 flex-1 focus-visible:ring-transparent ${useButton ? 'h-10 rounded-l-none rounded-r-none px-2' : ''} ${!useButton ? 'pl-[4.75rem]' : ''} ${focusByShortcut ? 'pr-16' : ''} input`}
-					/>
-					{showEmojiSuggestions ? (
-						<div className="emoji-suggestions pointer-events-auto absolute bottom-full left-0 z-50 mb-2 w-full min-w-64 overflow-hidden rounded-md border border-white/15 bg-background/95 p-1 text-foreground shadow-xl backdrop-blur-md">
-							{emojiSuggestions.map((emoji, index) => (
-								<button
-									key={emoji.id}
-									type="button"
-									className={`flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm ${
-										index === suggestionIndex
-											? 'bg-accent text-accent-foreground'
-											: 'hover:bg-accent hover:text-accent-foreground'
-									}`}
-									onMouseDown={(event) => {
+									if (event.key === 'ArrowDown') {
 										event.preventDefault();
-										insertEmoji(emoji);
-									}}
-								>
-									<img
-										src={emoji.src}
-										alt=""
-										loading="lazy"
-										decoding="async"
-										className="h-7 w-7 shrink-0 object-contain"
-									/>
-									<span className="min-w-0 flex-1 truncate font-bold">{`:${emoji.id}:`}</span>
-									<span className="shrink-0 text-xs text-muted-foreground">
-										{emoji.animated
-											? 'Animated'
-											: emoji.kind === 'sticker'
-												? 'Sticker'
-												: emoji.source}
-									</span>
-								</button>
-							))}
-						</div>
-					) : null}
-					{focusByShortcut ? (
-						<Shortcut className="pointer-events-none absolute right-3 top-1/2 z-10 flex -translate-y-1/2 items-center justify-center gap-0.5 text-xs font-bold">
-							{playersCount > 0 ? (
-								<>
-									<IconUsers stroke={3} size={14} /> {playersCount}
-								</>
-							) : null}
-						</Shortcut>
-					) : null}
+										setSuggestionIndex((index) => (index + 1) % emojiSuggestions.length);
+										return;
+									}
+									if (event.key === 'ArrowUp') {
+										event.preventDefault();
+										setSuggestionIndex(
+											(index) => (index - 1 + emojiSuggestions.length) % emojiSuggestions.length
+										);
+										return;
+									}
+									if (event.key === 'Enter' || event.key === 'Tab') {
+										event.preventDefault();
+										insertEmoji(emojiSuggestions[suggestionIndex] ?? emojiSuggestions[0]);
+										return;
+									}
+								}
+								if (event.key === 'Escape') {
+									event.preventDefault();
+									if (showEmojiSuggestions) {
+										setSuggestionsDismissedFor(activeEmojiToken?.query ?? '');
+										return;
+									}
+									inputRef.current?.blur();
+								}
+							}}
+							onKeyUp={(event) => {
+								event.stopPropagation();
+								updateCursorFromInput(event.currentTarget);
+							}}
+							onKeyPress={(event) => {
+								event.stopPropagation();
+							}}
+							placeholder={placeholder}
+							type="text"
+							autoComplete="off"
+							className={`chat-input-native relative z-[2] min-w-0 flex-1 focus-visible:ring-transparent ${useButton ? 'h-10 rounded-l-none rounded-r-none px-2' : ''} ${!useButton ? 'pl-[4.75rem]' : ''} ${focusByShortcut ? 'pr-16' : ''} input`}
+						/>
+						{hasEmojiPreview ? (
+							<div
+								ref={inputPreviewRef}
+								aria-hidden="true"
+								className={`chat-input-preview pointer-events-none absolute inset-0 z-[1] flex items-center overflow-hidden whitespace-pre rounded-md px-3 py-1 text-sm ${useButton ? 'h-10 rounded-l-none rounded-r-none px-2' : 'pl-[4.75rem]'} ${focusByShortcut ? 'pr-16' : ''}`}
+							>
+								<span className="chat-input-preview-content block min-w-max">
+									<EmojiText text={value} emojiRefs={emojiRefs} />
+								</span>
+							</div>
+						) : null}
+						{showEmojiSuggestions ? (
+							<div className="emoji-suggestions pointer-events-auto absolute bottom-full left-0 z-50 mb-2 w-full min-w-0 overflow-x-hidden overflow-y-hidden rounded-md border border-white/15 bg-background/95 p-1 text-foreground shadow-xl backdrop-blur-md">
+								{emojiSuggestions.map((emoji, index) => (
+									<button
+										key={emoji.id}
+										type="button"
+										className={`flex w-full min-w-0 items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm ${
+											index === suggestionIndex
+												? 'bg-accent text-accent-foreground'
+												: 'hover:bg-accent hover:text-accent-foreground'
+										}`}
+										onMouseDown={(event) => {
+											event.preventDefault();
+											insertEmoji(emoji);
+										}}
+									>
+										<img
+											src={emoji.src}
+											alt=""
+											loading="lazy"
+											decoding="async"
+											className="h-7 w-7 shrink-0 object-contain"
+										/>
+										<span className="min-w-0 flex-1 truncate font-bold">{`:${emoji.id}:`}</span>
+										<span className="shrink-0 text-xs text-muted-foreground">
+											{emoji.animated
+												? 'Animated'
+												: emoji.kind === 'sticker'
+													? 'Sticker'
+													: emoji.source}
+										</span>
+									</button>
+								))}
+							</div>
+						) : null}
+						{focusByShortcut ? (
+							<Shortcut className="pointer-events-none absolute right-3 top-1/2 z-10 flex -translate-y-1/2 items-center justify-center gap-0.5 text-xs font-bold">
+								{playersCount > 0 ? (
+									<>
+										<IconUsers stroke={3} size={14} /> {playersCount}
+									</>
+								) : null}
+							</Shortcut>
+						) : null}
+					</div>
 				</div>
 
 				{useButton ? (

@@ -617,6 +617,7 @@ export function Player({ data }: { data: ServerData }) {
 	const mediaSelectionRef = useRef<MediaSelectionHandle | null>(null);
 	const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
 	const soundEffectAudioRef = useRef<HTMLAudioElement | null>(null);
+	const soundEffectBadgeTimersRef = useRef<Record<string, number>>({});
 	const supRef = useRef<SUPtitles | null>(null);
 	const supPlayingRef = useRef(false);
 	const jasRef = useRef<any>(null);
@@ -650,6 +651,7 @@ export function Player({ data }: { data: ServerData }) {
 	const [roomMessages, setRoomMessages] = useState<Chat[]>([]);
 	const [localSystemMessages, setLocalSystemMessages] = useState<LocalSystemMessage[]>([]);
 	const [controlsToDisplay, setControlsToDisplay] = useState<SendPayload[]>([]);
+	const [soundEffectPlayerIds, setSoundEffectPlayerIds] = useState<Set<string>>(() => new Set());
 	const [selectedCodec, setSelectedCodec] = useState('auto');
 	const [selectedAudio, setSelectedAudio] = useState('1-jpn');
 	const [supportedCodecs, setSupportedCodecs] = useState<string[]>([]);
@@ -769,6 +771,35 @@ export function Player({ data }: { data: ServerData }) {
 		]);
 	}, []);
 
+	const pulseSoundEffectBadge = useCallback((playerId: string | undefined) => {
+		if (!playerId) {
+			return;
+		}
+
+		const existingTimer = soundEffectBadgeTimersRef.current[playerId];
+		if (existingTimer !== undefined) {
+			window.clearTimeout(existingTimer);
+		}
+
+		setSoundEffectPlayerIds((prev) => {
+			const next = new Set(prev);
+			next.add(playerId);
+			return next;
+		});
+
+		soundEffectBadgeTimersRef.current[playerId] = window.setTimeout(() => {
+			delete soundEffectBadgeTimersRef.current[playerId];
+			setSoundEffectPlayerIds((prev) => {
+				if (!prev.has(playerId)) {
+					return prev;
+				}
+				const next = new Set(prev);
+				next.delete(playerId);
+				return next;
+			});
+		}, 1800);
+	}, []);
+
 	const playSoundEffect = useCallback((id: string | undefined) => {
 		const effect = getSoundEffect(id);
 		if (!effect) {
@@ -860,6 +891,10 @@ export function Player({ data }: { data: ServerData }) {
 		return () => {
 			soundEffectAudioRef.current?.pause();
 			soundEffectAudioRef.current = null;
+			for (const timer of Object.values(soundEffectBadgeTimersRef.current)) {
+				window.clearTimeout(timer);
+			}
+			soundEffectBadgeTimersRef.current = {};
 		};
 	}, []);
 
@@ -1697,6 +1732,7 @@ export function Player({ data }: { data: ServerData }) {
 									break;
 								case BroadcastTypes.SoundEffect:
 									playSoundEffect(broadcast.soundEffect?.id);
+									pulseSoundEffectBadge(state.firedBy?.id);
 									break;
 							}
 							break;
@@ -1761,6 +1797,7 @@ export function Player({ data }: { data: ServerData }) {
 			updatePfp,
 			handleVoiceBroadcast,
 			playSoundEffect,
+			pulseSoundEffectBadge,
 			armPlaybackSyncSuppression,
 			clearPlaybackSyncSuppression
 		]
@@ -2448,6 +2485,7 @@ export function Player({ data }: { data: ServerData }) {
 						const isCurrentUser = player.id === playerId;
 						const playerProfileId = player.profileId || player.id;
 						const isSpeaking = speakingPlayerIds.has(player.id);
+						const isUsingSoundEffect = soundEffectPlayerIds.has(player.id);
 						const playerMuted = isCurrentUser
 							? !voice.desiredJoined || voice.status === 'listen-only' || voice.muted
 							: (voice.peerMuted[player.id] ?? true);
@@ -2457,7 +2495,9 @@ export function Player({ data }: { data: ServerData }) {
 								className={`group relative flex h-auto gap-2 overflow-visible rounded-full rounded-l-full rounded-r-full border-2 py-0 pl-0 pr-4 transition-[background-color,border-color,box-shadow] duration-200 ${
 									isSpeaking
 										? 'border-emerald-500 bg-emerald-500/10 shadow-[0_0_18px_rgba(16,185,129,0.28)]'
-										: 'border-input'
+										: isUsingSoundEffect
+											? 'border-sky-400 bg-sky-400/10 shadow-[0_0_18px_rgba(56,189,248,0.3)]'
+											: 'border-input'
 								} ${isCurrentUser ? '' : 'cursor-default'}`}
 							>
 								<span className="relative mr-0.5 shrink-0">

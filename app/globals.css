@@ -292,6 +292,49 @@
 	padding-left: 4.75rem;
 }
 
+.chat-input-native[data-has-emoji-preview='true'] {
+	background-color: transparent !important;
+	color: transparent !important;
+	caret-color: hsl(var(--foreground));
+}
+
+.chat-pc .chat-input-native[data-has-emoji-preview='true'] {
+	caret-color: white;
+}
+
+.chat-input-preview-surface {
+	background-color: transparent;
+}
+
+.chat-pc .chat-input-preview-surface {
+	background-color: hsla(0, 0%, 100%, 0.3);
+}
+
+.chat-input-preview {
+	color: hsl(var(--foreground));
+	font-family: var(--font-body);
+	font-weight: 600;
+}
+
+.chat-pc .chat-input-preview {
+	color: white;
+	font-weight: 700;
+}
+
+.chat-pc .chat-input-preview span {
+	color: inherit;
+}
+
+.chat-input-preview-content {
+	line-height: 1.25rem;
+}
+
+.chat-input-preview .chat-emoji {
+	width: 1.25em;
+	height: 1.25em;
+	min-width: 1.25em;
+}
+
 .chat-pc .emoji-trigger,
 .chat-pc .sound-trigger {
 	color: rgba(255, 255, 255, 0.72);
