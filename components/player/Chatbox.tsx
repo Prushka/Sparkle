@@ -682,47 +682,79 @@ export function Chatbox({
 							>
 								History
 							</Dialog.Trigger>
-							<Dialog.Content className="gap-3 pr-1 max-sm:pl-2">
-								<Dialog.Title className="self-start text-lg font-bold">
-									Chat History (Session)
-								</Dialog.Title>
+							<Dialog.Content className="w-[calc(100vw-2rem)] max-w-[42rem] gap-0 overflow-hidden rounded-lg border-border/70 p-0 shadow-2xl">
+								<div className="border-b border-border/70 bg-muted/30 px-5 py-4 pr-12">
+									<div className="flex min-w-0 items-center justify-between gap-3">
+										<Dialog.Title className="min-w-0 truncate text-lg font-extrabold">
+											Chat History
+										</Dialog.Title>
+										<span className="shrink-0 rounded-full border border-border bg-background px-2.5 py-1 text-xs font-bold text-muted-foreground">
+											{messages.length === 1 ? '1 message' : `${messages.length} messages`}
+										</span>
+									</div>
+								</div>
 								<Dialog.Description className="sr-only">
 									Messages sent in this watch room session.
 								</Dialog.Description>
-								<div className="flex max-h-[85vh] flex-col items-center gap-2.5 overflow-x-hidden overflow-y-auto">
+								<div className="page-scrollbar max-h-[min(70vh,38rem)] overflow-x-hidden overflow-y-auto px-4 py-4">
 									{messages.length === 0 ? (
-										<div className="self-start">There&apos;s nothing here yet ┬─┬ノ( º _ ºノ)</div>
+										<div className="flex min-h-40 items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 px-6 text-center text-sm font-semibold text-muted-foreground">
+											No messages yet
+										</div>
 									) : null}
-									{messages
-										.slice()
-										.reverse()
-										.map((message, index) => (
-											<div
-												key={`${message.timestamp}-${message.uid}-${message.message}-${index}`}
-												className={`flex w-full flex-wrap items-center gap-1.5 text-center ${message.isStateUpdate ? 'font-semibold' : ''}`}
-											>
-												<Pfp
-													id={historicalPlayers[message.uid]?.profileId || message.uid}
-													className="avatar shrink-0 !h-6 !w-6"
-													discordUser={historicalPlayers[message.uid]?.discordUser}
-													name={getRealName(historicalPlayers[message.uid])}
-													staticBaseUrl={staticBaseUrl}
-												/>
-												<span className="shrink-0 font-bold">
-													{new Date(message.timestamp).toLocaleTimeString('en-US', {
-														hour: '2-digit',
-														minute: '2-digit',
-														hour12: false
-													})}
-												</span>
-												<span className="shrink-0">
-													{getRealName(historicalPlayers[message.uid])}:
-												</span>
-												<span className="block overflow-x-hidden wrap-break-word pr-3 text-justify">
-													<EmojiText text={message.message} emojiRefs={message.emojiRefs} />
-												</span>
-											</div>
-										))}
+									<div className="flex flex-col gap-3">
+										{messages
+											.slice()
+											.reverse()
+											.map((message, index) => {
+												const player = historicalPlayers[message.uid];
+												const playerName = getRealName(player);
+												const timestamp = new Date(message.timestamp);
+												return (
+													<div
+														key={`${message.timestamp}-${message.uid}-${message.message}-${index}`}
+														className={`flex min-w-0 gap-3 rounded-lg border px-3.5 py-3 shadow-sm ${
+															message.isStateUpdate
+																? 'border-primary/15 bg-primary/5'
+																: 'border-border/70 bg-card/70'
+														}`}
+													>
+														<Pfp
+															id={player?.profileId || message.uid}
+															className="mt-0.5 h-9 w-9 shrink-0"
+															discordUser={player?.discordUser}
+															name={playerName}
+															staticBaseUrl={staticBaseUrl}
+														/>
+														<div className="min-w-0 flex-1">
+															<div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+																<span className="min-w-0 max-w-full truncate font-extrabold">
+																	{playerName}
+																</span>
+																<time
+																	dateTime={timestamp.toISOString()}
+																	className="shrink-0 text-xs font-bold text-muted-foreground"
+																>
+																	{timestamp.toLocaleTimeString('en-US', {
+																		hour: '2-digit',
+																		minute: '2-digit',
+																		hour12: false
+																	})}
+																</time>
+																{message.isStateUpdate ? (
+																	<span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[0.68rem] font-extrabold uppercase text-primary">
+																		System
+																	</span>
+																) : null}
+															</div>
+															<p className="mt-1 break-words text-sm leading-relaxed text-foreground/90">
+																<EmojiText text={message.message} emojiRefs={message.emojiRefs} />
+															</p>
+														</div>
+													</div>
+												);
+											})}
+									</div>
 								</div>
 							</Dialog.Content>
 						</Dialog.Root>

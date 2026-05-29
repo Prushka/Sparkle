@@ -244,6 +244,35 @@
 	--video-border-radius: 0rem;
 }
 
+html,
+.page-scrollbar {
+	scrollbar-color: hsl(var(--muted-foreground) / 0.38) transparent;
+}
+
+html::-webkit-scrollbar,
+.page-scrollbar::-webkit-scrollbar {
+	height: 0.875rem;
+	width: 0.875rem;
+}
+
+html::-webkit-scrollbar-track,
+.page-scrollbar::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+html::-webkit-scrollbar-thumb,
+.page-scrollbar::-webkit-scrollbar-thumb {
+	background-clip: content-box;
+	background-color: hsl(var(--muted-foreground) / 0.38);
+	border: 0.25rem solid transparent;
+	border-radius: 9999px;
+}
+
+html::-webkit-scrollbar-thumb:hover,
+.page-scrollbar::-webkit-scrollbar-thumb:hover {
+	background-color: hsl(var(--muted-foreground) / 0.58);
+}
+
 .custom-file-upload {
 	display: flex;
 	cursor: pointer;
