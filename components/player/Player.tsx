@@ -510,6 +510,13 @@ function generatePlaceholderName() {
 	return `${adjective}${noun}`;
 }
 
+function getBrowserAbsoluteUrl(value: string) {
+	if (typeof window === 'undefined') {
+		return value;
+	}
+	return new URL(value, window.location.origin).toString();
+}
+
 function joinBackendPath(base: string, path: string) {
 	if (!base) {
 		return path.startsWith('/') ? path : `/${path}`;
@@ -745,7 +752,7 @@ export function Player({ data }: { data: ServerData }) {
 	const BASE_STATIC = `${staticBaseUrl}/${job.Id}`;
 	const [tickedSecsAgo, setTickedSecsAgo] = useState(-1);
 	const [chatFocusedSecs, setChatFocusedSecs] = useState(0);
-	const thumbnailVttSrc = `${BASE_STATIC}/storyboard.vtt`;
+	const thumbnailVttSrc = getBrowserAbsoluteUrl(`${BASE_STATIC}/storyboard.vtt`);
 	const posterSrc = data.preview;
 	const roomBase = searchParams.get('room') || searchParams.get('channel_id') || '';
 	const room = roomBase ? `${roomBase}${job.Id}` : job.Id;

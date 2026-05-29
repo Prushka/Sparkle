@@ -85,11 +85,9 @@ PUBLIC_DISCORD_CLIENT_ID=123456789012345678
 SERVER_DISCORD_CLIENT_SECRET=...
 ```
 
-`SERVER_INTERNAL_BE` is optional. Use it when `SERVER_BE` is relative but
-server-rendered pages should fetch the backend directly instead of resolving
-`/be` against the current request host. `SERVER_INTERNAL_STATIC` is optional and
-defaults to `SERVER_INTERNAL_BE/static`; set it when static assets have a
-different internal base.
+`SERVER_INTERNAL_BE` and `SERVER_INTERNAL_STATIC` are used by server-rendered
+pages and local rewrites. Keep them separate so backend API requests and static
+asset requests can resolve to different internal routes.
 
 ### Desktop Activity
 
@@ -138,8 +136,8 @@ Video files are first processed and transcoded by the backend to:
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `SERVER_BE`                    | Browser backend base. Values beginning with `http://` or `https://` stay absolute; other values become relative paths like `/be`          |
 | `SERVER_STATIC`                | Browser static asset base. Values beginning with `http://` or `https://` stay absolute; other values become relative paths like `/static` |
-| `SERVER_INTERNAL_BE`           | Optional private backend base for server-side fetches when `SERVER_BE` is relative                                                        |
-| `SERVER_INTERNAL_STATIC`       | Optional private static asset base for local/standalone rewrites when `SERVER_STATIC` is relative                                         |
+| `SERVER_INTERNAL_BE`           | Private backend base for server-side fetches and local/standalone rewrites                                                                |
+| `SERVER_INTERNAL_STATIC`       | Private static asset base for server-side fetches and local/standalone rewrites                                                           |
 | `PUBLIC_DISCORD_CLIENT_ID`     | Your Discord application id / OAuth2 client id (runtime)                                                                                  |
 | `SERVER_DISCORD_CLIENT_SECRET` | Your Discord application OAuth2 client secret (runtime)                                                                                   |
 

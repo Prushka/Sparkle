@@ -3,9 +3,9 @@ import { cache } from 'react';
 import { redirect } from 'next/navigation';
 import { getJobs, roomMapping } from '@/lib/server/jobs';
 import {
-	getBackendBaseUrl,
 	getBrowserBackendBaseUrl,
-	getBrowserStaticBaseUrl
+	getBrowserStaticBaseUrl,
+	getStaticBaseUrl
 } from '@/lib/server/env';
 import type { Job, ServerData } from '@/lib/player/t';
 
@@ -38,7 +38,7 @@ export const loadHomePageData = cache(
 		if (room && roomMapping[room]) {
 			redirect(`/${roomMapping[room]}${getRoomRedirectQuery(searchParams, room)}`);
 		}
-		const jobs = await getJobs(fetchFn, null, host);
+		const jobs = await getJobs(fetchFn);
 		return {
 			jobs,
 			staticBaseUrl: getBrowserStaticBaseUrl(),
@@ -67,7 +67,7 @@ export const loadMediaPageData = cache(
 			roomMapping[room] = id;
 		}
 		try {
-			jobs = await getJobs(fetchFn, id, host);
+			jobs = await getJobs(fetchFn, id);
 		} catch (error) {
 			console.log({ id }, error);
 			redirect('/');
@@ -95,7 +95,7 @@ export const loadMediaPageData = cache(
 					codec = 'hevc';
 				}
 			}
-			const infoResponse = await fetchFn(`${getBackendBaseUrl(host)}/static/${id}/info.nfo`);
+			const infoResponse = await fetchFn(`${getStaticBaseUrl()}/${id}/info.nfo`);
 			const info = await infoResponse.text();
 			const $ = cheerio.load(info, { xml: true });
 			rating = parseFloat($('rating').text());

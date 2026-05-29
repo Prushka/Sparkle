@@ -10,10 +10,6 @@ function getRequiredEnv(key: string) {
 	return value;
 }
 
-function getOptionalEnv(key: string) {
-	return trimTrailingSlash(process.env[key] ?? '');
-}
-
 function isHttpUrl(value: string) {
 	return /^https?:\/\//i.test(value);
 }
@@ -25,35 +21,16 @@ function getPathnameBase(value: string) {
 	return trimTrailingSlash(value.startsWith('/') ? value : `/${value}`);
 }
 
-function getRequestOrigin(host?: string) {
-	const requestHost = host || 'localhost:3001';
-	const protocol = /^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(requestHost)
-		? 'http'
-		: 'https';
-	return `${protocol}://${requestHost}`;
-}
-
-function getServerBaseUrl(value: string, overrideKey: string, host?: string) {
-	const override = getOptionalEnv(overrideKey);
-	if (override) {
-		return override;
-	}
-	if (isHttpUrl(value)) {
-		return value;
-	}
-	return trimTrailingSlash(new URL(getPathnameBase(value), getRequestOrigin(host)).toString());
-}
-
 function getBrowserBaseUrl(value: string) {
 	return isHttpUrl(value) ? value : getPathnameBase(value);
 }
 
-export function getBackendBaseUrl(host?: string) {
-	return getServerBaseUrl(getRequiredEnv('SERVER_BE'), 'SERVER_INTERNAL_BE', host);
+export function getBackendBaseUrl() {
+	return getRequiredEnv('SERVER_INTERNAL_BE');
 }
 
 export function getStaticBaseUrl() {
-	return getRequiredEnv('SERVER_STATIC');
+	return getRequiredEnv('SERVER_INTERNAL_STATIC');
 }
 
 export function getBrowserBackendBaseUrl() {
@@ -61,5 +38,5 @@ export function getBrowserBackendBaseUrl() {
 }
 
 export function getBrowserStaticBaseUrl() {
-	return getBrowserBaseUrl(getStaticBaseUrl());
+	return getBrowserBaseUrl(getRequiredEnv('SERVER_STATIC'));
 }

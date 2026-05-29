@@ -23,9 +23,7 @@ function joinUrl(base, path) {
 const backendPublicPath = getPathnameBase(process.env.SERVER_BE);
 const staticPublicPath = getPathnameBase(process.env.SERVER_STATIC);
 const internalBackendBase = trimTrailingSlash(process.env.SERVER_INTERNAL_BE ?? '');
-const internalStaticBase = trimTrailingSlash(
-	process.env.SERVER_INTERNAL_STATIC ?? (internalBackendBase ? `${internalBackendBase}/static` : '')
-);
+const internalStaticBase = trimTrailingSlash(process.env.SERVER_INTERNAL_STATIC ?? '');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
