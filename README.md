@@ -85,16 +85,10 @@ Video files are first processed and transcoded by the backend to:
 | `SERVER_STATIC`                | The absolute static asset base, including `/static`, used for poster/thumbnail URLs |
 | `PUBLIC_DISCORD_CLIENT_ID`     | Your Discord application id / OAuth2 client id (runtime)                            |
 | `SERVER_DISCORD_CLIENT_SECRET` | Your Discord application OAuth2 client secret (runtime)                             |
-| `SERVER_TENOR_API_KEY`         | Google Tenor API key used by `/api/tenor` for live GIF emoji search                 |
-| `SERVER_TENOR_CLIENT_KEY`      | Optional Tenor client key label, defaults to `sparkle`                              |
 
-Tenor API access requires an existing API key. Google has announced Tenor API
-decommissioning for app developers on June 30, 2026, so `/api/tenor` is kept as a
-small proxy surface that can be replaced with another GIF provider later.
-
-Built-in room sound effects use short remote MP3s. The original utility set uses
-Mixkit previews, while the anime/game/meme soundboard clips use MyInstants media
-URLs.
+Built-in chat emotes and room sound effects are bundled in `public/media`, so the
+frontend can render and play the curated picker catalog without depending on
+third-party media CDNs at runtime.
 
 ## Docker Compose
 

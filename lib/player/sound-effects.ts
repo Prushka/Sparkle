@@ -58,7 +58,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Correct Answer',
 		icon: '✅',
 		category: 'reactions',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2870/2870-preview.mp3',
+		src: '/media/sound-effects/correct_tone.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['correct', 'yes', 'success']
@@ -68,7 +68,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Wrong Answer',
 		icon: '❌',
 		category: 'reactions',
-		src: 'https://assets.mixkit.co/active_storage/sfx/946/946-preview.mp3',
+		src: '/media/sound-effects/wrong_fail.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['wrong', 'fail', 'no']
@@ -78,7 +78,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Positive Ping',
 		icon: '✨',
 		category: 'reactions',
-		src: 'https://assets.mixkit.co/active_storage/sfx/951/951-preview.mp3',
+		src: '/media/sound-effects/positive_ping.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['positive', 'ping', 'nice']
@@ -88,7 +88,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Happy Bells',
 		icon: '🔔',
 		category: 'reactions',
-		src: 'https://assets.mixkit.co/active_storage/sfx/937/937-preview.mp3',
+		src: '/media/sound-effects/happy_bells.mp3',
 		duration: '0:03',
 		source: 'Mixkit',
 		tags: ['happy', 'bells', 'win']
@@ -98,7 +98,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Coin Win',
 		icon: '🪙',
 		category: 'game',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2069/2069-preview.mp3',
+		src: '/media/sound-effects/coin_win.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['coin', 'win', 'game']
@@ -108,7 +108,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Level Complete',
 		icon: '🏆',
 		category: 'game',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2059/2059-preview.mp3',
+		src: '/media/sound-effects/level_complete.mp3',
 		duration: '0:03',
 		source: 'Mixkit',
 		tags: ['level', 'complete', 'win']
@@ -118,7 +118,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Unlock Item',
 		icon: '🔓',
 		category: 'game',
-		src: 'https://assets.mixkit.co/active_storage/sfx/253/253-preview.mp3',
+		src: '/media/sound-effects/unlock_item.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['unlock', 'item', 'reward']
@@ -128,7 +128,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Game Over',
 		icon: '💀',
 		category: 'game',
-		src: 'https://assets.mixkit.co/active_storage/sfx/276/276-preview.mp3',
+		src: '/media/sound-effects/game_over.mp3',
 		duration: '0:05',
 		source: 'Mixkit',
 		tags: ['lose', 'game over', 'fail']
@@ -138,7 +138,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Health Recharge',
 		icon: '💚',
 		category: 'game',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2837/2837-preview.mp3',
+		src: '/media/sound-effects/health_recharge.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['health', 'recharge', 'heal']
@@ -148,7 +148,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Treasure',
 		icon: '💎',
 		category: 'game',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2066/2066-preview.mp3',
+		src: '/media/sound-effects/treasure.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['treasure', 'reward', 'loot']
@@ -158,7 +158,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Trombone',
 		icon: '🎺',
 		category: 'memes',
-		src: 'https://assets.mixkit.co/active_storage/sfx/744/744-preview.mp3',
+		src: '/media/sound-effects/trombone.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['sad', 'fail', 'meme']
@@ -168,7 +168,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Cartoon Laugh',
 		icon: '😂',
 		category: 'memes',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2882/2882-preview.mp3',
+		src: '/media/sound-effects/cartoon_laugh.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['laugh', 'funny', 'meme']
@@ -178,7 +178,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Boing',
 		icon: '🌀',
 		category: 'memes',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2894/2894-preview.mp3',
+		src: '/media/sound-effects/boing.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['boing', 'hit', 'bounce']
@@ -188,7 +188,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Clown Horn',
 		icon: '📣',
 		category: 'memes',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2886/2886-preview.mp3',
+		src: '/media/sound-effects/clown_horn.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['horn', 'funny', 'meme']
@@ -198,7 +198,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Message Pop',
 		icon: '💬',
 		category: 'ui',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3',
+		src: '/media/sound-effects/message_pop.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['message', 'pop', 'alert']
@@ -208,7 +208,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Bell',
 		icon: '🔔',
 		category: 'ui',
-		src: 'https://assets.mixkit.co/active_storage/sfx/933/933-preview.mp3',
+		src: '/media/sound-effects/bell_notification.mp3',
 		duration: '0:03',
 		source: 'Mixkit',
 		tags: ['bell', 'notification', 'ding']
@@ -218,7 +218,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Sci-Fi Click',
 		icon: '🛸',
 		category: 'ui',
-		src: 'https://assets.mixkit.co/active_storage/sfx/900/900-preview.mp3',
+		src: '/media/sound-effects/sci_fi_click.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['click', 'sci-fi', 'ui']
@@ -228,7 +228,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Interface Select',
 		icon: '☑️',
 		category: 'ui',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2573/2573-preview.mp3',
+		src: '/media/sound-effects/interface_select.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['select', 'interface', 'ui']
@@ -238,7 +238,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Page Chime',
 		icon: '📄',
 		category: 'ui',
-		src: 'https://assets.mixkit.co/active_storage/sfx/1107/1107-preview.mp3',
+		src: '/media/sound-effects/page_chime.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['page', 'chime', 'ui']
@@ -248,7 +248,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Long Pop',
 		icon: '🔊',
 		category: 'alerts',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3',
+		src: '/media/sound-effects/long_pop.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['pop', 'alert', 'notification']
@@ -258,7 +258,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Confirmation',
 		icon: '✅',
 		category: 'alerts',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2867/2867-preview.mp3',
+		src: '/media/sound-effects/confirmation_tone.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['confirm', 'success', 'alert']
@@ -268,7 +268,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Clear Announce',
 		icon: '📢',
 		category: 'alerts',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2861/2861-preview.mp3',
+		src: '/media/sound-effects/clear_announce.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['announce', 'alert', 'tone']
@@ -278,7 +278,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Correct Reward',
 		icon: '🏅',
 		category: 'alerts',
-		src: 'https://assets.mixkit.co/active_storage/sfx/952/952-preview.mp3',
+		src: '/media/sound-effects/correct_reward.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['correct', 'reward', 'win']
@@ -288,7 +288,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Happy Bell',
 		icon: '🔔',
 		category: 'alerts',
-		src: 'https://assets.mixkit.co/active_storage/sfx/601/601-preview.mp3',
+		src: '/media/sound-effects/happy_bell_alert.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['bell', 'happy', 'alert']
@@ -298,7 +298,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Guitar Alert',
 		icon: '🎸',
 		category: 'alerts',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2320/2320-preview.mp3',
+		src: '/media/sound-effects/guitar_alert.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['guitar', 'alert', 'notification']
@@ -308,7 +308,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Flute Notice',
 		icon: '🎶',
 		category: 'alerts',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2310/2310-preview.mp3',
+		src: '/media/sound-effects/flute_notification.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['flute', 'music', 'notification']
@@ -318,7 +318,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Urgent Tone',
 		icon: '🚨',
 		category: 'alerts',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2976/2976-preview.mp3',
+		src: '/media/sound-effects/urgent_simple_tone.mp3',
 		duration: '0:03',
 		source: 'Mixkit',
 		tags: ['urgent', 'alert', 'loop']
@@ -328,7 +328,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Fast Punch',
 		icon: '🥊',
 		category: 'game',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2047/2047-preview.mp3',
+		src: '/media/sound-effects/martial_punch.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['punch', 'hit', 'fight']
@@ -338,7 +338,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Player Fail',
 		icon: '💥',
 		category: 'game',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2042/2042-preview.mp3',
+		src: '/media/sound-effects/player_fail.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['fail', 'lose', 'game']
@@ -348,7 +348,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Ball Tap',
 		icon: '⚽',
 		category: 'game',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2073/2073-preview.mp3',
+		src: '/media/sound-effects/ball_tap.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['ball', 'tap', 'game']
@@ -358,7 +358,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Player Jump',
 		icon: '🕹️',
 		category: 'game',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2043/2043-preview.mp3',
+		src: '/media/sound-effects/player_jump.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['jump', 'game', 'platform']
@@ -368,7 +368,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Bonus Earned',
 		icon: '⭐',
 		category: 'game',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2058/2058-preview.mp3',
+		src: '/media/sound-effects/bonus_earned.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['bonus', 'earned', 'game']
@@ -378,7 +378,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Casino Bling',
 		icon: '🎰',
 		category: 'game',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2067/2067-preview.mp3',
+		src: '/media/sound-effects/casino_bling.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['casino', 'bling', 'achievement']
@@ -388,7 +388,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Retro Click',
 		icon: '🕹️',
 		category: 'game',
-		src: 'https://assets.mixkit.co/active_storage/sfx/237/237-preview.mp3',
+		src: '/media/sound-effects/retro_click.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['retro', 'click', 'game']
@@ -398,7 +398,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Laser Bubble',
 		icon: '🔫',
 		category: 'game',
-		src: 'https://assets.mixkit.co/active_storage/sfx/277/277-preview.mp3',
+		src: '/media/sound-effects/laser_bubble.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['laser', 'bubble', 'game']
@@ -408,7 +408,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Arcade Bling',
 		icon: '👾',
 		category: 'game',
-		src: 'https://assets.mixkit.co/active_storage/sfx/210/210-preview.mp3',
+		src: '/media/sound-effects/arcade_bling.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['arcade', 'bling', 'game']
@@ -418,7 +418,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Level Up',
 		icon: '🆙',
 		category: 'game',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2062/2062-preview.mp3',
+		src: '/media/sound-effects/level_up.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['level', 'up', 'game']
@@ -428,7 +428,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Final Bonus',
 		icon: '🏁',
 		category: 'game',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2061/2061-preview.mp3',
+		src: '/media/sound-effects/final_bonus.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['bonus', 'final', 'game']
@@ -438,7 +438,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Mystery Alert',
 		icon: '❔',
 		category: 'game',
-		src: 'https://assets.mixkit.co/active_storage/sfx/234/234-preview.mp3',
+		src: '/media/sound-effects/mystery_alert.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['mystery', 'alert', 'game']
@@ -448,7 +448,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Toy Whistle',
 		icon: '🧸',
 		category: 'memes',
-		src: 'https://assets.mixkit.co/active_storage/sfx/616/616-preview.mp3',
+		src: '/media/sound-effects/toy_whistle.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['toy', 'whistle', 'funny']
@@ -458,7 +458,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Creature Laugh',
 		icon: '😂',
 		category: 'memes',
-		src: 'https://assets.mixkit.co/active_storage/sfx/414/414-preview.mp3',
+		src: '/media/sound-effects/creature_laugh.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['laugh', 'creature', 'funny']
@@ -468,7 +468,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Failure Piano',
 		icon: '🎹',
 		category: 'memes',
-		src: 'https://assets.mixkit.co/active_storage/sfx/473/473-preview.mp3',
+		src: '/media/sound-effects/failure_piano.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['fail', 'piano', 'funny']
@@ -478,7 +478,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Cartoon Dazzle',
 		icon: '💫',
 		category: 'memes',
-		src: 'https://assets.mixkit.co/active_storage/sfx/746/746-preview.mp3',
+		src: '/media/sound-effects/cartoon_dazzle.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['cartoon', 'dazzle', 'hit']
@@ -488,7 +488,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Cartoon Fart',
 		icon: '💨',
 		category: 'memes',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2891/2891-preview.mp3',
+		src: '/media/sound-effects/cartoon_fart.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['cartoon', 'fart', 'funny']
@@ -498,7 +498,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Funny Giggle',
 		icon: '🤭',
 		category: 'memes',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2885/2885-preview.mp3',
+		src: '/media/sound-effects/funny_giggle.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['giggle', 'funny', 'laugh']
@@ -508,7 +508,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Falling Whistle',
 		icon: '🪂',
 		category: 'memes',
-		src: 'https://assets.mixkit.co/active_storage/sfx/395/395-preview.mp3',
+		src: '/media/sound-effects/falling_whistle.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['fall', 'whistle', 'cartoon']
@@ -518,7 +518,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Cartoon Melody',
 		icon: '🎵',
 		category: 'memes',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2881/2881-preview.mp3',
+		src: '/media/sound-effects/cartoon_melody.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['cartoon', 'melody', 'funny']
@@ -528,7 +528,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Sad Party Horn',
 		icon: '📯',
 		category: 'memes',
-		src: 'https://assets.mixkit.co/active_storage/sfx/527/527-preview.mp3',
+		src: '/media/sound-effects/sad_party_horn.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['sad', 'party', 'horn']
@@ -538,7 +538,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Software Start',
 		icon: '▶️',
 		category: 'ui',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2574/2574-preview.mp3',
+		src: '/media/sound-effects/software_start.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['software', 'start', 'ui']
@@ -548,7 +548,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Software Back',
 		icon: '↩️',
 		category: 'ui',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2575/2575-preview.mp3',
+		src: '/media/sound-effects/software_back.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['software', 'back', 'ui']
@@ -558,7 +558,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Select Click',
 		icon: '🖱️',
 		category: 'ui',
-		src: 'https://assets.mixkit.co/active_storage/sfx/1109/1109-preview.mp3',
+		src: '/media/sound-effects/select_click.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['select', 'click', 'ui']
@@ -568,7 +568,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Software Remove',
 		icon: '➖',
 		category: 'ui',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2576/2576-preview.mp3',
+		src: '/media/sound-effects/software_remove.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['software', 'remove', 'ui']
@@ -578,7 +578,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Cool Click',
 		icon: '🧊',
 		category: 'ui',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3',
+		src: '/media/sound-effects/cool_click.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['cool', 'click', 'ui']
@@ -588,7 +588,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Click Error',
 		icon: '⚠️',
 		category: 'ui',
-		src: 'https://assets.mixkit.co/active_storage/sfx/1110/1110-preview.mp3',
+		src: '/media/sound-effects/click_error.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['click', 'error', 'ui']
@@ -598,7 +598,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Negative Tap',
 		icon: '🚫',
 		category: 'ui',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2569/2569-preview.mp3',
+		src: '/media/sound-effects/negative_tap.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['negative', 'tap', 'ui']
@@ -608,7 +608,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Device Click',
 		icon: '📱',
 		category: 'ui',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2577/2577-preview.mp3',
+		src: '/media/sound-effects/device_click.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['device', 'click', 'ui']
@@ -618,7 +618,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Page Back',
 		icon: '📖',
 		category: 'ui',
-		src: 'https://assets.mixkit.co/active_storage/sfx/1108/1108-preview.mp3',
+		src: '/media/sound-effects/page_back.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['page', 'back', 'ui']
@@ -628,7 +628,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Open Interface',
 		icon: '🪟',
 		category: 'ui',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2578/2578-preview.mp3',
+		src: '/media/sound-effects/open_interface.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['open', 'interface', 'ui']
@@ -638,7 +638,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Game UI Tone',
 		icon: '🎛️',
 		category: 'ui',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2570/2570-preview.mp3',
+		src: '/media/sound-effects/game_ui_tone.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['game', 'interface', 'ui']
@@ -648,7 +648,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Page Turn',
 		icon: '📄',
 		category: 'ui',
-		src: 'https://assets.mixkit.co/active_storage/sfx/1106/1106-preview.mp3',
+		src: '/media/sound-effects/page_turn_chime.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['page', 'turn', 'chime']
@@ -658,7 +658,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Rocket Whoosh',
 		icon: '🚀',
 		category: 'transitions',
-		src: 'https://assets.mixkit.co/active_storage/sfx/1714/1714-preview.mp3',
+		src: '/media/sound-effects/rocket_whoosh.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['rocket', 'whoosh', 'transition']
@@ -668,7 +668,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Cinematic Whoosh',
 		icon: '🌪️',
 		category: 'transitions',
-		src: 'https://assets.mixkit.co/active_storage/sfx/1492/1492-preview.mp3',
+		src: '/media/sound-effects/cinematic_whoosh.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['cinematic', 'whoosh', 'transition']
@@ -678,7 +678,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Small Sweep',
 		icon: '💨',
 		category: 'transitions',
-		src: 'https://assets.mixkit.co/active_storage/sfx/166/166-preview.mp3',
+		src: '/media/sound-effects/small_sweep.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['sweep', 'transition', 'fast']
@@ -688,7 +688,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Epic Orchestra',
 		icon: '🎬',
 		category: 'transitions',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2290/2290-preview.mp3',
+		src: '/media/sound-effects/epic_orchestra.mp3',
 		duration: '0:03',
 		source: 'Mixkit',
 		tags: ['epic', 'orchestra', 'transition']
@@ -698,7 +698,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Movie Impact',
 		icon: '💥',
 		category: 'transitions',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2909/2909-preview.mp3',
+		src: '/media/sound-effects/movie_impact.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['impact', 'movie', 'trailer']
@@ -708,7 +708,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Air Zoom',
 		icon: '🌀',
 		category: 'transitions',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2608/2608-preview.mp3',
+		src: '/media/sound-effects/air_zoom.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['air', 'zoom', 'transition']
@@ -718,7 +718,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Laser Thunder',
 		icon: '⚡',
 		category: 'transitions',
-		src: 'https://assets.mixkit.co/active_storage/sfx/1287/1287-preview.mp3',
+		src: '/media/sound-effects/laser_thunder.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['laser', 'thunder', 'cinematic']
@@ -728,7 +728,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Intro Transition',
 		icon: '🎞️',
 		category: 'transitions',
-		src: 'https://assets.mixkit.co/active_storage/sfx/1146/1146-preview.mp3',
+		src: '/media/sound-effects/intro_transition.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['intro', 'transition', 'video']
@@ -738,7 +738,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Windy Swoosh',
 		icon: '🌬️',
 		category: 'transitions',
-		src: 'https://assets.mixkit.co/active_storage/sfx/1474/1474-preview.mp3',
+		src: '/media/sound-effects/windy_swoosh.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['wind', 'swoosh', 'transition']
@@ -748,7 +748,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Terror Sweep',
 		icon: '🌑',
 		category: 'transitions',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2630/2630-preview.mp3',
+		src: '/media/sound-effects/terror_sweep.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['terror', 'dark', 'sweep']
@@ -758,7 +758,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Tech Slide',
 		icon: '🖥️',
 		category: 'transitions',
-		src: 'https://assets.mixkit.co/active_storage/sfx/3120/3120-preview.mp3',
+		src: '/media/sound-effects/tech_slide.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['technology', 'slide', 'transition']
@@ -768,7 +768,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Helicopter Riser',
 		icon: '🚁',
 		category: 'transitions',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2719/2719-preview.mp3',
+		src: '/media/sound-effects/helicopter_riser.mp3',
 		duration: '0:03',
 		source: 'Mixkit',
 		tags: ['helicopter', 'riser', 'cinematic']
@@ -778,7 +778,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Birds Singing',
 		icon: '🐦',
 		category: 'animals',
-		src: 'https://assets.mixkit.co/active_storage/sfx/17/17-preview.mp3',
+		src: '/media/sound-effects/birds_trees.mp3',
 		duration: '0:05',
 		source: 'Mixkit',
 		tags: ['birds', 'trees', 'animal']
@@ -788,7 +788,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Dog Bark',
 		icon: '🐕',
 		category: 'animals',
-		src: 'https://assets.mixkit.co/active_storage/sfx/1/1-preview.mp3',
+		src: '/media/sound-effects/dog_bark.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['dog', 'bark', 'animal']
@@ -798,7 +798,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Wolf Forest',
 		icon: '🐺',
 		category: 'animals',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2485/2485-preview.mp3',
+		src: '/media/sound-effects/wolf_forest.mp3',
 		duration: '0:04',
 		source: 'Mixkit',
 		tags: ['wolf', 'forest', 'animal']
@@ -808,7 +808,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Rooster Morning',
 		icon: '🐓',
 		category: 'animals',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2462/2462-preview.mp3',
+		src: '/media/sound-effects/rooster_morning.mp3',
 		duration: '0:03',
 		source: 'Mixkit',
 		tags: ['rooster', 'morning', 'animal']
@@ -818,7 +818,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Kitty Meow',
 		icon: '🐱',
 		category: 'animals',
-		src: 'https://assets.mixkit.co/active_storage/sfx/93/93-preview.mp3',
+		src: '/media/sound-effects/kitty_meow.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['cat', 'kitty', 'meow']
@@ -828,7 +828,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Beast Roar',
 		icon: '🐲',
 		category: 'animals',
-		src: 'https://assets.mixkit.co/active_storage/sfx/13/13-preview.mp3',
+		src: '/media/sound-effects/beast_roar.mp3',
 		duration: '0:03',
 		source: 'Mixkit',
 		tags: ['beast', 'roar', 'animal']
@@ -838,7 +838,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Wolf Howl',
 		icon: '🌕',
 		category: 'animals',
-		src: 'https://assets.mixkit.co/active_storage/sfx/1775/1775-preview.mp3',
+		src: '/media/sound-effects/wolf_howl.mp3',
 		duration: '0:03',
 		source: 'Mixkit',
 		tags: ['wolf', 'howl', 'animal']
@@ -848,7 +848,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Cricket',
 		icon: '🦗',
 		category: 'animals',
-		src: 'https://assets.mixkit.co/active_storage/sfx/1780/1780-preview.mp3',
+		src: '/media/sound-effects/cricket_screech.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['cricket', 'animal', 'night']
@@ -858,7 +858,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Horse Gallop',
 		icon: '🐎',
 		category: 'animals',
-		src: 'https://assets.mixkit.co/active_storage/sfx/83/83-preview.mp3',
+		src: '/media/sound-effects/horse_gallop.mp3',
 		duration: '0:03',
 		source: 'Mixkit',
 		tags: ['horse', 'gallop', 'animal']
@@ -868,7 +868,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Monkey Giggle',
 		icon: '🐒',
 		category: 'animals',
-		src: 'https://assets.mixkit.co/active_storage/sfx/108/108-preview.mp3',
+		src: '/media/sound-effects/monkey_giggle.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['monkey', 'giggle', 'animal']
@@ -878,7 +878,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Owl Forest',
 		icon: '🦉',
 		category: 'animals',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2466/2466-preview.mp3',
+		src: '/media/sound-effects/owl_forest.mp3',
 		duration: '0:03',
 		source: 'Mixkit',
 		tags: ['owl', 'forest', 'animal']
@@ -888,7 +888,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Farm Morning',
 		icon: '🐄',
 		category: 'animals',
-		src: 'https://assets.mixkit.co/active_storage/sfx/7/7-preview.mp3',
+		src: '/media/sound-effects/farm_morning.mp3',
 		duration: '0:04',
 		source: 'Mixkit',
 		tags: ['farm', 'morning', 'animals']
@@ -898,7 +898,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Cheer Applause',
 		icon: '👏',
 		category: 'voices',
-		src: 'https://assets.mixkit.co/active_storage/sfx/518/518-preview.mp3',
+		src: '/media/sound-effects/cheer_applause.mp3',
 		duration: '0:03',
 		source: 'Mixkit',
 		tags: ['cheer', 'applause', 'people']
@@ -908,7 +908,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Baby Sneeze',
 		icon: '👶',
 		category: 'voices',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2214/2214-preview.mp3',
+		src: '/media/sound-effects/baby_sneeze.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['baby', 'sneeze', 'voice']
@@ -918,7 +918,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Gasp',
 		icon: '😮',
 		category: 'voices',
-		src: 'https://assets.mixkit.co/active_storage/sfx/964/964-preview.mp3',
+		src: '/media/sound-effects/astonished_gasp.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['gasp', 'voice', 'surprise']
@@ -928,7 +928,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Child Laugh',
 		icon: '😄',
 		category: 'voices',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2265/2265-preview.mp3',
+		src: '/media/sound-effects/child_laugh.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['child', 'laugh', 'voice']
@@ -938,7 +938,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Cute Kiss',
 		icon: '😘',
 		category: 'voices',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2192/2192-preview.mp3',
+		src: '/media/sound-effects/cute_kiss.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['kiss', 'cute', 'voice']
@@ -948,7 +948,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Fighter Scream',
 		icon: '😫',
 		category: 'voices',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2768/2768-preview.mp3',
+		src: '/media/sound-effects/fighter_scream.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['scream', 'fighter', 'voice']
@@ -958,7 +958,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Crunch Chew',
 		icon: '😋',
 		category: 'voices',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2244/2244-preview.mp3',
+		src: '/media/sound-effects/crunch_chew.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['chew', 'crunch', 'mouth']
@@ -968,7 +968,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Cough',
 		icon: '😷',
 		category: 'voices',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2227/2227-preview.mp3',
+		src: '/media/sound-effects/young_cough.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['cough', 'voice']
@@ -978,7 +978,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Mouth Blow',
 		icon: '🌬️',
 		category: 'voices',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2659/2659-preview.mp3',
+		src: '/media/sound-effects/mouth_blow.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['blow', 'mouth', 'voice']
@@ -988,7 +988,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Ow Pain',
 		icon: '😖',
 		category: 'voices',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2204/2204-preview.mp3',
+		src: '/media/sound-effects/pain_ow.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['pain', 'ow', 'voice']
@@ -998,7 +998,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Tired Yawn',
 		icon: '🥱',
 		category: 'voices',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2278/2278-preview.mp3',
+		src: '/media/sound-effects/tired_yawn.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['yawn', 'tired', 'voice']
@@ -1008,7 +1008,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Zombie Breath',
 		icon: '🧟',
 		category: 'voices',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2233/2233-preview.mp3',
+		src: '/media/sound-effects/zombie_breath.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['zombie', 'breath', 'voice']
@@ -1018,7 +1018,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Energy Flow',
 		icon: '✨',
 		category: 'magic',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2589/2589-preview.mp3',
+		src: '/media/sound-effects/energy_flow.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['energy', 'magic', 'flow']
@@ -1028,7 +1028,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Sparkle Whoosh',
 		icon: '🪄',
 		category: 'magic',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2350/2350-preview.mp3',
+		src: '/media/sound-effects/magic_sparkle_whoosh.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['magic', 'sparkle', 'whoosh']
@@ -1038,7 +1038,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Fairy Glitter',
 		icon: '✨',
 		category: 'magic',
-		src: 'https://assets.mixkit.co/active_storage/sfx/867/867-preview.mp3',
+		src: '/media/sound-effects/fairy_glitter.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['fairy', 'glitter', 'magic']
@@ -1048,7 +1048,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Fairy Sparkle',
 		icon: '🧚',
 		category: 'magic',
-		src: 'https://assets.mixkit.co/active_storage/sfx/871/871-preview.mp3',
+		src: '/media/sound-effects/fairy_magic_sparkle.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['fairy', 'sparkle', 'magic']
@@ -1058,7 +1058,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Fantasy Success',
 		icon: '🏆',
 		category: 'magic',
-		src: 'https://assets.mixkit.co/active_storage/sfx/270/270-preview.mp3',
+		src: '/media/sound-effects/fantasy_success.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['fantasy', 'success', 'magic']
@@ -1068,7 +1068,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Harp Sweep',
 		icon: '🎶',
 		category: 'magic',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2628/2628-preview.mp3',
+		src: '/media/sound-effects/harp_sweep.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['harp', 'sweep', 'magic']
@@ -1078,7 +1078,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Magic Light',
 		icon: '🌟',
 		category: 'magic',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2583/2583-preview.mp3',
+		src: '/media/sound-effects/magic_light_transition.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['magic', 'light', 'transition']
@@ -1088,7 +1088,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Spellcaster',
 		icon: '🧙',
 		category: 'magic',
-		src: 'https://assets.mixkit.co/active_storage/sfx/1463/1463-preview.mp3',
+		src: '/media/sound-effects/spellcaster_swoosh.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['spell', 'swoosh', 'magic']
@@ -1098,7 +1098,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Wand Sparkle',
 		icon: '🪄',
 		category: 'magic',
-		src: 'https://assets.mixkit.co/active_storage/sfx/3062/3062-preview.mp3',
+		src: '/media/sound-effects/magic_wand_sparkle.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['wand', 'sparkle', 'magic']
@@ -1108,7 +1108,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Light Spell',
 		icon: '💡',
 		category: 'magic',
-		src: 'https://assets.mixkit.co/active_storage/sfx/873/873-preview.mp3',
+		src: '/media/sound-effects/light_spell.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['light', 'spell', 'magic']
@@ -1118,7 +1118,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Magic Bubbles',
 		icon: '🫧',
 		category: 'magic',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2999/2999-preview.mp3',
+		src: '/media/sound-effects/magic_bubbles.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['bubbles', 'spell', 'magic']
@@ -1128,7 +1128,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Fairy Teleport',
 		icon: '🧚',
 		category: 'magic',
-		src: 'https://assets.mixkit.co/active_storage/sfx/868/868-preview.mp3',
+		src: '/media/sound-effects/fairy_teleport.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['fairy', 'teleport', 'magic']
@@ -1138,7 +1138,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Classic Alarm',
 		icon: '⏰',
 		category: 'technology',
-		src: 'https://assets.mixkit.co/active_storage/sfx/995/995-preview.mp3',
+		src: '/media/sound-effects/classic_alarm.mp3',
 		duration: '0:03',
 		source: 'Mixkit',
 		tags: ['alarm', 'classic', 'technology']
@@ -1148,7 +1148,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Countdown',
 		icon: '⏱️',
 		category: 'technology',
-		src: 'https://assets.mixkit.co/active_storage/sfx/916/916-preview.mp3',
+		src: '/media/sound-effects/countdown_bleeps.mp3',
 		duration: '0:03',
 		source: 'Mixkit',
 		tags: ['countdown', 'bleep', 'technology']
@@ -1158,7 +1158,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Emergency Alarm',
 		icon: '🚨',
 		category: 'technology',
-		src: 'https://assets.mixkit.co/active_storage/sfx/1000/1000-preview.mp3',
+		src: '/media/sound-effects/emergency_alarm.mp3',
 		duration: '0:03',
 		source: 'Mixkit',
 		tags: ['emergency', 'alarm', 'technology']
@@ -1168,7 +1168,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Modern Select',
 		icon: '🖱️',
 		category: 'technology',
-		src: 'https://assets.mixkit.co/active_storage/sfx/3124/3124-preview.mp3',
+		src: '/media/sound-effects/modern_select.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['modern', 'select', 'technology']
@@ -1178,7 +1178,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Futuristic Hum',
 		icon: '🛸',
 		category: 'technology',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2133/2133-preview.mp3',
+		src: '/media/sound-effects/futuristic_hum.mp3',
 		duration: '0:04',
 		source: 'Mixkit',
 		tags: ['futuristic', 'hum', 'technology']
@@ -1188,7 +1188,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Electric Glitch',
 		icon: '⚡',
 		category: 'technology',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2594/2594-preview.mp3',
+		src: '/media/sound-effects/electric_glitch.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['electric', 'glitch', 'technology']
@@ -1198,7 +1198,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'High Tech Bleep',
 		icon: '📟',
 		category: 'technology',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2521/2521-preview.mp3',
+		src: '/media/sound-effects/high_tech_bleep.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['bleep', 'high tech', 'technology']
@@ -1208,7 +1208,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Sci-Fi Loading',
 		icon: '💽',
 		category: 'technology',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2529/2529-preview.mp3',
+		src: '/media/sound-effects/sci_fi_loading.mp3',
 		duration: '0:03',
 		source: 'Mixkit',
 		tags: ['sci-fi', 'loading', 'technology']
@@ -1218,7 +1218,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Power Up',
 		icon: '🔌',
 		category: 'technology',
-		src: 'https://assets.mixkit.co/active_storage/sfx/2602/2602-preview.mp3',
+		src: '/media/sound-effects/power_up.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['power', 'up', 'technology']
@@ -1228,7 +1228,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Tech Alert',
 		icon: '🚨',
 		category: 'technology',
-		src: 'https://assets.mixkit.co/active_storage/sfx/3121/3121-preview.mp3',
+		src: '/media/sound-effects/technology_alert.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['alert', 'technology', 'transition']
@@ -1238,7 +1238,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Robot Item',
 		icon: '🤖',
 		category: 'technology',
-		src: 'https://assets.mixkit.co/active_storage/sfx/3205/3205-preview.mp3',
+		src: '/media/sound-effects/robot_item.mp3',
 		duration: '0:02',
 		source: 'Mixkit',
 		tags: ['robot', 'item', 'technology']
@@ -1248,7 +1248,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Alien Button',
 		icon: '👽',
 		category: 'technology',
-		src: 'https://assets.mixkit.co/active_storage/sfx/3118/3118-preview.mp3',
+		src: '/media/sound-effects/alien_button.mp3',
 		duration: '0:01',
 		source: 'Mixkit',
 		tags: ['alien', 'button', 'technology']
@@ -1258,7 +1258,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Anime Wow',
 		icon: '😲',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/anime-wow-sound-effect.mp3',
+		src: '/media/sound-effects/anime_wow.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['anime', 'wow', 'reaction']
@@ -1268,7 +1268,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Tuturu',
 		icon: '🌸',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/tuturu_1.mp3',
+		src: '/media/sound-effects/tuturu.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['anime', 'cute', 'steins gate']
@@ -1278,7 +1278,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Za Warudo',
 		icon: '⏱️',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/za-warudo-stop-time-sound.mp3',
+		src: '/media/sound-effects/za_warudo.mp3',
 		duration: '0:03',
 		source: 'MyInstants',
 		tags: ['anime', 'jojo', 'time stop']
@@ -1288,7 +1288,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Anime Punch',
 		icon: '🥊',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/strongpunch.mp3',
+		src: '/media/sound-effects/anime_punch.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['anime', 'punch', 'hit']
@@ -1298,7 +1298,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Nya',
 		icon: '🐾',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/nya_2xyALFL.mp3',
+		src: '/media/sound-effects/nya_cat_girl.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['anime', 'nya', 'cat']
@@ -1308,7 +1308,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Jutsu',
 		icon: '🔥',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/katon.mp3',
+		src: '/media/sound-effects/jutsu_activation.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['anime', 'naruto', 'jutsu']
@@ -1318,7 +1318,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Sugoi Sugoi',
 		icon: '✨',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/sugoi-sugoi.mp3',
+		src: '/media/sound-effects/sugoi_sugoi.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['anime', 'sugoi', 'reaction']
@@ -1328,7 +1328,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Nani',
 		icon: '❔',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/tmph3o88c10.mp3',
+		src: '/media/sound-effects/anime_nani.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['anime', 'nani', 'reaction']
@@ -1338,7 +1338,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Good Job',
 		icon: '👏',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/good-job_d15pHHg.mp3',
+		src: '/media/sound-effects/anime_good_job.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['anime', 'good job', 'praise']
@@ -1348,7 +1348,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Senpai',
 		icon: '💌',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/anime-girl-senpai.mp3',
+		src: '/media/sound-effects/anime_senpai.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['anime', 'senpai', 'voice']
@@ -1358,7 +1358,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Naruto Sad',
 		icon: '🍃',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/naruto-sad-music-instant.mp3',
+		src: '/media/sound-effects/naruto_sad_song.mp3',
 		duration: '0:05',
 		source: 'MyInstants',
 		tags: ['anime', 'naruto', 'sad']
@@ -1368,7 +1368,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Naruto Battle',
 		icon: '⚔️',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/naruto-the-raising-fighting-spirit-extended-audiotrimmer_7wvXRts.mp3',
+		src: '/media/sound-effects/naruto_battle.mp3',
 		duration: '0:05',
 		source: 'MyInstants',
 		tags: ['anime', 'naruto', 'battle']
@@ -1378,7 +1378,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Dattebayo',
 		icon: '🌀',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/d-a-t-t-e-b-a-y-o-meme-audiotrimmer.mp3',
+		src: '/media/sound-effects/dattebayo.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['anime', 'naruto', 'voice']
@@ -1388,7 +1388,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Shadow Clone',
 		icon: '🥷',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/naruto_shadow_clones.mp3',
+		src: '/media/sound-effects/shadow_clone.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['anime', 'naruto', 'jutsu']
@@ -1398,7 +1398,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Sharingan',
 		icon: '👁️',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/itachi-mangekyou-sharingan-sound-effect.mp3',
+		src: '/media/sound-effects/sharingan.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['anime', 'naruto', 'jutsu']
@@ -1408,7 +1408,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Rasengan',
 		icon: '🌀',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/naruto-rasenganshippuden-mp3cut.mp3',
+		src: '/media/sound-effects/rasengan.mp3',
 		duration: '0:03',
 		source: 'MyInstants',
 		tags: ['anime', 'naruto', 'attack']
@@ -1418,7 +1418,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'To Be Continued',
 		icon: '➡️',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/untitled_1071.mp3',
+		src: '/media/sound-effects/jojo_to_be_continued.mp3',
 		duration: '0:04',
 		source: 'MyInstants',
 		tags: ['anime', 'jojo', 'meme']
@@ -1428,7 +1428,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Giorno Theme',
 		icon: '🎹',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/giornos-theme-but-only-the-best-part-is-in_vwd15lya_lyb0-online-audio-converter.mp3',
+		src: '/media/sound-effects/giorno_theme.mp3',
 		duration: '0:05',
 		source: 'MyInstants',
 		tags: ['anime', 'jojo', 'theme']
@@ -1438,7 +1438,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Ayayay',
 		icon: '🗿',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/jojos-bizarre-adventure-ay-ay-ay-ay-_-sound-effect.mp3',
+		src: '/media/sound-effects/jojo_ayayay.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['anime', 'jojo', 'chant']
@@ -1448,7 +1448,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Yes Yes Yes',
 		icon: '✅',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/yes-yes-yes-yes-yes.mp3',
+		src: '/media/sound-effects/jojo_yes.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['anime', 'jojo', 'yes']
@@ -1458,7 +1458,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'WRYYY',
 		icon: '🧛',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/dio-wryyy.mp3',
+		src: '/media/sound-effects/wryyy.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['anime', 'jojo', 'dio']
@@ -1468,7 +1468,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Ora Ora',
 		icon: '👊',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/jojos-bizarre-adventure-asb-ora-ora-ora.mp3',
+		src: '/media/sound-effects/ora_ora.mp3',
 		duration: '0:03',
 		source: 'MyInstants',
 		tags: ['anime', 'jojo', 'attack']
@@ -1478,7 +1478,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Kono Dio Da',
 		icon: '😈',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/kono-dio-da99.mp3',
+		src: '/media/sound-effects/kono_dio_da.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['anime', 'jojo', 'dio']
@@ -1488,7 +1488,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Muda Muda',
 		icon: '💢',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/muda_muda_muda_sound_effect.mp3',
+		src: '/media/sound-effects/muda_muda.mp3',
 		duration: '0:03',
 		source: 'MyInstants',
 		tags: ['anime', 'jojo', 'attack']
@@ -1498,7 +1498,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Goodbye Jojo',
 		icon: '👋',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/goodbye-jojo.mp3',
+		src: '/media/sound-effects/goodbye_jojo.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['anime', 'jojo', 'voice']
@@ -1508,7 +1508,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Rero Rero',
 		icon: '🍒',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/rero-rero-rero.mp3',
+		src: '/media/sound-effects/rero_rero.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['anime', 'jojo', 'meme']
@@ -1518,7 +1518,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Jojo Nice',
 		icon: '👌',
 		category: 'anime',
-		src: 'https://www.myinstants.com/media/sounds/joseph-joestar-nice.mp3',
+		src: '/media/sound-effects/jojo_nice.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['anime', 'jojo', 'nice']
@@ -1528,7 +1528,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Metal Gear',
 		icon: '❗',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/metalgearsolid.swf.mp3',
+		src: '/media/sound-effects/metal_gear_alert.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['game', 'alert', 'stealth']
@@ -1538,7 +1538,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'MC Drink',
 		icon: '🧪',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/minecraft-drinking-sound-effect.mp3',
+		src: '/media/sound-effects/minecraft_drink.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['game', 'minecraft', 'drink']
@@ -1548,7 +1548,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'MC Hurt',
 		icon: '🟩',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/classic_hurt.mp3',
+		src: '/media/sound-effects/minecraft_hurt.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['game', 'minecraft', 'hurt']
@@ -1558,7 +1558,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Villager',
 		icon: '🧑‍🌾',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/minecraft-villager-sound-effect.mp3',
+		src: '/media/sound-effects/minecraft_villager.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['game', 'minecraft', 'villager']
@@ -1568,7 +1568,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'MC Click',
 		icon: '🧱',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/minecraft_click.mp3',
+		src: '/media/sound-effects/minecraft_click.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['game', 'minecraft', 'click']
@@ -1578,7 +1578,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'MC XP',
 		icon: '🟢',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/orb.mp3',
+		src: '/media/sound-effects/minecraft_xp.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['game', 'minecraft', 'xp']
@@ -1588,7 +1588,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'MC Level Up',
 		icon: '⬆️',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/levelup.mp3',
+		src: '/media/sound-effects/minecraft_level_up.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['game', 'minecraft', 'level']
@@ -1598,7 +1598,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Enderman',
 		icon: '🌌',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/teleport1_Cw1ot9l.mp3',
+		src: '/media/sound-effects/enderman_teleport.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['game', 'minecraft', 'teleport']
@@ -1608,7 +1608,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Creeper Boom',
 		icon: '💥',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/creeper-explosion.mp3',
+		src: '/media/sound-effects/creeper_explosion.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['game', 'minecraft', 'explosion']
@@ -1618,7 +1618,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'MC Drop',
 		icon: '📦',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/minecraft-drop-block-sound-effect.mp3',
+		src: '/media/sound-effects/minecraft_drop.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['game', 'minecraft', 'drop']
@@ -1628,7 +1628,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'MC Totem',
 		icon: '🪽',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/minecraft-totem-sound.mp3',
+		src: '/media/sound-effects/minecraft_totem.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['game', 'minecraft', 'totem']
@@ -1638,7 +1638,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'MC Bow',
 		icon: '🏹',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/bow_shoot.mp3',
+		src: '/media/sound-effects/minecraft_bow.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['game', 'minecraft', 'bow']
@@ -1648,7 +1648,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Roblox Oof',
 		icon: '🧱',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/roblox-death-sound_1.mp3',
+		src: '/media/sound-effects/roblox_oof.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['game', 'roblox', 'oof']
@@ -1658,7 +1658,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Roblox Boom',
 		icon: '💣',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/roblox-explosion-sound.mp3',
+		src: '/media/sound-effects/roblox_explosion.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['game', 'roblox', 'explosion']
@@ -1668,7 +1668,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Roblox Sword',
 		icon: '⚔️',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/roblox-sword.mp3',
+		src: '/media/sound-effects/roblox_sword.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['game', 'roblox', 'sword']
@@ -1678,7 +1678,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'GameCube',
 		icon: '🟪',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/gamecube_intro.mp3',
+		src: '/media/sound-effects/gamecube_intro.mp3',
 		duration: '0:04',
 		source: 'MyInstants',
 		tags: ['game', 'nintendo', 'startup']
@@ -1688,7 +1688,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'You Died',
 		icon: '☠️',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/dark-souls-you-died-sound-effect_hm5sYFG.mp3',
+		src: '/media/sound-effects/dark_souls_death.mp3',
 		duration: '0:03',
 		source: 'MyInstants',
 		tags: ['game', 'dark souls', 'death']
@@ -1698,7 +1698,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Game Boy',
 		icon: '🎮',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/nintendo-game-boy-startup.mp3',
+		src: '/media/sound-effects/gameboy_startup.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['game', 'nintendo', 'startup']
@@ -1708,7 +1708,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Mario Jump',
 		icon: '🍄',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/maro-jump-sound-effect_1.mp3',
+		src: '/media/sound-effects/mario_jump.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['game', 'mario', 'jump']
@@ -1718,7 +1718,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Mario Death',
 		icon: '💀',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/super-mario-death-sound-sound-effect.mp3',
+		src: '/media/sound-effects/mario_death.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['game', 'mario', 'death']
@@ -1728,7 +1728,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Mario Coin',
 		icon: '🪙',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/super-mario-coin-sound.mp3',
+		src: '/media/sound-effects/mario_coin.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['game', 'mario', 'coin']
@@ -1738,7 +1738,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Mario 1-Up',
 		icon: '🍄',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/mario-1-up.mp3',
+		src: '/media/sound-effects/mario_one_up.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['game', 'mario', 'life']
@@ -1748,7 +1748,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Mario Pipe',
 		icon: '🟩',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/super-mario-bros.mp3',
+		src: '/media/sound-effects/mario_pipe.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['game', 'mario', 'pipe']
@@ -1758,7 +1758,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Mario Power',
 		icon: '⭐',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/01-power-up-mario.mp3',
+		src: '/media/sound-effects/mario_power_up.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['game', 'mario', 'power']
@@ -1768,7 +1768,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Mario Yahoo',
 		icon: '🙌',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/super-mario-64-yahoo-sound.mp3',
+		src: '/media/sound-effects/mario_yahoo.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['game', 'mario', 'voice']
@@ -1778,7 +1778,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Zelda Item',
 		icon: '🗡️',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/139-item-catch.mp3',
+		src: '/media/sound-effects/zelda_item_get.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['game', 'zelda', 'item']
@@ -1788,7 +1788,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Zelda Chest',
 		icon: '🎁',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/zelda-chest-opening-and-item-catch.mp3',
+		src: '/media/sound-effects/zelda_chest.mp3',
 		duration: '0:03',
 		source: 'MyInstants',
 		tags: ['game', 'zelda', 'chest']
@@ -1798,7 +1798,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Rupee',
 		icon: '💎',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/rupee-collect.mp3',
+		src: '/media/sound-effects/zelda_rupee.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['game', 'zelda', 'rupee']
@@ -1808,7 +1808,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Hey Listen',
 		icon: '🧚',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/zelda-navi-listen.mp3',
+		src: '/media/sound-effects/hey_listen.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['game', 'zelda', 'navi']
@@ -1818,7 +1818,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Zelda Secret',
 		icon: '🔎',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/ringtones-zelda-1.mp3',
+		src: '/media/sound-effects/zelda_secret.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['game', 'zelda', 'secret']
@@ -1828,7 +1828,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Sans Talk',
 		icon: '💀',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/just-sans-talking.mp3',
+		src: '/media/sound-effects/sans_talking.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['game', 'undertale', 'sans']
@@ -1838,7 +1838,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Gaster Blaster',
 		icon: '💀',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/gaster_blaster_sound_effect_1.mp3',
+		src: '/media/sound-effects/gaster_blaster.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['game', 'undertale', 'attack']
@@ -1848,7 +1848,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'UT Damage',
 		icon: '❤️',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/undertale-damage-taken.mp3',
+		src: '/media/sound-effects/undertale_damage.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['game', 'undertale', 'damage']
@@ -1858,7 +1858,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Savepoint',
 		icon: '💾',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/savepoint.mp3',
+		src: '/media/sound-effects/undertale_savepoint.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['game', 'undertale', 'save']
@@ -1868,7 +1868,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Soul Shatter',
 		icon: '💔',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/undertale-soul-shatter.mp3',
+		src: '/media/sound-effects/soul_shatter.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['game', 'undertale', 'soul']
@@ -1878,7 +1878,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'UT Game Over',
 		icon: '🪦',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/undertale-game-over.mp3',
+		src: '/media/sound-effects/undertale_game_over.mp3',
 		duration: '0:03',
 		source: 'MyInstants',
 		tags: ['game', 'undertale', 'game over']
@@ -1888,7 +1888,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'UT Select',
 		icon: '☑️',
 		category: 'game',
-		src: 'https://www.myinstants.com/media/sounds/undertale-select-sound.mp3',
+		src: '/media/sound-effects/undertale_select.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['game', 'undertale', 'select']
@@ -1898,7 +1898,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Vine Boom',
 		icon: '💥',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/vine-boom.mp3',
+		src: '/media/sound-effects/vine_boom.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['meme', 'vine', 'boom']
@@ -1908,7 +1908,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Run Vine',
 		icon: '🏃',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/run-vine-sound-effect.mp3',
+		src: '/media/sound-effects/run_vine.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['meme', 'vine', 'run']
@@ -1918,7 +1918,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Bruh',
 		icon: '🫠',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/movie_1.mp3',
+		src: '/media/sound-effects/bruh_meme.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['meme', 'bruh', 'reaction']
@@ -1928,7 +1928,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Sad Violin',
 		icon: '🎻',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/tf_nemesis.mp3',
+		src: '/media/sound-effects/sad_violin_meme.mp3',
 		duration: '0:04',
 		source: 'MyInstants',
 		tags: ['meme', 'sad', 'violin']
@@ -1938,7 +1938,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Role Reveal',
 		icon: '🟥',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/among-us-role-reveal-sound.mp3',
+		src: '/media/sound-effects/among_role_reveal.mp3',
 		duration: '0:03',
 		source: 'MyInstants',
 		tags: ['meme', 'among us', 'sus']
@@ -1948,7 +1948,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Emotional Damage',
 		icon: '🧠',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/emotional-damage-meme.mp3',
+		src: '/media/sound-effects/emotional_damage.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['meme', 'damage', 'reaction']
@@ -1958,7 +1958,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Thud',
 		icon: '📉',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/vine-boom-sound-effect_KT89XIq.mp3',
+		src: '/media/sound-effects/instagram_thud.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['meme', 'thud', 'boom']
@@ -1968,7 +1968,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Shocked',
 		icon: '😱',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/shocked-sound-effect.mp3',
+		src: '/media/sound-effects/shocked_sound.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['meme', 'shock', 'reaction']
@@ -1978,7 +1978,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Dun Dun Dun',
 		icon: '🎺',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/dun-dun-dun-sound-effect-brass_8nFBccR.mp3',
+		src: '/media/sound-effects/dun_dun_dun.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['meme', 'dramatic', 'sting']
@@ -1988,7 +1988,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Cat Laugh',
 		icon: '😹',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/cat-laugh-meme-1.mp3',
+		src: '/media/sound-effects/cat_laugh_meme.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['meme', 'cat', 'laugh']
@@ -1998,7 +1998,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Mimimi',
 		icon: '😴',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/snore-mimimimimimi.mp3',
+		src: '/media/sound-effects/snore_mimimi.mp3',
 		duration: '0:03',
 		source: 'MyInstants',
 		tags: ['meme', 'sleep', 'snore']
@@ -2008,7 +2008,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Oh My God',
 		icon: '😳',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/oh-my-god-meme.mp3',
+		src: '/media/sound-effects/oh_my_god_meme.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['meme', 'reaction', 'omg']
@@ -2018,7 +2018,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Wide Putin',
 		icon: '🚶',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/my-movie-6_0RlWMvM.mp3',
+		src: '/media/sound-effects/wide_putin.mp3',
 		duration: '0:05',
 		source: 'MyInstants',
 		tags: ['meme', 'wide', 'song']
@@ -2028,7 +2028,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Dog Doin',
 		icon: '🐶',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/yt1s_wU4BGgD.mp3',
+		src: '/media/sound-effects/what_da_dog_doin.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['meme', 'dog', 'reaction']
@@ -2038,7 +2038,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Oh No No',
 		icon: '🙅',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/oh-no-no-no-tik-tok-song-sound-effect.mp3',
+		src: '/media/sound-effects/oh_no_no_tiktok.mp3',
 		duration: '0:04',
 		source: 'MyInstants',
 		tags: ['meme', 'oh no', 'tiktok']
@@ -2048,7 +2048,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Oh Hell No',
 		icon: '🚫',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/oh-hell-no-sound-effect-free-download.mp3',
+		src: '/media/sound-effects/oh_hell_no.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['meme', 'no', 'reaction']
@@ -2058,7 +2058,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Always Lying',
 		icon: '🤥',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/why-you-always-lying-original.mp3',
+		src: '/media/sound-effects/why_you_lying.mp3',
 		duration: '0:04',
 		source: 'MyInstants',
 		tags: ['meme', 'lying', 'vine']
@@ -2068,7 +2068,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Taco Bell',
 		icon: '🔔',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/taco-bell.mp3',
+		src: '/media/sound-effects/taco_bell_bong.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['meme', 'bell', 'bong']
@@ -2078,7 +2078,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'The Rock',
 		icon: '🤨',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/the-rock-meme-sound-effect.mp3',
+		src: '/media/sound-effects/the_rock_meme.mp3',
 		duration: '0:02',
 		source: 'MyInstants',
 		tags: ['meme', 'rock', 'reaction']
@@ -2088,7 +2088,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Look At Dude',
 		icon: '👀',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/look-at-this-dude.mp3',
+		src: '/media/sound-effects/look_at_this_dude.mp3',
 		duration: '0:03',
 		source: 'MyInstants',
 		tags: ['meme', 'reaction', 'look']
@@ -2098,7 +2098,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Emergency',
 		icon: '🚨',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/emergency-meeting-sound-among-us.mp3',
+		src: '/media/sound-effects/among_emergency.mp3',
 		duration: '0:03',
 		source: 'MyInstants',
 		tags: ['meme', 'among us', 'emergency']
@@ -2108,7 +2108,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Body Reported',
 		icon: '🦴',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/report_bobdyfound_1.mp3',
+		src: '/media/sound-effects/body_reported.mp3',
 		duration: '0:03',
 		source: 'MyInstants',
 		tags: ['meme', 'among us', 'reported']
@@ -2118,7 +2118,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Ejected',
 		icon: '🚀',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/among-us-eject-sound-effect.mp3',
+		src: '/media/sound-effects/among_eject.mp3',
 		duration: '0:03',
 		source: 'MyInstants',
 		tags: ['meme', 'among us', 'eject']
@@ -2128,7 +2128,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Sus',
 		icon: '📮',
 		category: 'memes',
-		src: 'https://www.myinstants.com/media/sounds/sus_5644vtL.mp3',
+		src: '/media/sound-effects/sus_sound.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['meme', 'among us', 'sus']
@@ -2138,7 +2138,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Discord Ping',
 		icon: '💬',
 		category: 'ui',
-		src: 'https://www.myinstants.com/media/sounds/discord-notification.mp3',
+		src: '/media/sound-effects/discord_notification.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['discord', 'notification', 'ping']
@@ -2148,7 +2148,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Discord Call',
 		icon: '📞',
 		category: 'ui',
-		src: 'https://www.myinstants.com/media/sounds/discord-call-sound.mp3',
+		src: '/media/sound-effects/discord_call.mp3',
 		duration: '0:03',
 		source: 'MyInstants',
 		tags: ['discord', 'call', 'ring']
@@ -2158,7 +2158,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Discord Join',
 		icon: '✅',
 		category: 'ui',
-		src: 'https://www.myinstants.com/media/sounds/discord-sounds.mp3',
+		src: '/media/sound-effects/discord_join.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['discord', 'join', 'voice']
@@ -2168,7 +2168,7 @@ const customSoundEffects: SoundEffect[] = [
 		name: 'Discord Leave',
 		icon: '↩️',
 		category: 'ui',
-		src: 'https://www.myinstants.com/media/sounds/discord-leave-noise.mp3',
+		src: '/media/sound-effects/discord_leave.mp3',
 		duration: '0:01',
 		source: 'MyInstants',
 		tags: ['discord', 'leave', 'voice']
