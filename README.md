@@ -54,7 +54,10 @@ chat is disabled inside Discord Activities.
   frontend server.
 
 Example production-style Activity mapping. Discord portal targets omit the
-protocol, while Sparkle environment variables stay absolute URLs.
+protocol. In Sparkle, `SERVER_BE` and `SERVER_STATIC` may be relative path
+prefixes, matching the old Svelte app's public `PUBLIC_BE` and `PUBLIC_STATIC`
+values. If either value starts with `http://` or `https://`, Sparkle treats it as
+an absolute URL instead.
 
 | Prefix    | Target                       |
 | --------- | ---------------------------- |
@@ -71,9 +74,22 @@ PUBLIC_DISCORD_CLIENT_ID=123456789012345678
 SERVER_DISCORD_CLIENT_SECRET=...
 ```
 
-When Discord serves the Activity at `https://123456789012345678.discordsays.com`,
-Sparkle rewrites browser-facing backend/static URLs to the proxy host while
-server-side metadata fetches keep using the configured origins.
+Or, for the relative-path setup used by Discord proxy mappings:
+
+```env
+SERVER_BE=/be
+SERVER_STATIC=/static
+SERVER_INTERNAL_BE=http://sparkle-backend:1323
+SERVER_INTERNAL_STATIC=http://sparkle-backend:1323/static
+PUBLIC_DISCORD_CLIENT_ID=123456789012345678
+SERVER_DISCORD_CLIENT_SECRET=...
+```
+
+`SERVER_INTERNAL_BE` is optional. Use it when `SERVER_BE` is relative but
+server-rendered pages should fetch the backend directly instead of resolving
+`/be` against the current request host. `SERVER_INTERNAL_STATIC` is optional and
+defaults to `SERVER_INTERNAL_BE/static`; set it when static assets have a
+different internal base.
 
 ### Desktop Activity
 
@@ -118,12 +134,14 @@ Video files are first processed and transcoded by the backend to:
 
 # Setup
 
-| Environment Variable           | Description                                                                         |
-| ------------------------------ | ----------------------------------------------------------------------------------- |
-| `SERVER_BE`                    | The backend endpoint used by server code and passed to the browser at runtime       |
-| `SERVER_STATIC`                | The absolute static asset base, including `/static`, used for poster/thumbnail URLs |
-| `PUBLIC_DISCORD_CLIENT_ID`     | Your Discord application id / OAuth2 client id (runtime)                            |
-| `SERVER_DISCORD_CLIENT_SECRET` | Your Discord application OAuth2 client secret (runtime)                             |
+| Environment Variable           | Description                                                                                                                               |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `SERVER_BE`                    | Browser backend base. Values beginning with `http://` or `https://` stay absolute; other values become relative paths like `/be`          |
+| `SERVER_STATIC`                | Browser static asset base. Values beginning with `http://` or `https://` stay absolute; other values become relative paths like `/static` |
+| `SERVER_INTERNAL_BE`           | Optional private backend base for server-side fetches when `SERVER_BE` is relative                                                        |
+| `SERVER_INTERNAL_STATIC`       | Optional private static asset base for local/standalone rewrites when `SERVER_STATIC` is relative                                         |
+| `PUBLIC_DISCORD_CLIENT_ID`     | Your Discord application id / OAuth2 client id (runtime)                                                                                  |
+| `SERVER_DISCORD_CLIENT_SECRET` | Your Discord application OAuth2 client secret (runtime)                                                                                   |
 
 Built-in chat emotes and room sound effects are bundled in `public/media`, so the
 frontend can render and play the curated picker catalog without depending on
@@ -139,8 +157,10 @@ services:
     ports:
       - '3000:3000'
     environment:
-      - SERVER_BE=https://anime.lyu.sh/be
-      - SERVER_STATIC=https://anime.lyu.sh/static
+      - SERVER_BE=/be
+      - SERVER_STATIC=/static
+      - SERVER_INTERNAL_BE=http://sparkle-backend:1323
+      - SERVER_INTERNAL_STATIC=http://sparkle-backend:1323/static
       - PUBLIC_DISCORD_CLIENT_ID=
       - SERVER_DISCORD_CLIENT_SECRET=
 ```

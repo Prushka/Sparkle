@@ -10,37 +10,56 @@ function getRequiredEnv(key: string) {
 	return value;
 }
 
-function isDiscordProxyHost(host: string | undefined) {
-	return Boolean(host && /^[0-9]+\.discordsays\.com(?::\d+)?$/.test(host));
+function getOptionalEnv(key: string) {
+	return trimTrailingSlash(process.env[key] ?? '');
+}
+
+function isHttpUrl(value: string) {
+	return /^https?:\/\//i.test(value);
 }
 
 function getPathnameBase(value: string) {
-	try {
+	if (isHttpUrl(value)) {
 		return trimTrailingSlash(new URL(value).pathname || '/');
-	} catch {
-		return trimTrailingSlash(value.startsWith('/') ? value : `/${value}`);
 	}
+	return trimTrailingSlash(value.startsWith('/') ? value : `/${value}`);
 }
 
-function getBrowserBaseUrl(value: string, host?: string) {
-	if (!isDiscordProxyHost(host)) {
+function getRequestOrigin(host?: string) {
+	const requestHost = host || 'localhost:3001';
+	const protocol = /^(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/i.test(requestHost)
+		? 'http'
+		: 'https';
+	return `${protocol}://${requestHost}`;
+}
+
+function getServerBaseUrl(value: string, overrideKey: string, host?: string) {
+	const override = getOptionalEnv(overrideKey);
+	if (override) {
+		return override;
+	}
+	if (isHttpUrl(value)) {
 		return value;
 	}
-	return `https://${host}${getPathnameBase(value)}`;
+	return trimTrailingSlash(new URL(getPathnameBase(value), getRequestOrigin(host)).toString());
 }
 
-export function getBackendBaseUrl() {
-	return getRequiredEnv('SERVER_BE');
+function getBrowserBaseUrl(value: string) {
+	return isHttpUrl(value) ? value : getPathnameBase(value);
+}
+
+export function getBackendBaseUrl(host?: string) {
+	return getServerBaseUrl(getRequiredEnv('SERVER_BE'), 'SERVER_INTERNAL_BE', host);
 }
 
 export function getStaticBaseUrl() {
 	return getRequiredEnv('SERVER_STATIC');
 }
 
-export function getBrowserBackendBaseUrl(_host?: string) {
-	return getBrowserBaseUrl(getBackendBaseUrl(), _host);
+export function getBrowserBackendBaseUrl() {
+	return getBrowserBaseUrl(getRequiredEnv('SERVER_BE'));
 }
 
-export function getBrowserStaticBaseUrl(_host?: string) {
-	return getBrowserBaseUrl(getStaticBaseUrl(), _host);
+export function getBrowserStaticBaseUrl() {
+	return getBrowserBaseUrl(getStaticBaseUrl());
 }

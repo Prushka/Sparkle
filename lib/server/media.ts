@@ -16,17 +16,33 @@ function getSearchValue(searchParams: SearchParams, key: string) {
 	return Array.isArray(value) ? value[0] : value;
 }
 
+function getRoomRedirectQuery(searchParams: SearchParams, room: string) {
+	const params = new URLSearchParams();
+	for (const [key, value] of Object.entries(searchParams)) {
+		if (Array.isArray(value)) {
+			for (const item of value) {
+				params.append(key, item);
+			}
+		} else if (value !== undefined) {
+			params.set(key, value);
+		}
+	}
+	params.set('room', room);
+	const query = params.toString();
+	return query ? `?${query}` : '';
+}
+
 export const loadHomePageData = cache(
 	async (searchParams: SearchParams, fetchFn: typeof fetch, host?: string) => {
 		const room = getSearchValue(searchParams, 'room') || getSearchValue(searchParams, 'channel_id');
 		if (room && roomMapping[room]) {
-			redirect(`/${roomMapping[room]}?room=${room}`);
+			redirect(`/${roomMapping[room]}${getRoomRedirectQuery(searchParams, room)}`);
 		}
-		const jobs = await getJobs(fetchFn);
+		const jobs = await getJobs(fetchFn, null, host);
 		return {
 			jobs,
-			staticBaseUrl: getBrowserStaticBaseUrl(host),
-			backendBaseUrl: getBrowserBackendBaseUrl(host)
+			staticBaseUrl: getBrowserStaticBaseUrl(),
+			backendBaseUrl: getBrowserBackendBaseUrl()
 		};
 	}
 );
@@ -40,7 +56,7 @@ export const loadMediaPageData = cache(
 	): Promise<ServerData> => {
 		let job: Job | undefined;
 		let codec = 'h264';
-		const browserStaticBaseUrl = getBrowserStaticBaseUrl(host);
+		const browserStaticBaseUrl = getBrowserStaticBaseUrl();
 		let base = `${browserStaticBaseUrl}/${id}`;
 		let plot = '';
 		let rating = -1;
@@ -51,7 +67,7 @@ export const loadMediaPageData = cache(
 			roomMapping[room] = id;
 		}
 		try {
-			jobs = await getJobs(fetchFn, id);
+			jobs = await getJobs(fetchFn, id, host);
 		} catch (error) {
 			console.log({ id }, error);
 			redirect('/');
@@ -79,7 +95,7 @@ export const loadMediaPageData = cache(
 					codec = 'hevc';
 				}
 			}
-			const infoResponse = await fetchFn(`${getBackendBaseUrl()}/static/${id}/info.nfo`);
+			const infoResponse = await fetchFn(`${getBackendBaseUrl(host)}/static/${id}/info.nfo`);
 			const info = await infoResponse.text();
 			const $ = cheerio.load(info, { xml: true });
 			rating = parseFloat($('rating').text());
@@ -115,7 +131,7 @@ export const loadMediaPageData = cache(
 				? `https://${host}/json/${job?.Id}?room=${room}`
 				: `https://${host}/json/${job?.Id}`,
 			dominantColor: job?.DominantColors?.[0] ? job.DominantColors[0] : '#EC275F',
-			backendBaseUrl: getBrowserBackendBaseUrl(host)
+			backendBaseUrl: getBrowserBackendBaseUrl()
 		};
 	}
 );

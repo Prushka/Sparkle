@@ -9,7 +9,7 @@ import {
 	useRef,
 	useState
 } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { IconCheck, IconChevronRight, IconChevronDown } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
 import * as Popover from '@/components/ui/popover';
@@ -31,6 +31,8 @@ export const MediaSelection = forwardRef<
 	}
 >(function MediaSelection({ data, bounceToOverride = null, staticBaseUrl, backendBaseUrl }, ref) {
 	const router = useRouter();
+	const searchParams = useSearchParams();
+	const searchParamsString = searchParams.toString();
 	const [jobs, setJobs] = useState<Job[]>(data.jobs);
 	const [titleSelectionOpen, setTitleSelectionOpen] = useState(false);
 	const [seSelectionOpen, setSeSelectionOpen] = useState(false);
@@ -88,7 +90,7 @@ export const MediaSelection = forwardRef<
 		if (bounceToOverride) {
 			bounceToOverride(id);
 		} else {
-			router.push(`/${id}`);
+			router.push(searchParamsString ? `/${id}?${searchParamsString}` : `/${id}`);
 		}
 	}
 

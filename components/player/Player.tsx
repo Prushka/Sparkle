@@ -660,6 +660,7 @@ export function Player({ data }: { data: ServerData }) {
 	const { job } = data;
 	const router = useRouter();
 	const searchParams = useSearchParams();
+	const searchParamsString = searchParams.toString();
 	const {
 		setCurrentlyWatching,
 		setChatFocused,
@@ -739,11 +740,13 @@ export function Player({ data }: { data: ServerData }) {
 	const [playerVolume, setPlayerVolume] = useState(initialVolume);
 	const [playerMuted, setPlayerMuted] = useState(initialVolume === 0);
 	const [renderNow, setRenderNow] = useState(0);
-	const BASE_STATIC = `${data.staticBaseUrl}/${job.Id}`;
+	const staticBaseUrl = data.staticBaseUrl;
+	const backendBaseUrl = data.backendBaseUrl;
+	const BASE_STATIC = `${staticBaseUrl}/${job.Id}`;
 	const [tickedSecsAgo, setTickedSecsAgo] = useState(-1);
 	const [chatFocusedSecs, setChatFocusedSecs] = useState(0);
-	const thumbnailVttSrc = `${data.staticBaseUrl}/${job.Id}/storyboard.vtt`;
-	const backendBaseUrl = data.backendBaseUrl;
+	const thumbnailVttSrc = `${BASE_STATIC}/storyboard.vtt`;
+	const posterSrc = data.preview;
 	const roomBase = searchParams.get('room') || searchParams.get('channel_id') || '';
 	const room = roomBase ? `${roomBase}${job.Id}` : job.Id;
 	const youtubeRoomId = roomBase || job.Id;
@@ -751,8 +754,15 @@ export function Player({ data }: { data: ServerData }) {
 	const youtubeStateStorageKey = `sparkle:youtube-sync-state:${youtubeRoomId}`;
 	const [youtubeState, setYoutubeState] = useState<YouTubeSyncState>(DEFAULT_YOUTUBE_SYNC_STATE);
 	const getRoomPath = useCallback(
-		(id: string) => (roomBase ? `/${id}?room=${encodeURIComponent(roomBase)}` : `/${id}`),
-		[roomBase]
+		(id: string) => {
+			const params = new URLSearchParams(searchParamsString);
+			if (roomBase) {
+				params.set('room', roomBase);
+			}
+			const query = params.toString();
+			return query ? `/${id}?${query}` : `/${id}`;
+		},
+		[roomBase, searchParamsString]
 	);
 	const discord = discordAuth as Discord | null;
 	const discordUser = discord?.user;
@@ -1011,7 +1021,7 @@ export function Player({ data }: { data: ServerData }) {
 			title: job.Title.title,
 			se: job.Title.episode ? job.Title.episode.se : '',
 			seTitle: job.Title.episode ? job.Title.episode.title : '',
-			thumbnail: data.preview,
+			thumbnail: posterSrc,
 			timeEntered: Date.now(),
 			paused: true,
 			totalDuration: 0,
@@ -1021,7 +1031,7 @@ export function Player({ data }: { data: ServerData }) {
 		if (discord) {
 			setInteracted(true);
 		}
-	}, [data.preview, discord, job.Id, job.Title, setCurrentlyWatching, setInteracted]);
+	}, [discord, job.Id, job.Title, posterSrc, setCurrentlyWatching, setInteracted]);
 
 	useEffect(() => {
 		setPlayersCount(socketCommunicating ? roomPlayers.length : -1);
@@ -2397,7 +2407,7 @@ export function Player({ data }: { data: ServerData }) {
 				formId={`chat-pc-form-${suffix}`}
 				messages={[]}
 				historicalPlayers={{}}
-				staticBaseUrl={data.staticBaseUrl}
+				staticBaseUrl={staticBaseUrl}
 				onFocus={() => {
 					playerEl?.controls?.pause?.();
 					setChatFocused(true);
@@ -2421,7 +2431,7 @@ export function Player({ data }: { data: ServerData }) {
 				controlsShowing={controlsShowing && playerSmallLayout}
 				messagesToDisplay={messagesToDisplay}
 				historicalPlayers={historicalPlayers}
-				staticBaseUrl={data.staticBaseUrl}
+				staticBaseUrl={staticBaseUrl}
 			/>
 		</div>
 	);
@@ -2489,7 +2499,7 @@ export function Player({ data }: { data: ServerData }) {
 							}}
 						>
 							<MediaProvider className="media-provider h-full w-full">
-								<Poster className="vds-poster" src={data.preview} alt="" />
+								<Poster className="vds-poster" src={posterSrc} alt="" />
 								<canvas ref={canvasRef} id="sub-canvas" className="pointer-events-none absolute" />
 							</MediaProvider>
 							<DefaultVideoLayout
@@ -2601,7 +2611,7 @@ export function Player({ data }: { data: ServerData }) {
 						useButton
 						messages={roomMessages}
 						historicalPlayers={historicalPlayers}
-						staticBaseUrl={data.staticBaseUrl}
+						staticBaseUrl={staticBaseUrl}
 						onFocus={() => {
 							setChatFocused(true);
 						}}
@@ -2641,7 +2651,7 @@ export function Player({ data }: { data: ServerData }) {
 										id={playerProfileId}
 										discordUser={historicalPlayers[player.id]?.discordUser ?? player.discordUser}
 										name={player.name}
-										staticBaseUrl={data.staticBaseUrl}
+										staticBaseUrl={staticBaseUrl}
 									/>
 									{voiceSupported ? (
 										<span
@@ -2715,7 +2725,7 @@ export function Player({ data }: { data: ServerData }) {
 												className="h-14 w-14"
 												discordUser={discordUser}
 												name={displayName}
-												staticBaseUrl={data.staticBaseUrl}
+												staticBaseUrl={staticBaseUrl}
 											/>
 											<input
 												accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
@@ -2782,7 +2792,7 @@ export function Player({ data }: { data: ServerData }) {
 						<MediaSelection
 							ref={mediaSelectionRef}
 							data={data}
-							staticBaseUrl={data.staticBaseUrl}
+							staticBaseUrl={staticBaseUrl}
 							backendBaseUrl={backendBaseUrl}
 							bounceToOverride={(id) => {
 								if (socketCommunicating && roomPlayers.length > 1 && id !== job.Id) {
@@ -2822,7 +2832,7 @@ export function Player({ data }: { data: ServerData }) {
 						firedBy={moveToast.firedBy}
 						job={moveToast.job}
 						moveToPath={getRoomPath}
-						staticBaseUrl={data.staticBaseUrl}
+						staticBaseUrl={staticBaseUrl}
 					/>
 				</div>
 			) : null}

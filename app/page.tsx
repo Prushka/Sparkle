@@ -3,6 +3,7 @@ import { headers } from 'next/headers';
 import { connection } from 'next/server';
 import { MediaSelection } from '@/components/player/MediaSelection';
 import { loadHomePageData } from '@/lib/server/media';
+import { getRequestHost } from '@/lib/server/request';
 
 export const metadata: Metadata = {
 	title: "It's anime time!"
@@ -17,7 +18,8 @@ export default async function HomePage({
 }) {
 	await connection();
 	const resolvedSearchParams = await Promise.resolve(searchParams ?? {});
-	const host = (await headers()).get('host') ?? 'localhost:3000';
+	const requestHeaders = await headers();
+	const host = getRequestHost(requestHeaders);
 	const data = await loadHomePageData(resolvedSearchParams, fetch, host);
 
 	return (
