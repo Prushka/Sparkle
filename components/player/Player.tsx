@@ -2499,12 +2499,14 @@ export function Player({ data }: { data: ServerData }) {
 				className="flex w-full flex-col gap-4 p-4 font-semibold"
 				style={!discord ? { minHeight: 'calc(100dvh - min(100dvh, 56.25vw))' } : undefined}
 			>
-				<div className="mx-auto grid w-full max-w-[90rem] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 max-[760px]:grid-cols-1 max-[760px]:justify-items-center">
-					<div className="flex min-w-0 justify-start max-[760px]:justify-center">
+				<div className="mx-auto grid w-full max-w-[90rem] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 max-[760px]:grid-cols-[auto_auto] max-[760px]:justify-center">
+					<div className="flex min-w-0 justify-start max-[760px]:order-2 max-[760px]:justify-end">
 						<VoiceControls voice={voice} />
 					</div>
-					<div className="flex min-w-0 justify-center">{videoSettingsDropdown}</div>
-					<div className="flex min-w-0 items-center justify-end gap-2 max-[760px]:justify-center">
+					<div className="flex min-w-0 justify-center max-[760px]:order-1 max-[760px]:col-span-2 max-[760px]:w-full">
+						{videoSettingsDropdown}
+					</div>
+					<div className="flex min-w-0 items-center justify-end gap-2 max-[760px]:order-3 max-[760px]:justify-start">
 						<Tooltip.Provider delayDuration={0}>
 							<Tooltip.Root>
 								<Tooltip.Trigger asChild>

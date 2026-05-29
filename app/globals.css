@@ -405,12 +405,12 @@
 
 .chat-pc .emoji-trigger,
 .chat-pc .sound-trigger {
-	color: rgba(255, 255, 255, 0.72);
+	color: hsla(0, 0%, 100%, 0.56);
 }
 
 .chat-pc .emoji-trigger:hover,
 .chat-pc .sound-trigger:hover {
-	color: white;
+	color: hsla(0, 0%, 100%, 0.56);
 }
 
 .player-chat-control {

@@ -9760,6 +9760,178 @@ export const chatEmojis: ChatEmoji[] = [
 export const chatEmojiById = new Map(chatEmojis.map((emoji) => [emoji.id, emoji]));
 
 const emojiTokenRegex = /:([a-z0-9][a-z0-9_+-]{1,39}):/gi;
+const noEmojiSearchMatch = Number.POSITIVE_INFINITY;
+
+type SearchableChatEmoji = {
+	emoji: ChatEmoji;
+	id: SearchableText;
+	label: SearchableText;
+	tags: SearchableText[];
+};
+
+type SearchableText = {
+	normalized: string;
+	compact: string;
+	words: string[];
+	acronym: string;
+};
+
+function normalizeSearchText(value: string) {
+	return value.trim().toLowerCase();
+}
+
+function compactSearchText(value: string) {
+	return normalizeSearchText(value).replace(/[^a-z0-9]/g, '');
+}
+
+function splitSearchWords(value: string) {
+	return compactSearchText(value)
+		? normalizeSearchText(value)
+				.split(/[^a-z0-9]+/)
+				.filter(Boolean)
+		: [];
+}
+
+function createSearchableText(value: string): SearchableText {
+	const words = splitSearchWords(value);
+	return {
+		normalized: normalizeSearchText(value),
+		compact: compactSearchText(value),
+		words,
+		acronym: words.map((word) => word[0]).join('')
+	};
+}
+
+function scoreSubsequence(target: string, query: string) {
+	if (query.length < 2 || query.length > target.length) {
+		return noEmojiSearchMatch;
+	}
+
+	let queryIndex = 0;
+	const positions: number[] = [];
+	for (
+		let targetIndex = 0;
+		targetIndex < target.length && queryIndex < query.length;
+		targetIndex++
+	) {
+		if (target[targetIndex] !== query[queryIndex]) {
+			continue;
+		}
+		positions.push(targetIndex);
+		queryIndex += 1;
+	}
+	if (queryIndex !== query.length) {
+		return noEmojiSearchMatch;
+	}
+
+	const start = positions[0];
+	const span = positions[positions.length - 1] - start + 1;
+	const gaps = span - query.length;
+	return start * 2 + gaps * 3 + Math.max(0, target.length - query.length) * 0.05;
+}
+
+function scoreWordPrefixSequence(words: string[], query: string) {
+	if (query.length < 2 || words.length < 2) {
+		return noEmojiSearchMatch;
+	}
+
+	const visit = (wordIndex: number, queryIndex: number, usedWords: number): number => {
+		if (queryIndex === query.length) {
+			return usedWords > 1 ? usedWords : noEmojiSearchMatch;
+		}
+		if (wordIndex >= words.length) {
+			return noEmojiSearchMatch;
+		}
+
+		const word = words[wordIndex];
+		const maxLength = Math.min(word.length, query.length - queryIndex);
+		let bestScore = noEmojiSearchMatch;
+		for (let length = maxLength; length >= 1; length--) {
+			const part = query.slice(queryIndex, queryIndex + length);
+			if (!word.startsWith(part)) {
+				continue;
+			}
+			bestScore = Math.min(bestScore, visit(wordIndex + 1, queryIndex + length, usedWords + 1));
+		}
+		return bestScore;
+	};
+
+	let bestScore = noEmojiSearchMatch;
+	for (let startIndex = 0; startIndex < words.length; startIndex++) {
+		const score = visit(startIndex, 0, 0);
+		if (Number.isFinite(score)) {
+			bestScore = Math.min(bestScore, startIndex * 4 + score);
+		}
+	}
+	return bestScore;
+}
+
+function scoreSearchText(candidate: SearchableText, query: SearchableText) {
+	if (!query.compact || !candidate.compact) {
+		return noEmojiSearchMatch;
+	}
+
+	const scores: number[] = [];
+	if (candidate.normalized === query.normalized) {
+		scores.push(0);
+	}
+	if (candidate.compact === query.compact) {
+		scores.push(1);
+	}
+	if (candidate.normalized.startsWith(query.normalized)) {
+		scores.push(4);
+	}
+	if (candidate.compact.startsWith(query.compact)) {
+		scores.push(6);
+	}
+	if (candidate.words.some((word) => word === query.compact)) {
+		scores.push(8);
+	}
+	if (candidate.words.some((word) => word.startsWith(query.compact))) {
+		scores.push(10);
+	}
+	const wordSequenceScore = scoreWordPrefixSequence(candidate.words, query.compact);
+	if (Number.isFinite(wordSequenceScore)) {
+		scores.push(12 + wordSequenceScore);
+	}
+	if (candidate.normalized.includes(query.normalized)) {
+		scores.push(18);
+	}
+	if (candidate.compact.includes(query.compact)) {
+		scores.push(20);
+	}
+	if (query.compact.length >= 2 && candidate.acronym) {
+		if (candidate.acronym.startsWith(query.compact)) {
+			scores.push(24);
+		} else {
+			const acronymScore = scoreSubsequence(candidate.acronym, query.compact);
+			if (Number.isFinite(acronymScore)) {
+				scores.push(30 + acronymScore);
+			}
+		}
+	}
+
+	const fuzzyScore = scoreSubsequence(candidate.compact, query.compact);
+	if (Number.isFinite(fuzzyScore)) {
+		scores.push(36 + fuzzyScore);
+	}
+
+	return scores.length ? Math.min(...scores) : noEmojiSearchMatch;
+}
+
+function scoreSearchableEmoji(candidate: SearchableChatEmoji, query: SearchableText) {
+	const idScore = scoreSearchText(candidate.id, query);
+	const labelScore = scoreSearchText(candidate.label, query) + 80;
+	const tagScore = Math.min(...candidate.tags.map((tag) => scoreSearchText(tag, query))) + 120;
+	return Math.min(idScore, labelScore, tagScore);
+}
+
+const searchableChatEmojis: SearchableChatEmoji[] = chatEmojis.map((emoji) => ({
+	emoji,
+	id: createSearchableText(emoji.id),
+	label: createSearchableText(emoji.label),
+	tags: emoji.tags.map(createSearchableText)
+}));
 
 export function getChatEmoji(id: string): ChatEmoji | undefined {
 	return chatEmojiById.get(id.toLowerCase());
@@ -9846,24 +10018,22 @@ export function findActiveEmojiToken(text: string, cursorIndex: number) {
 }
 
 export function searchChatEmojis(query: string, limit = 8): ChatEmoji[] {
-	const normalized = query.trim().toLowerCase();
+	const normalized = normalizeSearchText(query);
 	if (!normalized) {
 		return chatEmojis.slice(0, limit);
 	}
-	const scored = chatEmojis
-		.map((emoji) => {
-			const idScore = emoji.id.startsWith(normalized) ? 0 : emoji.id.includes(normalized) ? 2 : 9;
-			const label = emoji.label.toLowerCase();
-			const labelScore = label.startsWith(normalized) ? 1 : label.includes(normalized) ? 3 : 9;
-			const tagScore = emoji.tags.some((tag) => tag.startsWith(normalized))
-				? 4
-				: emoji.tags.some((tag) => tag.includes(normalized))
-					? 5
-					: 9;
-			const score = Math.min(idScore, labelScore, tagScore);
-			return { emoji, score };
-		})
-		.filter(({ score }) => score < 9)
-		.sort((a, b) => a.score - b.score || a.emoji.id.localeCompare(b.emoji.id));
+	const searchableQuery = createSearchableText(normalized);
+	const scored = searchableChatEmojis
+		.map((candidate) => ({
+			emoji: candidate.emoji,
+			score: scoreSearchableEmoji(candidate, searchableQuery)
+		}))
+		.filter(({ score }) => Number.isFinite(score))
+		.sort(
+			(a, b) =>
+				a.score - b.score ||
+				a.emoji.id.length - b.emoji.id.length ||
+				a.emoji.id.localeCompare(b.emoji.id)
+		);
 	return scored.slice(0, limit).map(({ emoji }) => emoji);
 }

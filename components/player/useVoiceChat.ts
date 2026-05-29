@@ -488,23 +488,14 @@ export function useVoiceChat({
 		setMuted(true);
 		mutedRef.current = true;
 		setDeafened(false);
-		setStatus('joining');
-
-		try {
-			const stream = await ensureMicrophone();
-			attachLocalStreamToPeers(stream);
-			setStatus('ready');
-		} catch (error) {
-			console.warn('Voice microphone unavailable', error);
-			setStatus('listen-only');
-		}
+		setStatus('listen-only');
 
 		sendVoiceSignal(undefined, {
 			kind: 'hello',
 			sessionId: sessionIdRef.current,
 			muted: mutedRef.current
 		});
-	}, [attachLocalStreamToPeers, ensureMicrophone, sendVoiceSignal]);
+	}, [sendVoiceSignal]);
 
 	const leave = useCallback(() => {
 		sendVoiceSignal(undefined, {
