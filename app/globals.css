@@ -293,11 +293,9 @@
 }
 
 .chat-rich-input {
-	display: flex;
+	display: block;
 	height: 2.25rem;
 	width: 100%;
-	align-items: center;
-	gap: 0.18rem;
 	overflow-x: auto;
 	overflow-y: hidden;
 	white-space: pre;
@@ -306,8 +304,9 @@
 	border: 1px solid hsl(var(--input));
 	background-color: transparent;
 	padding: 0.25rem 0.75rem;
+	font-family: var(--font-body);
 	font-size: 0.875rem;
-	line-height: 1.25rem;
+	line-height: 1.7rem;
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 	outline: none;
 	scrollbar-width: none;
@@ -329,13 +328,39 @@
 	padding-left: 0.5rem;
 }
 
+.chat-rich-input [data-slate-placeholder='true'] {
+	color: hsl(var(--muted-foreground)) !important;
+	font-weight: inherit;
+	opacity: 1 !important;
+}
+
+.chat-input-line {
+	display: inline;
+}
+
 .chat-input-emote {
 	display: inline-flex;
 	height: 1.45em;
 	min-width: 1.45em;
 	align-items: center;
 	justify-content: center;
+	margin: 0 0.07rem;
+	border-radius: 0.2rem;
+	outline: 1px solid transparent;
+	outline-offset: 1px;
+	user-select: all;
 	vertical-align: -0.25em;
+}
+
+.chat-input-emote[data-selected='true'] {
+	background-color: hsl(var(--accent));
+	outline-color: hsl(var(--ring));
+}
+
+.chat-input-emote-asset {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 }
 
 .chat-input-emote-image {
@@ -343,12 +368,6 @@
 	width: 1.35em;
 	object-fit: contain;
 	user-select: none;
-}
-
-.chat-token-draft {
-	min-width: 1ch;
-	color: inherit;
-	font: inherit;
 }
 
 .chat-pc .chat-rich-input {
@@ -361,20 +380,17 @@
 	padding-left: 1rem;
 }
 
-.chat-pc .chat-rich-input .chat-token-draft {
-	height: auto;
-	width: auto;
-	border: 0;
-	background: transparent !important;
-	color: inherit;
-	font-weight: inherit;
-	margin: 0;
-	padding: 0;
-	box-shadow: none;
+.chat-pc .chat-rich-input [data-slate-placeholder='true'] {
+	color: hsla(0, 0%, 100%, 0.56);
 }
 
 .chat-pc .chat-input-wrap .chat-rich-input {
 	padding-left: 4.75rem;
+}
+
+.chat-pc .chat-input-emote[data-selected='true'] {
+	background-color: hsla(0, 0%, 100%, 0.22);
+	outline-color: hsla(0, 0%, 100%, 0.6);
 }
 
 .chat-pc .chat-rich-input span {

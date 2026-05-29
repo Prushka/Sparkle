@@ -2,9 +2,30 @@
 
 /* eslint-disable @next/next/no-img-element -- Emote thumbnails come from animated third-party CDNs. */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { IconEye, IconEyeOff, IconSend, IconUsers } from '@tabler/icons-react';
+import {
+	createEditor,
+	Editor,
+	Element as SlateElement,
+	Node as SlateNode,
+	Range,
+	Text,
+	Transforms,
+	type BaseEditor,
+	type Descendant
+} from 'slate';
+import { withHistory, type HistoryEditor } from 'slate-history';
+import {
+	Editable,
+	ReactEditor,
+	Slate,
+	useFocused,
+	useSelected,
+	withReact,
+	type RenderElementProps
+} from 'slate-react';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Shortcut } from '@/components/ui/command';
 import * as Dialog from '@/components/ui/dialog';
@@ -41,77 +62,236 @@ type Props = {
 	staticBaseUrl: string;
 };
 
-type ChatInputPart =
-	| {
-			type: 'text';
-			text: string;
-	  }
-	| {
-			type: 'emoji';
-			emoji: ChatEmojiRef;
-	  };
-
-type DraftCommitOptions = {
-	syncSelection?: boolean;
+type ChatText = {
+	text: string;
 };
+
+type ChatEmojiElement = {
+	type: 'emoji';
+	emoji: ChatEmojiRef;
+	children: ChatText[];
+};
+
+type ChatParagraphElement = {
+	type: 'paragraph';
+	children: Array<ChatText | ChatEmojiElement>;
+};
+
+type ChatElement = ChatEmojiElement | ChatParagraphElement;
+type ChatEditor = BaseEditor & ReactEditor & HistoryEditor;
+
+type ActiveEmojiToken = {
+	query: string;
+	range: Range;
+};
+
+declare module 'slate' {
+	interface CustomTypes {
+		Editor: ChatEditor;
+		Element: ChatElement;
+		Text: ChatText;
+	}
+}
 
 const chatInputMaxLength = 250;
 const emojiTokenRegex = /:([a-z0-9][a-z0-9_+-]{1,39}):/gi;
+
+function createEmptyChatValue(): Descendant[] {
+	return [{ type: 'paragraph', children: [{ text: '' }] }];
+}
+
+function createEmojiElement(emoji: ChatEmojiRef): ChatEmojiElement {
+	return { type: 'emoji', emoji, children: [{ text: '' }] };
+}
+
+function isEmojiElement(element: SlateElement): element is ChatEmojiElement {
+	return element.type === 'emoji';
+}
 
 function getEmojiToken(emoji: ChatEmojiRef) {
 	return `:${emoji.id}:`;
 }
 
-function serializeChatParts(parts: ChatInputPart[]) {
-	return parts
-		.map((part) => (part.type === 'emoji' ? getEmojiToken(part.emoji) : part.text))
-		.join('');
+function normalizeChatInputText(text: string) {
+	return text.replace(/\r\n?/g, '\n').replace(/\n/g, ' ');
 }
 
-function mergeTextParts(parts: ChatInputPart[]) {
-	const merged: ChatInputPart[] = [];
+function serializeNode(node: Descendant): string {
+	if (Text.isText(node)) {
+		return node.text;
+	}
+	if (isEmojiElement(node)) {
+		return getEmojiToken(node.emoji);
+	}
+	return node.children.map(serializeNode).join('');
+}
 
-	for (const part of parts) {
-		if (part.type === 'text') {
-			if (!part.text) {
+function serializeNodes(nodes: Descendant[]) {
+	return nodes.map(serializeNode).join('');
+}
+
+function getSelectedTextLength(editor: ChatEditor) {
+	if (!editor.selection) {
+		return 0;
+	}
+	return serializeNodes(Editor.fragment(editor, editor.selection)).length;
+}
+
+function getRemainingTextCapacity(editor: ChatEditor) {
+	const currentLength = serializeNodes(editor.children as Descendant[]).length;
+	return chatInputMaxLength - (currentLength - getSelectedTextLength(editor));
+}
+
+function insertLimitedText(editor: ChatEditor, insertText: (text: string) => void, text: string) {
+	const normalized = normalizeChatInputText(text);
+	if (!normalized) {
+		return;
+	}
+
+	const remaining = getRemainingTextCapacity(editor);
+	if (remaining <= 0) {
+		return;
+	}
+
+	insertText(normalized.slice(0, remaining));
+}
+
+function insertEmojiNode(editor: ChatEditor, emoji: ChatEmojiRef) {
+	Transforms.insertNodes(editor, createEmojiElement(emoji), { select: true });
+	const emojiEntry = Editor.above(editor, {
+		match: (node) => SlateElement.isElement(node) && isEmojiElement(node),
+		voids: true
+	});
+	const afterEmoji = emojiEntry ? Editor.after(editor, emojiEntry[1], { voids: true }) : null;
+	if (afterEmoji) {
+		Transforms.select(editor, afterEmoji);
+	} else {
+		Transforms.collapse(editor, { edge: 'end' });
+	}
+}
+
+function withChatInput(editor: ChatEditor) {
+	const { isInline, isVoid, insertData, insertText } = editor;
+
+	editor.isInline = (element) => (isEmojiElement(element) ? true : isInline(element));
+	editor.isVoid = (element) => (isEmojiElement(element) ? true : isVoid(element));
+
+	editor.insertBreak = () => {};
+
+	editor.insertData = (data) => {
+		const text = data.getData('text/plain');
+		if (text) {
+			editor.insertText(text);
+			return;
+		}
+		insertData(data);
+	};
+
+	editor.insertText = (text) => insertLimitedText(editor, insertText, text);
+
+	return editor;
+}
+
+function getActiveEmojiToken(editor: ChatEditor): ActiveEmojiToken | null {
+	const { selection } = editor;
+	if (!selection || !Range.isCollapsed(selection)) {
+		return null;
+	}
+
+	const [node, path] = Editor.node(editor, selection.anchor.path);
+	if (!Text.isText(node)) {
+		return null;
+	}
+
+	const token = findActiveEmojiToken(node.text, selection.anchor.offset);
+	if (!token) {
+		return null;
+	}
+
+	return {
+		query: token.query,
+		range: {
+			anchor: { path, offset: token.from },
+			focus: { path, offset: token.to }
+		}
+	};
+}
+
+function replaceCompletedEmojiTokens(editor: ChatEditor, refs: ChatEmojiRef[]) {
+	let replaced = false;
+	const textEntries = Array.from(SlateNode.texts(editor)).reverse();
+
+	for (const [node, path] of textEntries) {
+		const matches = [...node.text.matchAll(emojiTokenRegex)].reverse();
+		for (const match of matches) {
+			const [token, id] = match;
+			const index = match.index ?? 0;
+			const emoji = getChatEmojiAsset(id, refs);
+			if (!emoji) {
 				continue;
 			}
-			const previous = merged[merged.length - 1];
-			if (previous?.type === 'text') {
-				previous.text += part.text;
-			} else {
-				merged.push({ ...part });
-			}
-		} else {
-			merged.push(part);
+
+			Transforms.select(editor, {
+				anchor: { path, offset: index },
+				focus: { path, offset: index + token.length }
+			});
+			Transforms.delete(editor);
+			insertEmojiNode(editor, emoji);
+			replaced = true;
 		}
 	}
 
-	return merged;
+	return replaced;
 }
 
-function limitChatParts(parts: ChatInputPart[]) {
-	const limited: ChatInputPart[] = [];
-	let length = 0;
+function clearEditor(editor: ChatEditor) {
+	Editor.withoutNormalizing(editor, () => {
+		const start = Editor.start(editor, []);
+		const end = Editor.end(editor, []);
+		Transforms.select(editor, { anchor: start, focus: end });
+		Transforms.delete(editor);
+		Transforms.select(editor, Editor.start(editor, []));
+	});
+	editor.history = { redos: [], undos: [] };
+}
 
-	for (const part of parts) {
-		const partLength = part.type === 'emoji' ? getEmojiToken(part.emoji).length : part.text.length;
-		const remaining = chatInputMaxLength - length;
-		if (remaining <= 0) {
-			break;
-		}
-		if (partLength <= remaining) {
-			limited.push(part);
-			length += partLength;
-		} else if (part.type === 'text') {
-			limited.push({ type: 'text', text: part.text.slice(0, remaining) });
-			break;
-		} else {
-			break;
-		}
+function EmojiElement({ attributes, children, element }: RenderElementProps) {
+	const selected = useSelected();
+	const focused = useFocused();
+	const emoji = (element as ChatEmojiElement).emoji;
+
+	return (
+		<span
+			{...attributes}
+			data-chat-input-emoji="true"
+			data-emoji-id={emoji.id}
+			data-selected={selected && focused ? 'true' : 'false'}
+			className="chat-input-emote"
+			title={emoji.label}
+		>
+			<span contentEditable={false} className="chat-input-emote-asset">
+				<img
+					src={emoji.src}
+					alt={`:${emoji.id}:`}
+					draggable={false}
+					className="chat-input-emote-image"
+				/>
+			</span>
+			{children}
+		</span>
+	);
+}
+
+function ChatInputElement(props: RenderElementProps) {
+	if (isEmojiElement(props.element)) {
+		return <EmojiElement {...props} />;
 	}
 
-	return mergeTextParts(limited);
+	return (
+		<span {...props.attributes} className="chat-input-line">
+			{props.children}
+		</span>
+	);
 }
 
 export function Chatbox({
@@ -130,24 +310,21 @@ export function Chatbox({
 	staticBaseUrl
 }: Props) {
 	const { chatLayout, setChatLayout, playersCount } = useAppState();
-	const [chatParts, setChatParts] = useState<ChatInputPart[]>([]);
-	const [draft, setDraft] = useState('');
+	const editor = useMemo(() => withChatInput(withHistory(withReact(createEditor()))), []);
+	const initialValue = useMemo(() => createEmptyChatValue(), []);
+	const [value, setValue] = useState('');
 	const [showSent, setShowSent] = useState(false);
 	const [showShortcut, setShowShortcut] = useState(true);
 	const [inputFocused, setInputFocused] = useState(false);
-	const [cursorIndex, setCursorIndex] = useState(0);
+	const [activeEmojiToken, setActiveEmojiToken] = useState<ActiveEmojiToken | null>(null);
 	const [suggestionIndex, setSuggestionIndex] = useState(0);
 	const [suggestionsDismissedFor, setSuggestionsDismissedFor] = useState<string | null>(null);
 	const [emojiRefs, setEmojiRefs] = useState<ChatEmojiRef[]>([]);
 	const [suggestionsRect, setSuggestionsRect] = useState<DOMRect | null>(null);
-	const inputRef = useRef<HTMLInputElement | null>(null);
 	const inputShellRef = useRef<HTMLDivElement | null>(null);
 
 	const chatHidden = chatLayout === 'hide';
 	const connected = playersCount > 0;
-	const committedValue = useMemo(() => serializeChatParts(chatParts), [chatParts]);
-	const value = `${committedValue}${draft}`;
-	const activeEmojiToken = findActiveEmojiToken(draft, cursorIndex);
 	const emojiSuggestions = useMemo(
 		() => (activeEmojiToken ? searchChatEmojis(activeEmojiToken.query, 6) : []),
 		[activeEmojiToken]
@@ -163,6 +340,15 @@ export function Chatbox({
 	}, [chatHidden, controlsShowing, showShortcut]);
 	const placeholder = showSent ? 'Sent!' : chatTxt;
 
+	const syncActiveEmojiToken = useCallback(() => {
+		setActiveEmojiToken(getActiveEmojiToken(editor));
+	}, [editor]);
+
+	const renderElement = useCallback(
+		(props: RenderElementProps) => <ChatInputElement {...props} />,
+		[]
+	);
+
 	useEffect(() => {
 		if (!focusByShortcut) {
 			return;
@@ -170,10 +356,9 @@ export function Chatbox({
 		const listener = (event: KeyboardEvent) => {
 			if (event.altKey && (event.key === 's' || event.key === 'S')) {
 				event.preventDefault();
-				if (controlsShowing === false || controlsShowing === null) {
-					(
-						inputRef.current ?? (document.getElementById(inputId) as HTMLInputElement | null)
-					)?.focus();
+				if ((controlsShowing === false || controlsShowing === null) && connected) {
+					ReactEditor.focus(editor);
+					Transforms.select(editor, Editor.end(editor, []));
 				}
 			}
 		};
@@ -183,7 +368,7 @@ export function Chatbox({
 			document.removeEventListener('keydown', listener);
 			window.clearTimeout(timeout);
 		};
-	}, [controlsShowing, focusByShortcut, inputId]);
+	}, [connected, controlsShowing, editor, focusByShortcut]);
 
 	useEffect(() => {
 		if (!showEmojiSuggestions) {
@@ -208,112 +393,61 @@ export function Chatbox({
 		};
 	}, [showEmojiSuggestions, value]);
 
-	function focusDraftInput(cursor = draft.length) {
-		window.requestAnimationFrame(() => {
-			inputRef.current?.focus();
-			inputRef.current?.setSelectionRange(cursor, cursor);
-		});
-	}
-
-	function commitDraftValue(
-		nextDraft: string,
-		nextCursor: number,
-		refs = emojiRefs,
-		{ syncSelection = false }: DraftCommitOptions = {}
-	) {
-		let lastCommittedIndex = 0;
-		const nextParts: ChatInputPart[] = [];
-
-		for (const match of nextDraft.matchAll(emojiTokenRegex)) {
-			const [token, id] = match;
-			const index = match.index ?? 0;
-			const emoji = getChatEmojiAsset(id, refs);
-			if (!emoji) {
-				continue;
-			}
-			if (index > lastCommittedIndex) {
-				nextParts.push({ type: 'text', text: nextDraft.slice(lastCommittedIndex, index) });
-			}
-			nextParts.push({ type: 'emoji', emoji });
-			lastCommittedIndex = index + token.length;
+	function handleEditorChange(nextValue: Descendant[]) {
+		if (replaceCompletedEmojiTokens(editor, emojiRefs)) {
+			return;
 		}
 
-		const remainingDraft = nextDraft.slice(lastCommittedIndex);
-		const remainingCursor =
-			nextCursor >= lastCommittedIndex ? nextCursor - lastCommittedIndex : remainingDraft.length;
-		const nextCommitted = limitChatParts([...chatParts, ...nextParts]);
-		const remainingCapacity = Math.max(
-			0,
-			chatInputMaxLength - serializeChatParts(nextCommitted).length
-		);
-		const limitedDraft = remainingDraft.slice(0, remainingCapacity);
-		const limitedCursor = Math.min(remainingCursor, limitedDraft.length);
-
-		setChatParts(nextCommitted);
-		setDraft(limitedDraft);
-		setCursorIndex(limitedCursor);
+		setValue(serializeNodes(nextValue));
+		syncActiveEmojiToken();
 		setSuggestionIndex(0);
 		setSuggestionsDismissedFor(null);
-		if (syncSelection || nextParts.length > 0 || limitedDraft.length !== remainingDraft.length) {
-			focusDraftInput(limitedCursor);
+	}
+
+	function insertEmoji(emoji: ChatEmojiRef, range = activeEmojiToken?.range ?? null) {
+		if (
+			serializeNodes(editor.children as Descendant[]).length >= chatInputMaxLength &&
+			!editor.selection
+		) {
+			return;
 		}
-	}
 
-	function updateDraft(
-		nextDraft: string,
-		nextCursor: number,
-		refs = emojiRefs,
-		options?: DraftCommitOptions
-	) {
-		const remainingCapacity = Math.max(0, chatInputMaxLength - committedValue.length);
-		commitDraftValue(nextDraft.slice(0, remainingCapacity), nextCursor, refs, options);
-	}
-
-	function removeLastCommittedPart() {
-		setChatParts((parts) => {
-			if (parts.length === 0) {
-				return parts;
-			}
-			const nextParts = [...parts];
-			const last = nextParts[nextParts.length - 1];
-			if (last.type === 'emoji' || last.text.length <= 1) {
-				nextParts.pop();
-			} else {
-				nextParts[nextParts.length - 1] = { type: 'text', text: last.text.slice(0, -1) };
-			}
-			return nextParts;
-		});
-		setSuggestionIndex(0);
-		setSuggestionsDismissedFor(null);
-		focusDraftInput(0);
-	}
-
-	function insertEmoji(emoji: ChatEmojiRef, range = activeEmojiToken) {
-		const cursor = inputRef.current?.selectionStart ?? cursorIndex;
-		const selectionEnd = inputRef.current?.selectionEnd ?? cursor;
-		const from = range?.from ?? cursor;
-		const to = range?.to ?? selectionEnd;
-		const token = `${getEmojiToken(emoji)} `;
 		const nextRefs = emojiRefs.some((ref) => ref.id === emoji.id)
 			? emojiRefs
 			: [...emojiRefs, emoji];
+
 		setEmojiRefs(nextRefs);
-		updateDraft(`${draft.slice(0, from)}${token}${draft.slice(to)}`, from + token.length, nextRefs);
+		ReactEditor.focus(editor);
+		if (range) {
+			Transforms.select(editor, range);
+		}
+		if (editor.selection && !Range.isCollapsed(editor.selection)) {
+			Transforms.delete(editor);
+		}
+		if (getRemainingTextCapacity(editor) < getEmojiToken(emoji).length) {
+			return;
+		}
+
+		insertEmojiNode(editor, emoji);
+		setActiveEmojiToken(null);
+		setSuggestionIndex(0);
+		setSuggestionsDismissedFor(null);
 	}
 
 	function sendMessage() {
-		if (!value) {
+		const chat = serializeNodes(editor.children as Descendant[]);
+		if (!chat) {
 			return;
 		}
 		send({
-			chat: value,
-			emojis: getEmojiIdsFromText(value),
-			emojiRefs: getEmojiRefsFromText(value, emojiRefs),
+			chat,
+			emojis: getEmojiIdsFromText(chat),
+			emojiRefs: getEmojiRefsFromText(chat, emojiRefs),
 			type: SyncTypes.ChatSync
 		});
-		setChatParts([]);
-		setDraft('');
-		setCursorIndex(0);
+		clearEditor(editor);
+		setValue('');
+		setActiveEmojiToken(null);
 		setSuggestionIndex(0);
 		setSuggestionsDismissedFor(null);
 		setEmojiRefs([]);
@@ -389,56 +523,36 @@ export function Chatbox({
 						}
 					/>
 					<div ref={inputShellRef} className="relative min-w-0 flex-1">
-						<div
-							className={`chat-rich-input min-w-0 flex-1 focus-within:ring-transparent ${useButton ? 'h-10 rounded-l-none rounded-r-none px-2' : ''} ${!useButton ? 'pl-[4.75rem]' : ''} ${focusByShortcut ? 'pr-16' : ''} input`}
-							aria-disabled={!connected}
-							data-button-layout={useButton ? 'true' : 'false'}
-							data-empty={value.length === 0 ? 'true' : 'false'}
-							onMouseDown={(event) => {
-								if (!connected) {
-									return;
-								}
-								setInputFocused(true);
-								if (event.target !== inputRef.current) {
-									event.preventDefault();
-								}
-								inputRef.current?.focus();
-							}}
+						<Slate
+							editor={editor}
+							initialValue={initialValue}
+							onChange={handleEditorChange}
+							onSelectionChange={syncActiveEmojiToken}
 						>
-							{chatParts.map((part, index) =>
-								part.type === 'emoji' ? (
-									<span
-										key={`${part.emoji.id}-${index}`}
-										data-emoji-id={part.emoji.id}
-										className="chat-input-emote"
-										title={part.emoji.label}
-									>
-										<img
-											src={part.emoji.src}
-											alt={`:${part.emoji.id}:`}
-											draggable={false}
-											className="chat-input-emote-image"
-										/>
-									</span>
-								) : (
-									<span key={`text-${index}`}>{part.text}</span>
-								)
-							)}
-							<input
-								ref={inputRef}
+							<Editable
 								id={inputId}
+								readOnly={!connected}
+								role="textbox"
 								aria-label={placeholder}
-								disabled={!connected}
-								value={draft}
-								maxLength={Math.max(0, chatInputMaxLength - committedValue.length)}
-								placeholder={chatParts.length === 0 ? placeholder : ''}
-								type="text"
-								autoComplete="off"
-								className="chat-token-draft min-w-0 flex-1 bg-transparent p-0 outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
+								aria-disabled={!connected}
+								aria-multiline="false"
+								placeholder={placeholder}
+								renderElement={renderElement}
+								spellCheck={false}
+								className={`chat-rich-input min-w-0 flex-1 focus-within:ring-transparent ${useButton ? 'h-10 rounded-l-none rounded-r-none px-2' : ''} ${!useButton ? 'pl-[4.75rem]' : ''} ${focusByShortcut ? 'pr-16' : ''} input`}
+								data-button-layout={useButton ? 'true' : 'false'}
+								onDOMBeforeInput={(event) => {
+									if (
+										event.inputType === 'insertLineBreak' ||
+										event.inputType === 'insertParagraph'
+									) {
+										event.preventDefault();
+									}
+								}}
 								onFocus={() => {
 									setInputFocused(true);
 									onFocus();
-									setCursorIndex(inputRef.current?.selectionStart ?? draft.length);
+									syncActiveEmojiToken();
 									if (useButton) {
 										window.setTimeout(() => {
 											window.scrollTo(0, 0);
@@ -448,25 +562,6 @@ export function Chatbox({
 								onBlur={() => {
 									setInputFocused(false);
 									onBlur();
-								}}
-								onClick={(event) => setCursorIndex(event.currentTarget.selectionStart ?? 0)}
-								onSelect={(event) => setCursorIndex(event.currentTarget.selectionStart ?? 0)}
-								onChange={(event) => {
-									updateDraft(
-										event.target.value,
-										event.target.selectionStart ?? event.target.value.length
-									);
-								}}
-								onPaste={(event) => {
-									event.preventDefault();
-									const cursor = event.currentTarget.selectionStart ?? draft.length;
-									const selectionEnd = event.currentTarget.selectionEnd ?? cursor;
-									updateDraft(
-										`${draft.slice(0, cursor)}${event.clipboardData.getData('text/plain')}${draft.slice(selectionEnd)}`,
-										cursor + event.clipboardData.getData('text/plain').length,
-										emojiRefs,
-										{ syncSelection: true }
-									);
 								}}
 								onKeyDown={(event) => {
 									event.stopPropagation();
@@ -494,14 +589,18 @@ export function Chatbox({
 										sendMessage();
 										return;
 									}
-									if (
-										event.key === 'Backspace' &&
-										event.currentTarget.selectionStart === 0 &&
-										event.currentTarget.selectionEnd === 0
-									) {
-										event.preventDefault();
-										removeLastCommittedPart();
-										return;
+									if ((event.key === 'Backspace' || event.key === 'Delete') && editor.selection) {
+										const voidEntry = Editor.void(editor, { at: editor.selection });
+										if (
+											voidEntry &&
+											SlateElement.isElement(voidEntry[0]) &&
+											isEmojiElement(voidEntry[0])
+										) {
+											event.preventDefault();
+											Transforms.removeNodes(editor, { at: voidEntry[1] });
+											syncActiveEmojiToken();
+											return;
+										}
 									}
 									if (event.key === 'Escape') {
 										event.preventDefault();
@@ -509,18 +608,15 @@ export function Chatbox({
 											setSuggestionsDismissedFor(activeEmojiToken?.query ?? '');
 											return;
 										}
-										inputRef.current?.blur();
+										ReactEditor.blur(editor);
 									}
 								}}
 								onKeyUp={(event) => {
 									event.stopPropagation();
-									setCursorIndex(event.currentTarget.selectionStart ?? 0);
-								}}
-								onKeyPress={(event) => {
-									event.stopPropagation();
+									syncActiveEmojiToken();
 								}}
 							/>
-						</div>
+						</Slate>
 						{showEmojiSuggestions && suggestionsRect && typeof document !== 'undefined'
 							? createPortal(
 									<div
