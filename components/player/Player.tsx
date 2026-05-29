@@ -1161,9 +1161,12 @@ export function Player({ data }: { data: ServerData }) {
 	);
 
 	const openNewYouTubeTab = useCallback(() => {
+		if (!socketConnected) {
+			return;
+		}
 		const id = randomString(10);
 		updateYouTubeState(id, createDefaultYouTubeTab(id));
-	}, [updateYouTubeState]);
+	}, [socketConnected, updateYouTubeState]);
 
 	useEffect(() => {
 		youtubeStateStorageKeyRef.current = youtubeStateStorageKey;
@@ -1173,7 +1176,7 @@ export function Player({ data }: { data: ServerData }) {
 	}, [applyYouTubeState, youtubeStateStorageKey]);
 
 	useEffect(() => {
-		if (!playerId) {
+		if (!playerId || !socketConnected) {
 			return;
 		}
 
@@ -1285,7 +1288,14 @@ export function Player({ data }: { data: ServerData }) {
 				youtubeSocketRef.current = null;
 			}
 		};
-	}, [applyYouTubeState, backendBaseUrl, playerId, sendYouTubeSnapshot, youtubeSyncRoom]);
+	}, [
+		applyYouTubeState,
+		backendBaseUrl,
+		playerId,
+		sendYouTubeSnapshot,
+		socketConnected,
+		youtubeSyncRoom
+	]);
 
 	const voice = useVoiceChat({
 		playerId,
@@ -2573,6 +2583,7 @@ export function Player({ data }: { data: ServerData }) {
 												type="button"
 												variant="outline"
 												className="h-auto min-h-9 gap-2 px-3 py-2"
+												disabled={!socketConnected}
 												onClick={openNewYouTubeTab}
 											>
 												<IconBrandYoutubeFilled className="text-red-600" size={18} />
@@ -2664,17 +2675,19 @@ export function Player({ data }: { data: ServerData }) {
 				</Card>
 			</div>
 
-			{youtubeState.tabs
-				.filter((tab) => tab.open)
-				.map((tab, index) => (
-					<YouTubeFloatingTab
-						key={tab.id}
-						roomId={youtubeRoomId}
-						initialIndex={index}
-						state={tab}
-						onStateChange={(patch) => updateYouTubeState(tab.id, patch)}
-					/>
-				))}
+			{socketConnected
+				? youtubeState.tabs
+						.filter((tab) => tab.open)
+						.map((tab, index) => (
+							<YouTubeFloatingTab
+								key={tab.id}
+								roomId={youtubeRoomId}
+								initialIndex={index}
+								state={tab}
+								onStateChange={(patch) => updateYouTubeState(tab.id, patch)}
+							/>
+						))
+				: null}
 
 			{moveToast ? (
 				<div className="fixed bottom-4 left-1/2 z-[100] w-[90%] max-w-xl -translate-x-1/2">
