@@ -510,13 +510,6 @@ function generatePlaceholderName() {
 	return `${adjective}${noun}`;
 }
 
-function getBrowserAbsoluteUrl(value: string) {
-	if (typeof window === 'undefined') {
-		return value;
-	}
-	return new URL(value, window.location.origin).toString();
-}
-
 function joinBackendPath(base: string, path: string) {
 	if (!base) {
 		return path.startsWith('/') ? path : `/${path}`;
@@ -750,9 +743,14 @@ export function Player({ data }: { data: ServerData }) {
 	const staticBaseUrl = data.staticBaseUrl;
 	const backendBaseUrl = data.backendBaseUrl;
 	const BASE_STATIC = `${staticBaseUrl}/${job.Id}`;
+	const thumbnailVttSrc = useMemo(() => {
+		if (typeof window === 'undefined') {
+			return null;
+		}
+		return new URL(`${BASE_STATIC}/storyboard.vtt`, window.location.origin).toString();
+	}, [BASE_STATIC]);
 	const [tickedSecsAgo, setTickedSecsAgo] = useState(-1);
 	const [chatFocusedSecs, setChatFocusedSecs] = useState(0);
-	const thumbnailVttSrc = getBrowserAbsoluteUrl(`${BASE_STATIC}/storyboard.vtt`);
 	const posterSrc = data.preview;
 	const roomBase = searchParams.get('room') || searchParams.get('channel_id') || '';
 	const room = roomBase ? `${roomBase}${job.Id}` : job.Id;
@@ -2454,7 +2452,7 @@ export function Player({ data }: { data: ServerData }) {
 						showJoinOverlay ? 'pointer-events-none blur-sm' : 'blur-0'
 					}`}
 				>
-					{mounted ? (
+					{mounted && thumbnailVttSrc ? (
 						<MediaPlayer
 							className={mediaPlayerClassName}
 							src={videoSrc?.src || undefined}
