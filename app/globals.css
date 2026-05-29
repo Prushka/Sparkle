@@ -474,6 +474,14 @@
 	opacity: 1 !important;
 }
 
+.vds-video-settings-menu > .vds-menu-item .vds-menu-item-hint {
+	max-width: min(12rem, 42vw);
+	overflow: hidden;
+	padding-left: 0.5rem;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .vds-gesture[action='toggle:paused'] {
 	display: none !important;
 }

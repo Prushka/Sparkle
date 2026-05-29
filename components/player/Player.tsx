@@ -14,15 +14,21 @@ import { AnimatePresence, motion } from 'motion/react';
 import {
 	MediaPlayer,
 	MediaProvider,
+	Menu,
 	Poster,
 	TextTrack,
 	type MediaKeyShortcuts,
 	type MediaPlayerInstance
 } from '@vidstack/react';
-import { DefaultVideoLayout, defaultLayoutIcons } from '@vidstack/react/player/layouts/default';
+import {
+	DefaultMenuButton,
+	DefaultMenuRadioGroup,
+	DefaultMenuSection,
+	DefaultVideoLayout,
+	defaultLayoutIcons
+} from '@vidstack/react/player/layouts/default';
 import JASSUB from 'jassub';
 import {
-	IconAlertOctagonFilled,
 	IconBrandYoutubeFilled,
 	IconCheck,
 	IconHeadphones,
@@ -73,7 +79,6 @@ import SUPtitles from '@/lib/suptitles/suptitles';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import * as Dialog from '@/components/ui/dialog';
-import * as DropdownMenu from '@/components/ui/dropdown-menu';
 import * as Tooltip from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
 import { Chatbox } from '@/components/player/Chatbox';
@@ -738,6 +743,28 @@ export function Player({ data }: { data: ServerData }) {
 			? `Auto ${autoCodec}`.trim()
 			: `${codecDisplayMap[selectedCodec] ?? selectedCodec}${formatMbps(job, selectedCodec)}`;
 	const videoSettingsSummary = `${videoSettingsAudioLabel} • ${videoSettingsCodecLabel}`;
+	const videoSettingsAudioOptions =
+		videoSrc?.sCodec && audiosExistForCodec(job, videoSrc.sCodec)
+			? (job.MappedAudio[videoSrc.sCodec] ?? []).map((stream) => {
+					const value = `${stream.Index}-${stream.Language}`;
+					return {
+						label: `${formatPair(stream)} (${stream.Index})`,
+						value
+					};
+				})
+			: [];
+	const videoSettingsCodecOptions = [
+		{
+			label: `Auto ${autoCodec}`.trim(),
+			value: 'auto'
+		},
+		...job.EncodedCodecs.map((codec) => ({
+			label: `${codecDisplayMap[codec] ?? codec}${formatMbps(job, codec)}${
+				supportedCodecs.includes(codec) ? '' : ' (unsupported)'
+			}`,
+			value: codec
+		}))
+	];
 	const chatHidden = chatLayout === 'hide';
 	const setPlayerElement = useCallback((element: MediaPlayerInstance | null) => {
 		if (element !== playerElementRef.current) {
@@ -2292,56 +2319,32 @@ export function Player({ data }: { data: ServerData }) {
 
 	const showJoinOverlay = !socketConnected;
 	const mediaPlayerClassName = `media-player relative w-full bg-slate-900 ${discord ? 'h-[100dvh]' : 'aspect-video'} ${playerEl && !playerEl.paused && chatFocusedSecs > hideControlsOnChatFocused ? 'chat-controls-hidden' : ''}`;
-	const videoSettingsDropdown = (
-		<DropdownMenu.Root>
-			<DropdownMenu.Trigger asChild>
-				<Button
-					variant={theme === 'dark' ? 'outline' : 'default'}
-					className="h-10 max-w-[min(24rem,calc(100vw-2rem))] justify-start gap-2 px-3 text-left"
-				>
-					<IconSettings2 className="shrink-0 max-sm:hidden" size={16} stroke={2} />
-					<span className="block max-w-full truncate leading-none">{videoSettingsSummary}</span>
-				</Button>
-			</DropdownMenu.Trigger>
-			<DropdownMenu.Content className="w-56">
-				<DropdownMenu.Label className="flex items-center justify-between gap-3">
-					<span>Video Settings</span>
-					<span className="truncate text-xs font-medium text-muted-foreground">
-						{job.ExtractedQuality}
-					</span>
-				</DropdownMenu.Label>
-				<DropdownMenu.Separator />
-				<DropdownMenu.Group>
-					{audiosExistForCodec(job, videoSrc?.sCodec || '') ? (
-						<DropdownMenu.RadioGroup value={effectiveAudio} onValueChange={changeAudio}>
-							{job.MappedAudio[videoSrc?.sCodec || '']?.map((stream) => {
-								const curr = `${stream.Index}-${stream.Language}`;
-								return (
-									<DropdownMenu.RadioItem key={curr} value={curr}>
-										{formatPair(stream)} ({stream.Index})
-									</DropdownMenu.RadioItem>
-								);
-							})}
-						</DropdownMenu.RadioGroup>
-					) : null}
-				</DropdownMenu.Group>
-				<DropdownMenu.Separator />
-				<DropdownMenu.Group>
-					<DropdownMenu.RadioGroup value={selectedCodec} onValueChange={changeCodec}>
-						<DropdownMenu.RadioItem value="auto">Auto {autoCodec}</DropdownMenu.RadioItem>
-						{job.EncodedCodecs.map((codec) => (
-							<DropdownMenu.RadioItem key={codec} value={codec}>
-								{codecDisplayMap[codec]}
-								{formatMbps(job, codec)}
-								{!supportedCodecs.includes(codec) ? (
-									<IconAlertOctagonFilled className="ml-2" size={16} stroke={2} />
-								) : null}
-							</DropdownMenu.RadioItem>
-						))}
-					</DropdownMenu.RadioGroup>
-				</DropdownMenu.Group>
-			</DropdownMenu.Content>
-		</DropdownMenu.Root>
+	const videoSettingsMenu = (
+		<Menu.Root className="vds-video-settings-menu vds-menu">
+			<DefaultMenuButton
+				label="Video Settings"
+				hint={videoSettingsSummary}
+				Icon={defaultLayoutIcons.Menu.Settings}
+			/>
+			<Menu.Items className="vds-menu-items">
+				{videoSettingsAudioOptions.length > 0 ? (
+					<DefaultMenuSection label="Audio Track" value={videoSettingsAudioLabel}>
+						<DefaultMenuRadioGroup
+							value={effectiveAudio}
+							options={videoSettingsAudioOptions}
+							onChange={changeAudio}
+						/>
+					</DefaultMenuSection>
+				) : null}
+				<DefaultMenuSection label="Codec" value={videoSettingsCodecLabel}>
+					<DefaultMenuRadioGroup
+						value={selectedCodec}
+						options={videoSettingsCodecOptions}
+						onChange={changeCodec}
+					/>
+				</DefaultMenuSection>
+			</Menu.Items>
+		</Menu.Root>
 	);
 	const renderControlsChat = (mobileLayout: boolean, suffix: string) =>
 		pageChatInputVisible ? null : (
@@ -2446,6 +2449,7 @@ export function Player({ data }: { data: ServerData }) {
 								icons={defaultLayoutIcons}
 								thumbnails={thumbnailVttSrc}
 								slots={{
+									settingsMenuItemsStart: videoSettingsMenu,
 									largeLayout: {
 										beforeCaptionButton: renderControlsChat(false, 'large')
 									},
@@ -2499,14 +2503,11 @@ export function Player({ data }: { data: ServerData }) {
 				className="flex w-full flex-col gap-4 p-4 font-semibold"
 				style={!discord ? { minHeight: 'calc(100dvh - min(100dvh, 56.25vw))' } : undefined}
 			>
-				<div className="mx-auto grid w-full max-w-[90rem] grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 max-[760px]:grid-cols-[auto_auto] max-[760px]:justify-center">
-					<div className="flex min-w-0 justify-start max-[760px]:order-2 max-[760px]:justify-end">
+				<div className="mx-auto flex w-full max-w-[90rem] flex-wrap items-center justify-between gap-2 max-[760px]:justify-center">
+					<div className="flex min-w-0 justify-start">
 						<VoiceControls voice={voice} />
 					</div>
-					<div className="flex min-w-0 justify-center max-[760px]:order-1 max-[760px]:col-span-2 max-[760px]:w-full">
-						{videoSettingsDropdown}
-					</div>
-					<div className="flex min-w-0 items-center justify-end gap-2 max-[760px]:order-3 max-[760px]:justify-start">
+					<div className="flex min-w-0 items-center justify-end gap-2">
 						<Tooltip.Provider delayDuration={0}>
 							<Tooltip.Root>
 								<Tooltip.Trigger asChild>
