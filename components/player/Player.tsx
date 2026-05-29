@@ -72,6 +72,7 @@ import {
 	type Player as RoomPlayer,
 	type SendPayload,
 	type ServerData,
+	type Stream,
 	type YouTubeTabSyncState,
 	type YouTubeSyncState
 } from '@/lib/player/t';
@@ -126,6 +127,9 @@ type SelectedSubtitleTrack = Pick<SubtitleTrackInfo, 'format' | 'label' | 'langu
 
 const PLAYER_VOLUME_STORAGE_KEY = 'volume';
 const DEFAULT_PLAYER_VOLUME = 1;
+const SUBTITLE_LANGUAGE_STORAGE_KEY = 'subtitleLanguage';
+const AUDIO_LANGUAGE_PRIORITY = ['jpn', 'eng', 'chi'];
+const SUBTITLE_LANGUAGE_PRIORITY = ['en'];
 
 const PLAYER_KEY_SHORTCUTS: MediaKeyShortcuts = {
 	togglePaused: 'k Space',
@@ -270,6 +274,68 @@ function restorePlayerVolume(player: MediaPlayerInstance, volume: number) {
 	const nextVolume = normalizePlayerVolume(volume);
 	player.volume = nextVolume;
 	player.muted = nextVolume === 0;
+}
+
+function getStreamAudioValue(stream: Stream) {
+	return `${stream.Index}-${stream.Language}`;
+}
+
+function pickPriorityAudioStream(streams: Stream[]) {
+	for (const language of AUDIO_LANGUAGE_PRIORITY) {
+		const stream = streams.find((candidate) => candidate.Language === language);
+		if (stream) {
+			return stream;
+		}
+	}
+	return streams[0] ?? null;
+}
+
+function getSubtitleLanguage(stream: Stream) {
+	return languageSrcMap[stream.Language] || stream.Language;
+}
+
+function getSubtitleLanguageBase(language: string) {
+	return language.split('-')[0]?.toLowerCase() || language.toLowerCase();
+}
+
+function isSameSubtitleLanguage(a: string, b: string) {
+	return a === b || getSubtitleLanguageBase(a) === getSubtitleLanguageBase(b);
+}
+
+function readStoredSubtitleLanguage() {
+	if (typeof window === 'undefined') {
+		return null;
+	}
+	return window.localStorage.getItem(SUBTITLE_LANGUAGE_STORAGE_KEY);
+}
+
+function saveStoredSubtitleLanguage(language: string) {
+	if (typeof window === 'undefined' || !language) {
+		return;
+	}
+	window.localStorage.setItem(SUBTITLE_LANGUAGE_STORAGE_KEY, language);
+}
+
+function pickPrioritySubtitleStream(streams: Stream[], storedLanguage: string | null) {
+	if (storedLanguage) {
+		const storedMatch = streams.find((stream) =>
+			isSameSubtitleLanguage(getSubtitleLanguage(stream), storedLanguage)
+		);
+		if (storedMatch) {
+			return storedMatch;
+		}
+	}
+
+	for (const language of SUBTITLE_LANGUAGE_PRIORITY) {
+		const priorityMatch = streams.find(
+			(stream) => getSubtitleLanguageBase(getSubtitleLanguage(stream)) === language
+		);
+		if (priorityMatch) {
+			return priorityMatch;
+		}
+	}
+
+	return streams[0] ?? null;
 }
 
 function getSubtitleFormat(src: string): SubtitleTrackFormat {
@@ -702,16 +768,11 @@ export function Player({ data }: { data: ServerData }) {
 			return null;
 		}
 		const audioStreams = job.MappedAudio[effectiveCodec] ?? [];
-		let stream = audioStreams.find(
-			(candidate) => `${candidate.Index}-${candidate.Language}` === selectedAudio
-		);
+		let stream = audioStreams.find((candidate) => getStreamAudioValue(candidate) === selectedAudio);
 		if (!stream) {
-			const selectedLanguage = selectedAudio.split('-')[1];
-			stream =
-				audioStreams.find((candidate) => candidate.Language === selectedLanguage) ||
-				audioStreams[0];
+			stream = pickPriorityAudioStream(audioStreams);
 		}
-		const effectiveAudio = stream ? `${stream.Index}-${stream.Language}` : selectedAudio;
+		const effectiveAudio = stream ? getStreamAudioValue(stream) : selectedAudio;
 		return {
 			src: `${BASE_STATIC}/${effectiveCodec}-${effectiveAudio}.mp4`,
 			type: 'video/mp4',
@@ -747,7 +808,7 @@ export function Player({ data }: { data: ServerData }) {
 	const videoSettingsAudioOptions =
 		videoSrc?.sCodec && audiosExistForCodec(job, videoSrc.sCodec)
 			? (job.MappedAudio[videoSrc.sCodec] ?? []).map((stream) => {
-					const value = `${stream.Index}-${stream.Language}`;
+					const value = getStreamAudioValue(stream);
 					return {
 						label: `${formatPair(stream)} (${stream.Index})`,
 						value
@@ -1111,30 +1172,19 @@ export function Player({ data }: { data: ServerData }) {
 			return;
 		}
 		const timer = window.setTimeout(() => {
-			const storedAudio = window.localStorage.getItem('sAudio');
-			const codecToUse = selectedCodec === 'auto' ? job.EncodedCodecs?.[0] : selectedCodec;
+			window.localStorage.removeItem('sAudio');
+			const codecToUse =
+				selectedCodec === 'auto'
+					? supportedCodecs.find((codec) => job.EncodedCodecs?.includes(codec)) ||
+						job.EncodedCodecs?.[0]
+					: selectedCodec;
 			const streams = codecToUse ? (job.MappedAudio[codecToUse] ?? []) : [];
-			let nextAudio = streams[0] ? `${streams[0].Index}-${streams[0].Language}` : '1-jpn';
-			if (storedAudio) {
-				const exactMatch = streams.find(
-					(candidate) => `${candidate.Index}-${candidate.Language}` === storedAudio
-				);
-				if (exactMatch) {
-					nextAudio = storedAudio;
-				} else {
-					const storedLanguage = storedAudio.split('-')[1];
-					const languageMatch = streams.find((candidate) => candidate.Language === storedLanguage);
-					if (languageMatch) {
-						nextAudio = `${languageMatch.Index}-${languageMatch.Language}`;
-					} else if (streams.length === 0) {
-						nextAudio = storedAudio;
-					}
-				}
-			}
+			const nextStream = pickPriorityAudioStream(streams);
+			const nextAudio = nextStream ? getStreamAudioValue(nextStream) : '1-jpn';
 			setSelectedAudio(nextAudio);
 		}, 0);
 		return () => window.clearTimeout(timer);
-	}, [job.EncodedCodecs, job.MappedAudio, selectedCodec]);
+	}, [job.EncodedCodecs, job.MappedAudio, selectedCodec, supportedCodecs]);
 
 	useEffect(() => {
 		if (typeof window === 'undefined') {
@@ -1483,7 +1533,13 @@ export function Player({ data }: { data: ServerData }) {
 			if (job.Streams) {
 				const sortedJob = { ...job, Streams: [...job.Streams] };
 				sortedJob.Streams = sortTracks(sortedJob);
-				let defaulted = false;
+				const subtitleStreams = sortedJob.Streams.filter(
+					(stream) => stream.CodecType === 'subtitle'
+				);
+				const defaultSubtitleStream = pickPrioritySubtitleStream(
+					subtitleStreams,
+					readStoredSubtitleLanguage()
+				);
 				for (const [, stream] of Object.entries(sortedJob.Streams)) {
 					switch (stream.CodecType) {
 						case 'attachment':
@@ -1499,8 +1555,8 @@ export function Player({ data }: { data: ServerData }) {
 								label: formatPair(stream, true, true),
 								kind: 'subtitles',
 								type: format === 'ass' ? 'asshuh' : format,
-								language: languageSrcMap[stream.Language] || stream.Language,
-								default: !defaulted,
+								language: getSubtitleLanguage(stream),
+								default: stream === defaultSubtitleStream,
 								format
 							};
 							subtitleTracks.push(track);
@@ -1518,7 +1574,6 @@ export function Player({ data }: { data: ServerData }) {
 											}
 								)
 							);
-							defaulted = true;
 							break;
 					}
 				}
@@ -1933,11 +1988,18 @@ export function Player({ data }: { data: ServerData }) {
 			return;
 		}
 
-		const setSelectedSubtitleTrack = (track: any, mode?: TextTrackMode) => {
+		const setSelectedSubtitleTrack = (
+			track: any,
+			mode?: TextTrackMode,
+			options: { storeLanguage?: boolean } = {}
+		) => {
 			const nextTrack = selectedFromVidstackTrack(track, subtitleTracksRef.current);
 			const nextMode = mode ?? track?.mode;
 			selectedSubtitleTrackRef.current =
 				nextTrack && (!nextMode || nextMode === 'showing') ? nextTrack : null;
+			if (options.storeLanguage && selectedSubtitleTrackRef.current?.language) {
+				saveStoredSubtitleLanguage(selectedSubtitleTrackRef.current.language);
+			}
 		};
 
 		const handleTextTrackChange = (event: Event) => {
@@ -1954,7 +2016,7 @@ export function Player({ data }: { data: ServerData }) {
 				typeof detail.index === 'number'
 					? subtitleTracksRef.current[detail.index] || playerEl.textTracks?.[detail.index]
 					: null;
-			setSelectedSubtitleTrack(requestedTrack, detail.mode);
+			setSelectedSubtitleTrack(requestedTrack, detail.mode, { storeLanguage: true });
 		};
 
 		playerEl.addEventListener?.('text-track-change', handleTextTrackChange);
@@ -2217,8 +2279,6 @@ export function Player({ data }: { data: ServerData }) {
 	function changeAudio(curr: string) {
 		if (selectedAudio !== curr) {
 			setSelectedAudio(curr);
-			window.localStorage.setItem('sAudio', curr);
-			setPageReloadCounter((value) => value + 1);
 		}
 	}
 

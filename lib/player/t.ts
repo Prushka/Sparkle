@@ -127,6 +127,7 @@ export const codecDisplayMap: { [key: string]: string } = {
 
 const subtitlePriorityNormal = ['ass', 'vtt', 'sup'];
 const subtitlePriorityMobile = ['vtt', 'ass', 'sup'];
+const subtitleLanguagePriority = ['en'];
 
 export const chatLayouts = ['show', 'hide'];
 
@@ -672,48 +673,33 @@ export function sortTracks(job: Job) {
 	const streams = job.Streams;
 	const files = job.Files;
 	const subtitlePriority = isMobile() ? subtitlePriorityMobile : subtitlePriorityNormal;
-	let aExt: string;
-	let bExt: string;
-	let aMapped: string;
-	let bMapped: string;
-	const languagePriority = typeof navigator !== 'undefined' ? [navigator.language] : ['en-US'];
-	if (typeof navigator !== 'undefined') {
-		if (navigator.language !== 'en-US') {
-			languagePriority.push('en-US');
-		}
-		if (navigator.language !== 'zh-CN') {
-			languagePriority.push('zh-CN');
-		}
-	}
+	const getLanguageRank = (stream: Stream) => {
+		const mappedLanguage = languageSrcMap[stream.Language] || stream.Language;
+		const baseLanguage =
+			mappedLanguage.split('-')[0]?.toLowerCase() || mappedLanguage.toLowerCase();
+		const index = subtitleLanguagePriority.indexOf(baseLanguage);
+		return index === -1 ? subtitleLanguagePriority.length : index;
+	};
+	const getFormatRank = (stream: Stream) => {
+		const extension = stream.Location.split('.').pop()?.toLowerCase() || '';
+		const index = subtitlePriority.indexOf(extension);
+		return index === -1 ? subtitlePriority.length : index;
+	};
 	const compare = (a: Stream, b: Stream) => {
-		aMapped = languageSrcMap[a.Language];
-		bMapped = languageSrcMap[b.Language];
-		aExt = a.Location.slice(-3);
-		bExt = b.Location.slice(-3);
-
-		const aInPriority = languagePriority.includes(aMapped);
-		const bInPriority = languagePriority.includes(bMapped);
-		if (aInPriority && !bInPriority) {
-			return -1;
+		const languageCompare = getLanguageRank(a) - getLanguageRank(b);
+		if (languageCompare !== 0) {
+			return languageCompare;
 		}
-		if (!aInPriority && bInPriority) {
-			return 1;
-		}
-		if (aInPriority && bInPriority) {
-			const index = languagePriority.indexOf(aMapped) - languagePriority.indexOf(bMapped);
-			if (index !== 0) {
-				return index;
+		if (a.Language === b.Language) {
+			const formatCompare = getFormatRank(a) - getFormatRank(b);
+			if (formatCompare !== 0) {
+				return formatCompare;
 			}
-			const extCompare = subtitlePriority.indexOf(aExt) - subtitlePriority.indexOf(bExt);
-			if (extCompare !== 0) {
-				return extCompare;
-			}
-			return files[b.Location] - files[a.Location];
+			return (files[b.Location] ?? 0) - (files[a.Location] ?? 0);
 		}
 		return a.Language.localeCompare(b.Language);
 	};
 	streams.sort(compare);
-	console.log(streams);
 	return streams;
 }
 
