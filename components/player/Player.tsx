@@ -688,7 +688,7 @@ export function Player({ data }: { data: ServerData }) {
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
 	const mediaSelectionRef = useRef<MediaSelectionHandle | null>(null);
 	const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
-	const soundEffectAudioRef = useRef<HTMLAudioElement | null>(null);
+	const soundEffectAudioByPlayerRef = useRef<Record<string, HTMLAudioElement>>({});
 	const soundEffectBadgeTimersRef = useRef<Record<string, number>>({});
 	const supRef = useRef<SUPtitles | null>(null);
 	const supPlayingRef = useRef(false);
@@ -908,13 +908,14 @@ export function Player({ data }: { data: ServerData }) {
 		}, 1800);
 	}, []);
 
-	const playSoundEffect = useCallback((id: string | undefined) => {
+	const playSoundEffect = useCallback((id: string | undefined, playerId: string | undefined) => {
 		const effect = getSoundEffect(id);
 		if (!effect) {
 			return;
 		}
 
-		const previous = soundEffectAudioRef.current;
+		const audioKey = playerId || '__unknown__';
+		const previous = soundEffectAudioByPlayerRef.current[audioKey];
 		if (previous) {
 			previous.pause();
 			previous.currentTime = 0;
@@ -923,9 +924,17 @@ export function Player({ data }: { data: ServerData }) {
 		const audio = new Audio(effect.src);
 		audio.preload = 'auto';
 		audio.volume = 0.72;
-		soundEffectAudioRef.current = audio;
+		soundEffectAudioByPlayerRef.current[audioKey] = audio;
+		audio.onended = () => {
+			if (soundEffectAudioByPlayerRef.current[audioKey] === audio) {
+				delete soundEffectAudioByPlayerRef.current[audioKey];
+			}
+		};
 		audio.play().catch((error) => {
 			console.warn('Unable to play sound effect', error);
+			if (soundEffectAudioByPlayerRef.current[audioKey] === audio) {
+				delete soundEffectAudioByPlayerRef.current[audioKey];
+			}
 		});
 	}, []);
 
@@ -997,8 +1006,10 @@ export function Player({ data }: { data: ServerData }) {
 
 	useEffect(() => {
 		return () => {
-			soundEffectAudioRef.current?.pause();
-			soundEffectAudioRef.current = null;
+			for (const audio of Object.values(soundEffectAudioByPlayerRef.current)) {
+				audio.pause();
+			}
+			soundEffectAudioByPlayerRef.current = {};
 			for (const timer of Object.values(soundEffectBadgeTimersRef.current)) {
 				window.clearTimeout(timer);
 			}
@@ -1843,7 +1854,7 @@ export function Player({ data }: { data: ServerData }) {
 									void handleVoiceBroadcast(state.firedBy?.id, broadcast);
 									break;
 								case BroadcastTypes.SoundEffect:
-									playSoundEffect(broadcast.soundEffect?.id);
+									playSoundEffect(broadcast.soundEffect?.id, state.firedBy?.id);
 									pulseSoundEffectBadge(state.firedBy?.id);
 									break;
 							}
