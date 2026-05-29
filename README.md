@@ -92,9 +92,9 @@ Tenor API access requires an existing API key. Google has announced Tenor API
 decommissioning for app developers on June 30, 2026, so `/api/tenor` is kept as a
 small proxy surface that can be replaced with another GIF provider later.
 
-Built-in room sound effects use short Mixkit preview MP3s. Mixkit lists these
-sound effects as free to download and usable under the Mixkit sound effects
-license.
+Built-in room sound effects use short remote MP3s. The original utility set uses
+Mixkit previews, while the anime/game/meme soundboard clips use MyInstants media
+URLs.
 
 ## Docker Compose
 

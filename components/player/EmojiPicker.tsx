@@ -38,6 +38,7 @@ export function EmojiPicker({ disabled = false, triggerClassName = '', onSelect 
 	const emojiSections = useMemo<EmojiSection[]>(() => {
 		const normalizedQuery = query.trim();
 		const searchedEmoji = normalizedQuery ? searchChatEmojis(normalizedQuery, 80) : chatEmojis;
+		const maxItemsPerSection = normalizedQuery ? 96 : 180;
 		const sections: EmojiSection[] = [];
 
 		if (tenorResults.length || tenorLoading || tenorError) {
@@ -49,7 +50,9 @@ export function EmojiPicker({ disabled = false, triggerClassName = '', onSelect 
 		}
 
 		for (const category of emojiCategories) {
-			const items = searchedEmoji.filter((emoji) => emoji.category === category.id);
+			const items = searchedEmoji
+				.filter((emoji) => emoji.category === category.id)
+				.slice(0, maxItemsPerSection);
 			if (items.length) {
 				sections.push({
 					id: category.id,
