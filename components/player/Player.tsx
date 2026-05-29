@@ -2411,6 +2411,20 @@ export function Player({ data }: { data: ServerData }) {
 			/>
 		</div>
 	);
+	const chatOverlay = (
+		<div
+			className="pointer-events-none absolute inset-0 z-50 flex gap-1"
+			id="chat-overlay"
+			style={chatHidden ? { display: 'none' } : undefined}
+		>
+			<Chats
+				controlsShowing={controlsShowing && playerSmallLayout}
+				messagesToDisplay={messagesToDisplay}
+				historicalPlayers={historicalPlayers}
+				staticBaseUrl={data.staticBaseUrl}
+			/>
+		</div>
+	);
 
 	return (
 		<>
@@ -2492,23 +2506,11 @@ export function Player({ data }: { data: ServerData }) {
 									}
 								}}
 							/>
+							{chatOverlay}
 						</MediaPlayer>
 					) : (
 						<div className={mediaPlayerClassName} />
 					)}
-				</div>
-
-				<div
-					className="pointer-events-none absolute inset-0 z-50 flex gap-1"
-					id="chat-overlay"
-					style={chatHidden ? { display: 'none' } : undefined}
-				>
-					<Chats
-						controlsShowing={controlsShowing && playerSmallLayout}
-						messagesToDisplay={messagesToDisplay}
-						historicalPlayers={historicalPlayers}
-						staticBaseUrl={data.staticBaseUrl}
-					/>
 				</div>
 				<AnimatePresence>
 					{showJoinOverlay ? (
