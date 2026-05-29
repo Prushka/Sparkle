@@ -292,47 +292,93 @@
 	padding-left: 4.75rem;
 }
 
-.chat-input-native[data-has-emoji-preview='true'] {
-	background-color: transparent !important;
-	color: transparent !important;
-	caret-color: hsl(var(--foreground));
-}
-
-.chat-pc .chat-input-native[data-has-emoji-preview='true'] {
-	caret-color: white;
-}
-
-.chat-input-preview-surface {
+.chat-rich-input {
+	display: flex;
+	height: 2.25rem;
+	width: 100%;
+	align-items: center;
+	gap: 0.18rem;
+	overflow-x: auto;
+	overflow-y: hidden;
+	white-space: pre;
+	word-break: normal;
+	border-radius: 0.375rem;
+	border: 1px solid hsl(var(--input));
 	background-color: transparent;
+	padding: 0.25rem 0.75rem;
+	font-size: 0.875rem;
+	line-height: 1.25rem;
+	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+	outline: none;
+	scrollbar-width: none;
 }
 
-.chat-pc .chat-input-preview-surface {
-	background-color: hsla(0, 0%, 100%, 0.3);
+.chat-rich-input::-webkit-scrollbar {
+	display: none;
 }
 
-.chat-input-preview {
-	color: hsl(var(--foreground));
-	font-family: var(--font-body);
-	font-weight: 600;
+.chat-rich-input[aria-disabled='true'] {
+	cursor: not-allowed;
+	opacity: 0.5;
 }
 
-.chat-pc .chat-input-preview {
+.chat-rich-input[data-button-layout='true'] {
+	height: 2.5rem;
+	border-radius: 0;
+	padding-right: 0.5rem;
+	padding-left: 0.5rem;
+}
+
+.chat-input-emote {
+	display: inline-flex;
+	height: 1.45em;
+	min-width: 1.45em;
+	align-items: center;
+	justify-content: center;
+	vertical-align: -0.25em;
+}
+
+.chat-input-emote-image {
+	height: 1.35em;
+	width: 1.35em;
+	object-fit: contain;
+	user-select: none;
+}
+
+.chat-token-draft {
+	min-width: 1ch;
+	color: inherit;
+	font: inherit;
+}
+
+.chat-pc .chat-rich-input {
+	height: 2.25rem;
+	border: none;
+	background-color: hsla(0, 0%, 100%, 0.3) !important;
 	color: white;
 	font-weight: 700;
+	padding-right: 4rem;
+	padding-left: 1rem;
 }
 
-.chat-pc .chat-input-preview span {
+.chat-pc .chat-rich-input .chat-token-draft {
+	height: auto;
+	width: auto;
+	border: 0;
+	background: transparent !important;
 	color: inherit;
+	font-weight: inherit;
+	margin: 0;
+	padding: 0;
+	box-shadow: none;
 }
 
-.chat-input-preview-content {
-	line-height: 1.25rem;
+.chat-pc .chat-input-wrap .chat-rich-input {
+	padding-left: 4.75rem;
 }
 
-.chat-input-preview .chat-emoji {
-	width: 1.25em;
-	height: 1.25em;
-	min-width: 1.25em;
+.chat-pc .chat-rich-input span {
+	color: inherit;
 }
 
 .chat-pc .emoji-trigger,
