@@ -27,27 +27,23 @@ type EmojiSection = {
 	items: ChatEmojiRef[];
 };
 
-type EmojiVirtualRow =
-	| {
-			key: string;
-			type: 'header';
-			label: string;
-			height: number;
-	  }
-	| {
-			key: string;
-			type: 'items';
-			items: ChatEmojiRef[];
-			height: number;
-	  };
-
-type EmojiVirtualLayout = {
-	row: EmojiVirtualRow;
+type EmojiVirtualItemRow = {
+	key: string;
+	items: ChatEmojiRef[];
 	top: number;
+	height: number;
+};
+
+type EmojiVirtualSectionLayout = {
+	id: ChatEmojiCategory;
+	label: string;
+	itemAreaTop: number;
+	itemAreaHeight: number;
+	rows: EmojiVirtualItemRow[];
 };
 
 const emojiGridGap = 4;
-const emojiHeaderHeight = 26;
+const emojiHeaderHeight = 28;
 const emojiRowGap = 8;
 const emojiOverscanPx = 240;
 const emojiPanelHeight = 352;
@@ -101,42 +97,48 @@ export function EmojiPicker({ disabled = false, triggerClassName = '', onSelect 
 		Math.floor((Math.max(viewportWidth, 320) - emojiGridGap * (columns - 1)) / columns)
 	);
 
-	const { totalHeight, rowLayouts } = useMemo(() => {
-		const rows: EmojiVirtualLayout[] = [];
+	const sectionLayouts = useMemo<EmojiVirtualSectionLayout[]>(() => {
+		const sections: EmojiVirtualSectionLayout[] = [];
 		let top = 0;
 
 		for (const section of emojiSections) {
-			const header: EmojiVirtualRow = {
-				key: `${section.id}-header`,
-				type: 'header',
-				label: section.label,
-				height: emojiHeaderHeight
-			};
-			rows.push({ row: header, top });
-			top += header.height;
+			const rows: EmojiVirtualItemRow[] = [];
+			let itemTop = 0;
 
 			for (let index = 0; index < section.items.length; index += columns) {
-				const itemRow: EmojiVirtualRow = {
+				rows.push({
 					key: `${section.id}-${index}`,
-					type: 'items',
 					items: section.items.slice(index, index + columns),
+					top: itemTop,
 					height: tileSize
-				};
-				rows.push({ row: itemRow, top });
-				top += itemRow.height;
+				});
+				itemTop += tileSize;
 			}
 
-			top += emojiRowGap;
+			sections.push({
+				id: section.id,
+				label: section.label,
+				itemAreaTop: top + emojiHeaderHeight,
+				itemAreaHeight: itemTop,
+				rows
+			});
+			top += emojiHeaderHeight + itemTop + emojiRowGap;
 		}
 
-		return { totalHeight: top, rowLayouts: rows };
+		return sections;
 	}, [columns, emojiSections, tileSize]);
 
-	const visibleRows = useMemo(() => {
+	const visibleSectionLayouts = useMemo(() => {
 		const min = Math.max(0, scrollTop - emojiOverscanPx);
 		const max = scrollTop + viewportHeight + emojiOverscanPx;
-		return rowLayouts.filter(({ row, top: rowTop }) => rowTop + row.height >= min && rowTop <= max);
-	}, [rowLayouts, scrollTop, viewportHeight]);
+		return sectionLayouts.map((section) => ({
+			...section,
+			visibleRows: section.rows.filter((row) => {
+				const rowTop = section.itemAreaTop + row.top;
+				return rowTop + row.height >= min && rowTop <= max;
+			})
+		}));
+	}, [scrollTop, sectionLayouts, viewportHeight]);
 
 	const showEmptyState = emojiSections.every((section) => section.items.length === 0);
 
@@ -201,7 +203,7 @@ export function EmojiPicker({ disabled = false, triggerClassName = '', onSelect 
 					</div>
 					<div
 						ref={scrollRef}
-						className="overflow-y-auto p-2"
+						className="overflow-y-auto px-2 pb-2"
 						style={{ height: emojiPanelHeight }}
 						onScroll={(event) => setScrollTop(event.currentTarget.scrollTop)}
 					>
@@ -210,53 +212,61 @@ export function EmojiPicker({ disabled = false, triggerClassName = '', onSelect 
 								No emoji found
 							</div>
 						) : (
-							<div className="relative" style={{ height: totalHeight }}>
-								{visibleRows.map(({ row, top }) => (
-									<div
-										key={row.key}
-										className="absolute left-0 right-0"
-										style={{ height: row.height, transform: `translateY(${top}px)` }}
+							<div>
+								{visibleSectionLayouts.map((section) => (
+									<section
+										key={section.id}
+										className="relative"
+										style={{ paddingBottom: emojiRowGap }}
 									>
-										{row.type === 'header' ? (
-											<div className="flex h-full items-end px-1 pb-1.5">
-												<h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-													{row.label}
-												</h3>
-											</div>
-										) : (
-											<div
-												className="grid"
-												style={{
-													gap: emojiGridGap,
-													gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`
-												}}
-											>
-												{row.items.map((emoji) => (
-													<Tooltip.Root key={emoji.id}>
-														<Tooltip.Trigger asChild>
-															<button
-																type="button"
-																aria-label={`:${emoji.id}:`}
-																className="flex aspect-square items-center justify-center rounded-md border border-transparent bg-muted/35 p-0.5 hover:border-primary/35 hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-																onClick={() => selectEmoji(emoji)}
-															>
-																<img
-																	src={emoji.src}
-																	alt=""
-																	loading="lazy"
-																	decoding="async"
-																	className="h-full max-h-5 w-full object-contain"
-																/>
-															</button>
-														</Tooltip.Trigger>
-														<Tooltip.Content side="bottom">
-															<p>{`:${emoji.id}:`}</p>
-														</Tooltip.Content>
-													</Tooltip.Root>
-												))}
-											</div>
-										)}
-									</div>
+										<div
+											data-category-header={section.label}
+											className="sticky top-0 z-20 -mx-2 flex h-7 items-center border-b border-white/10 bg-background/95 px-3 text-xs font-bold uppercase tracking-wide text-muted-foreground shadow-sm backdrop-blur-md"
+										>
+											{section.label}
+										</div>
+										<div className="relative" style={{ height: section.itemAreaHeight }}>
+											{section.visibleRows.map((row) => (
+												<div
+													key={row.key}
+													className="absolute left-0 right-0 top-0"
+													style={{ height: row.height, transform: `translateY(${row.top}px)` }}
+												>
+													<div
+														className="grid"
+														style={{
+															gap: emojiGridGap,
+															gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`
+														}}
+													>
+														{row.items.map((emoji) => (
+															<Tooltip.Root key={emoji.id}>
+																<Tooltip.Trigger asChild>
+																	<button
+																		type="button"
+																		aria-label={`:${emoji.id}:`}
+																		className="flex aspect-square items-center justify-center rounded-md border border-transparent bg-muted/35 p-0.5 hover:border-primary/35 hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+																		onClick={() => selectEmoji(emoji)}
+																	>
+																		<img
+																			src={emoji.src}
+																			alt=""
+																			loading="lazy"
+																			decoding="async"
+																			className="h-full max-h-5 w-full object-contain"
+																		/>
+																	</button>
+																</Tooltip.Trigger>
+																<Tooltip.Content side="bottom">
+																	<p>{`:${emoji.id}:`}</p>
+																</Tooltip.Content>
+															</Tooltip.Root>
+														))}
+													</div>
+												</div>
+											))}
+										</div>
+									</section>
 								))}
 							</div>
 						)}

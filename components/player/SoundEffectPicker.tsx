@@ -76,47 +76,52 @@ export function SoundEffectPicker({ disabled = false, triggerClassName = '', onP
 						/>
 					</div>
 				</div>
-				<div className="max-h-[22rem] space-y-3 overflow-y-auto p-2">
-					{soundSections.map((section, sectionIndex) => (
-						<motion.section
-							key={section.id}
-							initial={{ opacity: 0, y: 6 }}
-							animate={{ opacity: 1, y: 0 }}
-							transition={{ duration: 0.16, delay: sectionIndex * 0.025, ease: 'easeOut' }}
-						>
-							<div className="mb-1.5 px-1">
-								<h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-									{section.label}
-								</h3>
-							</div>
-							<div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
-								{section.items.map((effect) => (
-									<motion.button
-										key={effect.id}
-										type="button"
-										className="group flex min-h-10 min-w-0 items-center gap-1.5 rounded-md border border-transparent bg-muted/35 px-2.5 py-1.5 text-left transition-colors hover:border-primary/35 hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-										aria-label={`Play ${effect.name}`}
-										whileHover={{ y: -1, scale: 1.015 }}
-										whileTap={{ scale: 0.98 }}
-										transition={{ duration: 0.12, ease: 'easeOut' }}
-										onClick={() => onPlay(effect)}
-									>
-										<span className="shrink-0 text-lg leading-none transition-transform duration-150 group-hover:scale-110">
-											{effect.icon}
-										</span>
-										<span className="min-w-0 flex-1 truncate text-xs font-medium leading-tight">
-											{effect.name}
-										</span>
-									</motion.button>
-								))}
-							</div>
-						</motion.section>
-					))}
+				<div className="max-h-[22rem] overflow-y-auto px-2 pb-2">
 					{showEmptyState ? (
-						<div className="rounded-md border border-dashed border-white/10 px-3 py-8 text-center text-xs text-muted-foreground">
+						<div className="mt-2 rounded-md border border-dashed border-white/10 px-3 py-8 text-center text-xs text-muted-foreground">
 							No sounds found
 						</div>
-					) : null}
+					) : (
+						<div className="space-y-3">
+							{soundSections.map((section, sectionIndex) => (
+								<motion.section
+									key={section.id}
+									initial={{ opacity: 0, y: 6 }}
+									animate={{ opacity: 1, y: 0 }}
+									transition={{ duration: 0.16, delay: sectionIndex * 0.025, ease: 'easeOut' }}
+								>
+									<div
+										data-category-header={section.label}
+										data-sticky-category={section.label}
+										className="sticky top-0 z-20 -mx-2 mb-1.5 flex h-7 items-center border-b border-white/10 bg-background/95 px-3 text-xs font-bold uppercase tracking-wide text-muted-foreground shadow-sm backdrop-blur-md"
+									>
+										{section.label}
+									</div>
+									<div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
+										{section.items.map((effect) => (
+											<motion.button
+												key={effect.id}
+												type="button"
+												className="group flex min-h-10 min-w-0 items-center gap-1.5 rounded-md border border-transparent bg-muted/35 px-2.5 py-1.5 text-left transition-colors hover:border-primary/35 hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+												aria-label={`Play ${effect.name}`}
+												whileHover={{ y: -1, scale: 1.015 }}
+												whileTap={{ scale: 0.98 }}
+												transition={{ duration: 0.12, ease: 'easeOut' }}
+												onClick={() => onPlay(effect)}
+											>
+												<span className="shrink-0 text-lg leading-none transition-transform duration-150 group-hover:scale-110">
+													{effect.icon}
+												</span>
+												<span className="min-w-0 flex-1 truncate text-xs font-medium leading-tight">
+													{effect.name}
+												</span>
+											</motion.button>
+										))}
+									</div>
+								</motion.section>
+							))}
+						</div>
+					)}
 				</div>
 			</Popover.Content>
 		</Popover.Root>
