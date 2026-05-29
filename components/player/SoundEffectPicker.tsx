@@ -84,30 +84,27 @@ export function SoundEffectPicker({ disabled = false, triggerClassName = '', onP
 							animate={{ opacity: 1, y: 0 }}
 							transition={{ duration: 0.16, delay: sectionIndex * 0.025, ease: 'easeOut' }}
 						>
-							<div className="mb-1.5 flex items-center justify-between px-1">
+							<div className="mb-1.5 px-1">
 								<h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
 									{section.label}
 								</h3>
-								<span className="rounded-full bg-muted/45 px-2 py-0.5 text-[0.65rem] font-bold text-muted-foreground">
-									{section.items.length}
-								</span>
 							</div>
 							<div className="grid grid-cols-2 gap-1 sm:grid-cols-3">
 								{section.items.map((effect) => (
 									<motion.button
 										key={effect.id}
 										type="button"
-										className="group flex min-h-12 min-w-0 items-center gap-2 rounded-md border border-transparent bg-muted/35 px-3 py-2 text-left transition-colors hover:border-primary/35 hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+										className="group flex min-h-10 min-w-0 items-center gap-1.5 rounded-md border border-transparent bg-muted/35 px-2.5 py-1.5 text-left transition-colors hover:border-primary/35 hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
 										aria-label={`Play ${effect.name}`}
 										whileHover={{ y: -1, scale: 1.015 }}
 										whileTap={{ scale: 0.98 }}
 										transition={{ duration: 0.12, ease: 'easeOut' }}
 										onClick={() => onPlay(effect)}
 									>
-										<span className="shrink-0 text-xl leading-none transition-transform duration-150 group-hover:scale-110">
+										<span className="shrink-0 text-lg leading-none transition-transform duration-150 group-hover:scale-110">
 											{effect.icon}
 										</span>
-										<span className="min-w-0 flex-1 truncate text-sm font-bold leading-tight">
+										<span className="min-w-0 flex-1 truncate text-xs font-medium leading-tight">
 											{effect.name}
 										</span>
 									</motion.button>

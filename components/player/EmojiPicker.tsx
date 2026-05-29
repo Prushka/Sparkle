@@ -157,15 +157,10 @@ export function EmojiPicker({ disabled = false, triggerClassName = '', onSelect 
 							animate={{ opacity: 1, y: 0 }}
 							transition={{ duration: 0.16, delay: sectionIndex * 0.025, ease: 'easeOut' }}
 						>
-							<div className="mb-1.5 flex items-center justify-between px-1">
+							<div className="mb-1.5 px-1">
 								<h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
 									{section.label}
 								</h3>
-								{section.items.length ? (
-									<span className="rounded-full bg-muted/45 px-2 py-0.5 text-[0.65rem] font-bold text-muted-foreground">
-										{section.items.length}
-									</span>
-								) : null}
 							</div>
 							{section.items.length ? (
 								<div className="grid grid-cols-8 gap-1 sm:grid-cols-10">
