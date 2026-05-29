@@ -794,6 +794,12 @@ func (r *Room) newPlayer(sender *Player) {
 	sender.state.LastSeen = time.Now().Unix()
 	roomTime = r.state.Time
 	roomPaused = r.state.Paused
+	if len(r.players) == 1 {
+		roomPaused = false
+		r.state.Paused = false
+	}
+	sender.state.Time = roomTime
+	sender.state.Paused = roomPaused
 	youtube = r.youtube
 	chats = append([]Chat(nil), r.chats...)
 	r.mu.Unlock()

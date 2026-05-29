@@ -579,6 +579,7 @@ export function Player({ data }: { data: ServerData }) {
 	const roomPlayersRef = useRef<RoomPlayer[]>([]);
 	const lastSentTimeRef = useRef(-100);
 	const suppressNextPlaybackSyncRef = useRef(false);
+	const awaitingInitialPlaybackSyncRef = useRef(false);
 	const inBgRef = useRef(false);
 	const exitedRef = useRef(false);
 	const interactedRef = useRef(interacted);
@@ -588,7 +589,6 @@ export function Player({ data }: { data: ServerData }) {
 	const volumeRestoringRef = useRef(false);
 	const volumeCanPlayRestoredRef = useRef(false);
 	const playbackSyncSuppressionTimerRef = useRef<number | null>(null);
-	const autoPlayWhenAloneOnJoinRef = useRef(false);
 	const [mounted, setMounted] = useState(false);
 	const [playerEl, setPlayerEl] = useState<MediaPlayerInstance | null>(null);
 	const [playerCanPlay, setPlayerCanPlay] = useState(false);
@@ -629,7 +629,6 @@ export function Player({ data }: { data: ServerData }) {
 	const [youtubeState, setYoutubeState] = useState<YouTubeSyncState>(() =>
 		readStoredYouTubeSyncState(youtubeStateStorageKey)
 	);
-	youtubeStateStorageKeyRef.current = youtubeStateStorageKey;
 	const getRoomPath = useCallback(
 		(id: string) => (roomBase ? `/${id}?room=${encodeURIComponent(roomBase)}` : `/${id}`),
 		[roomBase]
@@ -1096,9 +1095,13 @@ export function Player({ data }: { data: ServerData }) {
 	);
 
 	useEffect(() => {
-		const stored = readStoredYouTubeSyncState(youtubeStateStorageKey);
-		applyYouTubeState(stored);
-		pendingYouTubeStateRef.current = null;
+		youtubeStateStorageKeyRef.current = youtubeStateStorageKey;
+		const timer = window.setTimeout(() => {
+			const stored = readStoredYouTubeSyncState(youtubeStateStorageKey);
+			applyYouTubeState(stored);
+			pendingYouTubeStateRef.current = null;
+		}, 0);
+		return () => window.clearTimeout(timer);
 	}, [applyYouTubeState, youtubeStateStorageKey]);
 
 	useEffect(() => {
@@ -1424,22 +1427,12 @@ export function Player({ data }: { data: ServerData }) {
 		return true;
 	}, [clearPlaybackSyncSuppression]);
 
-	const playFromSoloJoin = useCallback(() => {
-		const player = playerElementRef.current;
-		if (!player || !player.paused) {
-			return;
+	const shouldSendPlaybackSync = useCallback(() => {
+		if (awaitingInitialPlaybackSyncRef.current) {
+			return false;
 		}
-		const play = () => {
-			Promise.resolve(player.play()).catch((error) => {
-				console.warn('Unable to auto-play after joining an empty room', error);
-			});
-		};
-		if (player.state.canPlay) {
-			play();
-		} else {
-			player.canPlayQueue.enqueue('auto-play-empty-room-join', play);
-		}
-	}, []);
+		return !consumePlaybackSyncSuppression();
+	}, [consumePlaybackSyncSuppression]);
 
 	useEffect(() => {
 		return () => clearPlaybackSyncSuppression();
@@ -1485,11 +1478,9 @@ export function Player({ data }: { data: ServerData }) {
 				console.log(`Socket, connected to ${room}`);
 				setSocketConnected(true);
 				profileSyncedRef.current = sendProfile();
+				awaitingInitialPlaybackSyncRef.current = true;
 				send({ type: SyncTypes.NewPlayer });
 				sendSettings();
-				if (!playerElementRef.current?.paused) {
-					send({ paused: false, type: SyncTypes.PauseSync });
-				}
 				updateLastTicked(true);
 			};
 
@@ -1537,15 +1528,6 @@ export function Player({ data }: { data: ServerData }) {
 						case SyncTypes.PlayersStatusSync:
 							reconnectAttemptRef.current = 0;
 							roomPlayersCountRef.current = state.players.length;
-							if (autoPlayWhenAloneOnJoinRef.current) {
-								const joinedRoom = state.players.some((player) => player.id === playerId);
-								if (joinedRoom) {
-									autoPlayWhenAloneOnJoinRef.current = false;
-									if (state.players.length === 1) {
-										playFromSoloJoin();
-									}
-								}
-							}
 							if (roomPlayersRef.current.length > 0) {
 								const { left, joined } = getLeftAndJoined(
 									roomPlayersRef.current,
@@ -1588,6 +1570,7 @@ export function Player({ data }: { data: ServerData }) {
 							});
 							break;
 						case SyncTypes.PauseSync:
+							awaitingInitialPlaybackSyncRef.current = false;
 							if (state.paused === true && player.paused === false) {
 								armPlaybackSyncSuppression();
 								Promise.resolve(player.pause()).catch((error) => {
@@ -1660,6 +1643,7 @@ export function Player({ data }: { data: ServerData }) {
 				}
 				console.log(`Socket closed, ${room}`);
 				setSocketConnected(false);
+				awaitingInitialPlaybackSyncRef.current = false;
 				socketRef.current = null;
 				socketUrlRef.current = null;
 				if (!exitedRef.current && interactedRef.current) {
@@ -1697,8 +1681,7 @@ export function Player({ data }: { data: ServerData }) {
 			handleVoiceBroadcast,
 			playSoundEffect,
 			armPlaybackSyncSuppression,
-			clearPlaybackSyncSuppression,
-			playFromSoloJoin
+			clearPlaybackSyncSuppression
 		]
 	);
 
@@ -1713,7 +1696,7 @@ export function Player({ data }: { data: ServerData }) {
 			!socket ||
 			(socket.readyState !== WebSocket.CONNECTING && socket.readyState !== WebSocket.OPEN)
 		) {
-			autoPlayWhenAloneOnJoinRef.current = true;
+			awaitingInitialPlaybackSyncRef.current = true;
 		}
 		interactedRef.current = true;
 		setInteracted(true);
@@ -2146,7 +2129,6 @@ export function Player({ data }: { data: ServerData }) {
 			return;
 		}
 		startWatchRoomConnection();
-		playerEl?.play?.().catch?.(() => {});
 	}
 
 	const showJoinOverlay = !socketConnected;
@@ -2219,7 +2201,7 @@ export function Player({ data }: { data: ServerData }) {
 							onPause={() => {
 								supRef.current?.pauseHandler();
 								supPlayingRef.current = false;
-								if (!consumePlaybackSyncSuppression()) {
+								if (shouldSendPlaybackSync()) {
 									send({ paused: true, type: SyncTypes.PauseSync });
 								}
 								setCurrentlyWatching((value) => (value ? { ...value, paused: true } : null));
@@ -2230,7 +2212,7 @@ export function Player({ data }: { data: ServerData }) {
 									supPlayingRef.current = true;
 								}
 								startWatchRoomConnection();
-								if (!consumePlaybackSyncSuppression() && interactedRef.current) {
+								if (shouldSendPlaybackSync() && interactedRef.current) {
 									send({ paused: false, type: SyncTypes.PauseSync });
 								}
 								setCurrentlyWatching((value) => (value ? { ...value, paused: false } : null));

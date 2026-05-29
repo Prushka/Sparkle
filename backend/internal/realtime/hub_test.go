@@ -1,6 +1,7 @@
 package realtime
 
 import (
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -118,5 +119,100 @@ func TestSanitizeYouTubeStateRejectsInvalidVideoID(t *testing.T) {
 	}, 1234)
 	if ok {
 		t.Fatal("sanitizeYouTubeState() accepted invalid video id")
+	}
+}
+
+func TestNewSoloPlayerStartsPlayback(t *testing.T) {
+	room := &Room{
+		id:      "room",
+		players: make(map[string]*Player),
+		state:   VideoState{Time: 42, Paused: true},
+		youtube: defaultYouTubeState(),
+	}
+	player := &Player{
+		send: make(chan []byte, 4),
+		state: PlayerSnapshot{
+			VideoState:  defaultVideoState(),
+			PlayerState: PlayerState{Id: "joining"},
+		},
+	}
+	room.players[player.state.Id] = player
+
+	room.newPlayer(player)
+
+	if room.state.Paused {
+		t.Fatal("solo join left room paused, want resumed")
+	}
+	if player.state.Time != 42 || player.state.Paused {
+		t.Fatalf("joining player state = %#v, want time 42 and paused false", player.state.VideoState)
+	}
+
+	timePayload := readQueuedPayload(t, player)
+	if timePayload.Type != TimeSync || timePayload.Time == nil || *timePayload.Time != 42 {
+		t.Fatalf("time sync payload = %#v, want time 42", timePayload)
+	}
+
+	pausePayload := readQueuedPayload(t, player)
+	if pausePayload.Type != PauseSync || pausePayload.Paused == nil || *pausePayload.Paused {
+		t.Fatalf("pause sync payload = %#v, want paused false", pausePayload)
+	}
+}
+
+func TestNewPlayerAdoptsExistingRoomPause(t *testing.T) {
+	room := &Room{
+		id:      "room",
+		players: make(map[string]*Player),
+		state:   VideoState{Time: 42, Paused: true},
+		youtube: defaultYouTubeState(),
+	}
+	existing := &Player{
+		send: make(chan []byte, 4),
+		state: PlayerSnapshot{
+			VideoState:  VideoState{Time: 42, Paused: true},
+			PlayerState: PlayerState{Id: "existing"},
+		},
+	}
+	joining := &Player{
+		send: make(chan []byte, 4),
+		state: PlayerSnapshot{
+			VideoState:  defaultVideoState(),
+			PlayerState: PlayerState{Id: "joining"},
+		},
+	}
+	room.players[existing.state.Id] = existing
+	room.players[joining.state.Id] = joining
+
+	room.newPlayer(joining)
+
+	if !room.state.Paused {
+		t.Fatal("non-solo join resumed paused room")
+	}
+	if joining.state.Time != 42 || !joining.state.Paused {
+		t.Fatalf("joining player state = %#v, want time 42 and paused true", joining.state.VideoState)
+	}
+
+	_ = readQueuedPayload(t, joining)
+	pausePayload := readQueuedPayload(t, joining)
+	if pausePayload.Type != PauseSync || pausePayload.Paused == nil || !*pausePayload.Paused {
+		t.Fatalf("pause sync payload = %#v, want paused true", pausePayload)
+	}
+	if len(existing.send) != 0 {
+		t.Fatal("new player snapshot should not send playback commands to existing player")
+	}
+}
+
+func readQueuedPayload(t *testing.T, player *Player) SendPayload {
+	t.Helper()
+
+	select {
+	case raw := <-player.send:
+		var payload SendPayload
+		if err := json.Unmarshal(raw, &payload); err != nil {
+			t.Fatalf("unmarshal queued payload: %v", err)
+		}
+		return payload
+	default:
+		t.Fatal("expected queued payload")
+		return SendPayload{}
 	}
 }
