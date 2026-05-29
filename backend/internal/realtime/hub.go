@@ -505,16 +505,27 @@ func (r *Room) syncYouTube(sender *Player, incoming *YouTubeState) {
 }
 
 func shouldBroadcastYouTubeState(previous YouTubeState, next YouTubeState) bool {
-	if previous.Open != next.Open ||
-		previous.VideoID != next.VideoID ||
-		previous.Paused != next.Paused ||
-		math.Abs(previous.PlaybackRate-next.PlaybackRate) > 0.01 {
+	if len(previous.Tabs) != len(next.Tabs) {
 		return true
 	}
-	if next.Paused {
-		return math.Abs(previous.Time-next.Time) > 0.5
+	for i, previousTab := range previous.Tabs {
+		nextTab := next.Tabs[i]
+		if previousTab.ID != nextTab.ID ||
+			previousTab.Open != nextTab.Open ||
+			previousTab.VideoID != nextTab.VideoID ||
+			previousTab.Paused != nextTab.Paused ||
+			math.Abs(previousTab.PlaybackRate-nextTab.PlaybackRate) > 0.01 {
+			return true
+		}
+		if nextTab.Paused {
+			if math.Abs(previousTab.Time-nextTab.Time) > 0.5 {
+				return true
+			}
+		} else if math.Abs(previousTab.Time-nextTab.Time) > 3 {
+			return true
+		}
 	}
-	return math.Abs(previous.Time-next.Time) > 3
+	return false
 }
 
 func sanitizeYouTubeState(incoming *YouTubeState, timestamp int64) (YouTubeState, bool) {
@@ -523,24 +534,45 @@ func sanitizeYouTubeState(incoming *YouTubeState, timestamp int64) (YouTubeState
 	}
 
 	state := defaultYouTubeState()
-	state.Open = incoming.Open
-	state.VideoID = strings.TrimSpace(incoming.VideoID)
-	if state.VideoID != "" {
-		if !safeYouTubeVideoID.MatchString(state.VideoID) {
-			return YouTubeState{}, false
+	seen := make(map[string]bool, len(incoming.Tabs))
+	for _, rawTab := range incoming.Tabs {
+		if len(state.Tabs) >= maxYouTubeTabs {
+			break
 		}
-		state.URL = "https://www.youtube.com/watch?v=" + state.VideoID
-	} else {
-		state.URL = ""
-	}
+		tab := YouTubeTabState{
+			ID:           strings.TrimSpace(rawTab.ID),
+			Open:         rawTab.Open,
+			Paused:       true,
+			PlaybackRate: 1,
+			UpdatedAt:    timestamp,
+		}
+		if !safeID.MatchString(tab.ID) || seen[tab.ID] {
+			continue
+		}
+		seen[tab.ID] = true
 
-	if !math.IsNaN(incoming.Time) && !math.IsInf(incoming.Time, 0) && incoming.Time > 0 {
-		state.Time = math.Min(incoming.Time, 7*24*60*60)
+		tab.VideoID = strings.TrimSpace(rawTab.VideoID)
+		if tab.VideoID != "" {
+			if !safeYouTubeVideoID.MatchString(tab.VideoID) {
+				continue
+			}
+			tab.URL = "https://www.youtube.com/watch?v=" + tab.VideoID
+		}
+		if !math.IsNaN(rawTab.Time) && !math.IsInf(rawTab.Time, 0) && rawTab.Time > 0 {
+			tab.Time = math.Min(rawTab.Time, 7*24*60*60)
+		}
+		if rawTab.PlaybackRate > 0 && !math.IsNaN(rawTab.PlaybackRate) && !math.IsInf(rawTab.PlaybackRate, 0) {
+			tab.PlaybackRate = math.Min(rawTab.PlaybackRate, 4)
+		}
+		tab.Paused = rawTab.Paused
+		if rawTab.UpdatedAt > 0 {
+			tab.UpdatedAt = rawTab.UpdatedAt
+		}
+		state.Tabs = append(state.Tabs, tab)
 	}
-	if incoming.PlaybackRate > 0 && !math.IsNaN(incoming.PlaybackRate) && !math.IsInf(incoming.PlaybackRate, 0) {
-		state.PlaybackRate = math.Min(incoming.PlaybackRate, 4)
+	if len(incoming.Tabs) > 0 && len(state.Tabs) == 0 {
+		return YouTubeState{}, false
 	}
-	state.Paused = incoming.Paused
 	state.UpdatedAt = timestamp
 	return state, true
 }

@@ -22,6 +22,7 @@ const (
 	maxChatMessages = 200
 	maxChatLength   = 2000
 	maxChatEmojis   = 50
+	maxYouTubeTabs  = 12
 )
 
 type Options struct {
@@ -43,7 +44,8 @@ type VideoState struct {
 	Paused bool    `json:"paused"`
 }
 
-type YouTubeState struct {
+type YouTubeTabState struct {
+	ID           string  `json:"id"`
 	Open         bool    `json:"open"`
 	URL          string  `json:"url,omitempty"`
 	VideoID      string  `json:"videoId,omitempty"`
@@ -51,6 +53,11 @@ type YouTubeState struct {
 	Paused       bool    `json:"paused"`
 	PlaybackRate float64 `json:"playbackRate"`
 	UpdatedAt    int64   `json:"updatedAt"`
+}
+
+type YouTubeState struct {
+	Tabs      []YouTubeTabState `json:"tabs,omitempty"`
+	UpdatedAt int64             `json:"updatedAt"`
 }
 
 type PlayerState struct {
@@ -125,5 +132,5 @@ func defaultVideoState() VideoState {
 }
 
 func defaultYouTubeState() YouTubeState {
-	return YouTubeState{Time: 0, Paused: true, PlaybackRate: 1}
+	return YouTubeState{}
 }

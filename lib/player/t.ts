@@ -79,13 +79,19 @@ export interface Player {
 	discordUser: DiscordUser | null | undefined;
 }
 
-export interface YouTubeSyncState {
+export interface YouTubeTabSyncState {
+	id: string;
 	open: boolean;
 	url: string;
 	videoId: string;
 	time: number;
 	paused: boolean;
 	playbackRate: number;
+	updatedAt: number;
+}
+
+export interface YouTubeSyncState {
+	tabs: YouTubeTabSyncState[];
 	updatedAt: number;
 }
 

@@ -66,6 +66,7 @@ import {
 	type Player as RoomPlayer,
 	type SendPayload,
 	type ServerData,
+	type YouTubeTabSyncState,
 	type YouTubeSyncState
 } from '@/lib/player/t';
 import SUPtitles from '@/lib/suptitles/suptitles';
@@ -133,27 +134,46 @@ const PLAYER_KEY_SHORTCUTS: MediaKeyShortcuts = {
 };
 
 const DEFAULT_YOUTUBE_SYNC_STATE: YouTubeSyncState = {
-	open: false,
-	url: '',
-	videoId: '',
-	time: 0,
-	paused: true,
-	playbackRate: 1,
+	tabs: [],
 	updatedAt: 0
 };
 
 const YOUTUBE_VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
+const YOUTUBE_TAB_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const MAX_YOUTUBE_TABS = 12;
 
-function normalizeYouTubeSyncState(state: Partial<YouTubeSyncState> | null | undefined) {
+function createDefaultYouTubeTab(id: string): YouTubeTabSyncState {
+	return {
+		id,
+		open: true,
+		url: '',
+		videoId: '',
+		time: 0,
+		paused: true,
+		playbackRate: 1,
+		updatedAt: 0
+	};
+}
+
+function normalizeYouTubeTabSyncState(
+	state: Partial<YouTubeTabSyncState> | null | undefined,
+	fallbackId = randomString(10)
+): YouTubeTabSyncState | null {
+	const id =
+		typeof state?.id === 'string' && YOUTUBE_TAB_ID_PATTERN.test(state.id) ? state.id : fallbackId;
+	if (!YOUTUBE_TAB_ID_PATTERN.test(id)) {
+		return null;
+	}
 	const playbackRate =
 		typeof state?.playbackRate === 'number' && Number.isFinite(state.playbackRate)
 			? Math.max(0.25, Math.min(4, state.playbackRate))
-			: DEFAULT_YOUTUBE_SYNC_STATE.playbackRate;
+			: 1;
 	const videoId =
 		typeof state?.videoId === 'string' && YOUTUBE_VIDEO_ID_PATTERN.test(state.videoId)
 			? state.videoId
 			: '';
 	return {
+		id,
 		open: Boolean(state?.open),
 		url: typeof state?.url === 'string' ? state.url : '',
 		videoId,
@@ -163,6 +183,36 @@ function normalizeYouTubeSyncState(state: Partial<YouTubeSyncState> | null | und
 				: 0,
 		paused: state?.paused === false ? false : true,
 		playbackRate,
+		updatedAt:
+			typeof state?.updatedAt === 'number' && Number.isFinite(state.updatedAt) ? state.updatedAt : 0
+	};
+}
+
+function normalizeYouTubeSyncState(state: Partial<YouTubeSyncState> | null | undefined) {
+	const rawTabs = Array.isArray(state?.tabs) ? state.tabs : [];
+	const tabs: YouTubeTabSyncState[] = [];
+	const seen = new Set<string>();
+	for (const rawTab of rawTabs) {
+		if (tabs.length >= MAX_YOUTUBE_TABS) {
+			break;
+		}
+		const tab = normalizeYouTubeTabSyncState(rawTab);
+		if (!tab || seen.has(tab.id)) {
+			continue;
+		}
+		seen.add(tab.id);
+		tabs.push(tab);
+	}
+
+	if (rawTabs.length === 0 && state && 'open' in state) {
+		const legacyTab = normalizeYouTubeTabSyncState(state as Partial<YouTubeTabSyncState>, 'legacy');
+		if (legacyTab) {
+			tabs.push(legacyTab);
+		}
+	}
+
+	return {
+		tabs,
 		updatedAt:
 			typeof state?.updatedAt === 'number' && Number.isFinite(state.updatedAt) ? state.updatedAt : 0
 	};
@@ -184,14 +234,14 @@ function readStoredYouTubeSyncState(storageKey: string): YouTubeSyncState {
 }
 
 function saveStoredYouTubeSyncState(storageKey: string, state: YouTubeSyncState) {
-	if (typeof window === 'undefined') {
+	if (typeof window === 'undefined' || !storageKey) {
 		return;
 	}
 	window.localStorage.setItem(storageKey, JSON.stringify(state));
 }
 
 function isMeaningfulYouTubeState(state: YouTubeSyncState) {
-	return state.open || state.videoId !== '' || state.url !== '';
+	return state.tabs.some((tab) => tab.open || tab.videoId !== '' || tab.url !== '');
 }
 
 function normalizePlayerVolume(volume: number): number {
@@ -626,9 +676,7 @@ export function Player({ data }: { data: ServerData }) {
 	const youtubeRoomId = roomBase || job.Id;
 	const youtubeSyncRoom = `youtube:${youtubeRoomId}`;
 	const youtubeStateStorageKey = `sparkle:youtube-sync-state:${youtubeRoomId}`;
-	const [youtubeState, setYoutubeState] = useState<YouTubeSyncState>(() =>
-		readStoredYouTubeSyncState(youtubeStateStorageKey)
-	);
+	const [youtubeState, setYoutubeState] = useState<YouTubeSyncState>(DEFAULT_YOUTUBE_SYNC_STATE);
 	const getRoomPath = useCallback(
 		(id: string) => (roomBase ? `/${id}?room=${encodeURIComponent(roomBase)}` : `/${id}`),
 		[roomBase]
@@ -1082,11 +1130,29 @@ export function Player({ data }: { data: ServerData }) {
 	}, []);
 
 	const updateYouTubeState = useCallback(
-		(patch: Partial<YouTubeSyncState>) => {
+		(tabId: string, patch: Partial<YouTubeTabSyncState>) => {
+			const timestamp = Date.now();
+			const current = youtubeStateRef.current;
+			const existingTab =
+				current.tabs.find((tab) => tab.id === tabId) ?? createDefaultYouTubeTab(tabId);
+			const nextTab = normalizeYouTubeTabSyncState(
+				{
+					...existingTab,
+					...patch,
+					id: tabId,
+					updatedAt: timestamp
+				},
+				tabId
+			);
+			if (!nextTab) {
+				return;
+			}
+			const nextTabs = [...current.tabs.filter((tab) => tab.id !== tabId), nextTab].slice(
+				-MAX_YOUTUBE_TABS
+			);
 			const nextState = normalizeYouTubeSyncState({
-				...youtubeStateRef.current,
-				...patch,
-				updatedAt: Date.now()
+				tabs: nextTabs,
+				updatedAt: timestamp
 			});
 			applyYouTubeState(nextState);
 			sendYouTubeSnapshot(nextState);
@@ -1094,14 +1160,16 @@ export function Player({ data }: { data: ServerData }) {
 		[applyYouTubeState, sendYouTubeSnapshot]
 	);
 
+	const openNewYouTubeTab = useCallback(() => {
+		const id = randomString(10);
+		updateYouTubeState(id, createDefaultYouTubeTab(id));
+	}, [updateYouTubeState]);
+
 	useEffect(() => {
 		youtubeStateStorageKeyRef.current = youtubeStateStorageKey;
-		const timer = window.setTimeout(() => {
-			const stored = readStoredYouTubeSyncState(youtubeStateStorageKey);
-			applyYouTubeState(stored);
-			pendingYouTubeStateRef.current = null;
-		}, 0);
-		return () => window.clearTimeout(timer);
+		const stored = readStoredYouTubeSyncState(youtubeStateStorageKey);
+		applyYouTubeState(stored);
+		pendingYouTubeStateRef.current = null;
 	}, [applyYouTubeState, youtubeStateStorageKey]);
 
 	useEffect(() => {
@@ -1167,6 +1235,9 @@ export function Player({ data }: { data: ServerData }) {
 				const current = youtubeStateRef.current;
 				if (incoming.updatedAt === 0 && isMeaningfulYouTubeState(current)) {
 					sendYouTubeSnapshot(current, false);
+					return;
+				}
+				if (incoming.updatedAt < current.updatedAt) {
 					return;
 				}
 				applyYouTubeState(incoming);
@@ -2502,7 +2573,7 @@ export function Player({ data }: { data: ServerData }) {
 												type="button"
 												variant="outline"
 												className="h-auto min-h-9 gap-2 px-3 py-2"
-												onClick={() => updateYouTubeState({ open: true })}
+												onClick={openNewYouTubeTab}
 											>
 												<IconBrandYoutubeFilled className="text-red-600" size={18} />
 												<span>YouTube</span>
@@ -2593,12 +2664,17 @@ export function Player({ data }: { data: ServerData }) {
 				</Card>
 			</div>
 
-			<YouTubeFloatingTab
-				key={youtubeRoomId}
-				roomId={youtubeRoomId}
-				state={youtubeState}
-				onStateChange={updateYouTubeState}
-			/>
+			{youtubeState.tabs
+				.filter((tab) => tab.open)
+				.map((tab, index) => (
+					<YouTubeFloatingTab
+						key={tab.id}
+						roomId={youtubeRoomId}
+						initialIndex={index}
+						state={tab}
+						onStateChange={(patch) => updateYouTubeState(tab.id, patch)}
+					/>
+				))}
 
 			{moveToast ? (
 				<div className="fixed bottom-4 left-1/2 z-[100] w-[90%] max-w-xl -translate-x-1/2">

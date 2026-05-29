@@ -94,28 +94,38 @@ func TestSanitizeSoundEffectBroadcastRejectsInvalidID(t *testing.T) {
 
 func TestSanitizeYouTubeState(t *testing.T) {
 	got, ok := sanitizeYouTubeState(&YouTubeState{
-		Open:         true,
-		URL:          "https://evil.example/watch?v=dQw4w9WgXcQ",
-		VideoID:      "dQw4w9WgXcQ",
-		Time:         42.5,
-		Paused:       false,
-		PlaybackRate: 1.25,
+		Tabs: []YouTubeTabState{{
+			ID:           "tab_1",
+			Open:         true,
+			URL:          "https://evil.example/watch?v=dQw4w9WgXcQ",
+			VideoID:      "dQw4w9WgXcQ",
+			Time:         42.5,
+			Paused:       false,
+			PlaybackRate: 1.25,
+		}},
 	}, 1234)
 	if !ok {
 		t.Fatal("sanitizeYouTubeState() rejected valid state")
 	}
-	if !got.Open || got.URL != "https://www.youtube.com/watch?v=dQw4w9WgXcQ" || got.VideoID != "dQw4w9WgXcQ" {
+	if len(got.Tabs) != 1 {
+		t.Fatalf("sanitizeYouTubeState() tab count = %d", len(got.Tabs))
+	}
+	tab := got.Tabs[0]
+	if !tab.Open || tab.URL != "https://www.youtube.com/watch?v=dQw4w9WgXcQ" || tab.VideoID != "dQw4w9WgXcQ" {
 		t.Fatalf("sanitizeYouTubeState() = %#v", got)
 	}
-	if got.Time != 42.5 || got.Paused || got.PlaybackRate != 1.25 || got.UpdatedAt != 1234 {
+	if tab.Time != 42.5 || tab.Paused || tab.PlaybackRate != 1.25 || tab.UpdatedAt != 1234 || got.UpdatedAt != 1234 {
 		t.Fatalf("sanitizeYouTubeState() playback fields = %#v", got)
 	}
 }
 
 func TestSanitizeYouTubeStateRejectsInvalidVideoID(t *testing.T) {
 	_, ok := sanitizeYouTubeState(&YouTubeState{
-		Open:    true,
-		VideoID: "../bad",
+		Tabs: []YouTubeTabState{{
+			ID:      "tab_1",
+			Open:    true,
+			VideoID: "../bad",
+		}},
 	}, 1234)
 	if ok {
 		t.Fatal("sanitizeYouTubeState() accepted invalid video id")

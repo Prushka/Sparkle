@@ -6,6 +6,7 @@ import {
 	useCallback,
 	useEffect,
 	useId,
+	useLayoutEffect,
 	useRef,
 	useState
 } from 'react';
@@ -16,7 +17,7 @@ import {
 	IconGripVertical,
 	IconX
 } from '@tabler/icons-react';
-import type { YouTubeSyncState } from '@/lib/player/t';
+import type { YouTubeTabSyncState } from '@/lib/player/t';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -76,8 +77,9 @@ type ParsedYouTubeURL = {
 
 type YouTubeFloatingTabProps = {
 	roomId: string;
-	state: YouTubeSyncState;
-	onStateChange: (patch: Partial<YouTubeSyncState>) => void;
+	initialIndex?: number;
+	state: YouTubeTabSyncState;
+	onStateChange: (patch: Partial<YouTubeTabSyncState>) => void;
 };
 
 const MIN_WIDTH = 320;
@@ -206,15 +208,16 @@ function readStoredLayout(storageKey: string): YouTubeTabLayout | null {
 	}
 }
 
-function getDefaultLayout(): YouTubeTabLayout {
+function getDefaultLayout(initialIndex = 0): YouTubeTabLayout {
 	if (typeof window === 'undefined') {
 		return { x: 24, y: 96, width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT };
 	}
 	const width = Math.min(DEFAULT_WIDTH, Math.max(MIN_WIDTH, window.innerWidth - 32));
 	const height = Math.min(DEFAULT_HEIGHT, Math.max(MIN_HEIGHT, window.innerHeight - 32));
+	const offset = Math.min(160, Math.max(0, initialIndex) * 32);
 	return {
-		x: Math.max(16, window.innerWidth - width - 24),
-		y: Math.max(16, window.innerHeight - height - 24),
+		x: Math.max(16, window.innerWidth - width - 24 - offset),
+		y: Math.min(96 + offset, Math.max(16, window.innerHeight - height - 24)),
 		width,
 		height
 	};
@@ -253,10 +256,15 @@ function isSameLayout(a: YouTubeTabLayout, b: YouTubeTabLayout) {
 	);
 }
 
-export function YouTubeFloatingTab({ roomId, state, onStateChange }: YouTubeFloatingTabProps) {
+export function YouTubeFloatingTab({
+	roomId,
+	initialIndex = 0,
+	state,
+	onStateChange
+}: YouTubeFloatingTabProps) {
 	const reactId = useId();
 	const playerElementId = `youtube-player-${reactId.replace(/:/g, '')}`;
-	const storageKey = `sparkle:youtube-tab-layout:${roomId}`;
+	const storageKey = `sparkle:youtube-tab-layout:${roomId}:${state.id}`;
 	const panelRef = useRef<HTMLDivElement | null>(null);
 	const playerRef = useRef<YouTubePlayer | null>(null);
 	const readyRef = useRef(false);
@@ -270,9 +278,20 @@ export function YouTubeFloatingTab({ roomId, state, onStateChange }: YouTubeFloa
 		x: number;
 		y: number;
 	} | null>(null);
-	const [layout, setLayout] = useState<YouTubeTabLayout>(() =>
-		clampLayout(readStoredLayout(storageKey) ?? getDefaultLayout())
-	);
+	const resizeRef = useRef<{
+		pointerId: number;
+		startX: number;
+		startY: number;
+		width: number;
+		height: number;
+	} | null>(null);
+	const [layoutReady, setLayoutReady] = useState(false);
+	const [layout, setLayout] = useState<YouTubeTabLayout>({
+		x: 24,
+		y: 96,
+		width: DEFAULT_WIDTH,
+		height: DEFAULT_HEIGHT
+	});
 	const [urlInput, setUrlInput] = useState(state.url);
 	const [urlError, setUrlError] = useState('');
 
@@ -309,9 +328,10 @@ export function YouTubeFloatingTab({ roomId, state, onStateChange }: YouTubeFloa
 		[saveLayout]
 	);
 
-	useEffect(() => {
-		updateLayout(readStoredLayout(storageKey) ?? getDefaultLayout());
-	}, [storageKey, updateLayout]);
+	useLayoutEffect(() => {
+		setLayout(clampLayout(readStoredLayout(storageKey) ?? getDefaultLayout(initialIndex)));
+		setLayoutReady(true);
+	}, [initialIndex, storageKey]);
 
 	useEffect(() => {
 		if (!state.open) {
@@ -322,26 +342,7 @@ export function YouTubeFloatingTab({ roomId, state, onStateChange }: YouTubeFloa
 		return () => window.removeEventListener('resize', handleResize);
 	}, [state.open, updateLayout]);
 
-	useEffect(() => {
-		const panel = panelRef.current;
-		if (!state.open || !panel || typeof ResizeObserver === 'undefined') {
-			return;
-		}
-		const observer = new ResizeObserver(([entry]) => {
-			if (!entry) {
-				return;
-			}
-			updateLayout((current) => ({
-				...current,
-				width: entry.contentRect.width,
-				height: entry.contentRect.height
-			}));
-		});
-		observer.observe(panel);
-		return () => observer.disconnect();
-	}, [state.open, updateLayout]);
-
-	const applyStateToPlayer = useCallback((nextState: YouTubeSyncState, forceVideo = false) => {
+	const applyStateToPlayer = useCallback((nextState: YouTubeTabSyncState, forceVideo = false) => {
 		const player = playerRef.current;
 		if (!player || !readyRef.current || !nextState.videoId) {
 			return;
@@ -378,7 +379,7 @@ export function YouTubeFloatingTab({ roomId, state, onStateChange }: YouTubeFloa
 	}, []);
 
 	const emitPlayerState = useCallback(
-		(patch: Partial<YouTubeSyncState>) => {
+		(patch: Partial<YouTubeTabSyncState>) => {
 			if (applyingRemoteRef.current) {
 				return;
 			}
@@ -484,6 +485,16 @@ export function YouTubeFloatingTab({ roomId, state, onStateChange }: YouTubeFloa
 	}, [state.open]);
 
 	useEffect(() => {
+		return () => {
+			if (playerRef.current) {
+				playerRef.current.destroy();
+				playerRef.current = null;
+			}
+			readyRef.current = false;
+		};
+	}, []);
+
+	useEffect(() => {
 		if (!state.open || !state.videoId) {
 			return;
 		}
@@ -565,14 +576,49 @@ export function YouTubeFloatingTab({ roomId, state, onStateChange }: YouTubeFloa
 		}
 	}
 
-	if (!state.open) {
+	function handleResizeStart(event: ReactPointerEvent<HTMLDivElement>) {
+		if (event.button !== 0) {
+			return;
+		}
+		event.preventDefault();
+		event.stopPropagation();
+		event.currentTarget.setPointerCapture(event.pointerId);
+		resizeRef.current = {
+			pointerId: event.pointerId,
+			startX: event.clientX,
+			startY: event.clientY,
+			width: layout.width,
+			height: layout.height
+		};
+	}
+
+	function handleResizeMove(event: ReactPointerEvent<HTMLDivElement>) {
+		const resize = resizeRef.current;
+		if (!resize || resize.pointerId !== event.pointerId) {
+			return;
+		}
+		updateLayout({
+			...layout,
+			width: resize.width + event.clientX - resize.startX,
+			height: resize.height + event.clientY - resize.startY
+		});
+	}
+
+	function handleResizeEnd(event: ReactPointerEvent<HTMLDivElement>) {
+		if (resizeRef.current?.pointerId === event.pointerId) {
+			resizeRef.current = null;
+		}
+	}
+
+	if (!state.open || !layoutReady) {
 		return null;
 	}
 
 	return (
 		<div
 			ref={panelRef}
-			className="fixed z-[120] flex min-h-[260px] min-w-[320px] resize overflow-hidden rounded-lg border border-border bg-background shadow-2xl"
+			data-youtube-tab={state.id}
+			className="fixed z-[120] flex min-h-[260px] min-w-[320px] overflow-hidden rounded-lg border border-border bg-background shadow-2xl"
 			style={{
 				left: layout.x,
 				top: layout.y,
@@ -637,11 +683,16 @@ export function YouTubeFloatingTab({ roomId, state, onStateChange }: YouTubeFloa
 					)}
 				</div>
 			</div>
-			<IconArrowsDiagonal
-				className="pointer-events-none absolute bottom-1.5 right-1.5 text-muted-foreground/70"
-				size={15}
-				stroke={2}
-			/>
+			<div
+				className="absolute bottom-0 right-0 flex h-7 w-7 cursor-nwse-resize touch-none items-end justify-end p-1.5 text-muted-foreground/70"
+				onPointerDown={handleResizeStart}
+				onPointerMove={handleResizeMove}
+				onPointerUp={handleResizeEnd}
+				onPointerCancel={handleResizeEnd}
+				aria-hidden="true"
+			>
+				<IconArrowsDiagonal size={15} stroke={2} />
+			</div>
 		</div>
 	);
 }
