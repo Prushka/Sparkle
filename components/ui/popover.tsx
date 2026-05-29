@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import * as PopoverPrimitive from '@radix-ui/react-popover';
+import { useFullscreenPortalContainer } from '@/components/ui/fullscreen-portal';
 import { cn } from '@/lib/utils';
 
 const Root = PopoverPrimitive.Root;
@@ -12,8 +13,10 @@ const Content = React.forwardRef<
 	React.ElementRef<typeof PopoverPrimitive.Content>,
 	React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content>
 >(({ className, align = 'center', sideOffset = 4, ...props }, ref) => {
+	const fullscreenPortalContainer = useFullscreenPortalContainer();
+
 	return (
-		<PopoverPrimitive.Portal>
+		<PopoverPrimitive.Portal container={fullscreenPortalContainer}>
 			<PopoverPrimitive.Content
 				ref={ref}
 				align={align}

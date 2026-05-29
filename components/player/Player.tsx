@@ -689,7 +689,6 @@ export function Player({ data }: { data: ServerData }) {
 	const notificationAudioRef = useRef<HTMLAudioElement | null>(null);
 	const soundEffectAudioRef = useRef<HTMLAudioElement | null>(null);
 	const soundEffectBadgeTimersRef = useRef<Record<string, number>>({});
-	const pageChatContainerRef = useRef<HTMLDivElement | null>(null);
 	const supRef = useRef<SUPtitles | null>(null);
 	const supPlayingRef = useRef(false);
 	const jasRef = useRef<any>(null);
@@ -717,7 +716,6 @@ export function Player({ data }: { data: ServerData }) {
 	const [playerCanPlay, setPlayerCanPlay] = useState(false);
 	const [controlsShowing, setControlsShowing] = useState(false);
 	const [playerSmallLayout, setPlayerSmallLayout] = useState(false);
-	const [pageChatInputVisible, setPageChatInputVisible] = useState(false);
 	const [socketConnected, setSocketConnected] = useState(false);
 	const [roomPlayers, setRoomPlayers] = useState<RoomPlayer[]>([]);
 	const [historicalPlayers, setHistoricalPlayers] = useState<Record<string, RoomPlayer>>({});
@@ -980,42 +978,6 @@ export function Player({ data }: { data: ServerData }) {
 	useEffect(() => {
 		const timer = window.setTimeout(() => setMounted(true), 0);
 		return () => window.clearTimeout(timer);
-	}, []);
-
-	useEffect(() => {
-		const element = pageChatContainerRef.current;
-		if (!element) {
-			return;
-		}
-
-		const updateVisibility = () => {
-			const rect = element.getBoundingClientRect();
-			setPageChatInputVisible(
-				rect.top >= 0 &&
-					rect.left >= 0 &&
-					rect.bottom <= window.innerHeight &&
-					rect.right <= window.innerWidth
-			);
-		};
-
-		updateVisibility();
-		if (typeof IntersectionObserver === 'undefined') {
-			window.addEventListener('scroll', updateVisibility, true);
-			window.addEventListener('resize', updateVisibility);
-			return () => {
-				window.removeEventListener('scroll', updateVisibility, true);
-				window.removeEventListener('resize', updateVisibility);
-			};
-		}
-
-		const observer = new IntersectionObserver(
-			() => {
-				updateVisibility();
-			},
-			{ threshold: [0, 1] }
-		);
-		observer.observe(element);
-		return () => observer.disconnect();
 	}, []);
 
 	useEffect(() => {
@@ -2419,37 +2381,36 @@ export function Player({ data }: { data: ServerData }) {
 			</Menu.Items>
 		</Menu.Root>
 	);
-	const renderControlsChat = (mobileLayout: boolean, suffix: string) =>
-		pageChatInputVisible ? null : (
-			<div
-				className="player-chat-control"
-				data-player-chat-mount="true"
-				data-mobile-layout={mobileLayout ? 'true' : 'false'}
-			>
-				<Chatbox
-					send={send}
-					chatFocused={chatFocused}
-					focusByShortcut
-					controlsShowing={null}
-					className="chat-pc"
-					inputId={`chat-pc-input-${suffix}`}
-					formId={`chat-pc-form-${suffix}`}
-					messages={[]}
-					historicalPlayers={{}}
-					staticBaseUrl={data.staticBaseUrl}
-					onFocus={() => {
-						playerEl?.controls?.pause?.();
-						setChatFocused(true);
-					}}
-					onBlur={() => {
-						playerEl?.controls?.resume?.();
-						setChatFocused(false);
-						chatFocusedSecsRef.current = 0;
-						setChatFocusedSecs(0);
-					}}
-				/>
-			</div>
-		);
+	const renderControlsChat = (mobileLayout: boolean, suffix: string) => (
+		<div
+			className="player-chat-control"
+			data-player-chat-mount="true"
+			data-mobile-layout={mobileLayout ? 'true' : 'false'}
+		>
+			<Chatbox
+				send={send}
+				chatFocused={chatFocused}
+				focusByShortcut
+				controlsShowing={null}
+				className="chat-pc"
+				inputId={`chat-pc-input-${suffix}`}
+				formId={`chat-pc-form-${suffix}`}
+				messages={[]}
+				historicalPlayers={{}}
+				staticBaseUrl={data.staticBaseUrl}
+				onFocus={() => {
+					playerEl?.controls?.pause?.();
+					setChatFocused(true);
+				}}
+				onBlur={() => {
+					playerEl?.controls?.resume?.();
+					setChatFocused(false);
+					chatFocusedSecsRef.current = 0;
+					setChatFocusedSecs(0);
+				}}
+			/>
+		</div>
+	);
 
 	return (
 		<>
@@ -2627,10 +2588,7 @@ export function Player({ data }: { data: ServerData }) {
 					</div>
 				</div>
 
-				<div
-					ref={pageChatContainerRef}
-					className="mx-auto flex w-full max-w-[90rem] items-center gap-2"
-				>
+				<div className="mx-auto flex w-full max-w-[90rem] items-center gap-2">
 					<Chatbox
 						send={send}
 						chatFocused={chatFocused}

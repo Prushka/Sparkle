@@ -34,6 +34,7 @@ import { Pfp } from '@/components/player/Pfp';
 import { EmojiPicker } from '@/components/player/EmojiPicker';
 import { EmojiText } from '@/components/player/EmojiText';
 import { SoundEffectPicker } from '@/components/player/SoundEffectPicker';
+import { useFullscreenPortalContainer } from '@/components/ui/fullscreen-portal';
 import {
 	findActiveEmojiToken,
 	getChatEmojiAsset,
@@ -322,6 +323,7 @@ export function Chatbox({
 	const [emojiRefs, setEmojiRefs] = useState<ChatEmojiRef[]>([]);
 	const [suggestionsRect, setSuggestionsRect] = useState<DOMRect | null>(null);
 	const inputShellRef = useRef<HTMLDivElement | null>(null);
+	const fullscreenPortalContainer = useFullscreenPortalContainer();
 
 	const chatHidden = chatLayout === 'hide';
 	const connected = playersCount > 0;
@@ -657,7 +659,7 @@ export function Chatbox({
 											</button>
 										))}
 									</div>,
-									document.body
+									fullscreenPortalContainer ?? document.body
 								)
 							: null}
 						{focusByShortcut ? (
