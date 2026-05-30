@@ -93,6 +93,27 @@ func TestSanitizeSoundEffectBroadcastRejectsInvalidID(t *testing.T) {
 	}
 }
 
+func TestSanitizeMoveToBroadcast(t *testing.T) {
+	got := sanitizeBroadcast(map[string]any{
+		"type":   MoveToBroadcast,
+		"moveTo": "media_123",
+		"extra":  "ignored",
+	})
+	if got["type"] != MoveToBroadcast || got["moveTo"] != "media_123" || len(got) != 2 {
+		t.Fatalf("sanitizeBroadcast() = %#v", got)
+	}
+}
+
+func TestSanitizeMoveToBroadcastRejectsInvalidID(t *testing.T) {
+	got := sanitizeBroadcast(map[string]any{
+		"type":   MoveToBroadcast,
+		"moveTo": "../bad",
+	})
+	if got != nil {
+		t.Fatalf("sanitizeBroadcast() = %#v, want nil", got)
+	}
+}
+
 func TestSanitizeDiscordUser(t *testing.T) {
 	avatar := "a_123abc"
 	globalName := strings.Repeat("Sparkle", 20)
@@ -287,6 +308,35 @@ func TestChatBroadcastSendsDeltaOnly(t *testing.T) {
 		}
 		if len(payload.Chats) != 0 {
 			t.Fatalf("chat delta included %d history messages, want 0", len(payload.Chats))
+		}
+	}
+}
+
+func TestMoveToBroadcastUpdatesRoomMedia(t *testing.T) {
+	room := newRoom("room", "old_media")
+	sender := testPlayer("sender", "Sender", 4)
+	receiver := testPlayer("receiver", "Receiver", 4)
+	room.players[sender.state.Id] = sender
+	room.players[receiver.state.Id] = receiver
+
+	room.broadcast(sender, sanitizeBroadcast(map[string]any{
+		"type":   MoveToBroadcast,
+		"moveTo": "new_media",
+	}))
+
+	if room.mediaID != "new_media" {
+		t.Fatalf("room mediaID = %q, want new_media", room.mediaID)
+	}
+	for _, player := range []*Player{sender, receiver} {
+		payload := readQueuedPayload(t, player)
+		if payload.Type != BroadcastSync || payload.Broadcast["type"] != MoveToBroadcast {
+			t.Fatalf("move payload = %#v", payload)
+		}
+		if payload.Broadcast["moveTo"] != "new_media" {
+			t.Fatalf("move payload target = %#v, want new_media", payload.Broadcast["moveTo"])
+		}
+		if payload.FiredBy == nil || payload.FiredBy.Id != "sender" {
+			t.Fatalf("move payload firedBy = %#v, want sender", payload.FiredBy)
 		}
 	}
 }

@@ -1,9 +1,7 @@
 import type { Metadata } from 'next';
-import { headers } from 'next/headers';
 import { connection } from 'next/server';
 import { LibraryHome } from '@/components/library-home';
 import { loadHomePageData } from '@/lib/server/media';
-import { getRequestHost } from '@/lib/server/request';
 
 export const metadata: Metadata = {
 	title: "It's anime time!"
@@ -18,9 +16,7 @@ export default async function HomePage({
 }) {
 	await connection();
 	const resolvedSearchParams = await Promise.resolve(searchParams ?? {});
-	const requestHeaders = await headers();
-	const host = getRequestHost(requestHeaders);
-	const data = await loadHomePageData(resolvedSearchParams, fetch, host);
+	const data = await loadHomePageData(resolvedSearchParams, fetch);
 
 	return <LibraryHome jobs={data.jobs} staticBaseUrl={data.staticBaseUrl} />;
 }

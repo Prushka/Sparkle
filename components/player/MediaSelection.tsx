@@ -110,7 +110,9 @@ export const MediaSelection = forwardRef<
 		if (bounceToOverride) {
 			bounceToOverride(id);
 		} else {
-			router.push(searchParamsString ? `/${id}?${searchParamsString}` : `/${id}`);
+			const params = new URLSearchParams(searchParamsString);
+			params.set('mediaId', id);
+			router.push(`/rooms/new?${params.toString()}`);
 		}
 	}
 

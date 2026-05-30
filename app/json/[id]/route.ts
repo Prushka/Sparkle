@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getJobs } from '@/lib/server/jobs';
+import { getRoomRecord } from '@/lib/server/rooms';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -10,12 +11,13 @@ export async function GET(
 ) {
 	const resolvedParams = await Promise.resolve(params);
 	const url = new URL(request.url);
-	const room = url.searchParams.get('room') || url.searchParams.get('channel_id');
-	const to = room
-		? `https://${url.host}/${resolvedParams.id}?room=${room}`
-		: `https://${url.host}/${resolvedParams.id}`;
-	const jobs = await getJobs(fetch, resolvedParams.id);
-	const job = jobs.find((candidate) => candidate.Id === resolvedParams.id);
+	const legacyRoom = url.searchParams.get('room') || url.searchParams.get('channel_id');
+	const roomId = legacyRoom || resolvedParams.id;
+	const room = await getRoomRecord(fetch, roomId);
+	const mediaId = room?.mediaId ?? resolvedParams.id;
+	const to = `${url.protocol}//${url.host}/${room?.roomId ?? roomId}`;
+	const jobs = await getJobs(fetch, mediaId);
+	const job = jobs.find((candidate) => candidate.Id === mediaId);
 	if (job) {
 		let showType = 'a movie';
 		const res: Record<string, string> = {

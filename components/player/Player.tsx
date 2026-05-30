@@ -108,7 +108,7 @@ type VideoSource = {
 
 type MoveToastState = {
 	seconds: number;
-	firedBy: RoomPlayer;
+	firedBy?: RoomPlayer;
 	job: Job | undefined;
 };
 
@@ -891,7 +891,6 @@ export function Player({ data }: { data: ServerData }) {
 	const { job } = data;
 	const router = useRouter();
 	const searchParams = useSearchParams();
-	const searchParamsString = searchParams.toString();
 	const {
 		setCurrentlyWatching,
 		setChatFocused,
@@ -912,9 +911,11 @@ export function Player({ data }: { data: ServerData }) {
 	const reconnectAttemptRef = useRef(0);
 	const youtubeSocketRef = useRef<WebSocket | null>(null);
 	const pendingYouTubeStateRef = useRef<YouTubeSyncState | null>(null);
+	const pendingMediaSwitchRef = useRef<string | null>(null);
 	const youtubeStateRef = useRef<YouTubeSyncState>(DEFAULT_YOUTUBE_SYNC_STATE);
 	const youtubeStateStorageKeyRef = useRef('');
 	const connectRef = useRef<((_forceInteracted?: boolean) => void) | null>(null);
+	const roomMediaCheckRef = useRef<Promise<boolean> | null>(null);
 	const profileSyncedRef = useRef(false);
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
 	const mediaSelectionRef = useRef<MediaSelectionHandle | null>(null);
@@ -1019,23 +1020,11 @@ export function Player({ data }: { data: ServerData }) {
 	const [tickedSecsAgo, setTickedSecsAgo] = useState(-1);
 	const [chatFocusedSecs, setChatFocusedSecs] = useState(0);
 	const posterSrc = data.preview;
-	const roomBase = searchParams.get('room') || searchParams.get('channel_id') || '';
-	const room = roomBase ? `${roomBase}${job.Id}` : job.Id;
-	const youtubeRoomId = roomBase || job.Id;
+	const room = data.roomId;
+	const youtubeRoomId = room;
 	const youtubeSyncRoom = `youtube:${youtubeRoomId}`;
 	const youtubeStateStorageKey = `sparkle:youtube-sync-state:${youtubeRoomId}`;
 	const [youtubeState, setYoutubeState] = useState<YouTubeSyncState>(DEFAULT_YOUTUBE_SYNC_STATE);
-	const getRoomPath = useCallback(
-		(id: string) => {
-			const params = new URLSearchParams(searchParamsString);
-			if (roomBase) {
-				params.set('room', roomBase);
-			}
-			const query = params.toString();
-			return query ? `/${id}?${query}` : `/${id}`;
-		},
-		[roomBase, searchParamsString]
-	);
 	const discord = discordAuth as Discord | null;
 	const discordUser = discord?.user;
 	const discordUserId = discordUser?.id || '';
@@ -1161,6 +1150,42 @@ export function Player({ data }: { data: ServerData }) {
 			}
 		]);
 	}, []);
+
+	const refreshRoomMedia = useCallback(async () => {
+		if (roomMediaCheckRef.current) {
+			return roomMediaCheckRef.current;
+		}
+
+		const check = (async () => {
+			try {
+				const response = await fetch(
+					joinBackendPath(backendBaseUrl, `/rooms/${encodeURIComponent(room)}`),
+					{ cache: 'no-store' }
+				);
+				if (response.status === 404) {
+					router.replace('/');
+					return true;
+				}
+				if (!response.ok) {
+					throw new Error(`Room media check failed: ${response.status}`);
+				}
+				const record = (await response.json()) as { mediaId?: string };
+				if (record.mediaId && record.mediaId !== job.Id) {
+					router.refresh();
+					setPageReloadCounter((value) => value + 1);
+					return true;
+				}
+			} catch (error) {
+				console.warn('Unable to refresh room media', error);
+			} finally {
+				roomMediaCheckRef.current = null;
+			}
+			return false;
+		})();
+
+		roomMediaCheckRef.current = check;
+		return check;
+	}, [backendBaseUrl, job.Id, room, router, setPageReloadCounter]);
 
 	const pulseSoundEffectBadge = useCallback((playerId: string | undefined) => {
 		if (!playerId) {
@@ -2026,6 +2051,14 @@ export function Player({ data }: { data: ServerData }) {
 				awaitingInitialPlaybackSyncRef.current = true;
 				send({ type: SyncTypes.NewPlayer });
 				sendSettings();
+				const pendingMediaID = pendingMediaSwitchRef.current;
+				if (pendingMediaID && pendingMediaID !== job.Id) {
+					pendingMediaSwitchRef.current = null;
+					send({
+						type: SyncTypes.BroadcastSync,
+						broadcast: { type: BroadcastTypes.MoveTo, moveTo: pendingMediaID }
+					});
+				}
 				updateLastTicked(true);
 			};
 
@@ -2046,7 +2079,7 @@ export function Player({ data }: { data: ServerData }) {
 						setMoveToast({
 							seconds: moveSeconds,
 							job: jobs.find((candidate: Job) => candidate.Id === broadcast!.moveTo),
-							firedBy: state.firedBy!
+							firedBy: state.firedBy
 						});
 						const target = jobs.find((candidate) => candidate.Id === state.broadcast!.moveTo);
 						state.moveToText =
@@ -2258,6 +2291,7 @@ export function Player({ data }: { data: ServerData }) {
 		[
 			backendBaseUrl,
 			clearReconnectTimer,
+			job.Id,
 			playerId,
 			room,
 			send,
@@ -2281,21 +2315,26 @@ export function Player({ data }: { data: ServerData }) {
 	}, [connect]);
 
 	const startWatchRoomConnection = useCallback(() => {
-		reconnectAttemptRef.current = 0;
-		const socket = socketRef.current;
-		if (
-			!socket ||
-			(socket.readyState !== WebSocket.CONNECTING && socket.readyState !== WebSocket.OPEN)
-		) {
-			awaitingInitialPlaybackSyncRef.current = true;
-		}
-		interactedRef.current = true;
-		setInteracted(true);
-		if (voiceSupported) {
-			void joinVoice();
-		}
-		connect(true);
-	}, [connect, joinVoice, setInteracted, voiceSupported]);
+		void refreshRoomMedia().then((changed) => {
+			if (changed) {
+				return;
+			}
+			reconnectAttemptRef.current = 0;
+			const socket = socketRef.current;
+			if (
+				!socket ||
+				(socket.readyState !== WebSocket.CONNECTING && socket.readyState !== WebSocket.OPEN)
+			) {
+				awaitingInitialPlaybackSyncRef.current = true;
+			}
+			interactedRef.current = true;
+			setInteracted(true);
+			if (voiceSupported) {
+				void joinVoice();
+			}
+			connect(true);
+		});
+	}, [connect, joinVoice, refreshRoomMedia, setInteracted, voiceSupported]);
 
 	useEffect(() => {
 		if (!playerEl || !playerId || !interactedRef.current || !playerCanPlayRef.current) {
@@ -2421,6 +2460,7 @@ export function Player({ data }: { data: ServerData }) {
 					ignoreMediaRequestFailure(() => player.enterPictureInPicture?.());
 				}
 			} else {
+				void refreshRoomMedia();
 				send({ state: 'fg', type: SyncTypes.StateSync, paused: player.paused });
 				inBgRef.current = false;
 				ignoreMediaRequestFailure(() => player.exitPictureInPicture?.());
@@ -2522,7 +2562,7 @@ export function Player({ data }: { data: ServerData }) {
 			document.removeEventListener('mousemove', mouseMove);
 			player.el?.removeEventListener('mouseleave', mouseLeave);
 		};
-	}, [chatFocused, playerEl, send, updateLastTicked, updateTime]);
+	}, [chatFocused, playerEl, refreshRoomMedia, send, updateLastTicked, updateTime]);
 
 	useEffect(() => {
 		if (discordAuth?.user) {
@@ -2620,10 +2660,7 @@ export function Player({ data }: { data: ServerData }) {
 	}
 
 	function handleCopyRoomLink() {
-		let link = window.location.href;
-		if (searchParams.has('room') || searchParams.has('channel_id')) {
-			link = `${window.location.href.split('?')[0]}?room=${searchParams.get('room') || searchParams.get('channel_id')}`;
-		}
+		const link = new URL(`/${room}`, window.location.origin).toString();
 		window.navigator.clipboard.writeText(link).then(() => {
 			setCopiedRoomLink(true);
 			window.setTimeout(() => {
@@ -3083,13 +3120,19 @@ export function Player({ data }: { data: ServerData }) {
 							staticBaseUrl={staticBaseUrl}
 							backendBaseUrl={backendBaseUrl}
 							bounceToOverride={(id) => {
-								if (socketCommunicating && roomPlayers.length > 1 && id !== job.Id) {
+								if (id === job.Id) {
+									return;
+								}
+								const socket = socketRef.current;
+								pendingMediaSwitchRef.current = id;
+								if (socket?.readyState === WebSocket.OPEN) {
+									pendingMediaSwitchRef.current = null;
 									send({
 										type: SyncTypes.BroadcastSync,
 										broadcast: { type: BroadcastTypes.MoveTo, moveTo: id }
 									});
 								} else {
-									router.push(getRoomPath(id));
+									startWatchRoomConnection();
 								}
 							}}
 						/>
@@ -3114,12 +3157,12 @@ export function Player({ data }: { data: ServerData }) {
 			{moveToast ? (
 				<div className="fixed bottom-4 left-1/2 z-[100] w-[90%] max-w-xl -translate-x-1/2">
 					<MoveToast
-						key={`${moveToast.job?.Id ?? 'unknown'}-${moveToast.seconds}-${moveToast.firedBy.id}`}
+						key={`${moveToast.job?.Id ?? 'unknown'}-${moveToast.seconds}-${moveToast.firedBy?.id ?? 'room'}`}
 						historicalPlayers={historicalPlayers}
 						seconds={moveToast.seconds}
 						firedBy={moveToast.firedBy}
 						job={moveToast.job}
-						moveToPath={getRoomPath}
+						onMove={refreshRoomMedia}
 						staticBaseUrl={staticBaseUrl}
 					/>
 				</div>

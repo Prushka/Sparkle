@@ -763,6 +763,7 @@ export interface ServerData {
 	oembedJson: string;
 	staticBaseUrl: string;
 	backendBaseUrl: string;
+	roomId: string;
 }
 
 export function getRealName(player: Pick<Player, 'name' | 'discordUser'> | ChatAuthor | undefined) {

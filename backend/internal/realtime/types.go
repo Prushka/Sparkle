@@ -21,6 +21,10 @@ const (
 )
 
 const (
+	MoveToBroadcast = "moveTo"
+)
+
+const (
 	maxChatMessages = 200
 	maxChatLength   = 2000
 	maxChatEmojis   = 50

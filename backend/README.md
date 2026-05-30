@@ -5,6 +5,7 @@ This directory contains only the backend pieces used by the frontend:
 - Serve processed media assets from `OUTPUT` under `/static/*`
 - Return processed media metadata from `OUTPUT/*/job.json` via `/all`
 - Store uploaded profile images at `OUTPUT/pfp/:id.png`
+- Store watch room media IDs via `/rooms`
 - Synchronize rooms over `/sync/:room/:id` websockets
 
 ## Run
@@ -16,6 +17,9 @@ This directory contains only the backend pieces used by the frontend:
 The API listens on `:1323` and exposes:
 
 - `GET /all`
+- `POST /rooms`
+- `GET /rooms/:room`
+- `PUT /rooms/:room`
 - `POST /pfp/:id`
 - `GET /sync/:room/:id` websocket endpoint
 - `GET /static/*` from `OUTPUT`

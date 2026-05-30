@@ -4,14 +4,10 @@ import { getBackendBaseUrl } from '@/lib/server/env';
 type SparkleServerState = {
 	jobs?: Job[];
 	jobsLastFetched?: number;
-	roomMapping?: Record<string, string>;
 };
 
 const globalState = globalThis as typeof globalThis & SparkleServerState;
 const JOBS_CACHE_MS = 60_000;
-
-export const roomMapping: Record<string, string> =
-	globalState.roomMapping ?? (globalState.roomMapping = {});
 
 export async function getJobs(fetchFn: typeof fetch, target: string | null = null): Promise<Job[]> {
 	if (

@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
 import { connection } from 'next/server';
 import { Player } from '@/components/player/Player';
-import { loadMediaPageData } from '@/lib/server/media';
-import { getRequestHost } from '@/lib/server/request';
+import { loadRoomPageData } from '@/lib/server/media';
+import { getRequestOrigin } from '@/lib/server/request';
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type MediaPageProps = {
@@ -15,9 +15,9 @@ async function getMediaData({ params, searchParams }: MediaPageProps) {
 	const resolvedParams = await Promise.resolve(params);
 	const resolvedSearchParams = await Promise.resolve(searchParams ?? {});
 	const requestHeaders = await headers();
-	const host = getRequestHost(requestHeaders);
+	const origin = getRequestOrigin(requestHeaders);
 
-	return loadMediaPageData(resolvedParams.id, resolvedSearchParams, fetch, host);
+	return loadRoomPageData(resolvedParams.id, resolvedSearchParams, fetch, origin);
 }
 
 export async function generateMetadata(props: MediaPageProps): Promise<Metadata> {

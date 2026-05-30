@@ -1,16 +1,10 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { DiscordSDK } from '@discord/embedded-app-sdk';
 import { PUBLIC_DISCORD_CLIENT_ID } from '@/lib/env';
-import {
-	formatSeconds,
-	isExpired,
-	randomString,
-	type Discord,
-	type Watching
-} from '@/lib/player/t';
+import { formatSeconds, isExpired, type Discord, type Watching } from '@/lib/player/t';
 import { useAppState } from '@/lib/app-state';
 
 const DISCORD_AUTH_STORAGE_KEY = 'sparkle:discord-auth';
@@ -105,7 +99,6 @@ function buildActivityPayload(currentlyWatching: Watching, roomId: string | null
 export function DiscordBridge() {
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
-	const router = useRouter();
 	const { currentlyWatching, discordAuth, setDiscordAuth, setPageReloadCounter } = useAppState();
 	const sdkRef = useRef<DiscordSDK | null>(null);
 	const authenticatedRef = useRef(false);
@@ -136,35 +129,20 @@ export function DiscordBridge() {
 	useEffect(() => {
 		const params = new URLSearchParams(searchParamsString);
 		const room = params.get('room') || params.get('channel_id');
-		if (room) {
+		if (
+			pathname &&
+			pathname !== '/' &&
+			!pathname.startsWith('/api') &&
+			!pathname.startsWith('/json') &&
+			!pathname.startsWith('/rooms')
+		) {
+			latestRoomRef.current = decodeURIComponent(pathname.replace(/^\/+/, '').split('/')[0] || '');
+		} else if (room) {
 			latestRoomRef.current = room;
 		} else if (!latestRoomRef.current && discordAuth?.channelId) {
 			latestRoomRef.current = discordAuth.channelId;
 		}
-	}, [discordAuth?.channelId, searchParamsString]);
-
-	useEffect(() => {
-		if (
-			!pathname ||
-			pathname === '/' ||
-			pathname.startsWith('/api') ||
-			pathname.startsWith('/json')
-		) {
-			return;
-		}
-		const params = new URLSearchParams(searchParamsString);
-		if (params.has('room')) {
-			return;
-		}
-		const room =
-			latestRoomRef.current ||
-			discordAuth?.channelId ||
-			params.get('channel_id') ||
-			randomString(6);
-		latestRoomRef.current = room;
-		params.set('room', room);
-		router.replace(`${pathname}?${params.toString()}`);
-	}, [discordAuth?.channelId, pathname, router, searchParamsString]);
+	}, [discordAuth?.channelId, pathname, searchParamsString]);
 
 	useEffect(() => {
 		if (!PUBLIC_DISCORD_CLIENT_ID) {

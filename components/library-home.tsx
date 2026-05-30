@@ -110,7 +110,10 @@ export function LibraryHome({ jobs, staticBaseUrl }: { jobs: Job[]; staticBaseUr
 	const visibleItems = movies.length + visibleEpisodes;
 
 	function hrefFor(id: string) {
-		return searchString ? `/${id}?${searchString}` : `/${id}`;
+		const params = new URLSearchParams(searchString);
+		params.set('mediaId', id);
+		const query = params.toString();
+		return query ? `/rooms/new?${query}` : `/rooms/new?mediaId=${encodeURIComponent(id)}`;
 	}
 
 	function clearFilters() {
@@ -429,6 +432,7 @@ function PosterCard({
 		<article className="group min-w-0">
 			<Link
 				href={href}
+				prefetch={false}
 				className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8de8ce]"
 			>
 				<div className="relative overflow-hidden rounded-lg border border-white/10 bg-white/[0.04] shadow-2xl shadow-black/25 transition duration-200 group-hover:-translate-y-1 group-hover:border-white/25 group-hover:shadow-[#ec275f]/15">
@@ -474,6 +478,7 @@ function EpisodeCard({
 		<article className="group min-w-0 rounded-md border border-white/10 bg-white/[0.04] p-1.5 transition duration-200 hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/[0.07]">
 			<Link
 				href={href}
+				prefetch={false}
 				className="block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8de8ce]"
 			>
 				<div className="relative overflow-hidden rounded-md">

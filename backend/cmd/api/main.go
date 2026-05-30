@@ -36,6 +36,9 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", staticFiles(cfg.OutputDir))
 	mux.HandleFunc("GET /all", handleAll(jobStore))
+	mux.HandleFunc("POST /rooms", hub.HandleCreateRoom)
+	mux.HandleFunc("GET /rooms/{room}", hub.HandleGetRoom)
+	mux.HandleFunc("PUT /rooms/{room}", hub.HandleUpdateRoom)
 	mux.HandleFunc("POST /pfp/{id}", hub.HandlePFP)
 	mux.HandleFunc("GET /sync/{room}/{id}", hub.HandleWebSocket)
 
@@ -100,7 +103,7 @@ func withCORS(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Add("Vary", "Origin")
 		}
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 
 		if r.Method == http.MethodOptions {

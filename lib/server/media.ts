@@ -1,12 +1,13 @@
 import * as cheerio from 'cheerio';
 import { cache } from 'react';
 import { redirect } from 'next/navigation';
-import { getJobs, roomMapping } from '@/lib/server/jobs';
+import { getJobs } from '@/lib/server/jobs';
 import {
 	getBrowserBackendBaseUrl,
 	getBrowserStaticBaseUrl,
 	getStaticBaseUrl
 } from '@/lib/server/env';
+import { createRoomRecord, getRoomRecord } from '@/lib/server/rooms';
 import type { Job, ServerData } from '@/lib/player/t';
 
 type SearchParams = Record<string, string | string[] | undefined>;
@@ -16,9 +17,12 @@ function getSearchValue(searchParams: SearchParams, key: string) {
 	return Array.isArray(value) ? value[0] : value;
 }
 
-function getRoomRedirectQuery(searchParams: SearchParams, room: string) {
+function getRedirectQuery(searchParams: SearchParams) {
 	const params = new URLSearchParams();
 	for (const [key, value] of Object.entries(searchParams)) {
+		if (key === 'room' || key === 'mediaId') {
+			continue;
+		}
 		if (Array.isArray(value)) {
 			for (const item of value) {
 				params.append(key, item);
@@ -27,17 +31,12 @@ function getRoomRedirectQuery(searchParams: SearchParams, room: string) {
 			params.set(key, value);
 		}
 	}
-	params.set('room', room);
 	const query = params.toString();
 	return query ? `?${query}` : '';
 }
 
 export const loadHomePageData = cache(
-	async (searchParams: SearchParams, fetchFn: typeof fetch, host?: string) => {
-		const room = getSearchValue(searchParams, 'room') || getSearchValue(searchParams, 'channel_id');
-		if (room && roomMapping[room]) {
-			redirect(`/${roomMapping[room]}${getRoomRedirectQuery(searchParams, room)}`);
-		}
+	async (_searchParams: SearchParams, fetchFn: typeof fetch) => {
 		const jobs = await getJobs(fetchFn);
 		return {
 			jobs,
@@ -47,12 +46,47 @@ export const loadHomePageData = cache(
 	}
 );
 
+async function resolveRoomMediaID(
+	roomID: string,
+	searchParams: SearchParams,
+	fetchFn: typeof fetch
+) {
+	const legacyRoomID =
+		getSearchValue(searchParams, 'room') || getSearchValue(searchParams, 'channel_id');
+	if (legacyRoomID && legacyRoomID !== roomID) {
+		const existing = await getRoomRecord(fetchFn, legacyRoomID);
+		if (!existing) {
+			await createRoomRecord(fetchFn, roomID, legacyRoomID);
+		}
+		redirect(`/${legacyRoomID}${getRedirectQuery(searchParams)}`);
+	}
+
+	const room = await getRoomRecord(fetchFn, roomID);
+	if (!room?.mediaId) {
+		redirect('/');
+	}
+	return room.mediaId;
+}
+
+export const loadRoomPageData = cache(
+	async (
+		roomID: string,
+		searchParams: SearchParams,
+		fetchFn: typeof fetch,
+		origin: string
+	): Promise<ServerData> => {
+		const mediaID = await resolveRoomMediaID(roomID, searchParams, fetchFn);
+		return loadMediaPageData(mediaID, searchParams, fetchFn, origin, roomID);
+	}
+);
+
 export const loadMediaPageData = cache(
 	async (
 		id: string,
-		searchParams: SearchParams,
+		_searchParams: SearchParams,
 		fetchFn: typeof fetch,
-		host: string
+		origin: string,
+		roomID?: string
 	): Promise<ServerData> => {
 		let job: Job | undefined;
 		let codec = 'h264';
@@ -62,10 +96,6 @@ export const loadMediaPageData = cache(
 		let rating = -1;
 		let jobs: Job[] = [];
 		let titleStr: string;
-		const room = getSearchValue(searchParams, 'room') || getSearchValue(searchParams, 'channel_id');
-		if (room) {
-			roomMapping[room] = id;
-		}
 		try {
 			jobs = await getJobs(fetchFn, id);
 		} catch (error) {
@@ -127,11 +157,10 @@ export const loadMediaPageData = cache(
 			displayTitle,
 			plot,
 			staticBaseUrl: browserStaticBaseUrl,
-			oembedJson: room
-				? `https://${host}/json/${job?.Id}?room=${room}`
-				: `https://${host}/json/${job?.Id}`,
+			oembedJson: roomID ? `${origin}/json/${roomID}` : `${origin}/json/${job?.Id}`,
 			dominantColor: job?.DominantColors?.[0] ? job.DominantColors[0] : '#EC275F',
-			backendBaseUrl: getBrowserBackendBaseUrl()
+			backendBaseUrl: getBrowserBackendBaseUrl(),
+			roomId: roomID ?? job.Id
 		};
 	}
 );

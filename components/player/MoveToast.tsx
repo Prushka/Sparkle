@@ -15,13 +15,15 @@ export function MoveToast({
 	firedBy,
 	job,
 	moveToPath,
+	onMove,
 	staticBaseUrl
 }: {
 	historicalPlayers: Record<string, Player>;
 	seconds: number;
-	firedBy: Player;
+	firedBy?: Player;
 	job: Job | undefined;
 	moveToPath?: (_id: string) => string;
+	onMove?: () => void | Promise<unknown>;
 	staticBaseUrl: string;
 }) {
 	const router = useRouter();
@@ -31,7 +33,11 @@ export function MoveToast({
 	useEffect(() => {
 		if (remaining <= 0) {
 			if (job?.Id) {
-				router.push(moveToPath ? moveToPath(job.Id) : `/${job.Id}`);
+				if (onMove) {
+					void onMove();
+				} else {
+					router.push(moveToPath ? moveToPath(job.Id) : `/${job.Id}`);
+				}
 			}
 			return;
 		}
@@ -39,7 +45,7 @@ export function MoveToast({
 			setRemaining((value) => value - 1);
 		}, 1000);
 		return () => clearInterval(interval);
-	}, [job?.Id, moveToPath, remaining, router]);
+	}, [job?.Id, moveToPath, onMove, remaining, router]);
 
 	if (closed) {
 		return null;
@@ -74,7 +80,7 @@ export function MoveToast({
 				</div>
 			</CardContent>
 			<CardFooter className="flex justify-between">
-				<Button variant="outline">By: {firedBy?.name}</Button>
+				<Button variant="outline">By: {firedBy?.name || 'Room'}</Button>
 				<Button variant="default" onClick={() => setClosed(true)}>
 					Close
 				</Button>

@@ -29,3 +29,12 @@ export function getRequestHost(headers: HeaderReader) {
 	];
 	return candidates.find(isDiscordProxyHost) || candidates.find(Boolean) || 'localhost:3001';
 }
+
+export function getRequestOrigin(headers: HeaderReader) {
+	const host = getRequestHost(headers);
+	const protocol =
+		firstHeaderValue(headers.get('x-forwarded-proto')) ||
+		firstHeaderValue(headers.get('x-forwarded-protocol')) ||
+		(host.startsWith('localhost') || host.startsWith('127.0.0.1') ? 'http' : 'https');
+	return `${protocol}://${host}`;
+}

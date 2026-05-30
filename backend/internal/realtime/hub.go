@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/flate"
 	"context"
+	cryptorand "crypto/rand"
 	"encoding/json"
 	"errors"
 	"io"
@@ -35,6 +36,8 @@ var (
 const (
 	idleRoomTTL            = 48 * time.Hour
 	statusHeartbeatTimeout = 3 * time.Second
+	generatedRoomIDLength  = 6
+	roomIDAlphabet         = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 )
 
 type Hub struct {
@@ -49,6 +52,8 @@ type Hub struct {
 
 type Room struct {
 	id                        string
+	mediaID                   string
+	mediaUpdatedAt            int64
 	players                   map[string]*Player
 	chats                     []Chat
 	lastSeek                  time.Time
@@ -59,6 +64,17 @@ type Room struct {
 	state                     VideoState
 	youtube                   YouTubeState
 	mu                        sync.RWMutex
+}
+
+type roomRequest struct {
+	RoomID  string `json:"roomId,omitempty"`
+	MediaID string `json:"mediaId"`
+}
+
+type roomResponse struct {
+	RoomID       string `json:"roomId"`
+	MediaID      string `json:"mediaId"`
+	MediaUpdated int64  `json:"mediaUpdated"`
 }
 
 func NewHub(options Options) *Hub {
@@ -184,17 +200,181 @@ func (h *Hub) HandlePFP(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"id": id, "revision": revision})
 }
 
+func (h *Hub) HandleCreateRoom(w http.ResponseWriter, r *http.Request) {
+	var payload roomRequest
+	if err := decodeJSONRequest(w, r, &payload); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	mediaID := strings.TrimSpace(payload.MediaID)
+	if !safeID.MatchString(mediaID) {
+		http.Error(w, "mediaId is required", http.StatusBadRequest)
+		return
+	}
+
+	roomID := strings.TrimSpace(payload.RoomID)
+	if roomID != "" {
+		if !safeID.MatchString(roomID) {
+			http.Error(w, "invalid roomId", http.StatusBadRequest)
+			return
+		}
+	} else {
+		var err error
+		roomID, err = h.generateRoomID()
+		if err != nil {
+			log.Printf("generate room id: %v", err)
+			http.Error(w, "failed to create room", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	writeJSON(w, h.upsertRoom(roomID, mediaID, nil))
+}
+
+func (h *Hub) HandleGetRoom(w http.ResponseWriter, r *http.Request) {
+	roomID := strings.TrimSpace(r.PathValue("room"))
+	if !safeID.MatchString(roomID) {
+		http.Error(w, "invalid room", http.StatusBadRequest)
+		return
+	}
+
+	snapshot, ok := h.roomSnapshot(roomID)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	writeJSON(w, snapshot)
+}
+
+func (h *Hub) HandleUpdateRoom(w http.ResponseWriter, r *http.Request) {
+	roomID := strings.TrimSpace(r.PathValue("room"))
+	if !safeID.MatchString(roomID) {
+		http.Error(w, "invalid room", http.StatusBadRequest)
+		return
+	}
+
+	var payload roomRequest
+	if err := decodeJSONRequest(w, r, &payload); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	mediaID := strings.TrimSpace(payload.MediaID)
+	if !safeID.MatchString(mediaID) {
+		http.Error(w, "mediaId is required", http.StatusBadRequest)
+		return
+	}
+
+	if _, ok := h.roomSnapshot(roomID); !ok {
+		http.NotFound(w, r)
+		return
+	}
+	writeJSON(w, h.upsertRoom(roomID, mediaID, nil))
+}
+
+func decodeJSONRequest(w http.ResponseWriter, r *http.Request, target any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+	defer r.Body.Close()
+
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(target); err != nil {
+		return err
+	}
+	if decoder.Decode(&struct{}{}) != io.EOF {
+		return errors.New("unexpected extra json")
+	}
+	return nil
+}
+
+func writeJSON(w http.ResponseWriter, payload any) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func newRoom(id string, mediaID string) *Room {
+	room := &Room{
+		id:      id,
+		mediaID: mediaID,
+		players: make(map[string]*Player),
+		chats:   make([]Chat, 0),
+		state:   defaultVideoState(),
+		youtube: defaultYouTubeState(),
+	}
+	if mediaID != "" {
+		room.mediaUpdatedAt = time.Now().UnixMilli()
+	}
+	return room
+}
+
+func (h *Hub) generateRoomID() (string, error) {
+	for range 32 {
+		roomID, err := randomRoomID(generatedRoomIDLength)
+		if err != nil {
+			return "", err
+		}
+		h.mu.RLock()
+		_, exists := h.rooms[roomID]
+		h.mu.RUnlock()
+		if !exists {
+			return roomID, nil
+		}
+	}
+	return "", errors.New("unable to allocate unique room id")
+}
+
+func randomRoomID(length int) (string, error) {
+	if length <= 0 {
+		return "", errors.New("room id length must be positive")
+	}
+	bytes := make([]byte, length)
+	if _, err := cryptorand.Read(bytes); err != nil {
+		return "", err
+	}
+	result := make([]byte, length)
+	for i, value := range bytes {
+		result[i] = roomIDAlphabet[int(value)%len(roomIDAlphabet)]
+	}
+	return string(result), nil
+}
+
+func (h *Hub) upsertRoom(roomID string, mediaID string, firedBy *PlayerSnapshot) roomResponse {
+	h.mu.Lock()
+	room := h.rooms[roomID]
+	if room == nil {
+		room = newRoom(roomID, mediaID)
+		h.rooms[roomID] = room
+		response := room.snapshotLocked()
+		h.mu.Unlock()
+		return response
+	}
+	h.mu.Unlock()
+
+	return room.updateMediaID(mediaID, firedBy)
+}
+
+func (h *Hub) roomSnapshot(roomID string) (roomResponse, bool) {
+	h.mu.RLock()
+	room := h.rooms[roomID]
+	h.mu.RUnlock()
+	if room == nil {
+		return roomResponse{}, false
+	}
+
+	room.mu.RLock()
+	defer room.mu.RUnlock()
+	if room.mediaID == "" {
+		return roomResponse{}, false
+	}
+	return room.snapshotLocked(), true
+}
+
 func (h *Hub) addPlayerToRoom(id string, player *Player) *Room {
 	h.mu.Lock()
 	room := h.rooms[id]
 	if room == nil {
-		room = &Room{
-			id:      id,
-			players: make(map[string]*Player),
-			chats:   make([]Chat, 0),
-			state:   defaultVideoState(),
-			youtube: defaultYouTubeState(),
-		}
+		room = newRoom(id, "")
 		h.rooms[id] = room
 	}
 
@@ -353,6 +533,59 @@ func (r *Room) remove(player *Player) {
 	}
 }
 
+func (r *Room) updateMediaID(mediaID string, firedBy *PlayerSnapshot) roomResponse {
+	now := time.Now().UnixMilli()
+	var targets []*Player
+	changed := false
+
+	r.mu.Lock()
+	if r.mediaID != mediaID {
+		r.applyMediaIDLocked(mediaID, now)
+		targets = r.playersLocked()
+		changed = true
+	}
+	response := r.snapshotLocked()
+	r.mu.Unlock()
+
+	if changed && len(targets) > 0 {
+		payload := SendPayload{
+			Type:      BroadcastSync,
+			FiredBy:   firedBy,
+			Timestamp: now,
+			Broadcast: map[string]any{
+				"type":   MoveToBroadcast,
+				"moveTo": mediaID,
+			},
+		}
+		sendPayloadToPlayers(targets, payload)
+	}
+
+	return response
+}
+
+func (r *Room) applyMediaIDLocked(mediaID string, timestamp int64) {
+	r.mediaID = mediaID
+	r.mediaUpdatedAt = timestamp
+	r.state = defaultVideoState()
+	r.youtube = defaultYouTubeState()
+	r.lastSeek = time.Time{}
+	r.lastPlayersSignature = ""
+	r.lastPlayerStatusSignature = ""
+	r.lastStatusSent = time.Time{}
+	for _, player := range r.players {
+		player.state.Time = 0
+		player.state.Paused = true
+	}
+}
+
+func (r *Room) snapshotLocked() roomResponse {
+	return roomResponse{
+		RoomID:       r.id,
+		MediaID:      r.mediaID,
+		MediaUpdated: r.mediaUpdatedAt,
+	}
+}
+
 func (r *Room) close() {
 	r.mu.RLock()
 	players := make([]*Player, 0, len(r.players))
@@ -456,6 +689,8 @@ func (r *Room) broadcast(sender *Player, broadcast map[string]any) {
 	var firedBy PlayerSnapshot
 	var targets []*Player
 	targetID, targeted := broadcastTargetID(broadcast)
+	moveToMediaID, isMediaMove := broadcastMoveToMediaID(broadcast)
+	mediaChanged := false
 
 	r.mu.Lock()
 	if r.players[sender.state.Id] != sender {
@@ -464,6 +699,14 @@ func (r *Room) broadcast(sender *Player, broadcast map[string]any) {
 	}
 	sender.state.LastSeen = time.Now().Unix()
 	firedBy = sender.state
+	if isMediaMove {
+		if r.mediaID == moveToMediaID {
+			r.mu.Unlock()
+			return
+		}
+		r.applyMediaIDLocked(moveToMediaID, now)
+		mediaChanged = true
+	}
 	if targeted {
 		if target := r.players[targetID]; target != nil {
 			targets = append(targets, target)
@@ -473,6 +716,9 @@ func (r *Room) broadcast(sender *Player, broadcast map[string]any) {
 	}
 	r.mu.Unlock()
 
+	if isMediaMove && !mediaChanged {
+		return
+	}
 	payload := SendPayload{Type: BroadcastSync, FiredBy: &firedBy, Timestamp: now, Broadcast: broadcast}
 	sendPayloadToPlayers(targets, payload)
 }
@@ -488,11 +734,37 @@ func broadcastTargetID(broadcast map[string]any) (string, bool) {
 	return strings.TrimSpace(targetID), true
 }
 
+func broadcastMoveToMediaID(broadcast map[string]any) (string, bool) {
+	if broadcast["type"] != MoveToBroadcast {
+		return "", false
+	}
+	mediaID, ok := broadcast["moveTo"].(string)
+	if !ok {
+		return "", false
+	}
+	mediaID = strings.TrimSpace(mediaID)
+	if !safeID.MatchString(mediaID) {
+		return "", false
+	}
+	return mediaID, true
+}
+
 func sanitizeBroadcast(broadcast map[string]any) map[string]any {
 	if broadcast == nil {
 		return nil
 	}
-	if broadcast["type"] != SoundEffectSync {
+	switch broadcast["type"] {
+	case MoveToBroadcast:
+		mediaID, ok := broadcastMoveToMediaID(broadcast)
+		if !ok {
+			return nil
+		}
+		return map[string]any{
+			"type":   MoveToBroadcast,
+			"moveTo": mediaID,
+		}
+	case SoundEffectSync:
+	default:
 		return broadcast
 	}
 
