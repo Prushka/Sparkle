@@ -25,5 +25,5 @@ Useful runtime environment variables:
 - `ADDR`, default `:1323`
 - `PORT`, used only when `ADDR` is unset
 - `OUTPUT`, default `./output`
-- `JOBS_CACHE_TTL`, default `15m`
+- `JOBS_CACHE_TTL`, default `30m`
 - `MAX_PFP_BYTES`, default `12000000`

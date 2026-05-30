@@ -8,13 +8,14 @@ type SparkleServerState = {
 };
 
 const globalState = globalThis as typeof globalThis & SparkleServerState;
+const JOBS_CACHE_MS = 60_000;
 
 export const roomMapping: Record<string, string> =
 	globalState.roomMapping ?? (globalState.roomMapping = {});
 
 export async function getJobs(fetchFn: typeof fetch, target: string | null = null): Promise<Job[]> {
 	if (
-		Date.now() - (globalState.jobsLastFetched ?? 0) > 1000 * 10 ||
+		Date.now() - (globalState.jobsLastFetched ?? 0) > JOBS_CACHE_MS ||
 		(target !== null && !(globalState.jobs ?? []).find((job) => job.Id === target))
 	) {
 		console.log(new Date(), 'Fetching jobs');

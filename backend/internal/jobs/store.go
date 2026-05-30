@@ -2,8 +2,10 @@ package jobs
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -21,6 +23,7 @@ type Store struct {
 	mu        sync.RWMutex
 	expiresAt time.Time
 	cached    []byte
+	etag      string
 }
 
 func NewStore(outputDir string, ttl time.Duration) *Store {
@@ -28,13 +31,19 @@ func NewStore(outputDir string, ttl time.Duration) *Store {
 }
 
 func (s *Store) JSON(ctx context.Context) ([]byte, error) {
+	payload, _, err := s.Payload(ctx)
+	return payload, err
+}
+
+func (s *Store) Payload(ctx context.Context) ([]byte, string, error) {
 	now := time.Now()
 
 	s.mu.RLock()
 	if len(s.cached) > 0 && now.Before(s.expiresAt) {
 		payload := append([]byte(nil), s.cached...)
+		etag := s.etag
 		s.mu.RUnlock()
-		return payload, nil
+		return payload, etag, nil
 	}
 	s.mu.RUnlock()
 
@@ -42,25 +51,27 @@ func (s *Store) JSON(ctx context.Context) ([]byte, error) {
 	defer s.mu.Unlock()
 
 	if len(s.cached) > 0 && time.Now().Before(s.expiresAt) {
-		return append([]byte(nil), s.cached...), nil
+		return append([]byte(nil), s.cached...), s.etag, nil
 	}
 
 	jobs, err := s.scan(ctx)
 	if err != nil {
 		if len(s.cached) > 0 {
 			log.Printf("job scan failed; serving stale cache: %v", err)
-			return append([]byte(nil), s.cached...), nil
+			return append([]byte(nil), s.cached...), s.etag, nil
 		}
-		return nil, err
+		return nil, "", err
 	}
 
 	payload, err := json.Marshal(jobs)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	s.cached = payload
+	sum := sha256.Sum256(payload)
+	s.etag = fmt.Sprintf(`"%x"`, sum)
 	s.expiresAt = time.Now().Add(s.ttl)
-	return append([]byte(nil), payload...), nil
+	return append([]byte(nil), payload...), s.etag, nil
 }
 
 func (s *Store) scan(ctx context.Context) ([]map[string]any, error) {

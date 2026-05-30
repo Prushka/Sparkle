@@ -619,6 +619,7 @@ export function extractTitle(job: Job): Title {
 }
 
 export function getTitleComponentsByJobs(jobs: Job[]): Titles {
+	const jobsById = new Map(jobs.map((job) => [job.Id, job]));
 	const _titles = jobs.reduce((acc: Titles, job) => {
 		if (!acc[job.Title.titleId]) {
 			acc[job.Title.titleId] = {
@@ -656,7 +657,7 @@ export function getTitleComponentsByJobs(jobs: Job[]): Titles {
 					.reverse();
 				for (let i = 0; i < title.episodes.length; i++) {
 					const episode = title.episodes[i];
-					const job = jobs.find((candidate) => candidate.Id === episode.id);
+					const job = jobsById.get(episode.id);
 					if (job && job.Files['poster.jpg']) {
 						title.rep = episode;
 						break;

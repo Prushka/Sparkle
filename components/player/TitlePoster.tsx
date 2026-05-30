@@ -17,6 +17,10 @@ export function TitlePoster({
 			<img
 				src={`${staticBaseUrl}/${title.id}/poster.jpg`}
 				alt={title.title}
+				loading="lazy"
+				decoding="async"
+				width={48}
+				height={32}
 				className="mr-2 h-8 w-12 rounded-sm object-cover"
 			/>
 			{isNew ? <New /> : null}

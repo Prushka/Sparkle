@@ -21,6 +21,18 @@ export type MediaSelectionHandle = {
 	updateList: (_untilId?: string | null, _onSuccess?: (_jobs: Job[]) => void) => void;
 };
 
+function areJobListsEquivalent(a: Job[], b: Job[]) {
+	if (a.length !== b.length) {
+		return false;
+	}
+	for (let i = 0; i < a.length; i++) {
+		if (a[i].Id !== b[i].Id || a[i].JobModTime !== b[i].JobModTime) {
+			return false;
+		}
+	}
+	return true;
+}
+
 export const MediaSelection = forwardRef<
 	MediaSelectionHandle,
 	{
@@ -34,6 +46,7 @@ export const MediaSelection = forwardRef<
 	const searchParams = useSearchParams();
 	const searchParamsString = searchParams.toString();
 	const [jobs, setJobs] = useState<Job[]>(data.jobs);
+	const jobsRef = useRef(jobs);
 	const [titleSelectionOpen, setTitleSelectionOpen] = useState(false);
 	const [seSelectionOpen, setSeSelectionOpen] = useState(false);
 	const openEpisodeSelectionAfterTitleCloseRef = useRef(false);
@@ -43,8 +56,13 @@ export const MediaSelection = forwardRef<
 	const [selectedSe, setSelectedSe] = useState<string | undefined>(data.job?.Title?.episode?.se);
 
 	useEffect(() => {
+		jobsRef.current = data.jobs;
 		setJobs(data.jobs);
 	}, [data.jobs]);
+
+	useEffect(() => {
+		jobsRef.current = jobs;
+	}, [jobs]);
 
 	useEffect(() => {
 		setSelectedTitleId(data.job?.Title?.titleId);
@@ -66,6 +84,8 @@ export const MediaSelection = forwardRef<
 	const selectedEpisodes = selected?.episodes ?? [];
 	const selectedEpisode = selected?.episodes?.find((episode) => episode.se === selectedSe);
 	const newJobs = useMemo(() => getNewJobs(jobs), [jobs]);
+	const newJobIds = useMemo(() => new Set(newJobs.map((job) => job.Id)), [newJobs]);
+	const newTitleIds = useMemo(() => new Set(newJobs.map((job) => job.Title.titleId)), [newJobs]);
 
 	function getNewJobs(jobs: Job[]): Job[] {
 		const last7 = jobs
@@ -96,21 +116,39 @@ export const MediaSelection = forwardRef<
 
 	const updateList = useCallback(
 		(untilId: string | null = null, onSuccess: (_jobs: Job[]) => void = () => {}) => {
-			if (untilId !== null && jobs.find((candidate) => candidate.Id === untilId)) {
-				onSuccess(jobs);
+			const currentJobs = jobsRef.current;
+			if (untilId !== null && currentJobs.find((candidate) => candidate.Id === untilId)) {
+				onSuccess(currentJobs);
 				return;
 			}
 			fetch(`${backendBaseUrl}/all`)
-				.then((response) => response.json())
+				.then((response) => {
+					if (response.status === 304) {
+						return null;
+					}
+					if (!response.ok) {
+						throw new Error(`Failed to refresh media list: ${response.status}`);
+					}
+					return response.json();
+				})
 				.then((payload) => {
+					if (payload === null) {
+						onSuccess(jobsRef.current);
+						return;
+					}
 					if (payload?.length > 0) {
 						const nextJobs = preprocessJobs(payload);
-						setJobs(nextJobs);
+						setJobs((current) => {
+							const next = areJobListsEquivalent(current, nextJobs) ? current : nextJobs;
+							jobsRef.current = next;
+							return next;
+						});
 						onSuccess(nextJobs);
 					}
-				});
+				})
+				.catch((error) => console.warn('Unable to refresh media list', error));
 		},
-		[backendBaseUrl, jobs]
+		[backendBaseUrl]
 	);
 
 	useImperativeHandle(ref, () => ({ updateList }), [updateList]);
@@ -163,10 +201,7 @@ export const MediaSelection = forwardRef<
 									<TitlePoster
 										title={title.rep ? title.rep : title.episodes ? title.episodes[0] : title}
 										staticBaseUrl={staticBaseUrl}
-										isNew={
-											newJobs.find((candidate) => candidate.Title.titleId === title.titleId) !==
-											undefined
-										}
+										isNew={newTitleIds.has(title.titleId)}
 									/>
 									<span className="mr-4">{title.title}</span>
 									<IconCheck
@@ -218,9 +253,7 @@ export const MediaSelection = forwardRef<
 											<TitlePoster
 												title={episode}
 												staticBaseUrl={staticBaseUrl}
-												isNew={
-													newJobs.find((candidate) => candidate.Id === episode.id) !== undefined
-												}
+												isNew={newJobIds.has(episode.id)}
 											/>
 											<span className="mr-4">
 												{episode.se} - {episode.title}

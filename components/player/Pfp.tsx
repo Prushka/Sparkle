@@ -71,6 +71,7 @@ export function Pfp({
 				key={imageSrc}
 				src={imageSrc}
 				alt="pfp"
+				decoding="async"
 				className={`rounded-full object-cover ${className}`}
 				onError={() => setFailedImageSrc(imageSrc)}
 			/>

@@ -73,12 +73,20 @@ func main() {
 
 func handleAll(store *jobs.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		payload, err := store.JSON(r.Context())
+		payload, etag, err := store.Payload(r.Context())
 		if err != nil {
 			writeJSONError(w, http.StatusInternalServerError, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-cache")
+		if etag != "" {
+			w.Header().Set("ETag", etag)
+			if r.Header.Get("If-None-Match") == etag {
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+		}
 		_, _ = w.Write(payload)
 	}
 }
@@ -113,6 +121,8 @@ func staticFiles(outputDir string) http.Handler {
 		if strings.HasPrefix(r.URL.Path, "/static/pfp/") {
 			w.Header().Set("Cache-Control", "no-store, no-cache, max-age=0")
 			w.Header().Set("Pragma", "no-cache")
+		} else {
+			w.Header().Set("Cache-Control", "public, max-age=3600")
 		}
 		files.ServeHTTP(w, r)
 	})

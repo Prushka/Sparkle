@@ -31,6 +31,8 @@ var (
 	safeYouTubeVideoID = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 )
 
+const idleRoomTTL = 48 * time.Hour
+
 type Hub struct {
 	outputDir      string
 	maxUploadBytes int64
@@ -42,13 +44,14 @@ type Hub struct {
 }
 
 type Room struct {
-	id       string
-	players  map[string]*Player
-	chats    []Chat
-	lastSeek time.Time
-	state    VideoState
-	youtube  YouTubeState
-	mu       sync.RWMutex
+	id        string
+	players   map[string]*Player
+	chats     []Chat
+	lastSeek  time.Time
+	idleSince time.Time
+	state     VideoState
+	youtube   YouTubeState
+	mu        sync.RWMutex
 }
 
 func NewHub(options Options) *Hub {
@@ -65,15 +68,19 @@ func NewHub(options Options) *Hub {
 }
 
 func (h *Hub) Run(ctx context.Context) {
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
+	syncTicker := time.NewTicker(time.Second)
+	defer syncTicker.Stop()
+	cleanupTicker := time.NewTicker(time.Minute)
+	defer cleanupTicker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-ticker.C:
+		case <-syncTicker.C:
 			h.syncPlayerStates()
+		case <-cleanupTicker.C:
+			h.cleanupIdleRooms(time.Now())
 		}
 	}
 }
@@ -111,8 +118,7 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	player := newPlayer(conn, playerID)
-	room := h.getOrCreateRoom(roomID)
-	room.add(player)
+	room := h.addPlayerToRoom(roomID, player)
 
 	log.Printf("[%s] connected to room %s", playerID, roomID)
 	go player.writePump()
@@ -166,22 +172,50 @@ func (h *Hub) HandlePFP(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"id": id, "revision": revision})
 }
 
-func (h *Hub) getOrCreateRoom(id string) *Room {
+func (h *Hub) addPlayerToRoom(id string, player *Player) *Room {
+	h.mu.Lock()
+	room := h.rooms[id]
+	if room == nil {
+		room = &Room{
+			id:      id,
+			players: make(map[string]*Player),
+			chats:   make([]Chat, 0),
+			state:   defaultVideoState(),
+			youtube: defaultYouTubeState(),
+		}
+		h.rooms[id] = room
+	}
+
+	var old *Player
+	room.mu.Lock()
+	if existing := room.players[player.state.Id]; existing != nil {
+		old = existing
+	}
+	room.players[player.state.Id] = player
+	room.idleSince = time.Time{}
+	room.mu.Unlock()
+	h.mu.Unlock()
+
+	if old != nil {
+		old.kick()
+	}
+	return room
+}
+
+func (h *Hub) cleanupIdleRooms(now time.Time) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if room := h.rooms[id]; room != nil {
-		return room
+	for id, room := range h.rooms {
+		room.mu.RLock()
+		idle := len(room.players) == 0 &&
+			!room.idleSince.IsZero() &&
+			now.Sub(room.idleSince) >= idleRoomTTL
+		room.mu.RUnlock()
+		if idle {
+			delete(h.rooms, id)
+		}
 	}
-	room := &Room{
-		id:      id,
-		players: make(map[string]*Player),
-		chats:   make([]Chat, 0),
-		state:   defaultVideoState(),
-		youtube: defaultYouTubeState(),
-	}
-	h.rooms[id] = room
-	return room
 }
 
 func (h *Hub) syncPlayerStates() {
@@ -274,21 +308,6 @@ func (h *Hub) writeProfileImage(id string, content []byte) error {
 	return os.Rename(tmpName, filepath.Join(dir, id+".png"))
 }
 
-func (r *Room) add(player *Player) {
-	var old *Player
-
-	r.mu.Lock()
-	if existing := r.players[player.state.Id]; existing != nil {
-		old = existing
-	}
-	r.players[player.state.Id] = player
-	r.mu.Unlock()
-
-	if old != nil {
-		old.kick()
-	}
-}
-
 func (r *Room) remove(player *Player) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -301,6 +320,7 @@ func (r *Room) remove(player *Player) {
 		r.state = defaultVideoState()
 		r.youtube = defaultYouTubeState()
 		r.lastSeek = time.Time{}
+		r.idleSince = time.Now()
 	}
 }
 

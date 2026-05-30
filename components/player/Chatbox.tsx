@@ -274,6 +274,7 @@ function EmojiElement({ attributes, children, element }: RenderElementProps) {
 				<img
 					src={emoji.src}
 					alt={`:${emoji.id}:`}
+					decoding="async"
 					draggable={false}
 					className="chat-input-emote-image"
 				/>

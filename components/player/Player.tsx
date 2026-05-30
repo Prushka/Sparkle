@@ -162,6 +162,8 @@ const DEFAULT_YOUTUBE_SYNC_STATE: YouTubeSyncState = {
 const YOUTUBE_VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 const YOUTUBE_TAB_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const MAX_YOUTUBE_TABS = 12;
+const CONTROL_MESSAGE_TTL_MS = 8000;
+const MAX_CONTROL_MESSAGES = 40;
 
 function createDefaultYouTubeTab(id: string): YouTubeTabSyncState {
 	return {
@@ -500,6 +502,74 @@ function getSelectedSubtitleTrack(
 	}
 	const matchingTrack = findSubtitleTrack(tracks, nativeShowing);
 	return matchingTrack ? { ...matchingTrack, mode: nativeShowing.mode } : null;
+}
+
+function areDiscordUsersEqual(
+	a: Discord['user'] | null | undefined,
+	b: Discord['user'] | null | undefined
+) {
+	if (a === b) {
+		return true;
+	}
+	if (!a || !b) {
+		return false;
+	}
+	return (
+		a.id === b.id &&
+		a.username === b.username &&
+		a.discriminator === b.discriminator &&
+		a.avatar === b.avatar &&
+		a.global_name === b.global_name &&
+		a.public_flags === b.public_flags
+	);
+}
+
+function areRoomPlayersEqual(a: RoomPlayer[], b: RoomPlayer[]) {
+	if (a === b) {
+		return true;
+	}
+	if (a.length !== b.length) {
+		return false;
+	}
+	for (let i = 0; i < a.length; i++) {
+		const left = a[i];
+		const right = b[i];
+		if (
+			left.id !== right.id ||
+			left.profileId !== right.profileId ||
+			left.name !== right.name ||
+			left.time !== right.time ||
+			left.paused !== right.paused ||
+			left.inBg !== right.inBg ||
+			left.audio !== right.audio ||
+			left.codec !== right.codec ||
+			left.subtitle !== right.subtitle ||
+			!areDiscordUsersEqual(left.discordUser, right.discordUser)
+		) {
+			return false;
+		}
+	}
+	return true;
+}
+
+function areHistoricalPlayersEqual(current: RoomPlayer | undefined, next: RoomPlayer) {
+	return Boolean(
+		current &&
+		current.name === next.name &&
+		current.profileId === next.profileId &&
+		areDiscordUsersEqual(current.discordUser, next.discordUser)
+	);
+}
+
+function appendControlMessages(
+	current: SendPayload[],
+	incoming: SendPayload | SendPayload[],
+	now = Date.now()
+) {
+	const messages = Array.isArray(incoming) ? incoming : [incoming];
+	return [...current, ...messages]
+		.filter((message) => now - message.timestamp < CONTROL_MESSAGE_TTL_MS)
+		.slice(-MAX_CONTROL_MESSAGES);
 }
 
 function getLatestMessageTimestamp(messages: Chat[]) {
@@ -1087,9 +1157,11 @@ export function Player({ data }: { data: ServerData }) {
 		});
 	}, []);
 
-	const messagesToDisplay = (() => {
+	const messagesToDisplay = useMemo(() => {
 		let nextMessages = [
-			...roomMessages.filter((message) => renderNow - message.timestamp < 140000),
+			...roomMessages
+				.filter((message) => renderNow - message.timestamp < 140000)
+				.map((message) => ({ ...message, timeStr: '' })),
 			...localSystemMessages.filter(
 				(message) => renderNow - message.timestamp < SYSTEM_MESSAGE_DURATION_MS
 			)
@@ -1130,23 +1202,21 @@ export function Player({ data }: { data: ServerData }) {
 			}
 		}
 		nextMessages.sort((a, b) => a.timestamp - b.timestamp);
+		let prevTimeStr = '';
 		for (let i = 0; i < nextMessages.length; i++) {
-			let prevTimeStr = '';
-			for (let j = i - 1; j >= 0; j--) {
-				if (nextMessages[j].timeStr) {
-					prevTimeStr = nextMessages[j].timeStr;
-					break;
-				}
-			}
 			const currTimeStr = new Date(nextMessages[i].timestamp).toLocaleTimeString('en-US', {
 				hour: '2-digit',
 				minute: '2-digit',
 				hour12: false
 			});
-			nextMessages[i].timeStr = prevTimeStr === currTimeStr ? '' : currTimeStr;
+			const timeStr = prevTimeStr === currTimeStr ? '' : currTimeStr;
+			nextMessages[i] = { ...nextMessages[i], timeStr };
+			if (timeStr) {
+				prevTimeStr = timeStr;
+			}
 		}
 		return nextMessages;
-	})();
+	}, [controlsToDisplay, localSystemMessages, playerEl, renderNow, roomMessages]);
 
 	useEffect(() => {
 		const timer = window.setTimeout(() => setMounted(true), 0);
@@ -1903,7 +1973,7 @@ export function Player({ data }: { data: ServerData }) {
 				const broadcast = state.broadcast;
 				const persistControlState = (payload: any) => {
 					if (payload.firedBy !== undefined) {
-						setControlsToDisplay((prev) => [...prev, payload]);
+						setControlsToDisplay((prev) => appendControlMessages(prev, payload));
 					}
 				};
 				if (player) {
@@ -1917,7 +1987,7 @@ export function Player({ data }: { data: ServerData }) {
 						const target = jobs.find((candidate) => candidate.Id === state.broadcast!.moveTo);
 						state.moveToText =
 							target?.Title.title + (target?.Title?.episode ? ` ${target.Title.episode.se}` : '');
-						setControlsToDisplay((prev) => [...prev, state]);
+						setControlsToDisplay((prev) => appendControlMessages(prev, state));
 					};
 					switch (state.type) {
 						case SyncTypes.PfpSync:
@@ -1958,15 +2028,20 @@ export function Player({ data }: { data: ServerData }) {
 									}))
 								];
 								if (playerEvents.length > 0) {
-									setControlsToDisplay((controls) => [...controls, ...playerEvents]);
+									setControlsToDisplay((controls) => appendControlMessages(controls, playerEvents));
 								}
 							}
 							roomPlayersRef.current = state.players;
-							setRoomPlayers(state.players);
+							setRoomPlayers((current) =>
+								areRoomPlayersEqual(current, state.players) ? current : state.players
+							);
 							setHistoricalPlayers((prev) => {
-								const next = { ...prev };
+								let next = prev;
 								for (const player of state.players) {
-									if (!next[player.id] || next[player.id].name !== player.name) {
+									if (!areHistoricalPlayersEqual(next[player.id], player)) {
+										if (next === prev) {
+											next = { ...prev };
+										}
 										next[player.id] = player;
 									}
 								}
@@ -1974,10 +2049,10 @@ export function Player({ data }: { data: ServerData }) {
 							});
 							updateLastTicked(true, state.players.length);
 							setCurrentlyWatching((value) => {
-								if (value) {
+								if (value && value.roomPlayers !== state.players.length) {
 									return { ...value, roomPlayers: state.players.length };
 								}
-								return null;
+								return value;
 							});
 							break;
 						case SyncTypes.PauseSync:
@@ -2250,8 +2325,10 @@ export function Player({ data }: { data: ServerData }) {
 		};
 		document.addEventListener('visibilitychange', visibilityChange);
 		const mouseMove = () => {
-			chatFocusedSecsRef.current = 0;
-			setChatFocusedSecs(0);
+			if (chatFocusedSecsRef.current !== 0) {
+				chatFocusedSecsRef.current = 0;
+				setChatFocusedSecs(0);
+			}
 		};
 		document.addEventListener('mousemove', mouseMove);
 		const mouseLeave = () => {
@@ -2329,8 +2406,10 @@ export function Player({ data }: { data: ServerData }) {
 				chatFocusedSecsRef.current += 1;
 				setChatFocusedSecs(chatFocusedSecsRef.current);
 			} else {
-				chatFocusedSecsRef.current = 0;
-				setChatFocusedSecs(0);
+				if (chatFocusedSecsRef.current !== 0) {
+					chatFocusedSecsRef.current = 0;
+					setChatFocusedSecs(0);
+				}
 			}
 		}, 1000);
 
