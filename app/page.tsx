@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import { headers } from 'next/headers';
 import { connection } from 'next/server';
-import { MediaSelection } from '@/components/player/MediaSelection';
+import { LibraryHome } from '@/components/library-home';
 import { loadHomePageData } from '@/lib/server/media';
 import { getRequestHost } from '@/lib/server/request';
 
@@ -22,13 +22,5 @@ export default async function HomePage({
 	const host = getRequestHost(requestHeaders);
 	const data = await loadHomePageData(resolvedSearchParams, fetch, host);
 
-	return (
-		<div className="mt-20 flex w-full flex-col items-center justify-center gap-2 p-10">
-			<MediaSelection
-				data={{ jobs: data.jobs }}
-				staticBaseUrl={data.staticBaseUrl}
-				backendBaseUrl={data.backendBaseUrl}
-			/>
-		</div>
-	);
+	return <LibraryHome jobs={data.jobs} staticBaseUrl={data.staticBaseUrl} />;
 }
