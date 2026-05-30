@@ -55,7 +55,9 @@ type MoveTarget = {
 
 const MAP_WIDTH = 1440;
 const MAP_HEIGHT = 350;
-const GAME_HEIGHT = 350;
+const ROOM_CROP_TOP = 28;
+const ROOM_CROP_BOTTOM = 26;
+const GAME_HEIGHT = 178;
 const PLAYER_SPEED = 124;
 const PLAYER_RADIUS = 11;
 const SEND_INTERVAL_MS = 90;
@@ -762,6 +764,7 @@ function drawLighting(
 	ctx: CanvasRenderingContext2D,
 	time: number,
 	cameraX: number,
+	cameraY: number,
 	canvasWidth: number
 ) {
 	ctx.save();
@@ -799,7 +802,7 @@ function drawLighting(
 	vignette.addColorStop(0.75, 'rgba(77,48,34,0.08)');
 	vignette.addColorStop(1, 'rgba(38,26,29,0.35)');
 	ctx.fillStyle = vignette;
-	ctx.fillRect(cameraX, 0, canvasWidth, MAP_HEIGHT);
+	ctx.fillRect(cameraX, cameraY, canvasWidth, GAME_HEIGHT);
 	ctx.restore();
 }
 
@@ -905,13 +908,14 @@ function drawScene(
 	ctx: CanvasRenderingContext2D,
 	players: CottagePlayerSyncState[],
 	cameraX: number,
+	cameraY: number,
 	canvasWidth: number,
 	time: number
 ) {
 	ctx.clearRect(0, 0, canvasWidth, GAME_HEIGHT);
 	ctx.save();
 	const mapOffsetX = Math.max(0, (canvasWidth - MAP_WIDTH) / 2);
-	ctx.translate(mapOffsetX - cameraX, 0);
+	ctx.translate(mapOffsetX - cameraX, -cameraY);
 	drawFloorAndWalls(ctx);
 	drawBookshelf(ctx);
 	drawFireplace(ctx, time);
@@ -937,7 +941,7 @@ function drawScene(
 		item.draw();
 	}
 
-	drawLighting(ctx, time, cameraX, Math.min(canvasWidth, MAP_WIDTH));
+	drawLighting(ctx, time, cameraX, cameraY, Math.min(canvasWidth, MAP_WIDTH));
 	ctx.restore();
 }
 
@@ -988,6 +992,7 @@ export function CottageGame({
 	const currentPlayerRef = useRef<CottagePlayerIdentity | null>(currentPlayer);
 	const canvasSizeRef = useRef({ width: MAP_WIDTH, height: GAME_HEIGHT, dpr: 1 });
 	const cameraXRef = useRef(0);
+	const cameraYRef = useRef(ROOM_CROP_TOP);
 	const targetRef = useRef<MoveTarget | null>(null);
 	const keysRef = useRef<Set<string>>(new Set());
 	const actionUntilRef = useRef(0);
@@ -1397,12 +1402,19 @@ export function CottageGame({
 			const viewWidth = Math.min(MAP_WIDTH, size.width);
 			const cameraTarget = self ? self.x - viewWidth / 2 : MAP_WIDTH / 2 - viewWidth / 2;
 			cameraXRef.current = clamp(cameraTarget, 0, Math.max(0, MAP_WIDTH - viewWidth));
+			const cameraMinY = ROOM_CROP_TOP;
+			const cameraMaxY = Math.max(cameraMinY, MAP_HEIGHT - ROOM_CROP_BOTTOM - GAME_HEIGHT);
+			const cameraTargetY = self
+				? self.y - GAME_HEIGHT / 2
+				: cameraMinY + (cameraMaxY - cameraMinY) / 2;
+			cameraYRef.current = clamp(cameraTargetY, cameraMinY, cameraMaxY);
 			ctx.setTransform(size.dpr, 0, 0, size.dpr, 0, 0);
 			ctx.imageSmoothingEnabled = false;
 			drawScene(
 				ctx,
 				getVisiblePlayers(playersRef.current, roomPlayersRef.current, currentPlayerRef.current),
 				cameraXRef.current,
+				cameraYRef.current,
 				size.width,
 				time
 			);
@@ -1437,7 +1449,7 @@ export function CottageGame({
 				FLOOR_BOUNDS.maxX
 			),
 			y: clamp(
-				((event.clientY - rect.top) / rect.height) * GAME_HEIGHT,
+				((event.clientY - rect.top) / rect.height) * GAME_HEIGHT + cameraYRef.current,
 				FLOOR_BOUNDS.minY,
 				FLOOR_BOUNDS.maxY
 			)
@@ -1574,12 +1586,14 @@ export function CottageGame({
 			onBlur={() => {
 				keysRef.current.clear();
 			}}
-			className="relative mx-auto h-[350px] w-full max-w-[90rem] overflow-hidden rounded-lg border border-border/70 bg-[#312820] shadow-[0_1.25rem_3rem_rgba(15,23,42,0.18)] outline-none ring-offset-background transition-shadow focus-visible:ring-2 focus-visible:ring-primary/55 focus-visible:ring-offset-2"
+			className="relative mx-auto w-full max-w-[90rem] overflow-hidden bg-[#312820] outline-none focus-visible:outline-none"
+			style={{ height: GAME_HEIGHT }}
 		>
 			<canvas
 				ref={canvasRef}
 				aria-label="Synced cozy cottage game"
-				className="block h-[350px] w-full cursor-pointer select-none"
+				className="block w-full cursor-pointer select-none"
+				style={{ height: GAME_HEIGHT }}
 				onPointerDown={handlePointerDown}
 			/>
 			<div
