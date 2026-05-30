@@ -2292,7 +2292,11 @@ export function Player({ data }: { data: ServerData }) {
 						})
 						.then((buffer) => {
 							const file = new Uint8Array(buffer);
-							if (!canvasRef.current) {
+							if (
+								prevTrackSrcRef.current !== selectedTrackSrc ||
+								!canvasRef.current ||
+								!document.contains(videoElement)
+							) {
 								return;
 							}
 							supRef.current = new SUPtitles(canvasRef.current, file, () => {

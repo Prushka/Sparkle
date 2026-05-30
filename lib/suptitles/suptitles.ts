@@ -198,6 +198,7 @@ export default class SUPtitles {
 		ODS: ObjectDefinitionSegment[]
 	): void {
 		if (ODS.length > 0) {
+			this.clearCanvas();
 			let first: ObjectDefinitionSegment | null = null;
 			ODS.map((objectSegment) => {
 				if (objectSegment.type === 'First') {
