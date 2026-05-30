@@ -116,6 +116,77 @@ export interface YouTubeSyncState {
 	updatedAt: number;
 }
 
+export type ChessColor = 'w' | 'b';
+export type ChessTabPhase = 'setup' | 'playing' | 'ended';
+export type ChessPieceSet = 'classic' | 'letters' | 'neo';
+export type ChessBoardTheme = 'green' | 'blue' | 'walnut';
+export type ChessResultWinner = ChessColor | 'draw' | '';
+
+export interface ChessPlayerSyncState {
+	id: string;
+	name: string;
+	profileId?: string;
+}
+
+export interface ChessSettingsSyncState {
+	pieceSet: ChessPieceSet;
+	boardTheme: ChessBoardTheme;
+	timed: boolean;
+	minutes: number;
+	incrementSeconds: number;
+}
+
+export interface ChessMoveSyncState {
+	from: string;
+	to: string;
+	promotion?: string;
+	san: string;
+}
+
+export interface ChessClockSyncState {
+	w: number;
+	b: number;
+	lastTickAt: number;
+}
+
+export interface ChessCloseRequestSyncState {
+	requestedBy: ChessPlayerSyncState;
+	requestedAt: number;
+	expiresAt: number;
+}
+
+export interface ChessDrawOfferSyncState {
+	offeredBy: ChessPlayerSyncState;
+	offeredAt: number;
+}
+
+export interface ChessResultSyncState {
+	winner: ChessResultWinner;
+	reason: string;
+	message: string;
+}
+
+export interface ChessTabSyncState {
+	id: string;
+	open: boolean;
+	phase: ChessTabPhase;
+	settings: ChessSettingsSyncState;
+	white: ChessPlayerSyncState | null;
+	black: ChessPlayerSyncState | null;
+	fen: string;
+	moves: ChessMoveSyncState[];
+	clocks: ChessClockSyncState;
+	result: ChessResultSyncState | null;
+	closeRequest: ChessCloseRequestSyncState | null;
+	drawOffer: ChessDrawOfferSyncState | null;
+	updatedAt: number;
+}
+
+export interface ChessSyncState {
+	tabs: ChessTabSyncState[];
+	updatedAt: number;
+}
+
 export type Chat = {
 	message: string;
 	emojis?: string[];
@@ -189,6 +260,7 @@ export enum SyncTypes {
 	StateSync = 'state',
 	BroadcastSync = 'broadcast',
 	YouTubeSync = 'youtube',
+	ChessSync = 'chess',
 	AudioSwitch = 'audio',
 	CodecSwitch = 'codec',
 	SubtitleSwitch = 'subtitle',
@@ -220,6 +292,7 @@ export interface SendPayload {
 	subtitle?: string;
 	moveToText?: string;
 	youtube?: YouTubeSyncState;
+	chess?: ChessSyncState;
 }
 
 export interface BroadcastPayload {

@@ -14,6 +14,7 @@ const (
 	BroadcastSync     = "broadcast"
 	SoundEffectSync   = "soundEffect"
 	YouTubeSync       = "youtube"
+	ChessSync         = "chess"
 	ExitSync          = "exit"
 	CodecSwitch       = "codec"
 	AudioSwitch       = "audio"
@@ -29,6 +30,8 @@ const (
 	maxChatLength   = 2000
 	maxChatEmojis   = 50
 	maxYouTubeTabs  = 12
+	maxChessTabs    = 64
+	maxChessMoves   = 600
 )
 
 type Options struct {
@@ -64,6 +67,71 @@ type YouTubeTabState struct {
 type YouTubeState struct {
 	Tabs      []YouTubeTabState `json:"tabs,omitempty"`
 	UpdatedAt int64             `json:"updatedAt"`
+}
+
+type ChessPlayerState struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	ProfileID string `json:"profileId,omitempty"`
+}
+
+type ChessSettingsState struct {
+	PieceSet         string `json:"pieceSet"`
+	BoardTheme       string `json:"boardTheme"`
+	Timed            bool   `json:"timed"`
+	Minutes          int    `json:"minutes"`
+	IncrementSeconds int    `json:"incrementSeconds"`
+}
+
+type ChessMoveState struct {
+	From      string `json:"from"`
+	To        string `json:"to"`
+	Promotion string `json:"promotion,omitempty"`
+	SAN       string `json:"san"`
+}
+
+type ChessClockState struct {
+	WhiteMs    int64 `json:"w"`
+	BlackMs    int64 `json:"b"`
+	LastTickAt int64 `json:"lastTickAt"`
+}
+
+type ChessCloseRequestState struct {
+	RequestedBy ChessPlayerState `json:"requestedBy"`
+	RequestedAt int64            `json:"requestedAt"`
+	ExpiresAt   int64            `json:"expiresAt"`
+}
+
+type ChessDrawOfferState struct {
+	OfferedBy ChessPlayerState `json:"offeredBy"`
+	OfferedAt int64            `json:"offeredAt"`
+}
+
+type ChessResultState struct {
+	Winner  string `json:"winner"`
+	Reason  string `json:"reason"`
+	Message string `json:"message"`
+}
+
+type ChessTabState struct {
+	ID           string                  `json:"id"`
+	Open         bool                    `json:"open"`
+	Phase        string                  `json:"phase"`
+	Settings     ChessSettingsState      `json:"settings"`
+	White        *ChessPlayerState       `json:"white"`
+	Black        *ChessPlayerState       `json:"black"`
+	FEN          string                  `json:"fen"`
+	Moves        []ChessMoveState        `json:"moves,omitempty"`
+	Clocks       ChessClockState         `json:"clocks"`
+	Result       *ChessResultState       `json:"result"`
+	CloseRequest *ChessCloseRequestState `json:"closeRequest"`
+	DrawOffer    *ChessDrawOfferState    `json:"drawOffer"`
+	UpdatedAt    int64                   `json:"updatedAt"`
+}
+
+type ChessState struct {
+	Tabs      []ChessTabState `json:"tabs,omitempty"`
+	UpdatedAt int64           `json:"updatedAt"`
 }
 
 type PlayerState struct {
@@ -135,6 +203,7 @@ type ClientPayload struct {
 	Audio       string         `json:"audio,omitempty"`
 	Subtitle    string         `json:"subtitle,omitempty"`
 	YouTube     *YouTubeState  `json:"youtube,omitempty"`
+	Chess       *ChessState    `json:"chess,omitempty"`
 }
 
 type SendPayload struct {
@@ -150,6 +219,7 @@ type SendPayload struct {
 	Timestamp      int64            `json:"timestamp"`
 	Broadcast      map[string]any   `json:"broadcast,omitempty"`
 	YouTube        *YouTubeState    `json:"youtube,omitempty"`
+	Chess          *ChessState      `json:"chess,omitempty"`
 }
 
 func defaultVideoState() VideoState {
@@ -158,4 +228,8 @@ func defaultVideoState() VideoState {
 
 func defaultYouTubeState() YouTubeState {
 	return YouTubeState{}
+}
+
+func defaultChessState() ChessState {
+	return ChessState{}
 }

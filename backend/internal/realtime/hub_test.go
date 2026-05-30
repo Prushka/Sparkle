@@ -202,6 +202,51 @@ func TestSanitizeYouTubeStateRejectsInvalidVideoID(t *testing.T) {
 	}
 }
 
+func TestSanitizeChessState(t *testing.T) {
+	got, ok := sanitizeChessState(&ChessState{
+		Tabs: []ChessTabState{{
+			ID:     "game_1",
+			Open:   true,
+			Phase:  "ended",
+			White:  &ChessPlayerState{ID: "white", Name: "Alice"},
+			Black:  &ChessPlayerState{ID: "black", Name: "Bob"},
+			FEN:    "start",
+			Moves:  []ChessMoveState{{From: "e2", To: "e4", SAN: "e4"}},
+			Clocks: ChessClockState{WhiteMs: 0, BlackMs: 12000, LastTickAt: 99},
+			Settings: ChessSettingsState{
+				PieceSet:         "neo",
+				BoardTheme:       "blue",
+				Timed:            true,
+				Minutes:          5,
+				IncrementSeconds: 2,
+			},
+			Result: &ChessResultState{Winner: "b", Reason: "timeout", Message: "Black wins on time"},
+		}},
+	}, 1234)
+	if !ok {
+		t.Fatal("sanitizeChessState() rejected valid state")
+	}
+	if len(got.Tabs) != 1 {
+		t.Fatalf("sanitizeChessState() tab count = %d", len(got.Tabs))
+	}
+	tab := got.Tabs[0]
+	if !tab.Open || tab.Phase != "ended" || tab.White.Name != "Alice" || tab.Black.Name != "Bob" {
+		t.Fatalf("sanitizeChessState() tab = %#v", tab)
+	}
+	if tab.Settings.PieceSet != "neo" || tab.Settings.BoardTheme != "blue" || tab.Settings.Minutes != 5 || tab.Settings.IncrementSeconds != 2 {
+		t.Fatalf("sanitizeChessState() settings = %#v", tab.Settings)
+	}
+	if tab.Clocks.WhiteMs != 0 || tab.Clocks.BlackMs != 12000 || tab.Clocks.LastTickAt != 99 {
+		t.Fatalf("sanitizeChessState() clocks = %#v", tab.Clocks)
+	}
+	if tab.Result == nil || tab.Result.Winner != "b" || tab.Result.Reason != "timeout" {
+		t.Fatalf("sanitizeChessState() result = %#v", tab.Result)
+	}
+	if tab.UpdatedAt != 1234 || got.UpdatedAt != 1234 {
+		t.Fatalf("sanitizeChessState() timestamps = %#v", got)
+	}
+}
+
 func TestNewSoloPlayerStartsPlayback(t *testing.T) {
 	room := &Room{
 		id:      "room",
@@ -353,11 +398,12 @@ func TestNewPlayerReceivesFullChatHistory(t *testing.T) {
 			Uid:       "existing",
 		}},
 	}
-	joining := testPlayer("joining", "Joining", 4)
+	joining := testPlayer("joining", "Joining", 5)
 	room.players[joining.state.Id] = joining
 
 	room.newPlayer(joining)
 
+	_ = readQueuedPayload(t, joining)
 	_ = readQueuedPayload(t, joining)
 	_ = readQueuedPayload(t, joining)
 	_ = readQueuedPayload(t, joining)

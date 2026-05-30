@@ -36,6 +36,7 @@ import {
 import {
 	IconBrandYoutubeFilled,
 	IconCheck,
+	IconChess,
 	IconHeadphones,
 	IconHeadphonesOff,
 	IconMicrophone,
@@ -80,6 +81,17 @@ import {
 	type SendPayload,
 	type ServerData,
 	type Stream,
+	type ChessBoardTheme,
+	type ChessClockSyncState,
+	type ChessDrawOfferSyncState,
+	type ChessMoveSyncState,
+	type ChessPieceSet,
+	type ChessPlayerSyncState,
+	type ChessResultSyncState,
+	type ChessSettingsSyncState,
+	type ChessTabPhase,
+	type ChessTabSyncState,
+	type ChessSyncState,
 	type YouTubeTabSyncState,
 	type YouTubeSyncState
 } from '@/lib/player/t';
@@ -97,6 +109,7 @@ import { MoveToast } from '@/components/player/MoveToast';
 import { Chats } from '@/components/player/Chats';
 import { useVoiceChat } from '@/components/player/useVoiceChat';
 import { YouTubeFloatingTab } from '@/components/player/YouTubeFloatingTab';
+import { ChessFloatingTab } from '@/components/player/ChessFloatingTab';
 
 type VideoSource = {
 	src: string;
@@ -161,9 +174,25 @@ const DEFAULT_YOUTUBE_SYNC_STATE: YouTubeSyncState = {
 	updatedAt: 0
 };
 
+const DEFAULT_CHESS_SETTINGS: ChessSettingsSyncState = {
+	pieceSet: 'classic',
+	boardTheme: 'green',
+	timed: true,
+	minutes: 10,
+	incrementSeconds: 0
+};
+const DEFAULT_CHESS_SYNC_STATE: ChessSyncState = {
+	tabs: [],
+	updatedAt: 0
+};
+const DEFAULT_CHESS_FEN = 'start';
 const YOUTUBE_VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 const YOUTUBE_TAB_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const CHESS_TAB_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+const CHESS_SQUARE_PATTERN = /^[a-h][1-8]$/;
 const MAX_YOUTUBE_TABS = 12;
+const MAX_CHESS_TABS = 64;
+const MAX_CHESS_MOVES = 600;
 const CONTROL_MESSAGE_TTL_MS = 8000;
 const MAX_CONTROL_MESSAGES = 40;
 
@@ -267,6 +296,270 @@ function saveStoredYouTubeSyncState(storageKey: string, state: YouTubeSyncState)
 
 function isMeaningfulYouTubeState(state: YouTubeSyncState) {
 	return state.tabs.some((tab) => tab.open || tab.videoId !== '' || tab.url !== '');
+}
+
+function getDefaultChessClocks(settings: ChessSettingsSyncState): ChessClockSyncState {
+	const duration = settings.minutes * 60_000;
+	return { w: duration, b: duration, lastTickAt: 0 };
+}
+
+function createDefaultChessTab(
+	id: string,
+	player: ChessPlayerSyncState | null = null
+): ChessTabSyncState {
+	return {
+		id,
+		open: true,
+		phase: 'setup',
+		settings: DEFAULT_CHESS_SETTINGS,
+		white: player,
+		black: null,
+		fen: DEFAULT_CHESS_FEN,
+		moves: [],
+		clocks: getDefaultChessClocks(DEFAULT_CHESS_SETTINGS),
+		result: null,
+		closeRequest: null,
+		drawOffer: null,
+		updatedAt: 0
+	};
+}
+
+function normalizeChessPlayer(
+	player: Partial<ChessPlayerSyncState> | null | undefined
+): ChessPlayerSyncState | null {
+	if (!player || typeof player.id !== 'string' || !CHESS_TAB_ID_PATTERN.test(player.id)) {
+		return null;
+	}
+	const name =
+		typeof player.name === 'string' && player.name.trim() ? player.name.trim() : 'Player';
+	const profileId =
+		typeof player.profileId === 'string' && CHESS_TAB_ID_PATTERN.test(player.profileId)
+			? player.profileId
+			: undefined;
+	return {
+		id: player.id,
+		name: name.slice(0, 80),
+		...(profileId ? { profileId } : {})
+	};
+}
+
+function normalizeChessSettings(
+	settings: Partial<ChessSettingsSyncState> | null | undefined
+): ChessSettingsSyncState {
+	const pieceSet: ChessPieceSet =
+		settings?.pieceSet === 'letters' || settings?.pieceSet === 'neo'
+			? settings.pieceSet
+			: DEFAULT_CHESS_SETTINGS.pieceSet;
+	const boardTheme: ChessBoardTheme =
+		settings?.boardTheme === 'blue' || settings?.boardTheme === 'walnut'
+			? settings.boardTheme
+			: DEFAULT_CHESS_SETTINGS.boardTheme;
+	const minutes =
+		typeof settings?.minutes === 'number' && Number.isFinite(settings.minutes)
+			? Math.max(1, Math.min(180, Math.round(settings.minutes)))
+			: DEFAULT_CHESS_SETTINGS.minutes;
+	const incrementSeconds =
+		typeof settings?.incrementSeconds === 'number' && Number.isFinite(settings.incrementSeconds)
+			? Math.max(0, Math.min(120, Math.round(settings.incrementSeconds)))
+			: DEFAULT_CHESS_SETTINGS.incrementSeconds;
+	return {
+		pieceSet,
+		boardTheme,
+		timed: settings?.timed === false ? false : true,
+		minutes,
+		incrementSeconds
+	};
+}
+
+function normalizeChessClocks(
+	clocks: Partial<ChessClockSyncState> | null | undefined,
+	settings: ChessSettingsSyncState
+): ChessClockSyncState {
+	const defaults = getDefaultChessClocks(settings);
+	const maxClockMs = 24 * 60 * 60 * 1000;
+	return {
+		w:
+			typeof clocks?.w === 'number' && Number.isFinite(clocks.w)
+				? Math.max(0, Math.min(maxClockMs, clocks.w))
+				: defaults.w,
+		b:
+			typeof clocks?.b === 'number' && Number.isFinite(clocks.b)
+				? Math.max(0, Math.min(maxClockMs, clocks.b))
+				: defaults.b,
+		lastTickAt:
+			typeof clocks?.lastTickAt === 'number' && Number.isFinite(clocks.lastTickAt)
+				? Math.max(0, clocks.lastTickAt)
+				: 0
+	};
+}
+
+function normalizeChessMove(
+	move: Partial<ChessMoveSyncState> | null | undefined
+): ChessMoveSyncState | null {
+	if (
+		!move ||
+		typeof move.from !== 'string' ||
+		typeof move.to !== 'string' ||
+		!CHESS_SQUARE_PATTERN.test(move.from) ||
+		!CHESS_SQUARE_PATTERN.test(move.to)
+	) {
+		return null;
+	}
+	const promotion =
+		move.promotion === 'q' ||
+		move.promotion === 'r' ||
+		move.promotion === 'b' ||
+		move.promotion === 'n'
+			? move.promotion
+			: undefined;
+	const san = typeof move.san === 'string' ? move.san.slice(0, 32) : '';
+	return {
+		from: move.from,
+		to: move.to,
+		...(promotion ? { promotion } : {}),
+		san
+	};
+}
+
+function normalizeChessResult(
+	result: Partial<ChessResultSyncState> | null | undefined
+): ChessResultSyncState | null {
+	if (!result) {
+		return null;
+	}
+	const winner =
+		result.winner === 'w' || result.winner === 'b' || result.winner === 'draw' ? result.winner : '';
+	return {
+		winner,
+		reason: typeof result.reason === 'string' ? result.reason.slice(0, 40) : '',
+		message: typeof result.message === 'string' ? result.message.slice(0, 160) : ''
+	};
+}
+
+function normalizeChessCloseRequest(
+	request: Partial<NonNullable<ChessTabSyncState['closeRequest']>> | null | undefined
+): ChessTabSyncState['closeRequest'] {
+	if (!request) {
+		return null;
+	}
+	const requestedBy = normalizeChessPlayer(request.requestedBy);
+	if (!requestedBy) {
+		return null;
+	}
+	const requestedAt =
+		typeof request.requestedAt === 'number' && Number.isFinite(request.requestedAt)
+			? Math.max(0, request.requestedAt)
+			: Date.now();
+	const expiresAt =
+		typeof request.expiresAt === 'number' && Number.isFinite(request.expiresAt)
+			? Math.max(requestedAt + 1000, request.expiresAt)
+			: requestedAt + 60_000;
+	return { requestedBy, requestedAt, expiresAt };
+}
+
+function normalizeChessDrawOffer(
+	offer: Partial<ChessDrawOfferSyncState> | null | undefined
+): ChessDrawOfferSyncState | null {
+	if (!offer) {
+		return null;
+	}
+	const offeredBy = normalizeChessPlayer(offer.offeredBy);
+	if (!offeredBy) {
+		return null;
+	}
+	return {
+		offeredBy,
+		offeredAt:
+			typeof offer.offeredAt === 'number' && Number.isFinite(offer.offeredAt)
+				? Math.max(0, offer.offeredAt)
+				: 0
+	};
+}
+
+function normalizeChessTabSyncState(
+	state: Partial<ChessTabSyncState> | null | undefined,
+	fallbackId = randomString(10)
+): ChessTabSyncState | null {
+	const id =
+		typeof state?.id === 'string' && CHESS_TAB_ID_PATTERN.test(state.id) ? state.id : fallbackId;
+	if (!CHESS_TAB_ID_PATTERN.test(id)) {
+		return null;
+	}
+	const settings = normalizeChessSettings(state?.settings);
+	const phase: ChessTabPhase =
+		state?.phase === 'playing' || state?.phase === 'ended' ? state.phase : 'setup';
+	const white = normalizeChessPlayer(state?.white);
+	const black = normalizeChessPlayer(state?.black);
+	const moves = Array.isArray(state?.moves)
+		? state.moves
+				.map((move) => normalizeChessMove(move))
+				.filter((move) => Boolean(move))
+				.slice(0, MAX_CHESS_MOVES)
+		: [];
+	return {
+		id,
+		open: Boolean(state?.open),
+		phase,
+		settings,
+		white,
+		black: white && black?.id === white.id ? null : black,
+		fen: typeof state?.fen === 'string' && state.fen.trim() ? state.fen : DEFAULT_CHESS_FEN,
+		moves: moves as ChessMoveSyncState[],
+		clocks: normalizeChessClocks(state?.clocks, settings),
+		result: normalizeChessResult(state?.result),
+		closeRequest: normalizeChessCloseRequest(state?.closeRequest),
+		drawOffer: phase === 'playing' ? normalizeChessDrawOffer(state?.drawOffer) : null,
+		updatedAt:
+			typeof state?.updatedAt === 'number' && Number.isFinite(state.updatedAt) ? state.updatedAt : 0
+	};
+}
+
+function normalizeChessSyncState(state: Partial<ChessSyncState> | null | undefined) {
+	const rawTabs = Array.isArray(state?.tabs) ? state.tabs : [];
+	const tabs: ChessTabSyncState[] = [];
+	const seen = new Set<string>();
+	for (const rawTab of rawTabs) {
+		if (tabs.length >= MAX_CHESS_TABS) {
+			break;
+		}
+		const tab = normalizeChessTabSyncState(rawTab);
+		if (!tab || seen.has(tab.id)) {
+			continue;
+		}
+		seen.add(tab.id);
+		tabs.push(tab);
+	}
+	return {
+		tabs,
+		updatedAt:
+			typeof state?.updatedAt === 'number' && Number.isFinite(state.updatedAt) ? state.updatedAt : 0
+	};
+}
+
+function readStoredChessSyncState(storageKey: string): ChessSyncState {
+	if (typeof window === 'undefined') {
+		return DEFAULT_CHESS_SYNC_STATE;
+	}
+	try {
+		const stored = window.localStorage.getItem(storageKey);
+		if (!stored) {
+			return DEFAULT_CHESS_SYNC_STATE;
+		}
+		return normalizeChessSyncState(JSON.parse(stored) as Partial<ChessSyncState>);
+	} catch {
+		return DEFAULT_CHESS_SYNC_STATE;
+	}
+}
+
+function saveStoredChessSyncState(storageKey: string, state: ChessSyncState) {
+	if (typeof window === 'undefined' || !storageKey) {
+		return;
+	}
+	window.localStorage.setItem(storageKey, JSON.stringify(state));
+}
+
+function isMeaningfulChessState(state: ChessSyncState) {
+	return state.tabs.some((tab) => tab.open || tab.phase !== 'setup' || tab.moves.length > 0);
 }
 
 function normalizePlayerVolume(volume: number): number {
@@ -911,9 +1204,13 @@ export function Player({ data }: { data: ServerData }) {
 	const reconnectAttemptRef = useRef(0);
 	const youtubeSocketRef = useRef<WebSocket | null>(null);
 	const pendingYouTubeStateRef = useRef<YouTubeSyncState | null>(null);
+	const chessSocketRef = useRef<WebSocket | null>(null);
+	const pendingChessStateRef = useRef<ChessSyncState | null>(null);
 	const pendingMediaSwitchRef = useRef<string | null>(null);
 	const youtubeStateRef = useRef<YouTubeSyncState>(DEFAULT_YOUTUBE_SYNC_STATE);
 	const youtubeStateStorageKeyRef = useRef('');
+	const chessStateRef = useRef<ChessSyncState>(DEFAULT_CHESS_SYNC_STATE);
+	const chessStateStorageKeyRef = useRef('');
 	const connectRef = useRef<((_forceInteracted?: boolean) => void) | null>(null);
 	const roomMediaCheckRef = useRef<Promise<boolean> | null>(null);
 	const profileSyncedRef = useRef(false);
@@ -1025,6 +1322,10 @@ export function Player({ data }: { data: ServerData }) {
 	const youtubeSyncRoom = `youtube:${youtubeRoomId}`;
 	const youtubeStateStorageKey = `sparkle:youtube-sync-state:${youtubeRoomId}`;
 	const [youtubeState, setYoutubeState] = useState<YouTubeSyncState>(DEFAULT_YOUTUBE_SYNC_STATE);
+	const chessRoomId = room;
+	const chessSyncRoom = `chess:${chessRoomId}`;
+	const chessStateStorageKey = `sparkle:chess-sync-state:${chessRoomId}`;
+	const [chessState, setChessState] = useState<ChessSyncState>(DEFAULT_CHESS_SYNC_STATE);
 	const discord = discordAuth as Discord | null;
 	const discordUser = discord?.user;
 	const discordUserId = discordUser?.id || '';
@@ -1032,6 +1333,16 @@ export function Player({ data }: { data: ServerData }) {
 	const displayName = discordUser ? getName(discordUser) || '' : name;
 	const voiceSupported = !isDiscordActivityFrame && !discordUser;
 	const socketCommunicating = socketConnected && tickedSecsAgo >= 0 && tickedSecsAgo < 5;
+	const currentChessPlayer = useMemo<ChessPlayerSyncState | null>(() => {
+		if (!playerId) {
+			return null;
+		}
+		return {
+			id: playerId,
+			name: displayName || 'You',
+			...(profileId ? { profileId } : {})
+		};
+	}, [displayName, playerId, profileId]);
 	const videoSrc = useMemo<VideoSource | null>(() => {
 		const encodedCodecs = job.EncodedCodecs || [];
 		const autoCodec =
@@ -1766,6 +2077,204 @@ export function Player({ data }: { data: ServerData }) {
 		sendYouTubeSnapshot,
 		socketConnected,
 		youtubeSyncRoom
+	]);
+
+	const applyChessState = useCallback((nextState: ChessSyncState) => {
+		const normalized = normalizeChessSyncState(nextState);
+		chessStateRef.current = normalized;
+		setChessState(normalized);
+		saveStoredChessSyncState(chessStateStorageKeyRef.current, normalized);
+	}, []);
+
+	const sendChessSnapshot = useCallback((nextState: ChessSyncState, queue = true) => {
+		const socket = chessSocketRef.current;
+		if (queue) {
+			pendingChessStateRef.current = nextState;
+		}
+		if (socket?.readyState !== WebSocket.OPEN) {
+			return;
+		}
+		socket.send(
+			JSON.stringify({
+				type: SyncTypes.ChessSync,
+				chess: nextState
+			})
+		);
+		if (pendingChessStateRef.current === nextState) {
+			pendingChessStateRef.current = null;
+		}
+	}, []);
+
+	const updateChessState = useCallback(
+		(tabId: string, patch: Partial<ChessTabSyncState>) => {
+			const timestamp = Date.now();
+			const current = chessStateRef.current;
+			const existingTab =
+				current.tabs.find((tab) => tab.id === tabId) ??
+				createDefaultChessTab(tabId, currentChessPlayer);
+			const nextTabs =
+				patch.open === false
+					? current.tabs.filter((tab) => tab.id !== tabId)
+					: [
+							...current.tabs.filter((tab) => tab.id !== tabId),
+							normalizeChessTabSyncState(
+								{
+									...existingTab,
+									...patch,
+									id: tabId,
+									updatedAt: timestamp
+								},
+								tabId
+							)
+						].filter((tab): tab is ChessTabSyncState => Boolean(tab));
+			const nextState = normalizeChessSyncState({
+				tabs: nextTabs.slice(-MAX_CHESS_TABS),
+				updatedAt: timestamp
+			});
+			applyChessState(nextState);
+			sendChessSnapshot(nextState);
+		},
+		[applyChessState, currentChessPlayer, sendChessSnapshot]
+	);
+
+	const openNewChessTab = useCallback(() => {
+		if (!socketConnected || !currentChessPlayer) {
+			return;
+		}
+		const id = randomString(10);
+		updateChessState(id, createDefaultChessTab(id, currentChessPlayer));
+	}, [currentChessPlayer, socketConnected, updateChessState]);
+
+	useEffect(() => {
+		chessStateStorageKeyRef.current = chessStateStorageKey;
+		const stored = readStoredChessSyncState(chessStateStorageKey);
+		const timer = window.setTimeout(() => {
+			applyChessState(stored);
+			pendingChessStateRef.current = null;
+		}, 0);
+		return () => window.clearTimeout(timer);
+	}, [applyChessState, chessStateStorageKey]);
+
+	useEffect(() => {
+		if (!playerId || !socketConnected) {
+			return;
+		}
+
+		let reconnectTimer: number | null = null;
+		let reconnectAttempt = 0;
+		let disposed = false;
+		const playerChessId = `${playerId}-chess`;
+		const socketUrl = getBackendWebSocketUrl(
+			backendBaseUrl,
+			`/sync/${encodeURIComponent(chessSyncRoom)}/${encodeURIComponent(playerChessId)}`
+		);
+
+		const clearReconnectTimer = () => {
+			if (reconnectTimer !== null) {
+				window.clearTimeout(reconnectTimer);
+				reconnectTimer = null;
+			}
+		};
+
+		const connectChessSocket = () => {
+			if (disposed) {
+				return;
+			}
+			const existingSocket = chessSocketRef.current;
+			if (
+				existingSocket &&
+				(existingSocket.readyState === WebSocket.CONNECTING ||
+					existingSocket.readyState === WebSocket.OPEN)
+			) {
+				return;
+			}
+			clearReconnectTimer();
+			const socket = new WebSocket(socketUrl);
+			chessSocketRef.current = socket;
+
+			socket.onopen = () => {
+				if (chessSocketRef.current !== socket) {
+					socket.close();
+					return;
+				}
+				reconnectAttempt = 0;
+				const pendingState = pendingChessStateRef.current;
+				if (pendingState) {
+					socket.send(JSON.stringify({ type: SyncTypes.ChessSync, chess: pendingState }));
+					pendingChessStateRef.current = null;
+				}
+				socket.send(JSON.stringify({ type: SyncTypes.NewPlayer }));
+			};
+
+			socket.onmessage = (event: MessageEvent) => {
+				if (chessSocketRef.current !== socket) {
+					return;
+				}
+				const payload: SendPayload = JSON.parse(event.data);
+				if (payload.type !== SyncTypes.ChessSync || !payload.chess) {
+					return;
+				}
+				const incoming = normalizeChessSyncState(payload.chess);
+				const current = chessStateRef.current;
+				if (incoming.updatedAt === 0 && isMeaningfulChessState(current)) {
+					sendChessSnapshot(current, false);
+					return;
+				}
+				if (incoming.updatedAt < current.updatedAt) {
+					return;
+				}
+				applyChessState(incoming);
+			};
+
+			socket.onerror = () => {
+				if (chessSocketRef.current === socket) {
+					socket.close();
+				}
+			};
+
+			socket.onclose = () => {
+				if (chessSocketRef.current !== socket) {
+					return;
+				}
+				chessSocketRef.current = null;
+				if (disposed) {
+					return;
+				}
+				const delay = Math.min(30000, 1000 * 2 ** Math.min(reconnectAttempt, 5));
+				reconnectAttempt += 1;
+				reconnectTimer = window.setTimeout(() => {
+					reconnectTimer = null;
+					connectChessSocket();
+				}, delay);
+			};
+		};
+
+		connectChessSocket();
+
+		return () => {
+			disposed = true;
+			clearReconnectTimer();
+			const socket = chessSocketRef.current;
+			if (socket) {
+				socket.onopen = null;
+				socket.onmessage = null;
+				socket.onerror = null;
+				socket.onclose = null;
+				if (socket.readyState !== WebSocket.CLOSED) {
+					socket.close();
+				}
+			}
+			if (chessSocketRef.current === socket) {
+				chessSocketRef.current = null;
+			}
+		};
+	}, [
+		applyChessState,
+		backendBaseUrl,
+		chessSyncRoom,
+		playerId,
+		sendChessSnapshot,
+		socketConnected
 	]);
 
 	const voice = useVoiceChat({
@@ -3110,6 +3619,25 @@ export function Player({ data }: { data: ServerData }) {
 										</Tooltip.Content>
 									</Tooltip.Root>
 								</Tooltip.Provider>
+								<Tooltip.Provider delayDuration={0}>
+									<Tooltip.Root>
+										<Tooltip.Trigger asChild>
+											<Button
+												type="button"
+												variant="outline"
+												className="h-auto min-h-9 gap-2 px-3 py-2"
+												disabled={!socketConnected || !currentChessPlayer}
+												onClick={openNewChessTab}
+											>
+												<IconChess size={18} stroke={2} />
+												<span>Chess</span>
+											</Button>
+										</Tooltip.Trigger>
+										<Tooltip.Content>
+											<p>Open synced chess game</p>
+										</Tooltip.Content>
+									</Tooltip.Root>
+								</Tooltip.Provider>
 							</div>
 						</motion.div>
 					</CardHeader>
@@ -3150,6 +3678,21 @@ export function Player({ data }: { data: ServerData }) {
 								initialIndex={index}
 								state={tab}
 								onStateChange={(patch) => updateYouTubeState(tab.id, patch)}
+							/>
+						))
+				: null}
+
+			{socketConnected
+				? chessState.tabs
+						.filter((tab) => tab.open)
+						.map((tab, index) => (
+							<ChessFloatingTab
+								key={tab.id}
+								roomId={chessRoomId}
+								initialIndex={index}
+								state={tab}
+								currentPlayer={currentChessPlayer}
+								onStateChange={(patch) => updateChessState(tab.id, patch)}
 							/>
 						))
 				: null}

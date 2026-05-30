@@ -22,6 +22,7 @@
 		"@tabler/icons-react": "^3.44.0",
 		"@vidstack/react": "^1.15.2",
 		"cheerio": "^1.2.0",
+		"chess.js": "^1.4.0",
 		"clsx": "^2.1.1",
 		"cmdk": "^1.1.1",
 		"jassub": "^2.5.1",

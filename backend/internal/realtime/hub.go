@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"sort"
 	"strings"
@@ -31,6 +32,8 @@ var (
 	emojiTokenPattern  = regexp.MustCompile(`:([a-z0-9][a-z0-9_+-]{1,39}):`)
 	safeEmojiID        = regexp.MustCompile(`^[a-z0-9][a-z0-9_+-]{1,39}$`)
 	safeYouTubeVideoID = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
+	safeChessSquare    = regexp.MustCompile(`^[a-h][1-8]$`)
+	safeChessFEN       = regexp.MustCompile(`^[pnbrqkPNBRQK1-8/]+ [wb] (?:K?Q?k?q?|-)? (?:[a-h][36]|-) [0-9]{1,3} [0-9]{1,4}$`)
 )
 
 const (
@@ -63,6 +66,7 @@ type Room struct {
 	lastStatusSent            time.Time
 	state                     VideoState
 	youtube                   YouTubeState
+	chess                     ChessState
 	mu                        sync.RWMutex
 }
 
@@ -301,6 +305,7 @@ func newRoom(id string, mediaID string) *Room {
 		chats:   make([]Chat, 0),
 		state:   defaultVideoState(),
 		youtube: defaultYouTubeState(),
+		chess:   defaultChessState(),
 	}
 	if mediaID != "" {
 		room.mediaUpdatedAt = time.Now().UnixMilli()
@@ -525,6 +530,7 @@ func (r *Room) remove(player *Player) {
 	if len(r.players) == 0 {
 		r.state = defaultVideoState()
 		r.youtube = defaultYouTubeState()
+		r.chess = defaultChessState()
 		r.lastSeek = time.Time{}
 		r.idleSince = time.Now()
 		r.lastPlayersSignature = ""
@@ -568,6 +574,7 @@ func (r *Room) applyMediaIDLocked(mediaID string, timestamp int64) {
 	r.mediaUpdatedAt = timestamp
 	r.state = defaultVideoState()
 	r.youtube = defaultYouTubeState()
+	r.chess = defaultChessState()
 	r.lastSeek = time.Time{}
 	r.lastPlayersSignature = ""
 	r.lastPlayerStatusSignature = ""
@@ -627,6 +634,8 @@ func (r *Room) handlePayload(current *Player, payload ClientPayload) {
 		r.broadcast(current, sanitizeBroadcast(payload.Broadcast))
 	case YouTubeSync:
 		r.syncYouTube(current, payload.YouTube)
+	case ChessSync:
+		r.syncChess(current, payload.Chess)
 	case ChatSync:
 		r.chat(current, payload.Chat, payload.EmojiRefs)
 	case TimeSync:
@@ -949,6 +958,294 @@ func sanitizeYouTubeState(incoming *YouTubeState, timestamp int64) (YouTubeState
 	return state, true
 }
 
+func (r *Room) syncChess(sender *Player, incoming *ChessState) {
+	now := time.Now()
+	state, ok := sanitizeChessState(incoming, now.UnixMilli())
+	if !ok {
+		return
+	}
+
+	var firedBy PlayerSnapshot
+	var targets []*Player
+	shouldBroadcast := false
+
+	r.mu.Lock()
+	if r.players[sender.state.Id] != sender {
+		r.mu.Unlock()
+		return
+	}
+	sender.state.LastSeen = now.Unix()
+	shouldBroadcast = !reflect.DeepEqual(r.chess, state)
+	r.chess = state
+	firedBy = sender.state
+	if shouldBroadcast {
+		targets = r.playersLocked()
+	}
+	r.mu.Unlock()
+
+	if !shouldBroadcast {
+		return
+	}
+	payload := SendPayload{Type: ChessSync, Chess: &state, FiredBy: &firedBy, Timestamp: now.UnixMilli()}
+	sendPayloadToPlayers(targets, payload)
+}
+
+func sanitizeChessState(incoming *ChessState, timestamp int64) (ChessState, bool) {
+	if incoming == nil {
+		return ChessState{}, false
+	}
+
+	state := defaultChessState()
+	seen := make(map[string]bool, len(incoming.Tabs))
+	for _, rawTab := range incoming.Tabs {
+		if len(state.Tabs) >= maxChessTabs {
+			break
+		}
+		phase := sanitizeChessPhase(rawTab.Phase)
+		settings := sanitizeChessSettings(rawTab.Settings)
+		tab := ChessTabState{
+			ID:        strings.TrimSpace(rawTab.ID),
+			Open:      rawTab.Open,
+			Phase:     phase,
+			Settings:  settings,
+			FEN:       sanitizeChessFEN(rawTab.FEN),
+			Clocks:    sanitizeChessClocks(rawTab.Clocks, settings, phase),
+			Result:    sanitizeChessResult(rawTab.Result),
+			UpdatedAt: timestamp,
+		}
+		if !safeID.MatchString(tab.ID) || seen[tab.ID] {
+			continue
+		}
+		seen[tab.ID] = true
+		if tab.FEN == "" {
+			tab.FEN = "start"
+		}
+		if rawTab.UpdatedAt > 0 {
+			tab.UpdatedAt = rawTab.UpdatedAt
+		}
+
+		tab.White = sanitizeChessPlayer(rawTab.White)
+		tab.Black = sanitizeChessPlayer(rawTab.Black)
+		if tab.White != nil && tab.Black != nil && tab.White.ID == tab.Black.ID {
+			tab.Black = nil
+		}
+		tab.Moves = sanitizeChessMoves(rawTab.Moves)
+		tab.CloseRequest = sanitizeChessCloseRequest(rawTab.CloseRequest, timestamp)
+		tab.DrawOffer = sanitizeChessDrawOffer(rawTab.DrawOffer)
+		if tab.Phase != "playing" {
+			tab.DrawOffer = nil
+		}
+		if tab.Phase == "setup" {
+			tab.Result = nil
+		}
+
+		state.Tabs = append(state.Tabs, tab)
+	}
+	if len(incoming.Tabs) > 0 && len(state.Tabs) == 0 {
+		return ChessState{}, false
+	}
+	state.UpdatedAt = timestamp
+	return state, true
+}
+
+func sanitizeChessPhase(value string) string {
+	switch strings.TrimSpace(value) {
+	case "playing", "ended":
+		return strings.TrimSpace(value)
+	default:
+		return "setup"
+	}
+}
+
+func sanitizeChessSettings(settings ChessSettingsState) ChessSettingsState {
+	pieceSet := strings.TrimSpace(settings.PieceSet)
+	switch pieceSet {
+	case "letters", "neo":
+	default:
+		pieceSet = "classic"
+	}
+
+	boardTheme := strings.TrimSpace(settings.BoardTheme)
+	switch boardTheme {
+	case "blue", "walnut":
+	default:
+		boardTheme = "green"
+	}
+
+	minutes := settings.Minutes
+	if minutes <= 0 {
+		minutes = 10
+	}
+	if minutes > 180 {
+		minutes = 180
+	}
+	increment := settings.IncrementSeconds
+	if increment < 0 {
+		increment = 0
+	}
+	if increment > 120 {
+		increment = 120
+	}
+
+	return ChessSettingsState{
+		PieceSet:         pieceSet,
+		BoardTheme:       boardTheme,
+		Timed:            settings.Timed,
+		Minutes:          minutes,
+		IncrementSeconds: increment,
+	}
+}
+
+func sanitizeChessPlayer(player *ChessPlayerState) *ChessPlayerState {
+	if player == nil {
+		return nil
+	}
+	id := strings.TrimSpace(player.ID)
+	if !safeID.MatchString(id) {
+		return nil
+	}
+	name := trimRunes(strings.TrimSpace(player.Name), 80)
+	if name == "" {
+		name = "Player"
+	}
+	profileID := strings.TrimSpace(player.ProfileID)
+	if profileID != "" && !safeID.MatchString(profileID) {
+		profileID = ""
+	}
+	return &ChessPlayerState{
+		ID:        id,
+		Name:      name,
+		ProfileID: profileID,
+	}
+}
+
+func sanitizeChessMoves(moves []ChessMoveState) []ChessMoveState {
+	if len(moves) == 0 {
+		return nil
+	}
+	sanitized := make([]ChessMoveState, 0, min(len(moves), maxChessMoves))
+	for _, move := range moves {
+		if len(sanitized) >= maxChessMoves {
+			break
+		}
+		from := strings.TrimSpace(move.From)
+		to := strings.TrimSpace(move.To)
+		if !safeChessSquare.MatchString(from) || !safeChessSquare.MatchString(to) {
+			continue
+		}
+		promotion := strings.TrimSpace(move.Promotion)
+		switch promotion {
+		case "", "q", "r", "b", "n":
+		default:
+			promotion = ""
+		}
+		san := trimRunes(strings.TrimSpace(move.SAN), 32)
+		sanitized = append(sanitized, ChessMoveState{
+			From:      from,
+			To:        to,
+			Promotion: promotion,
+			SAN:       san,
+		})
+	}
+	return sanitized
+}
+
+func sanitizeChessFEN(value string) string {
+	fen := strings.TrimSpace(value)
+	if fen == "" || fen == "start" {
+		return "start"
+	}
+	if len(fen) > 120 || !safeChessFEN.MatchString(fen) {
+		return ""
+	}
+	return fen
+}
+
+func sanitizeChessClocks(clocks ChessClockState, settings ChessSettingsState, phase string) ChessClockState {
+	defaultMs := int64(settings.Minutes)
+	if defaultMs <= 0 {
+		defaultMs = 10
+	}
+	defaultMs *= int64(time.Minute / time.Millisecond)
+	whiteMs := clocks.WhiteMs
+	blackMs := clocks.BlackMs
+	if whiteMs < 0 {
+		whiteMs = 0
+	}
+	if blackMs < 0 {
+		blackMs = 0
+	}
+	if whiteMs == 0 && blackMs == 0 && phase != "ended" {
+		whiteMs = defaultMs
+		blackMs = defaultMs
+	}
+	maxMs := int64(24 * time.Hour / time.Millisecond)
+	if whiteMs > maxMs {
+		whiteMs = maxMs
+	}
+	if blackMs > maxMs {
+		blackMs = maxMs
+	}
+	lastTickAt := clocks.LastTickAt
+	if lastTickAt < 0 {
+		lastTickAt = 0
+	}
+	return ChessClockState{WhiteMs: whiteMs, BlackMs: blackMs, LastTickAt: lastTickAt}
+}
+
+func sanitizeChessResult(result *ChessResultState) *ChessResultState {
+	if result == nil {
+		return nil
+	}
+	winner := strings.TrimSpace(result.Winner)
+	switch winner {
+	case "w", "b", "draw":
+	default:
+		winner = ""
+	}
+	reason := trimRunes(strings.TrimSpace(result.Reason), 40)
+	message := trimRunes(strings.TrimSpace(result.Message), 160)
+	return &ChessResultState{Winner: winner, Reason: reason, Message: message}
+}
+
+func sanitizeChessCloseRequest(request *ChessCloseRequestState, timestamp int64) *ChessCloseRequestState {
+	if request == nil {
+		return nil
+	}
+	requestedBy := sanitizeChessPlayer(&request.RequestedBy)
+	if requestedBy == nil {
+		return nil
+	}
+	requestedAt := request.RequestedAt
+	if requestedAt <= 0 {
+		requestedAt = timestamp
+	}
+	expiresAt := request.ExpiresAt
+	if expiresAt <= requestedAt {
+		expiresAt = requestedAt + int64(time.Minute/time.Millisecond)
+	}
+	return &ChessCloseRequestState{
+		RequestedBy: *requestedBy,
+		RequestedAt: requestedAt,
+		ExpiresAt:   expiresAt,
+	}
+}
+
+func sanitizeChessDrawOffer(offer *ChessDrawOfferState) *ChessDrawOfferState {
+	if offer == nil {
+		return nil
+	}
+	offeredBy := sanitizeChessPlayer(&offer.OfferedBy)
+	if offeredBy == nil {
+		return nil
+	}
+	offeredAt := offer.OfferedAt
+	if offeredAt < 0 {
+		offeredAt = 0
+	}
+	return &ChessDrawOfferState{OfferedBy: *offeredBy, OfferedAt: offeredAt}
+}
+
 func (r *Room) chat(sender *Player, message string, emojiRefs []ChatEmojiRef) {
 	message = strings.TrimSpace(message)
 	if message == "" {
@@ -1191,6 +1488,7 @@ func (r *Room) newPlayer(sender *Player) {
 	var roomTime float64
 	var roomPaused bool
 	var youtube YouTubeState
+	var chess ChessState
 	var chats []Chat
 
 	r.mu.Lock()
@@ -1208,12 +1506,14 @@ func (r *Room) newPlayer(sender *Player) {
 	sender.state.Time = roomTime
 	sender.state.Paused = roomPaused
 	youtube = r.youtube
+	chess = r.chess
 	chats = append([]Chat(nil), r.chats...)
 	r.mu.Unlock()
 
 	sender.sendJSON(SendPayload{Type: TimeSync, Time: &roomTime, Timestamp: time.Now().UnixMilli()})
 	sender.sendJSON(SendPayload{Type: PauseSync, Paused: &roomPaused, Timestamp: time.Now().UnixMilli()})
 	sender.sendJSON(SendPayload{Type: YouTubeSync, YouTube: &youtube, Timestamp: time.Now().UnixMilli()})
+	sender.sendJSON(SendPayload{Type: ChessSync, Chess: &chess, Timestamp: time.Now().UnixMilli()})
 	if len(chats) > 0 {
 		sender.sendJSON(SendPayload{Type: ChatSync, Chats: chats, Timestamp: time.Now().UnixMilli()})
 	}
