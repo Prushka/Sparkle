@@ -1,0 +1,15 @@
+.DS_Store
+.env
+.env.*
+!.env.example
+.git
+.idea
+.next
+.output
+.vercel
+backend
+node_modules
+output
+tsconfig.tsbuildinfo
+next-env.d.ts
+npm-debug.log*

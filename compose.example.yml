@@ -1,0 +1,28 @@
+services:
+  sparkle-api:
+    image: meinya/sparkle-api:latest
+    restart: unless-stopped
+    environment:
+      ADDR: :1323
+      OUTPUT: /data/output
+      JOBS_CACHE_TTL: 15m
+      MAX_PFP_BYTES: "12000000"
+    ports:
+      - "1323:1323"
+    volumes:
+      - ./output:/data/output
+
+  sparkle-next:
+    image: meinya/sparkle-next:latest
+    restart: unless-stopped
+    depends_on:
+      - sparkle-api
+    environment:
+      SERVER_BE: /be
+      SERVER_STATIC: /static
+      SERVER_INTERNAL_BE: http://sparkle-api:1323
+      SERVER_INTERNAL_STATIC: http://sparkle-api:1323/static
+      PUBLIC_DISCORD_CLIENT_ID: ${PUBLIC_DISCORD_CLIENT_ID:-}
+      SERVER_DISCORD_CLIENT_SECRET: ${SERVER_DISCORD_CLIENT_SECRET:-}
+    ports:
+      - "3000:3000"
