@@ -1,7 +1,9 @@
 'use client';
 
 import {
+	type ChangeEvent,
 	type PointerEvent as ReactPointerEvent,
+	type ReactNode,
 	useCallback,
 	useEffect,
 	useLayoutEffect,
@@ -14,6 +16,9 @@ import { Chess, type Move, type PieceSymbol, type Square } from 'chess.js';
 import {
 	IconArrowsDiagonal,
 	IconChess,
+	IconCheck,
+	IconChevronDown,
+	IconChevronUp,
 	IconCircleCheck,
 	IconCircleX,
 	IconClock,
@@ -61,10 +66,19 @@ type PromotionChoice = {
 	options: PieceSymbol[];
 };
 
+type ChessSelectProps = {
+	label: string;
+	value: string | number;
+	disabled?: boolean;
+	onChange: (event: ChangeEvent<HTMLSelectElement>) => void;
+	children: ReactNode;
+};
+
 const MIN_WIDTH = 760;
 const MIN_HEIGHT = 540;
 const DEFAULT_WIDTH = 880;
 const DEFAULT_HEIGHT = 680;
+const COLLAPSED_HEIGHT = 44;
 const CLOSE_CONFIRMATION_MS = 60_000;
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'] as const;
 const RANKS = ['1', '2', '3', '4', '5', '6', '7', '8'] as const;
@@ -110,6 +124,23 @@ const BOARD_THEMES: Record<
 
 let chessTabZIndexCounter = 140;
 
+type FloatingZIndexWindow = Window & {
+	__sparkleFloatingTabZIndex?: number;
+};
+
+function nextFloatingTabZIndex() {
+	if (typeof window === 'undefined') {
+		chessTabZIndexCounter += 1;
+		return chessTabZIndexCounter;
+	}
+	const zWindow = window as FloatingZIndexWindow;
+	const current = Math.max(zWindow.__sparkleFloatingTabZIndex ?? 140, chessTabZIndexCounter);
+	const next = current + 1;
+	zWindow.__sparkleFloatingTabZIndex = next;
+	chessTabZIndexCounter = next;
+	return next;
+}
+
 function readStoredLayout(storageKey: string): ChessTabLayout | null {
 	if (typeof window === 'undefined') {
 		return null;
@@ -132,6 +163,13 @@ function readStoredLayout(storageKey: string): ChessTabLayout | null {
 	} catch {
 		return null;
 	}
+}
+
+function readStoredCollapsed(storageKey: string) {
+	if (typeof window === 'undefined') {
+		return false;
+	}
+	return window.localStorage.getItem(storageKey) === 'true';
 }
 
 function getDefaultLayout(initialIndex = 0): ChessTabLayout {
@@ -364,6 +402,63 @@ function SeatButton({
 	);
 }
 
+function ChessSelect({ label, value, disabled = false, onChange, children }: ChessSelectProps) {
+	return (
+		<label className="grid gap-1 text-xs font-bold text-muted-foreground">
+			{label}
+			<span className="relative block">
+				<select
+					value={value}
+					disabled={disabled}
+					onChange={onChange}
+					className="h-9 w-full appearance-none rounded-md border bg-background py-0 pl-2 pr-9 text-sm font-semibold text-foreground outline-none disabled:opacity-50"
+				>
+					{children}
+				</select>
+				<IconChevronDown
+					size={16}
+					stroke={2}
+					className={`pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground ${
+						disabled ? 'opacity-50' : ''
+					}`}
+				/>
+			</span>
+		</label>
+	);
+}
+
+function ChessCheckbox({
+	label,
+	checked,
+	onChange
+}: {
+	label: string;
+	checked: boolean;
+	onChange: (checked: boolean) => void;
+}) {
+	return (
+		<label className="flex items-center justify-between gap-3 text-sm font-semibold">
+			<span>{label}</span>
+			<span className="relative h-5 w-5 shrink-0">
+				<input
+					type="checkbox"
+					checked={checked}
+					onChange={(event) => onChange(event.target.checked)}
+					aria-label={label}
+					className="absolute inset-0 m-0 h-5 w-5 appearance-none rounded border border-input bg-background checked:border-primary checked:bg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+				/>
+				{checked ? (
+					<IconCheck
+						size={14}
+						stroke={3}
+						className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-primary-foreground"
+					/>
+				) : null}
+			</span>
+		</label>
+	);
+}
+
 export function ChessFloatingTab({
 	roomId,
 	initialIndex = 0,
@@ -372,6 +467,7 @@ export function ChessFloatingTab({
 	onStateChange
 }: ChessFloatingTabProps) {
 	const storageKey = `sparkle:chess-tab-layout:${roomId}:${state.id}`;
+	const collapsedStorageKey = `sparkle:chess-tab-collapsed:${roomId}:${state.id}`;
 	const panelRef = useRef<HTMLDivElement | null>(null);
 	const dragRef = useRef<{
 		pointerId: number;
@@ -394,10 +490,11 @@ export function ChessFloatingTab({
 		width: DEFAULT_WIDTH,
 		height: DEFAULT_HEIGHT
 	});
-	const [zIndex, setZIndex] = useState(() => ++chessTabZIndexCounter);
+	const [zIndex, setZIndex] = useState(nextFloatingTabZIndex);
 	const [selectedSquareState, setSelectedSquare] = useState<Square | null>(null);
 	const [promotion, setPromotion] = useState<PromotionChoice | null>(null);
 	const [clockNow, setClockNow] = useState(() => getNowMs());
+	const [collapsed, setCollapsed] = useState(false);
 
 	const game = useMemo(() => buildChessFromMoves(state.moves), [state.moves]);
 	const myColor = getPlayerColor(state, currentPlayer?.id);
@@ -441,6 +538,7 @@ export function ChessFloatingTab({
 	const canAnswerDrawOffer =
 		Boolean(drawOffer && currentPlayer && drawOffer.offeredBy.id !== currentPlayer.id) &&
 		isParticipant;
+	const panelCollapsed = collapsed && !closeRequest;
 
 	useEffect(() => {
 		if (!state.settings.timed && !state.closeRequest) {
@@ -501,17 +599,27 @@ export function ChessFloatingTab({
 	);
 
 	const bringToFront = useCallback(() => {
-		chessTabZIndexCounter += 1;
-		setZIndex(chessTabZIndexCounter);
+		setZIndex(nextFloatingTabZIndex());
 	}, []);
+
+	const toggleCollapsed = useCallback(() => {
+		setCollapsed((current) => {
+			const next = !current;
+			if (typeof window !== 'undefined') {
+				window.localStorage.setItem(collapsedStorageKey, String(next));
+			}
+			return next;
+		});
+	}, [collapsedStorageKey]);
 
 	useLayoutEffect(() => {
 		const frame = window.requestAnimationFrame(() => {
 			setLayout(clampLayout(readStoredLayout(storageKey) ?? getDefaultLayout(initialIndex)));
+			setCollapsed(readStoredCollapsed(collapsedStorageKey));
 			setLayoutReady(true);
 		});
 		return () => window.cancelAnimationFrame(frame);
-	}, [initialIndex, storageKey]);
+	}, [collapsedStorageKey, initialIndex, storageKey]);
 
 	useEffect(() => {
 		if (!state.open) {
@@ -833,14 +941,17 @@ export function ChessFloatingTab({
 		<div
 			ref={panelRef}
 			data-chess-tab={state.id}
-			className="fixed flex min-h-[540px] min-w-[760px] overflow-hidden rounded-lg border border-border bg-background shadow-2xl"
+			data-collapsed={panelCollapsed ? 'true' : 'false'}
+			className={`fixed flex min-w-[760px] overflow-hidden rounded-lg border border-border bg-background shadow-2xl ${
+				panelCollapsed ? 'min-h-11' : 'min-h-[540px]'
+			}`}
 			onFocusCapture={bringToFront}
 			onPointerDownCapture={bringToFront}
 			style={{
 				left: layout.x,
 				top: layout.y,
 				width: layout.width,
-				height: layout.height,
+				height: panelCollapsed ? COLLAPSED_HEIGHT : layout.height,
 				zIndex
 			}}
 		>
@@ -866,6 +977,22 @@ export function ChessFloatingTab({
 						size="icon"
 						className="h-8 w-8 shrink-0"
 						onPointerDown={(event) => event.stopPropagation()}
+						onClick={toggleCollapsed}
+						aria-label={panelCollapsed ? 'Expand chess tab' : 'Collapse chess tab'}
+						aria-expanded={!panelCollapsed}
+					>
+						{panelCollapsed ? (
+							<IconChevronDown size={17} stroke={2} />
+						) : (
+							<IconChevronUp size={17} stroke={2} />
+						)}
+					</Button>
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon"
+						className="h-8 w-8 shrink-0"
+						onPointerDown={(event) => event.stopPropagation()}
 						onClick={requestClose}
 						disabled={!isParticipant || Boolean(closeRequest)}
 						aria-label="Close chess tab"
@@ -874,7 +1001,7 @@ export function ChessFloatingTab({
 					</Button>
 				</div>
 
-				<div className="min-h-0 flex-1 overflow-auto bg-muted/20 p-3">
+				<div className="min-h-0 flex-1 overflow-auto bg-muted/20 p-3" aria-hidden={panelCollapsed}>
 					<div
 						className={
 							state.phase === 'setup'
@@ -1041,64 +1168,51 @@ export function ChessFloatingTab({
 									</div>
 
 									<div className="grid gap-2 rounded-md border bg-background p-3">
-										<label className="grid gap-1 text-xs font-bold text-muted-foreground">
-											Board
-											<select
-												value={state.settings.boardTheme}
-												onChange={(event) =>
-													updateSettings({ boardTheme: event.target.value as ChessBoardTheme })
-												}
-												className="h-9 rounded-md border bg-background px-2 text-sm font-semibold text-foreground"
-											>
-												<option value="green">Green</option>
-												<option value="blue">Blue</option>
-												<option value="walnut">Walnut</option>
-											</select>
-										</label>
-										<label className="flex items-center justify-between gap-2 text-sm font-semibold">
-											Timed
-											<input
-												type="checkbox"
-												checked={state.settings.timed}
-												onChange={(event) => updateSettings({ timed: event.target.checked })}
-												className="h-4 w-4"
-											/>
-										</label>
+										<ChessSelect
+											label="Board"
+											value={state.settings.boardTheme}
+											onChange={(event) =>
+												updateSettings({ boardTheme: event.target.value as ChessBoardTheme })
+											}
+										>
+											<option value="green">Green</option>
+											<option value="blue">Blue</option>
+											<option value="walnut">Walnut</option>
+										</ChessSelect>
+										<ChessCheckbox
+											label="Timed"
+											checked={state.settings.timed}
+											onChange={(checked) => updateSettings({ timed: checked })}
+										/>
 										<div className="grid grid-cols-2 gap-2">
-											<label className="grid gap-1 text-xs font-bold text-muted-foreground">
-												Minutes
-												<select
-													value={state.settings.minutes}
-													disabled={!state.settings.timed}
-													onChange={(event) =>
-														updateSettings({ minutes: Number(event.target.value) })
-													}
-													className="h-9 rounded-md border bg-background px-2 text-sm font-semibold text-foreground disabled:opacity-50"
-												>
-													{[1, 3, 5, 10, 15, 30, 60].map((minutes) => (
-														<option key={minutes} value={minutes}>
-															{minutes}
-														</option>
-													))}
-												</select>
-											</label>
-											<label className="grid gap-1 text-xs font-bold text-muted-foreground">
-												Increment
-												<select
-													value={state.settings.incrementSeconds}
-													disabled={!state.settings.timed}
-													onChange={(event) =>
-														updateSettings({ incrementSeconds: Number(event.target.value) })
-													}
-													className="h-9 rounded-md border bg-background px-2 text-sm font-semibold text-foreground disabled:opacity-50"
-												>
-													{[0, 1, 2, 5, 10, 30].map((seconds) => (
-														<option key={seconds} value={seconds}>
-															{seconds}s
-														</option>
-													))}
-												</select>
-											</label>
+											<ChessSelect
+												label="Minutes"
+												value={state.settings.minutes}
+												disabled={!state.settings.timed}
+												onChange={(event) =>
+													updateSettings({ minutes: Number(event.target.value) })
+												}
+											>
+												{[1, 3, 5, 10, 15, 30, 60].map((minutes) => (
+													<option key={minutes} value={minutes}>
+														{minutes}
+													</option>
+												))}
+											</ChessSelect>
+											<ChessSelect
+												label="Increment"
+												value={state.settings.incrementSeconds}
+												disabled={!state.settings.timed}
+												onChange={(event) =>
+													updateSettings({ incrementSeconds: Number(event.target.value) })
+												}
+											>
+												{[0, 1, 2, 5, 10, 30].map((seconds) => (
+													<option key={seconds} value={seconds}>
+														{seconds}s
+													</option>
+												))}
+											</ChessSelect>
 										</div>
 									</div>
 
@@ -1273,16 +1387,18 @@ export function ChessFloatingTab({
 				</div>
 			) : null}
 
-			<div
-				className="absolute bottom-0 right-0 flex h-7 w-7 cursor-nwse-resize touch-none items-end justify-end p-1.5 text-muted-foreground/70"
-				onPointerDown={handleResizeStart}
-				onPointerMove={handleResizeMove}
-				onPointerUp={handleResizeEnd}
-				onPointerCancel={handleResizeEnd}
-				aria-hidden="true"
-			>
-				<IconArrowsDiagonal size={15} stroke={2} />
-			</div>
+			{panelCollapsed ? null : (
+				<div
+					className="absolute bottom-0 right-0 flex h-7 w-7 cursor-nwse-resize touch-none items-end justify-end p-1.5 text-muted-foreground/70"
+					onPointerDown={handleResizeStart}
+					onPointerMove={handleResizeMove}
+					onPointerUp={handleResizeEnd}
+					onPointerCancel={handleResizeEnd}
+					aria-hidden="true"
+				>
+					<IconArrowsDiagonal size={15} stroke={2} />
+				</div>
+			)}
 		</div>
 	);
 }

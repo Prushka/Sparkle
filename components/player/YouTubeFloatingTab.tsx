@@ -14,6 +14,8 @@ import {
 	IconArrowRight,
 	IconArrowsDiagonal,
 	IconBrandYoutubeFilled,
+	IconChevronDown,
+	IconChevronUp,
 	IconGripVertical,
 	IconX
 } from '@tabler/icons-react';
@@ -86,10 +88,28 @@ const MIN_WIDTH = 320;
 const MIN_HEIGHT = 260;
 const DEFAULT_WIDTH = 640;
 const DEFAULT_HEIGHT = 420;
+const COLLAPSED_HEIGHT = 44;
 const YOUTUBE_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 
 let youTubeApiPromise: Promise<YouTubeNamespace> | null = null;
 let youtubeTabZIndexCounter = 120;
+
+type FloatingZIndexWindow = Window & {
+	__sparkleFloatingTabZIndex?: number;
+};
+
+function nextFloatingTabZIndex() {
+	if (typeof window === 'undefined') {
+		youtubeTabZIndexCounter += 1;
+		return youtubeTabZIndexCounter;
+	}
+	const zWindow = window as FloatingZIndexWindow;
+	const current = Math.max(zWindow.__sparkleFloatingTabZIndex ?? 120, youtubeTabZIndexCounter);
+	const next = current + 1;
+	zWindow.__sparkleFloatingTabZIndex = next;
+	youtubeTabZIndexCounter = next;
+	return next;
+}
 
 function loadYouTubeApi() {
 	if (typeof window === 'undefined') {
@@ -221,6 +241,13 @@ function readStoredLayout(storageKey: string): YouTubeTabLayout | null {
 	}
 }
 
+function readStoredCollapsed(storageKey: string) {
+	if (typeof window === 'undefined') {
+		return false;
+	}
+	return window.localStorage.getItem(storageKey) === 'true';
+}
+
 function getDefaultLayout(initialIndex = 0): YouTubeTabLayout {
 	if (typeof window === 'undefined') {
 		return { x: 24, y: 96, width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT };
@@ -278,6 +305,7 @@ export function YouTubeFloatingTab({
 	const reactId = useId();
 	const playerElementId = `youtube-player-${reactId.replace(/:/g, '')}`;
 	const storageKey = `sparkle:youtube-tab-layout:${roomId}:${state.id}`;
+	const collapsedStorageKey = `sparkle:youtube-tab-collapsed:${roomId}:${state.id}`;
 	const panelRef = useRef<HTMLDivElement | null>(null);
 	const playerRef = useRef<YouTubePlayer | null>(null);
 	const readyRef = useRef(false);
@@ -305,10 +333,11 @@ export function YouTubeFloatingTab({
 		width: DEFAULT_WIDTH,
 		height: DEFAULT_HEIGHT
 	});
-	const [zIndex, setZIndex] = useState(() => ++youtubeTabZIndexCounter);
+	const [zIndex, setZIndex] = useState(nextFloatingTabZIndex);
 	const [urlInput, setUrlInput] = useState(state.url);
 	const [urlError, setUrlError] = useState('');
 	const [playerError, setPlayerError] = useState('');
+	const [collapsed, setCollapsed] = useState(false);
 
 	useEffect(() => {
 		stateRef.current = state;
@@ -347,17 +376,27 @@ export function YouTubeFloatingTab({
 	);
 
 	const bringToFront = useCallback(() => {
-		youtubeTabZIndexCounter += 1;
-		setZIndex(youtubeTabZIndexCounter);
+		setZIndex(nextFloatingTabZIndex());
 	}, []);
+
+	const toggleCollapsed = useCallback(() => {
+		setCollapsed((current) => {
+			const next = !current;
+			if (typeof window !== 'undefined') {
+				window.localStorage.setItem(collapsedStorageKey, String(next));
+			}
+			return next;
+		});
+	}, [collapsedStorageKey]);
 
 	useLayoutEffect(() => {
 		const frame = window.requestAnimationFrame(() => {
 			setLayout(clampLayout(readStoredLayout(storageKey) ?? getDefaultLayout(initialIndex)));
+			setCollapsed(readStoredCollapsed(collapsedStorageKey));
 			setLayoutReady(true);
 		});
 		return () => window.cancelAnimationFrame(frame);
-	}, [initialIndex, storageKey]);
+	}, [collapsedStorageKey, initialIndex, storageKey]);
 
 	useEffect(() => {
 		if (!state.open) {
@@ -670,14 +709,17 @@ export function YouTubeFloatingTab({
 		<div
 			ref={panelRef}
 			data-youtube-tab={state.id}
-			className="fixed flex min-h-[260px] min-w-[320px] overflow-hidden rounded-lg border border-border bg-background shadow-2xl"
+			data-collapsed={collapsed ? 'true' : 'false'}
+			className={`fixed flex min-w-[320px] overflow-hidden rounded-lg border border-border bg-background shadow-2xl ${
+				collapsed ? 'min-h-11' : 'min-h-[260px]'
+			}`}
 			onFocusCapture={bringToFront}
 			onPointerDownCapture={bringToFront}
 			style={{
 				left: layout.x,
 				top: layout.y,
 				width: layout.width,
-				height: layout.height,
+				height: collapsed ? COLLAPSED_HEIGHT : layout.height,
 				zIndex
 			}}
 		>
@@ -717,6 +759,22 @@ export function YouTubeFloatingTab({
 						size="icon"
 						className="h-8 w-8 shrink-0"
 						onPointerDown={(event) => event.stopPropagation()}
+						onClick={toggleCollapsed}
+						aria-label={collapsed ? 'Expand YouTube tab' : 'Collapse YouTube tab'}
+						aria-expanded={!collapsed}
+					>
+						{collapsed ? (
+							<IconChevronDown size={17} stroke={2} />
+						) : (
+							<IconChevronUp size={17} stroke={2} />
+						)}
+					</Button>
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon"
+						className="h-8 w-8 shrink-0"
+						onPointerDown={(event) => event.stopPropagation()}
 						onClick={closeTab}
 						aria-label="Close YouTube tab"
 					>
@@ -728,7 +786,7 @@ export function YouTubeFloatingTab({
 						{urlError}
 					</div>
 				) : null}
-				<div className="relative min-h-0 flex-1 bg-black">
+				<div className="relative min-h-0 flex-1 bg-black" aria-hidden={collapsed}>
 					{state.videoId ? (
 						playerUnavailableMessage ? (
 							<div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-sm font-semibold text-white/70">
@@ -753,16 +811,18 @@ export function YouTubeFloatingTab({
 					)}
 				</div>
 			</div>
-			<div
-				className="absolute bottom-0 right-0 flex h-7 w-7 cursor-nwse-resize touch-none items-end justify-end p-1.5 text-muted-foreground/70"
-				onPointerDown={handleResizeStart}
-				onPointerMove={handleResizeMove}
-				onPointerUp={handleResizeEnd}
-				onPointerCancel={handleResizeEnd}
-				aria-hidden="true"
-			>
-				<IconArrowsDiagonal size={15} stroke={2} />
-			</div>
+			{collapsed ? null : (
+				<div
+					className="absolute bottom-0 right-0 flex h-7 w-7 cursor-nwse-resize touch-none items-end justify-end p-1.5 text-muted-foreground/70"
+					onPointerDown={handleResizeStart}
+					onPointerMove={handleResizeMove}
+					onPointerUp={handleResizeEnd}
+					onPointerCancel={handleResizeEnd}
+					aria-hidden="true"
+				>
+					<IconArrowsDiagonal size={15} stroke={2} />
+				</div>
+			)}
 		</div>
 	);
 }
