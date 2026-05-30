@@ -241,6 +241,9 @@ export interface Job {
 export interface Chapter {
 	start: number;
 	end: number;
+	start_time?: string;
+	end_time?: string;
+	time_base?: string;
 	tags: { [key: string]: any };
 }
 

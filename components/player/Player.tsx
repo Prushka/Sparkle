@@ -12,15 +12,19 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'motion/react';
 import {
+	LibASSTextRenderer,
 	MediaPlayer,
 	MediaProvider,
 	Menu,
 	Poster,
 	TextTrack,
+	useMediaState,
+	type LibASSConfig,
+	type LibASSConstructor,
 	type MediaKeyShortcuts,
 	type MediaPlayerInstance,
-	type MediaProviderInstance,
-	type MediaSrc
+	type MediaPlayerQuery,
+	type MediaProviderInstance
 } from '@vidstack/react';
 import {
 	DefaultMenuButton,
@@ -116,7 +120,7 @@ type SubtitleTrackInfo = {
 	src: string;
 	label: string;
 	kind: 'subtitles';
-	type: string;
+	type: SubtitleTrackFormat;
 	language: string;
 	default: boolean;
 	format: SubtitleTrackFormat;
@@ -142,6 +146,13 @@ const PLAYER_KEY_SHORTCUTS: MediaKeyShortcuts = {
 	volumeUp: 'ArrowUp',
 	volumeDown: 'ArrowDown'
 };
+
+function isSmallPlayerLayout(width: number, height: number) {
+	return width < 576 || height < 380;
+}
+
+const PLAYER_SMALL_LAYOUT_QUERY: MediaPlayerQuery = ({ width, height }) =>
+	isSmallPlayerLayout(width, height);
 
 const DEFAULT_YOUTUBE_SYNC_STATE: YouTubeSyncState = {
 	tabs: [],
@@ -374,6 +385,39 @@ function getPublicAssetUrl(src: string) {
 	return `/scripts/${src}`;
 }
 
+function getChapterTimeSeconds(chapter: Job['Chapters'][number], key: 'start' | 'end') {
+	const textValue = key === 'start' ? chapter.start_time : chapter.end_time;
+	const parsedTextValue = Number.parseFloat(textValue ?? '');
+	if (Number.isFinite(parsedTextValue)) {
+		return parsedTextValue;
+	}
+
+	const rawValue = chapter[key];
+	if (!Number.isFinite(rawValue)) {
+		return null;
+	}
+
+	const timeBaseMatch = chapter.time_base?.match(/^(-?\d+(?:\.\d+)?)\/(-?\d+(?:\.\d+)?)$/);
+	if (timeBaseMatch) {
+		const numerator = Number.parseFloat(timeBaseMatch[1]);
+		const denominator = Number.parseFloat(timeBaseMatch[2]);
+		if (Number.isFinite(numerator) && Number.isFinite(denominator) && denominator !== 0) {
+			return rawValue * (numerator / denominator);
+		}
+	}
+
+	return Math.abs(rawValue) > 24 * 60 * 60 ? rawValue / 1_000_000_000 : rawValue;
+}
+
+function getPlayerVideoElement(player: MediaPlayerInstance | null) {
+	const provider = player?.provider;
+	const providerVideo = provider && 'video' in provider ? (provider.video as unknown) : null;
+	if (typeof HTMLVideoElement !== 'undefined' && providerVideo instanceof HTMLVideoElement) {
+		return providerVideo;
+	}
+	return (player?.el?.querySelector?.('video') as HTMLVideoElement | null) ?? null;
+}
+
 function findSubtitleTrack(
 	tracks: SubtitleTrackInfo[],
 	track:
@@ -447,21 +491,15 @@ function getSelectedSubtitleTrack(
 		return selectedFromList;
 	}
 
-	const captionsButton = player?.querySelector?.('.vds-caption-button');
-	const defaultSelected = () =>
-		captionsButton?.getAttribute('aria-pressed') === 'true'
-			? tracks.find((track) => track.default) || tracks[0] || null
-			: null;
-
 	if (!video?.textTracks) {
-		return defaultSelected();
+		return null;
 	}
 	const nativeShowing = Array.from(video.textTracks).find((track) => track.mode === 'showing');
 	if (!nativeShowing) {
-		return defaultSelected();
+		return null;
 	}
 	const matchingTrack = findSubtitleTrack(tracks, nativeShowing);
-	return matchingTrack ? { ...matchingTrack, mode: nativeShowing.mode } : defaultSelected();
+	return matchingTrack ? { ...matchingTrack, mode: nativeShowing.mode } : null;
 }
 
 function getLatestMessageTimestamp(messages: Chat[]) {
@@ -657,42 +695,54 @@ async function waitForTextTracks(player: any) {
 	return null;
 }
 
-type AssRenderer = {
-	ready?: Promise<void>;
+type JASSUBRendererConfig = LibASSConfig & {
+	wasmUrl: string;
+	modernWasmUrl: string;
+	legacyWasmUrl: string;
+};
+
+type JASSUBManagedInstance = {
+	freeTrack: () => void;
 	destroy?: () => void | Promise<void>;
 };
 
-type AssRendererConstructor = new (options: Record<string, unknown>) => AssRenderer;
-
-type VidstackProviderElement = MediaProviderInstance & {
-	el?: HTMLElement | null;
-	load?: (target: HTMLElement | null | undefined) => void;
-};
-
 const JASSUB_SCRIPT_URL = '/scripts/jassub.es.js';
-let assRendererConstructorPromise: Promise<AssRendererConstructor> | null = null;
+let assRendererModulePromise: Promise<{ default: LibASSConstructor }> | null = null;
 
-function loadAssRendererConstructor() {
-	assRendererConstructorPromise ??= Promise.resolve()
-		.then(() => new URL(JASSUB_SCRIPT_URL, window.location.origin).toString())
-		.then((scriptUrl) =>
-			import(/* webpackIgnore: true */ scriptUrl).then(
-				(module) => (module as { default: AssRendererConstructor }).default
-			)
-		);
-	return assRendererConstructorPromise;
+function withManagedAssRendererCleanup(Constructor: LibASSConstructor): LibASSConstructor {
+	const ManagedLibASS = function (config: ConstructorParameters<LibASSConstructor>[0]) {
+		const instance = new Constructor(config) as JASSUBManagedInstance;
+		const freeTrack = instance.freeTrack.bind(instance);
+		let destroyed = false;
+
+		instance.freeTrack = () => {
+			freeTrack();
+			if (destroyed) {
+				return;
+			}
+			destroyed = true;
+			try {
+				void Promise.resolve(instance.destroy?.()).catch(() => undefined);
+			} catch {
+				// JASSUB may already be half-torn-down after a fast track switch.
+			}
+		};
+
+		return instance;
+	};
+
+	return ManagedLibASS as unknown as LibASSConstructor;
 }
 
-function destroyAssRenderer(renderer: AssRenderer | null | undefined) {
-	if (!renderer?.destroy) {
-		return;
-	}
-	try {
-		// JASSUB cleanup is async; dev remounts can close the worker before abslink settles.
-		void Promise.resolve(renderer.destroy()).catch(() => undefined);
-	} catch {
-		// Ignore cleanup races from a partially initialized subtitle worker.
-	}
+function loadAssRendererModule() {
+	assRendererModulePromise ??= Promise.resolve()
+		.then(() => new URL(JASSUB_SCRIPT_URL, window.location.origin).toString())
+		.then((scriptUrl) =>
+			import(/* webpackIgnore: true */ scriptUrl).then((module) => ({
+				default: withManagedAssRendererCleanup((module as { default: LibASSConstructor }).default)
+			}))
+		);
+	return assRendererModulePromise;
 }
 
 function ignoreMediaRequestFailure(action: () => unknown) {
@@ -739,8 +789,6 @@ export function Player({ data }: { data: ServerData }) {
 	const soundEffectBadgeTimersRef = useRef<Record<string, number>>({});
 	const supRef = useRef<SUPtitles | null>(null);
 	const supPlayingRef = useRef(false);
-	const jasRef = useRef<any>(null);
-	const fontsRef = useRef<string[]>([]);
 	const subtitleTracksRef = useRef<SubtitleTrackInfo[]>([]);
 	const selectedSubtitleTrackRef = useRef<SelectedSubtitleTrack | null>(null);
 	const prevTrackSrcRef = useRef<string | null>('');
@@ -754,6 +802,7 @@ export function Player({ data }: { data: ServerData }) {
 	const exitedRef = useRef(false);
 	const interactedRef = useRef(interacted);
 	const playerCanPlayRef = useRef(false);
+	const controlsShowingRef = useRef(false);
 	const chatFocusedSecsRef = useRef(0);
 	const volumeInitializedRef = useRef(false);
 	const volumeRestoringRef = useRef(false);
@@ -761,10 +810,7 @@ export function Player({ data }: { data: ServerData }) {
 	const playbackSyncSuppressionTimerRef = useRef<number | null>(null);
 	const [mounted, setMounted] = useState(false);
 	const [playerEl, setPlayerEl] = useState<MediaPlayerInstance | null>(null);
-	const [mediaProviderEl, setMediaProviderEl] = useState<VidstackProviderElement | null>(null);
-	const [playerCanPlay, setPlayerCanPlay] = useState(false);
-	const [controlsShowing, setControlsShowing] = useState(false);
-	const [playerSmallLayout, setPlayerSmallLayout] = useState(false);
+	const [mediaProviderEl, setMediaProviderEl] = useState<MediaProviderInstance | null>(null);
 	const [socketConnected, setSocketConnected] = useState(false);
 	const [roomPlayers, setRoomPlayers] = useState<RoomPlayer[]>([]);
 	const [historicalPlayers, setHistoricalPlayers] = useState<Record<string, RoomPlayer>>({});
@@ -785,12 +831,51 @@ export function Player({ data }: { data: ServerData }) {
 	const [initialVolume] = useState(() =>
 		normalizePlayerVolume(setGetLsNumber(PLAYER_VOLUME_STORAGE_KEY, DEFAULT_PLAYER_VOLUME))
 	);
+	const controlsShowing = useMediaState('controlsVisible', playerElementRef);
+	const playerCanPlay = useMediaState('canPlay', playerElementRef);
+	const playerWidth = useMediaState('width', playerElementRef);
+	const playerHeight = useMediaState('height', playerElementRef);
+	const playerSmallLayout = isSmallPlayerLayout(playerWidth, playerHeight);
 	const [playerVolume, setPlayerVolume] = useState(initialVolume);
 	const [playerMuted, setPlayerMuted] = useState(initialVolume === 0);
 	const [renderNow, setRenderNow] = useState(0);
 	const staticBaseUrl = data.staticBaseUrl;
 	const backendBaseUrl = data.backendBaseUrl;
 	const BASE_STATIC = `${staticBaseUrl}/${job.Id}`;
+	const assRendererConfig = useMemo<JASSUBRendererConfig>(() => {
+		const fallbackFontUrls = new Set<string>();
+		const availableFonts: Record<string, string> = {};
+
+		for (const [family, filename] of [defaultFallback, ...Object.values(fallbackFontsMap)]) {
+			if (!family || !filename) {
+				continue;
+			}
+			const fontUrl = getPublicAssetUrl(filename);
+			availableFonts[family.toLowerCase()] = fontUrl;
+			fallbackFontUrls.add(fontUrl);
+		}
+
+		const attachmentFonts =
+			job.Streams?.filter(
+				(stream) =>
+					stream.CodecType === 'attachment' &&
+					typeof stream.Location === 'string' &&
+					(/\.(otf|ttf)$/i.test(stream.Location) ||
+						stream.Location.toLowerCase().includes('.otf') ||
+						stream.Location.toLowerCase().includes('.ttf'))
+			).map((stream) => `${BASE_STATIC}/${stream.Location}`) ?? [];
+
+		return {
+			workerUrl: getPublicAssetUrl('jassub-worker.js'),
+			wasmUrl: getPublicAssetUrl('jassub-worker.wasm'),
+			modernWasmUrl: getPublicAssetUrl('jassub-worker-modern.wasm'),
+			legacyWasmUrl: getPublicAssetUrl('jassub-worker.wasm.js'),
+			fallbackFont: defaultFallback[0].toLowerCase(),
+			availableFonts,
+			fonts: Array.from(new Set([...attachmentFonts, ...fallbackFontUrls])),
+			useLocalFonts: false
+		};
+	}, [BASE_STATIC, job.Streams]);
 	const thumbnailVttSrc = useMemo(() => {
 		if (typeof window === 'undefined') {
 			return null;
@@ -853,15 +938,6 @@ export function Player({ data }: { data: ServerData }) {
 		selectedCodec,
 		supportedCodecs
 	]);
-	const playerSrc = useMemo<MediaSrc | undefined>(() => {
-		if (!videoSrc) {
-			return undefined;
-		}
-		return {
-			src: videoSrc.src,
-			type: videoSrc.type
-		};
-	}, [videoSrc]);
 	const playerSrcUrl = videoSrc?.src ?? '';
 	const effectiveAudio = videoSrc?.audio || selectedAudio;
 	const autoCodec =
@@ -909,9 +985,24 @@ export function Player({ data }: { data: ServerData }) {
 			volumeRestoringRef.current = false;
 			volumeCanPlayRestoredRef.current = false;
 		}
+		if (!element) {
+			playerCanPlayRef.current = false;
+		}
 		playerElementRef.current = element;
 		setPlayerEl(element);
 	}, []);
+
+	const restoreInitialVolume = useCallback(
+		(player: MediaPlayerInstance) => {
+			volumeRestoringRef.current = true;
+			restorePlayerVolume(player, initialVolume);
+			volumeInitializedRef.current = true;
+			window.setTimeout(() => {
+				volumeRestoringRef.current = false;
+			}, 0);
+		},
+		[initialVolume]
+	);
 
 	const clearReconnectTimer = useCallback(() => {
 		if (reconnectTimerRef.current === null) {
@@ -1279,9 +1370,7 @@ export function Player({ data }: { data: ServerData }) {
 	const sendSettings = useCallback(() => {
 		const selectedTrack = getSelectedSubtitleTrack(
 			playerEl,
-			typeof document === 'undefined'
-				? null
-				: (document.querySelector('.media-provider video') as HTMLVideoElement | null),
+			getPlayerVideoElement(playerEl),
 			subtitleTracksRef.current,
 			selectedSubtitleTrackRef.current
 		);
@@ -1311,23 +1400,17 @@ export function Player({ data }: { data: ServerData }) {
 	}, [playerEl, sendSettings, videoSrc]);
 
 	useEffect(() => {
-		if (!mediaProviderEl || !playerEl || !playerSrc) {
+		if (!mediaProviderEl || !playerEl || !playerSrcUrl) {
 			return;
 		}
 		const animationFrame = window.requestAnimationFrame(() => {
-			const videoElement =
-				(mediaProviderEl.el?.querySelector('video') as HTMLVideoElement | null) ??
-				(typeof document === 'undefined'
-					? null
-					: (document.querySelector('.media-provider video') as HTMLVideoElement | null));
-			if (!videoElement) {
-				return;
+			const videoElement = getPlayerVideoElement(playerEl);
+			if (videoElement) {
+				mediaProviderEl.load(videoElement);
 			}
-			mediaProviderEl.load?.(videoElement);
-			playerEl.startLoading?.();
 		});
 		return () => window.cancelAnimationFrame(animationFrame);
-	}, [mediaProviderEl, playerEl, playerSrc]);
+	}, [mediaProviderEl, playerEl, playerSrcUrl]);
 
 	const applyYouTubeState = useCallback((nextState: YouTubeSyncState) => {
 		const normalized = normalizeYouTubeSyncState(nextState);
@@ -1572,16 +1655,25 @@ export function Player({ data }: { data: ServerData }) {
 		if (!playerEl) {
 			return;
 		}
+
+		const assRenderer = new LibASSTextRenderer(loadAssRendererModule, assRendererConfig);
+		playerEl.textRenderers.add(assRenderer);
+
+		return () => {
+			playerEl.textRenderers.remove(assRenderer);
+		};
+	}, [assRendererConfig, playerEl]);
+
+	useEffect(() => {
+		if (!playerEl) {
+			return;
+		}
 		let cancelled = false;
 		const dispose = () => {
 			if (supRef.current != null) {
 				supRef.current.dispose();
 				supRef.current = null;
 				supPlayingRef.current = false;
-			}
-			if (jasRef.current != null) {
-				destroyAssRenderer(jasRef.current);
-				jasRef.current = null;
 			}
 			const canvas = canvasRef.current;
 			canvas?.getContext('2d')?.clearRect(0, 0, canvas.width, canvas.height);
@@ -1602,7 +1694,6 @@ export function Player({ data }: { data: ServerData }) {
 			if (typeof textTracks.clear === 'function') {
 				textTracks.clear();
 			}
-			const fonts: string[] = [];
 			const subtitleTracks: SubtitleTrackInfo[] = [];
 			selectedSubtitleTrackRef.current = null;
 			prevTrackSrcRef.current = '';
@@ -1618,11 +1709,6 @@ export function Player({ data }: { data: ServerData }) {
 				);
 				for (const [, stream] of Object.entries(sortedJob.Streams)) {
 					switch (stream.CodecType) {
-						case 'attachment':
-							if (stream.Location?.includes('otf') || stream.Location?.includes('ttf')) {
-								fonts.push(`${BASE_STATIC}/${stream.Location}`);
-							}
-							break;
 						case 'subtitle':
 							const src = `${BASE_STATIC}/${stream.Location}`;
 							const format = getSubtitleFormat(src);
@@ -1630,31 +1716,38 @@ export function Player({ data }: { data: ServerData }) {
 								src,
 								label: formatPair(stream, true, true),
 								kind: 'subtitles',
-								type: format === 'ass' ? 'asshuh' : format,
+								type: format,
 								language: getSubtitleLanguage(stream),
 								default: stream === defaultSubtitleStream,
 								format
 							};
 							subtitleTracks.push(track);
-							const shouldRenderTrackNatively = format === 'vtt' || format === 'srt';
-							textTracks.add(
-								new TextTrack(
-									shouldRenderTrackNatively
-										? (track as any)
-										: {
-												id: src,
-												label: track.label,
-												kind: track.kind,
-												language: track.language,
-												default: track.default
-											}
-								)
-							);
+							if (format === 'sup') {
+								textTracks.add(
+									new TextTrack({
+										id: src,
+										label: track.label,
+										kind: track.kind,
+										language: track.language,
+										default: track.default
+									})
+								);
+							} else {
+								textTracks.add(
+									new TextTrack({
+										src: track.src,
+										label: track.label,
+										kind: track.kind,
+										type: format,
+										language: track.language,
+										default: track.default
+									})
+								);
+							}
 							break;
 					}
 				}
 			}
-			fontsRef.current = fonts;
 			subtitleTracksRef.current = subtitleTracks;
 			if (job.Chapters && job.Chapters.length > 0) {
 				const track = new TextTrack({
@@ -1664,8 +1757,10 @@ export function Player({ data }: { data: ServerData }) {
 					default: true
 				});
 				for (const chapter of job.Chapters) {
-					if (chapter.tags?.title && chapter.end - chapter.start > 2 * 1000000000) {
-						track.addCue(new VTTCue(chapter.start, chapter.end, chapter.tags?.title));
+					const start = getChapterTimeSeconds(chapter, 'start');
+					const end = getChapterTimeSeconds(chapter, 'end');
+					if (chapter.tags?.title && start != null && end != null && end - start > 2) {
+						track.addCue(new VTTCue(start, end, chapter.tags.title));
 					}
 				}
 				textTracks.add(track);
@@ -2089,9 +2184,7 @@ export function Player({ data }: { data: ServerData }) {
 				return;
 			}
 			const requestedTrack =
-				typeof detail.index === 'number'
-					? subtitleTracksRef.current[detail.index] || playerEl.textTracks?.[detail.index]
-					: null;
+				typeof detail.index === 'number' ? playerEl.textTracks?.[detail.index] : null;
 			setSelectedSubtitleTrack(requestedTrack, detail.mode, { storeLanguage: true });
 		};
 
@@ -2110,37 +2203,37 @@ export function Player({ data }: { data: ServerData }) {
 	}, [playerEl]);
 
 	useEffect(() => {
+		controlsShowingRef.current = controlsShowing;
+	}, [controlsShowing]);
+
+	useEffect(() => {
+		if (!playerEl) {
+			return;
+		}
+		if (!volumeInitializedRef.current) {
+			restoreInitialVolume(playerEl);
+		}
+	}, [playerEl, restoreInitialVolume]);
+
+	useEffect(() => {
+		playerCanPlayRef.current = playerCanPlay;
+		if (!playerEl || !playerCanPlay) {
+			return;
+		}
+		if (interactedRef.current && !socketRef.current) {
+			connectRef.current?.();
+		}
+		if (!volumeCanPlayRestoredRef.current) {
+			restoreInitialVolume(playerEl);
+			volumeCanPlayRestoredRef.current = true;
+		}
+	}, [playerCanPlay, playerEl, restoreInitialVolume]);
+
+	useEffect(() => {
 		if (!playerEl) {
 			return;
 		}
 		const player = playerEl;
-		const applyInitialVolume = () => {
-			volumeRestoringRef.current = true;
-			restorePlayerVolume(player, initialVolume);
-			volumeInitializedRef.current = true;
-			window.setTimeout(() => {
-				volumeRestoringRef.current = false;
-			}, 0);
-		};
-		if (!volumeInitializedRef.current) {
-			applyInitialVolume();
-		}
-		const playerUnsubscribe = player.subscribe?.(
-			({ controlsVisible }: { controlsVisible: boolean }) => {
-				setControlsShowing(controlsVisible);
-			}
-		);
-		const playerCanPlayUnsubscribe = player.subscribe?.(({ canPlay }: { canPlay: boolean }) => {
-			playerCanPlayRef.current = canPlay;
-			setPlayerCanPlay(canPlay);
-			if (canPlay && interactedRef.current && !socketRef.current) {
-				connectRef.current?.();
-			}
-			if (canPlay && !volumeCanPlayRestoredRef.current) {
-				applyInitialVolume();
-				volumeCanPlayRestoredRef.current = true;
-			}
-		});
 
 		const visibilityChange = () => {
 			if (document.hidden) {
@@ -2162,8 +2255,8 @@ export function Player({ data }: { data: ServerData }) {
 		};
 		document.addEventListener('mousemove', mouseMove);
 		const mouseLeave = () => {
-			if (!player.paused && controlsShowing) {
-				player.remoteControl?.toggleControls?.();
+			if (!player.paused && controlsShowingRef.current) {
+				player.controls.hide(0);
 			}
 		};
 		player.el?.addEventListener('mouseleave', mouseLeave);
@@ -2171,9 +2264,7 @@ export function Player({ data }: { data: ServerData }) {
 		const interval = window.setInterval(() => {
 			updateTime();
 			updateLastTicked();
-			const videoElement = document.querySelector(
-				'.media-provider video'
-			) as HTMLVideoElement | null;
+			const videoElement = getPlayerVideoElement(player);
 			const selectedTrack = getSelectedSubtitleTrack(
 				player,
 				videoElement,
@@ -2187,77 +2278,35 @@ export function Player({ data }: { data: ServerData }) {
 					supRef.current = null;
 					supPlayingRef.current = false;
 				}
-				if (jasRef.current) {
-					destroyAssRenderer(jasRef.current);
-					jasRef.current = null;
-				}
 				canvasRef.current
 					?.getContext('2d')
 					?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
 				send({ type: SyncTypes.SubtitleSwitch, subtitle: selectedTrack?.src });
-				if (selectedTrack?.src) {
-					if (selectedTrack.format === 'sup') {
-						fetch(selectedTrack.src)
-							.then((response) => {
-								if (!response.ok) {
-									throw new Error(`Failed to load SUP subtitles: ${response.status}`);
-								}
-								return response.arrayBuffer();
-							})
-							.then((buffer) => {
-								const file = new Uint8Array(buffer);
-								if (!canvasRef.current) {
-									return;
-								}
-								supRef.current = new SUPtitles(canvasRef.current, file, () => {
-									return videoElement.currentTime * 1000;
-								});
-								supPlayingRef.current = false;
-								if (!videoElement.paused) {
-									supRef.current.playHandler();
-									supPlayingRef.current = true;
-								}
-							})
-							.catch((error) => {
-								console.error(error);
+				if (selectedTrack?.src && selectedTrack.format === 'sup') {
+					fetch(selectedTrack.src)
+						.then((response) => {
+							if (!response.ok) {
+								throw new Error(`Failed to load SUP subtitles: ${response.status}`);
+							}
+							return response.arrayBuffer();
+						})
+						.then((buffer) => {
+							const file = new Uint8Array(buffer);
+							if (!canvasRef.current) {
+								return;
+							}
+							supRef.current = new SUPtitles(canvasRef.current, file, () => {
+								return videoElement.currentTime * 1000;
 							});
-					} else if (selectedTrack.format === 'ass') {
-						const fallback = fallbackFontsMap[selectedTrack.language]
-							? fallbackFontsMap[selectedTrack.language]
-							: defaultFallback;
-						const fallbackFontUrl = getPublicAssetUrl(fallback[1]);
-						const availableFonts = {
-							[fallback[0]]: fallbackFontUrl
-						};
-						void loadAssRendererConstructor()
-							.then((JASSUB) => {
-								if (
-									prevTrackSrcRef.current !== selectedTrackSrc ||
-									!document.contains(videoElement)
-								) {
-									return;
-								}
-								jasRef.current = new JASSUB({
-									video: videoElement,
-									subUrl: selectedTrack.src,
-									workerUrl: getPublicAssetUrl('jassub-worker.js'),
-									wasmUrl: getPublicAssetUrl('jassub-worker.wasm'),
-									modernWasmUrl: getPublicAssetUrl('jassub-worker-modern.wasm'),
-									legacyWasmUrl: getPublicAssetUrl('jassub-worker.wasm.js'),
-									fallbackFont: fallback[0],
-									defaultFont: fallback[0],
-									availableFonts,
-									fonts: [...fontsRef.current, fallbackFontUrl],
-									queryFonts: false
-								});
-								jasRef.current.ready?.catch((error: unknown) => {
-									console.error('Failed to initialize ASS subtitles:', error);
-								});
-							})
-							.catch((error: unknown) => {
-								console.error('Failed to load ASS subtitles:', error);
-							});
-					}
+							supPlayingRef.current = false;
+							if (!videoElement.paused) {
+								supRef.current.playHandler();
+								supPlayingRef.current = true;
+							}
+						})
+						.catch((error) => {
+							console.error(error);
+						});
 				}
 				prevTrackSrcRef.current = selectedTrackSrc;
 			}
@@ -2279,9 +2328,6 @@ export function Player({ data }: { data: ServerData }) {
 				chatFocusedSecsRef.current = 0;
 				setChatFocusedSecs(0);
 			}
-			if (!playerEl) {
-				return;
-			}
 		}, 1000);
 
 		return () => {
@@ -2289,72 +2335,8 @@ export function Player({ data }: { data: ServerData }) {
 			document.removeEventListener('visibilitychange', visibilityChange);
 			document.removeEventListener('mousemove', mouseMove);
 			player.el?.removeEventListener('mouseleave', mouseLeave);
-			playerCanPlayRef.current = false;
-			setPlayerCanPlay(false);
-			playerUnsubscribe?.();
-			playerCanPlayUnsubscribe?.();
 		};
-	}, [
-		chatFocused,
-		connect,
-		controlsShowing,
-		initialVolume,
-		playerEl,
-		send,
-		startWatchRoomConnection,
-		updateLastTicked,
-		updateTime,
-		interacted
-	]);
-
-	useEffect(() => {
-		const playerNode = playerEl?.el;
-		if (!playerNode || typeof MutationObserver === 'undefined') {
-			return;
-		}
-
-		let animationFrame = 0;
-		let observedLayout: Element | null = null;
-		const layoutObserver = new MutationObserver(() => scheduleUpdate());
-
-		const updateSmallLayout = () => {
-			animationFrame = 0;
-			const layout = playerNode.querySelector?.('.vds-video-layout') as HTMLElement | null;
-			if (layout !== observedLayout) {
-				layoutObserver.disconnect();
-				observedLayout = layout;
-				if (layout) {
-					layoutObserver.observe(layout, {
-						attributes: true,
-						attributeFilter: ['data-sm', 'data-size']
-					});
-				}
-			}
-			const isSmallLayout = Boolean(layout?.hasAttribute('data-sm'));
-			setPlayerSmallLayout(isSmallLayout);
-		};
-
-		function scheduleUpdate() {
-			if (animationFrame) {
-				return;
-			}
-			animationFrame = window.requestAnimationFrame(updateSmallLayout);
-		}
-
-		const playerObserver = new MutationObserver(() => scheduleUpdate());
-		playerObserver.observe(playerNode, { childList: true, subtree: true });
-		window.addEventListener('resize', scheduleUpdate);
-		scheduleUpdate();
-
-		return () => {
-			if (animationFrame) {
-				window.cancelAnimationFrame(animationFrame);
-			}
-			playerObserver.disconnect();
-			layoutObserver.disconnect();
-			window.removeEventListener('resize', scheduleUpdate);
-		};
-	}, [playerEl]);
+	}, [chatFocused, playerEl, send, updateLastTicked, updateTime]);
 
 	useEffect(() => {
 		if (discordAuth?.user) {
@@ -2556,11 +2538,11 @@ export function Player({ data }: { data: ServerData }) {
 						showJoinOverlay ? 'pointer-events-none blur-sm' : 'blur-0'
 					}`}
 				>
-					{mounted && thumbnailVttSrc && playerSrc ? (
+					{mounted && thumbnailVttSrc && playerSrcUrl ? (
 						<MediaPlayer
 							className={mediaPlayerClassName}
 							key={`${playerSrcUrl}:${thumbnailVttSrc}`}
-							src={playerSrc}
+							src={playerSrcUrl}
 							title={job.Input}
 							artist="Let's watch anime!"
 							controlsDelay={1500}
@@ -2612,13 +2594,19 @@ export function Player({ data }: { data: ServerData }) {
 							}}
 						>
 							<MediaProvider className="media-provider h-full w-full" ref={setMediaProviderEl}>
-								<source key={playerSrcUrl} src={playerSrcUrl} type={videoSrc?.type} />
+								<source
+									key={playerSrcUrl}
+									src={playerSrcUrl}
+									type={videoSrc?.type}
+									data-codec={videoSrc?.codec}
+								/>
 								<Poster className="vds-poster" src={posterSrc} alt="" />
 								<canvas ref={canvasRef} id="sub-canvas" className="pointer-events-none absolute" />
 							</MediaProvider>
 							<DefaultVideoLayout
 								colorScheme={theme}
 								icons={defaultLayoutIcons}
+								smallLayoutWhen={PLAYER_SMALL_LAYOUT_QUERY}
 								thumbnails={thumbnailVttSrc}
 								slots={{
 									settingsMenuItemsStart: videoSettingsMenu,
