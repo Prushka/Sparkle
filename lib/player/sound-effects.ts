@@ -1,3 +1,5 @@
+import { CHESS_NOTIFICATION_SOUND_IDS } from '@/lib/player/chess-notifications';
+
 export type SoundEffectCategory =
 	| 'reactions'
 	| 'alerts'
@@ -2203,11 +2205,118 @@ export const soundEffects: SoundEffect[] = customSoundEffects.map((effect) => ({
 
 export const soundEffectById = new Map(soundEffects.map((effect) => [effect.id, effect]));
 
+const chessNotificationSoundEffects: SoundEffect[] = [
+	{
+		id: CHESS_NOTIFICATION_SOUND_IDS.start,
+		name: 'Chess Start',
+		icon: '♟',
+		category: 'game',
+		src: '/sound/chess-start.mp3',
+		duration: '0:01',
+		source: 'Mixkit',
+		tags: ['chess', 'start', 'notification']
+	},
+	{
+		id: CHESS_NOTIFICATION_SOUND_IDS.move,
+		name: 'Chess Move',
+		icon: '♟',
+		category: 'game',
+		src: '/sound/chess-move.mp3',
+		duration: '0:01',
+		source: 'Mixkit',
+		tags: ['chess', 'move', 'notification']
+	},
+	{
+		id: CHESS_NOTIFICATION_SOUND_IDS.capture,
+		name: 'Chess Capture',
+		icon: '♟',
+		category: 'game',
+		src: '/sound/chess-capture.mp3',
+		duration: '0:01',
+		source: 'Mixkit',
+		tags: ['chess', 'capture', 'notification']
+	},
+	{
+		id: CHESS_NOTIFICATION_SOUND_IDS.check,
+		name: 'Chess Check',
+		icon: '♟',
+		category: 'game',
+		src: '/sound/chess-check.mp3',
+		duration: '0:01',
+		source: 'Mixkit',
+		tags: ['chess', 'check', 'notification']
+	},
+	{
+		id: CHESS_NOTIFICATION_SOUND_IDS.gameOver,
+		name: 'Chess Game Over',
+		icon: '♟',
+		category: 'game',
+		src: '/sound/chess-game-over.mp3',
+		duration: '0:01',
+		source: 'Mixkit',
+		tags: ['chess', 'game over', 'notification']
+	},
+	{
+		id: CHESS_NOTIFICATION_SOUND_IDS.resign,
+		name: 'Chess Resign',
+		icon: '♟',
+		category: 'game',
+		src: '/sound/chess-resign.mp3',
+		duration: '0:01',
+		source: 'Mixkit',
+		tags: ['chess', 'resign', 'notification']
+	},
+	{
+		id: CHESS_NOTIFICATION_SOUND_IDS.closeRequest,
+		name: 'Chess Close Request',
+		icon: '♟',
+		category: 'alerts',
+		src: '/sound/chess-close-request.mp3',
+		duration: '0:01',
+		source: 'Mixkit',
+		tags: ['chess', 'confirm', 'notification']
+	},
+	{
+		id: CHESS_NOTIFICATION_SOUND_IDS.closeConfirm,
+		name: 'Chess Confirm',
+		icon: '♟',
+		category: 'alerts',
+		src: '/sound/chess-confirm.mp3',
+		duration: '0:01',
+		source: 'Mixkit',
+		tags: ['chess', 'confirm', 'notification']
+	},
+	{
+		id: CHESS_NOTIFICATION_SOUND_IDS.closeCancel,
+		name: 'Chess Cancel',
+		icon: '♟',
+		category: 'alerts',
+		src: '/sound/chess-cancel.mp3',
+		duration: '0:01',
+		source: 'Mixkit',
+		tags: ['chess', 'cancel', 'notification']
+	},
+	{
+		id: CHESS_NOTIFICATION_SOUND_IDS.draw,
+		name: 'Chess Draw',
+		icon: '♟',
+		category: 'game',
+		src: '/sound/chess-draw.mp3',
+		duration: '0:01',
+		source: 'Mixkit',
+		tags: ['chess', 'draw', 'notification']
+	}
+];
+
+const chessNotificationSoundEffectById = new Map(
+	chessNotificationSoundEffects.map((effect) => [effect.id, effect])
+);
+
 export function getSoundEffect(id: string | null | undefined): SoundEffect | undefined {
 	if (!id) {
 		return undefined;
 	}
-	return soundEffectById.get(id);
+	return soundEffectById.get(id) ?? chessNotificationSoundEffectById.get(id);
 }
 
 export function searchSoundEffects(query: string, limit = 24): SoundEffect[] {

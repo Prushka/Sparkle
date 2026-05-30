@@ -43,6 +43,10 @@ import type {
 	ChessSettingsSyncState,
 	ChessTabSyncState
 } from '@/lib/player/t';
+import {
+	CHESS_NOTIFICATION_SOUND_IDS,
+	type ChessNotificationSoundId
+} from '@/lib/player/chess-notifications';
 import { Button } from '@/components/ui/button';
 
 type ChessTabLayout = {
@@ -58,6 +62,7 @@ type ChessFloatingTabProps = {
 	state: ChessTabSyncState;
 	currentPlayer: ChessPlayerSyncState | null;
 	onStateChange: (patch: Partial<ChessTabSyncState>) => void;
+	onNotification: (soundId: ChessNotificationSoundId) => void;
 };
 
 type PromotionChoice = {
@@ -241,17 +246,30 @@ function otherColor(color: ChessColor): ChessColor {
 	return color === 'w' ? 'b' : 'w';
 }
 
+function isSameChessPlayer(
+	left: ChessPlayerSyncState | null | undefined,
+	right: ChessPlayerSyncState | null | undefined
+) {
+	if (!left || !right) {
+		return false;
+	}
+	return (
+		left.id === right.id ||
+		Boolean(left.profileId && right.profileId && left.profileId === right.profileId)
+	);
+}
+
 function getPlayerColor(
 	tab: ChessTabSyncState,
-	playerId: string | null | undefined
+	player: ChessPlayerSyncState | null | undefined
 ): ChessColor | null {
-	if (!playerId) {
+	if (!player) {
 		return null;
 	}
-	if (tab.white?.id === playerId) {
+	if (isSameChessPlayer(tab.white, player)) {
 		return 'w';
 	}
-	if (tab.black?.id === playerId) {
+	if (isSameChessPlayer(tab.black, player)) {
 		return 'b';
 	}
 	return null;
@@ -373,7 +391,7 @@ function SeatButton({
 	onJoin: () => void;
 	onLeave: () => void;
 }) {
-	const isSelf = Boolean(currentPlayer && player?.id === currentPlayer.id);
+	const isSelf = isSameChessPlayer(player, currentPlayer);
 	return (
 		<div className="flex min-w-0 items-center justify-between gap-2 rounded-md border bg-background/80 px-2.5 py-2">
 			<div className="min-w-0">
@@ -464,7 +482,8 @@ export function ChessFloatingTab({
 	initialIndex = 0,
 	state,
 	currentPlayer,
-	onStateChange
+	onStateChange,
+	onNotification
 }: ChessFloatingTabProps) {
 	const storageKey = `sparkle:chess-tab-layout:${roomId}:${state.id}`;
 	const collapsedStorageKey = `sparkle:chess-tab-collapsed:${roomId}:${state.id}`;
@@ -497,7 +516,7 @@ export function ChessFloatingTab({
 	const [collapsed, setCollapsed] = useState(false);
 
 	const game = useMemo(() => buildChessFromMoves(state.moves), [state.moves]);
-	const myColor = getPlayerColor(state, currentPlayer?.id);
+	const myColor = getPlayerColor(state, currentPlayer);
 	const activeColor = game.turn() as ChessColor;
 	const isMyTurn = state.phase === 'playing' && myColor === activeColor;
 	const isParticipant = Boolean(myColor);
@@ -529,16 +548,23 @@ export function ChessFloatingTab({
 	const theme = BOARD_THEMES[state.settings.boardTheme] ?? BOARD_THEMES.green;
 	const closeRequest = state.closeRequest;
 	const closeResponder =
-		Boolean(closeRequest && currentPlayer && closeRequest.requestedBy.id !== currentPlayer.id) &&
-		isParticipant;
+		Boolean(
+			closeRequest && currentPlayer && !isSameChessPlayer(closeRequest.requestedBy, currentPlayer)
+		) && isParticipant;
 	const closeSecondsLeft = closeRequest
 		? Math.max(0, Math.ceil((closeRequest.expiresAt - clockNow) / 1000))
 		: 0;
 	const drawOffer = state.drawOffer;
 	const canAnswerDrawOffer =
-		Boolean(drawOffer && currentPlayer && drawOffer.offeredBy.id !== currentPlayer.id) &&
+		Boolean(drawOffer && currentPlayer && !isSameChessPlayer(drawOffer.offeredBy, currentPlayer)) &&
 		isParticipant;
 	const panelCollapsed = collapsed && !closeRequest;
+	const canStartGame = Boolean(
+		state.white &&
+		state.black &&
+		currentPlayer &&
+		(isSameChessPlayer(state.white, currentPlayer) || isSameChessPlayer(state.black, currentPlayer))
+	);
 
 	useEffect(() => {
 		if (!state.settings.timed && !state.closeRequest) {
@@ -561,7 +587,19 @@ export function ChessFloatingTab({
 			clocks: { ...liveClocks, lastTickAt: 0 },
 			drawOffer: null
 		});
-	}, [activeColor, liveClocks, onStateChange, state.phase, state.result, state.settings.timed]);
+		if (myColor === activeColor) {
+			onNotification(CHESS_NOTIFICATION_SOUND_IDS.gameOver);
+		}
+	}, [
+		activeColor,
+		liveClocks,
+		myColor,
+		onNotification,
+		onStateChange,
+		state.phase,
+		state.result,
+		state.settings.timed
+	]);
 
 	useEffect(() => {
 		if (!closeRequest || !isParticipant) {
@@ -715,9 +753,17 @@ export function ChessFloatingTab({
 		}
 		onStateChange({
 			white:
-				color === 'w' ? currentPlayer : state.white?.id === currentPlayer.id ? null : state.white,
+				color === 'w'
+					? currentPlayer
+					: isSameChessPlayer(state.white, currentPlayer)
+						? null
+						: state.white,
 			black:
-				color === 'b' ? currentPlayer : state.black?.id === currentPlayer.id ? null : state.black
+				color === 'b'
+					? currentPlayer
+					: isSameChessPlayer(state.black, currentPlayer)
+						? null
+						: state.black
 		});
 	}
 
@@ -726,8 +772,8 @@ export function ChessFloatingTab({
 			return;
 		}
 		onStateChange({
-			white: state.white?.id === currentPlayer.id ? null : state.white,
-			black: state.black?.id === currentPlayer.id ? null : state.black
+			white: isSameChessPlayer(state.white, currentPlayer) ? null : state.white,
+			black: isSameChessPlayer(state.black, currentPlayer) ? null : state.black
 		});
 	}
 
@@ -739,7 +785,7 @@ export function ChessFloatingTab({
 	}
 
 	function startGame() {
-		if (!state.white || !state.black || !isParticipant) {
+		if (!canStartGame) {
 			return;
 		}
 		const started = new Chess();
@@ -758,6 +804,7 @@ export function ChessFloatingTab({
 			drawOffer: null,
 			closeRequest: null
 		});
+		onNotification(CHESS_NOTIFICATION_SOUND_IDS.start);
 	}
 
 	function resetGame() {
@@ -822,6 +869,15 @@ export function ChessFloatingTab({
 			result,
 			drawOffer: null
 		});
+		if (result) {
+			onNotification(CHESS_NOTIFICATION_SOUND_IDS.gameOver);
+		} else if (move.captured) {
+			onNotification(CHESS_NOTIFICATION_SOUND_IDS.capture);
+		} else if (nextGame.isCheck()) {
+			onNotification(CHESS_NOTIFICATION_SOUND_IDS.check);
+		} else {
+			onNotification(CHESS_NOTIFICATION_SOUND_IDS.move);
+		}
 	}
 
 	function handleSquareClick(square: Square) {
@@ -866,13 +922,14 @@ export function ChessFloatingTab({
 			clocks: { ...liveClocks, lastTickAt: 0 },
 			drawOffer: null
 		});
+		onNotification(CHESS_NOTIFICATION_SOUND_IDS.resign);
 	}
 
 	function offerOrAnswerDraw(accept = false) {
 		if (!currentPlayer || !isParticipant || state.phase !== 'playing') {
 			return;
 		}
-		if (accept && drawOffer && drawOffer.offeredBy.id !== currentPlayer.id) {
+		if (accept && drawOffer && !isSameChessPlayer(drawOffer.offeredBy, currentPlayer)) {
 			onStateChange({
 				phase: 'ended',
 				result: {
@@ -883,6 +940,7 @@ export function ChessFloatingTab({
 				clocks: { ...liveClocks, lastTickAt: 0 },
 				drawOffer: null
 			});
+			onNotification(CHESS_NOTIFICATION_SOUND_IDS.draw);
 			return;
 		}
 		onStateChange({
@@ -891,6 +949,7 @@ export function ChessFloatingTab({
 				offeredAt: getNowMs()
 			}
 		});
+		onNotification(CHESS_NOTIFICATION_SOUND_IDS.draw);
 	}
 
 	function declineDraw() {
@@ -898,6 +957,7 @@ export function ChessFloatingTab({
 			return;
 		}
 		onStateChange({ drawOffer: null });
+		onNotification(CHESS_NOTIFICATION_SOUND_IDS.closeCancel);
 	}
 
 	function requestClose() {
@@ -917,12 +977,14 @@ export function ChessFloatingTab({
 				expiresAt: now + CLOSE_CONFIRMATION_MS
 			}
 		});
+		onNotification(CHESS_NOTIFICATION_SOUND_IDS.closeRequest);
 	}
 
 	function confirmClose() {
 		if (!closeResponder) {
 			return;
 		}
+		onNotification(CHESS_NOTIFICATION_SOUND_IDS.closeConfirm);
 		onStateChange({ open: false, closeRequest: null });
 	}
 
@@ -931,6 +993,7 @@ export function ChessFloatingTab({
 			return;
 		}
 		onStateChange({ closeRequest: null });
+		onNotification(CHESS_NOTIFICATION_SOUND_IDS.closeCancel);
 	}
 
 	if (!state.open || !layoutReady) {
@@ -1220,7 +1283,7 @@ export function ChessFloatingTab({
 										type="button"
 										className="h-10 gap-2"
 										onClick={startGame}
-										disabled={!state.white || !state.black || !isParticipant}
+										disabled={!canStartGame}
 									>
 										<IconPlayerPlayFilled size={17} />
 										Start

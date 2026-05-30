@@ -52,6 +52,7 @@ import { useAppState } from '@/lib/app-state';
 import { useTheme } from '@/lib/theme';
 import { createNotificationAudioUrl } from '@/lib/player/notification-audio';
 import { getSoundEffect } from '@/lib/player/sound-effects';
+import type { ChessNotificationSoundId } from '@/lib/player/chess-notifications';
 import {
 	BroadcastTypes,
 	codecDisplayMap,
@@ -1821,6 +1822,19 @@ export function Player({ data }: { data: ServerData }) {
 			socket.send(JSON.stringify(data));
 		}
 	}, []);
+
+	const sendChessNotification = useCallback(
+		(soundId: ChessNotificationSoundId) => {
+			send({
+				type: SyncTypes.BroadcastSync,
+				broadcast: {
+					type: BroadcastTypes.SoundEffect,
+					soundEffect: { id: soundId }
+				}
+			});
+		},
+		[send]
+	);
 
 	const sendProfile = useCallback(() => {
 		if (displayName === '' || !profileId || socketRef.current?.readyState !== WebSocket.OPEN) {
@@ -3691,6 +3705,7 @@ export function Player({ data }: { data: ServerData }) {
 								state={tab}
 								currentPlayer={currentChessPlayer}
 								onStateChange={(patch) => updateChessState(tab.id, patch)}
+								onNotification={sendChessNotification}
 							/>
 						))
 				: null}
