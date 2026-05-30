@@ -14,7 +14,6 @@ import {
 import Image from 'next/image';
 import { Chess, type Move, type PieceSymbol, type Square } from 'chess.js';
 import {
-	IconArrowsDiagonal,
 	IconChess,
 	IconCheck,
 	IconChevronDown,
@@ -55,6 +54,8 @@ type ChessTabLayout = {
 	width: number;
 	height: number;
 };
+
+type ResizeCorner = 'top-left' | 'top-right' | 'bottom-right' | 'bottom-left';
 
 type ChessFloatingTabProps = {
 	roomId: string;
@@ -192,7 +193,7 @@ function getDefaultLayout(initialIndex = 0): ChessTabLayout {
 	};
 }
 
-function clampLayout(layout: ChessTabLayout): ChessTabLayout {
+function clampLayout(layout: ChessTabLayout, visibleHeight = layout.height): ChessTabLayout {
 	if (typeof window === 'undefined') {
 		return layout;
 	}
@@ -204,12 +205,68 @@ function clampLayout(layout: ChessTabLayout): ChessTabLayout {
 		Math.max(layout.height, MIN_HEIGHT),
 		Math.max(MIN_HEIGHT, window.innerHeight - 16)
 	);
+	const boxHeight = Math.max(0, Math.min(visibleHeight, window.innerHeight - 16));
 	return {
 		x: Math.min(Math.max(8, layout.x), Math.max(8, window.innerWidth - width - 8)),
-		y: Math.min(Math.max(8, layout.y), Math.max(8, window.innerHeight - height - 8)),
+		y: Math.min(Math.max(8, layout.y), Math.max(8, window.innerHeight - boxHeight - 8)),
 		width,
 		height
 	};
+}
+
+function constrainResizeSize(width: number, height: number) {
+	if (typeof window === 'undefined') {
+		return {
+			width: Math.max(width, MIN_WIDTH),
+			height: Math.max(height, MIN_HEIGHT)
+		};
+	}
+	return {
+		width: Math.min(Math.max(width, MIN_WIDTH), Math.max(MIN_WIDTH, window.innerWidth - 16)),
+		height: Math.min(Math.max(height, MIN_HEIGHT), Math.max(MIN_HEIGHT, window.innerHeight - 16))
+	};
+}
+
+function resizeLayoutFromCorner(
+	start: ChessTabLayout,
+	corner: ResizeCorner,
+	deltaX: number,
+	deltaY: number
+) {
+	const right = start.x + start.width;
+	const bottom = start.y + start.height;
+	if (corner === 'top-left') {
+		const size = constrainResizeSize(start.width - deltaX, start.height - deltaY);
+		return clampLayout({
+			x: right - size.width,
+			y: bottom - size.height,
+			width: size.width,
+			height: size.height
+		});
+	}
+	if (corner === 'top-right') {
+		const size = constrainResizeSize(start.width + deltaX, start.height - deltaY);
+		return clampLayout({
+			x: start.x,
+			y: bottom - size.height,
+			width: size.width,
+			height: size.height
+		});
+	}
+	if (corner === 'bottom-left') {
+		const size = constrainResizeSize(start.width - deltaX, start.height + deltaY);
+		return clampLayout({
+			x: right - size.width,
+			y: start.y,
+			width: size.width,
+			height: size.height
+		});
+	}
+	return clampLayout({
+		...start,
+		width: start.width + deltaX,
+		height: start.height + deltaY
+	});
 }
 
 function isSameLayout(a: ChessTabLayout, b: ChessTabLayout) {
@@ -499,9 +556,13 @@ export function ChessFloatingTab({
 		pointerId: number;
 		startX: number;
 		startY: number;
+		x: number;
+		y: number;
 		width: number;
 		height: number;
+		corner: ResizeCorner;
 	} | null>(null);
+	const resizeCleanupRef = useRef<(() => void) | null>(null);
 	const [layoutReady, setLayoutReady] = useState(false);
 	const [layout, setLayout] = useState<ChessTabLayout>({
 		x: 32,
@@ -567,6 +628,13 @@ export function ChessFloatingTab({
 	);
 
 	useEffect(() => {
+		return () => {
+			resizeCleanupRef.current?.();
+			resizeCleanupRef.current = null;
+		};
+	}, []);
+
+	useEffect(() => {
 		if (!state.settings.timed && !state.closeRequest) {
 			return;
 		}
@@ -625,7 +693,10 @@ export function ChessFloatingTab({
 	const updateLayout = useCallback(
 		(updater: ChessTabLayout | ((current: ChessTabLayout) => ChessTabLayout)) => {
 			setLayout((current) => {
-				const next = clampLayout(typeof updater === 'function' ? updater(current) : updater);
+				const next = clampLayout(
+					typeof updater === 'function' ? updater(current) : updater,
+					panelCollapsed ? COLLAPSED_HEIGHT : undefined
+				);
 				if (isSameLayout(current, next)) {
 					return current;
 				}
@@ -633,7 +704,7 @@ export function ChessFloatingTab({
 				return next;
 			});
 		},
-		[saveLayout]
+		[panelCollapsed, saveLayout]
 	);
 
 	const bringToFront = useCallback(() => {
@@ -641,23 +712,38 @@ export function ChessFloatingTab({
 	}, []);
 
 	const toggleCollapsed = useCallback(() => {
-		setCollapsed((current) => {
-			const next = !current;
-			if (typeof window !== 'undefined') {
-				window.localStorage.setItem(collapsedStorageKey, String(next));
+		const nextCollapsed = !collapsed;
+		if (typeof window !== 'undefined') {
+			window.localStorage.setItem(collapsedStorageKey, String(nextCollapsed));
+		}
+		setCollapsed(nextCollapsed);
+		setLayout((current) => {
+			const next = clampLayout(
+				current,
+				nextCollapsed && !closeRequest ? COLLAPSED_HEIGHT : undefined
+			);
+			if (isSameLayout(current, next)) {
+				return current;
 			}
+			saveLayout(next);
 			return next;
 		});
-	}, [collapsedStorageKey]);
+	}, [closeRequest, collapsed, collapsedStorageKey, saveLayout]);
 
 	useLayoutEffect(() => {
 		const frame = window.requestAnimationFrame(() => {
-			setLayout(clampLayout(readStoredLayout(storageKey) ?? getDefaultLayout(initialIndex)));
-			setCollapsed(readStoredCollapsed(collapsedStorageKey));
+			const storedCollapsed = readStoredCollapsed(collapsedStorageKey);
+			setLayout(
+				clampLayout(
+					readStoredLayout(storageKey) ?? getDefaultLayout(initialIndex),
+					storedCollapsed && !closeRequest ? COLLAPSED_HEIGHT : undefined
+				)
+			);
+			setCollapsed(storedCollapsed);
 			setLayoutReady(true);
 		});
 		return () => window.cancelAnimationFrame(frame);
-	}, [collapsedStorageKey, initialIndex, storageKey]);
+	}, [closeRequest, collapsedStorageKey, initialIndex, storageKey]);
 
 	useEffect(() => {
 		if (!state.open) {
@@ -701,38 +787,75 @@ export function ChessFloatingTab({
 		}
 	}
 
-	function handleResizeStart(event: ReactPointerEvent<HTMLDivElement>) {
+	function handleResizeStart(event: ReactPointerEvent<HTMLDivElement>, corner: ResizeCorner) {
 		if (event.button !== 0) {
 			return;
 		}
 		event.preventDefault();
 		event.stopPropagation();
-		event.currentTarget.setPointerCapture(event.pointerId);
+		try {
+			event.currentTarget.setPointerCapture(event.pointerId);
+		} catch {
+			// Window listeners below keep resize working when pointer capture is unavailable.
+		}
 		resizeRef.current = {
 			pointerId: event.pointerId,
 			startX: event.clientX,
 			startY: event.clientY,
+			x: layout.x,
+			y: layout.y,
 			width: layout.width,
-			height: layout.height
+			height: layout.height,
+			corner
+		};
+		resizeCleanupRef.current?.();
+
+		const handleWindowResizeMove = (moveEvent: PointerEvent) => {
+			applyResize(moveEvent.pointerId, moveEvent.clientX, moveEvent.clientY);
+		};
+		const handleWindowResizeEnd = (endEvent: PointerEvent) => {
+			finishResize(endEvent.pointerId);
+		};
+
+		window.addEventListener('pointermove', handleWindowResizeMove);
+		window.addEventListener('pointerup', handleWindowResizeEnd);
+		window.addEventListener('pointercancel', handleWindowResizeEnd);
+		resizeCleanupRef.current = () => {
+			window.removeEventListener('pointermove', handleWindowResizeMove);
+			window.removeEventListener('pointerup', handleWindowResizeEnd);
+			window.removeEventListener('pointercancel', handleWindowResizeEnd);
 		};
 	}
 
-	function handleResizeMove(event: ReactPointerEvent<HTMLDivElement>) {
+	function applyResize(pointerId: number, clientX: number, clientY: number) {
 		const resize = resizeRef.current;
-		if (!resize || resize.pointerId !== event.pointerId) {
+		if (!resize || resize.pointerId !== pointerId) {
 			return;
 		}
-		updateLayout({
-			...layout,
-			width: resize.width + event.clientX - resize.startX,
-			height: resize.height + event.clientY - resize.startY
-		});
+		updateLayout(
+			resizeLayoutFromCorner(
+				resize,
+				resize.corner,
+				clientX - resize.startX,
+				clientY - resize.startY
+			)
+		);
+	}
+
+	function handleResizeMove(event: ReactPointerEvent<HTMLDivElement>) {
+		applyResize(event.pointerId, event.clientX, event.clientY);
+	}
+
+	function finishResize(pointerId: number) {
+		if (resizeRef.current?.pointerId === pointerId) {
+			resizeRef.current = null;
+			resizeCleanupRef.current?.();
+			resizeCleanupRef.current = null;
+		}
 	}
 
 	function handleResizeEnd(event: ReactPointerEvent<HTMLDivElement>) {
-		if (resizeRef.current?.pointerId === event.pointerId) {
-			resizeRef.current = null;
-		}
+		finishResize(event.pointerId);
 	}
 
 	function updateSettings(patch: Partial<ChessSettingsSyncState>) {
@@ -1451,16 +1574,40 @@ export function ChessFloatingTab({
 			) : null}
 
 			{panelCollapsed ? null : (
-				<div
-					className="absolute bottom-0 right-0 flex h-7 w-7 cursor-nwse-resize touch-none items-end justify-end p-1.5 text-muted-foreground/70"
-					onPointerDown={handleResizeStart}
-					onPointerMove={handleResizeMove}
-					onPointerUp={handleResizeEnd}
-					onPointerCancel={handleResizeEnd}
-					aria-hidden="true"
-				>
-					<IconArrowsDiagonal size={15} stroke={2} />
-				</div>
+				<>
+					<div
+						className="absolute left-0 top-0 z-10 h-4 w-4 cursor-nwse-resize touch-none"
+						onPointerDown={(event) => handleResizeStart(event, 'top-left')}
+						onPointerMove={handleResizeMove}
+						onPointerUp={handleResizeEnd}
+						onPointerCancel={handleResizeEnd}
+						aria-hidden="true"
+					/>
+					<div
+						className="absolute right-0 top-0 z-10 h-4 w-4 cursor-nesw-resize touch-none"
+						onPointerDown={(event) => handleResizeStart(event, 'top-right')}
+						onPointerMove={handleResizeMove}
+						onPointerUp={handleResizeEnd}
+						onPointerCancel={handleResizeEnd}
+						aria-hidden="true"
+					/>
+					<div
+						className="absolute bottom-0 left-0 h-4 w-4 cursor-nesw-resize touch-none"
+						onPointerDown={(event) => handleResizeStart(event, 'bottom-left')}
+						onPointerMove={handleResizeMove}
+						onPointerUp={handleResizeEnd}
+						onPointerCancel={handleResizeEnd}
+						aria-hidden="true"
+					/>
+					<div
+						className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize touch-none"
+						onPointerDown={(event) => handleResizeStart(event, 'bottom-right')}
+						onPointerMove={handleResizeMove}
+						onPointerUp={handleResizeEnd}
+						onPointerCancel={handleResizeEnd}
+						aria-hidden="true"
+					/>
+				</>
 			)}
 		</div>
 	);
