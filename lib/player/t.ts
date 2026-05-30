@@ -194,6 +194,28 @@ export interface ChessSyncState {
 	updatedAt: number;
 }
 
+export type CottagePlayerAction = 'idle' | 'walking' | 'sitting' | 'sleeping' | 'interacting';
+export type CottagePlayerFacing = 'up' | 'down' | 'left' | 'right';
+
+export interface CottagePlayerSyncState {
+	id: string;
+	name: string;
+	profileId?: string;
+	x: number;
+	y: number;
+	targetX?: number;
+	targetY?: number;
+	action: CottagePlayerAction;
+	facing: CottagePlayerFacing;
+	interactionId?: string;
+	updatedAt: number;
+}
+
+export interface CottageSyncState {
+	players: CottagePlayerSyncState[];
+	updatedAt: number;
+}
+
 export type Chat = {
 	message: string;
 	emojis?: string[];
@@ -268,6 +290,7 @@ export enum SyncTypes {
 	BroadcastSync = 'broadcast',
 	YouTubeSync = 'youtube',
 	ChessSync = 'chess',
+	CottageSync = 'cottage',
 	AudioSwitch = 'audio',
 	CodecSwitch = 'codec',
 	SubtitleSwitch = 'subtitle',
@@ -300,6 +323,7 @@ export interface SendPayload {
 	moveToText?: string;
 	youtube?: YouTubeSyncState;
 	chess?: ChessSyncState;
+	cottage?: CottageSyncState;
 }
 
 export interface BroadcastPayload {

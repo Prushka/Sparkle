@@ -116,6 +116,7 @@ import { Chats } from '@/components/player/Chats';
 import { useVoiceChat } from '@/components/player/useVoiceChat';
 import { YouTubeFloatingTab } from '@/components/player/YouTubeFloatingTab';
 import { ChessFloatingTab } from '@/components/player/ChessFloatingTab';
+import { CottageGame } from '@/components/player/CottageGame';
 
 type VideoSource = {
 	src: string;
@@ -1379,6 +1380,7 @@ export function Player({ data }: { data: ServerData }) {
 			...(profileId ? { profileId } : {})
 		};
 	}, [displayName, playerId, profileId]);
+	const currentCottagePlayer = currentChessPlayer;
 	const videoSrc = useMemo<VideoSource | null>(() => {
 		const encodedCodecs = job.EncodedCodecs || [];
 		const autoCodec =
@@ -3438,6 +3440,14 @@ export function Player({ data }: { data: ServerData }) {
 				className="flex w-full flex-col gap-4 p-4 font-semibold"
 				style={!discord ? { minHeight: 'calc(100dvh - min(100dvh, 56.25vw))' } : undefined}
 			>
+				<CottageGame
+					backendBaseUrl={backendBaseUrl}
+					roomId={room}
+					socketConnected={socketConnected}
+					currentPlayer={currentCottagePlayer}
+					roomPlayers={displayedRoomPlayers}
+				/>
+
 				<div className="mx-auto flex w-full max-w-[90rem] flex-wrap items-center justify-between gap-2 max-[760px]:justify-center">
 					<div className="flex min-w-0 justify-start">
 						{voiceSupported ? <VoiceControls voice={voice} /> : null}

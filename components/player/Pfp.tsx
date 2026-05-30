@@ -2,17 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useAppState } from '@/lib/app-state';
+import { getPlayerFallbackColor } from '@/lib/player/color';
 import type { DiscordUser } from '@/lib/player/t';
 import { getAvatarUrl, getName } from '@/lib/player/t';
-
-function hashString(value: string) {
-	let hash = 2166136261;
-	for (let i = 0; i < value.length; i++) {
-		hash ^= value.charCodeAt(i);
-		hash = Math.imul(hash, 16777619);
-	}
-	return hash >>> 0;
-}
 
 function getFallbackName(name: string | undefined, discordUser: DiscordUser | null, id: string) {
 	return (name || getName(discordUser) || id || 'Unknown').trim() || 'Unknown';
@@ -20,14 +12,6 @@ function getFallbackName(name: string | undefined, discordUser: DiscordUser | nu
 
 function getFallbackInitial(name: string) {
 	return Array.from(name.trim())[0]?.toLocaleUpperCase() || '?';
-}
-
-function getFallbackColor(name: string) {
-	const hash = hashString(name.trim().toLocaleLowerCase());
-	const hue = hash % 360;
-	const saturation = 56 + (hash % 14);
-	const lightness = 36 + ((hash >> 8) % 12);
-	return `hsl(${hue} ${saturation}% ${lightness}%)`;
 }
 
 export function Pfp({
@@ -51,7 +35,7 @@ export function Pfp({
 		[discordUser, id, name]
 	);
 	const fallbackInitial = useMemo(() => getFallbackInitial(fallbackName), [fallbackName]);
-	const fallbackColor = useMemo(() => getFallbackColor(fallbackName), [fallbackName]);
+	const fallbackColor = useMemo(() => getPlayerFallbackColor(fallbackName), [fallbackName]);
 	const imageSrc = discordUser?.avatar
 		? getAvatarUrl(discordUser)
 		: !discordUser && id
