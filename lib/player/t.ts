@@ -130,9 +130,11 @@ export const codecDisplayMap: { [key: string]: string } = {
 	auto: 'Auto'
 };
 
-const subtitlePriorityNormal = ['ass', 'vtt', 'sup'];
-const subtitlePriorityMobile = ['vtt', 'ass', 'sup'];
+const subtitleTypePriorityNormal = ['ass', 'sup', 'vtt'] as const;
+const subtitleTypePriorityIOS = ['vtt', 'ass', 'sup'] as const;
 const subtitleLanguagePriority = ['en'];
+
+type SubtitleTypePriorityFormat = (typeof subtitleTypePriorityNormal)[number];
 
 export const chatLayouts = ['show', 'hide'];
 
@@ -669,19 +671,37 @@ export function getTitleComponentsByJobs(jobs: Job[]): Titles {
 		}, {});
 }
 
-function isMobile() {
+function isIOS() {
 	if (typeof navigator === 'undefined') {
 		return false;
 	}
 	const userAgent = navigator.userAgent.toLowerCase();
-	const mobileKeywords = [/webos/, /iphone/, /ipad/, /ipod/, /blackberry/, /windows phone/];
-	return mobileKeywords.some((keyword) => userAgent.match(keyword));
+	const platform = navigator.platform?.toLowerCase() || '';
+	return (
+		/iphone|ipad|ipod/.test(userAgent) || (platform === 'macintel' && navigator.maxTouchPoints > 1)
+	);
+}
+
+export function getSubtitleTypePriority(): readonly SubtitleTypePriorityFormat[] {
+	return isIOS() ? subtitleTypePriorityIOS : subtitleTypePriorityNormal;
+}
+
+export function getSubtitleStreamType(stream: Pick<Stream, 'Location'>) {
+	const cleanLocation = stream.Location.split(/[?#]/)[0].toLowerCase();
+	return cleanLocation.split('.').pop() || '';
+}
+
+export function getSubtitleTypeRank(stream: Pick<Stream, 'Location'>) {
+	const subtitlePriority = getSubtitleTypePriority();
+	const index = subtitlePriority.indexOf(
+		getSubtitleStreamType(stream) as SubtitleTypePriorityFormat
+	);
+	return index === -1 ? subtitlePriority.length : index;
 }
 
 export function sortTracks(job: Job) {
 	const streams = job.Streams;
 	const files = job.Files;
-	const subtitlePriority = isMobile() ? subtitlePriorityMobile : subtitlePriorityNormal;
 	const getLanguageRank = (stream: Stream) => {
 		const mappedLanguage = languageSrcMap[stream.Language] || stream.Language;
 		const baseLanguage =
@@ -689,21 +709,16 @@ export function sortTracks(job: Job) {
 		const index = subtitleLanguagePriority.indexOf(baseLanguage);
 		return index === -1 ? subtitleLanguagePriority.length : index;
 	};
-	const getFormatRank = (stream: Stream) => {
-		const extension = stream.Location.split('.').pop()?.toLowerCase() || '';
-		const index = subtitlePriority.indexOf(extension);
-		return index === -1 ? subtitlePriority.length : index;
-	};
 	const compare = (a: Stream, b: Stream) => {
+		const typeCompare = getSubtitleTypeRank(a) - getSubtitleTypeRank(b);
+		if (typeCompare !== 0) {
+			return typeCompare;
+		}
 		const languageCompare = getLanguageRank(a) - getLanguageRank(b);
 		if (languageCompare !== 0) {
 			return languageCompare;
 		}
 		if (a.Language === b.Language) {
-			const formatCompare = getFormatRank(a) - getFormatRank(b);
-			if (formatCompare !== 0) {
-				return formatCompare;
-			}
 			return (files[b.Location] ?? 0) - (files[a.Location] ?? 0);
 		}
 		return a.Language.localeCompare(b.Language);

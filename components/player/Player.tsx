@@ -62,6 +62,7 @@ import {
 	formatSeconds,
 	getLeftAndJoined,
 	getName,
+	getSubtitleTypeRank,
 	getSupportedCodecs,
 	hideControlsOnChatFocused,
 	languageSrcMap,
@@ -330,7 +331,7 @@ function saveStoredSubtitleLanguage(language: string) {
 	window.localStorage.setItem(SUBTITLE_LANGUAGE_STORAGE_KEY, language);
 }
 
-function pickPrioritySubtitleStream(streams: Stream[], storedLanguage: string | null) {
+function pickPrioritySubtitleStreamByLanguage(streams: Stream[], storedLanguage: string | null) {
 	if (storedLanguage) {
 		const storedMatch = streams.find((stream) =>
 			isSameSubtitleLanguage(getSubtitleLanguage(stream), storedLanguage)
@@ -343,6 +344,32 @@ function pickPrioritySubtitleStream(streams: Stream[], storedLanguage: string | 
 	for (const language of SUBTITLE_LANGUAGE_PRIORITY) {
 		const priorityMatch = streams.find(
 			(stream) => getSubtitleLanguageBase(getSubtitleLanguage(stream)) === language
+		);
+		if (priorityMatch) {
+			return priorityMatch;
+		}
+	}
+
+	return streams[0] ?? null;
+}
+
+function pickPrioritySubtitleStream(streams: Stream[], storedLanguage: string | null) {
+	const streamsByTypeRank = new Map<number, Stream[]>();
+
+	for (const stream of streams) {
+		const typeRank = getSubtitleTypeRank(stream);
+		const rankedStreams = streamsByTypeRank.get(typeRank);
+		if (rankedStreams) {
+			rankedStreams.push(stream);
+		} else {
+			streamsByTypeRank.set(typeRank, [stream]);
+		}
+	}
+
+	for (const typeRank of [...streamsByTypeRank.keys()].sort((a, b) => a - b)) {
+		const priorityMatch = pickPrioritySubtitleStreamByLanguage(
+			streamsByTypeRank.get(typeRank) ?? [],
+			storedLanguage
 		);
 		if (priorityMatch) {
 			return priorityMatch;
