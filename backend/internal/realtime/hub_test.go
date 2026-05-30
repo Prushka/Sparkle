@@ -282,6 +282,9 @@ func TestChatBroadcastSendsDeltaOnly(t *testing.T) {
 		if payload.Chat == nil || payload.Chat.Message != "hello :wave:" {
 			t.Fatalf("chat delta payload = %#v", payload.Chat)
 		}
+		if payload.Chat.Author == nil || payload.Chat.Author.Name != "Sender" || payload.Chat.Author.Id != "sender" {
+			t.Fatalf("chat delta author = %#v, want Sender/sender", payload.Chat.Author)
+		}
 		if len(payload.Chats) != 0 {
 			t.Fatalf("chat delta included %d history messages, want 0", len(payload.Chats))
 		}

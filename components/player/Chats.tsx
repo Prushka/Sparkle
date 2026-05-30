@@ -20,37 +20,41 @@ export function Chats({
 		<div
 			className={`${controlsShowing ? '!mt-10' : ''} chat-history ml-auto flex flex-col gap-0.5 items-end`}
 		>
-			{messagesToDisplay.map((message, index) => (
-				<div
-					key={`${message.timestamp}-${message.uid}-${message.message}-${index}`}
-					className={`chat-line flex items-center justify-center gap-1 px-2.5 py-1 text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''} ${message.isSystem ? 'chat-line-system' : ''}`}
-				>
-					{message.isSystem ? (
-						<>
-							<span className="chat-message-text">
-								<EmojiText text={message.message} emojiRefs={message.emojiRefs} />
-							</span>
-							<span>{message.timeStr ? `[${message.timeStr}]` : ''}</span>
-							<span className="chat-system-label">System</span>
-						</>
-					) : (
-						<>
-							<span className="chat-message-text">
-								<EmojiText text={message.message} emojiRefs={message.emojiRefs} />
-							</span>
-							<span>{message.timeStr ? `[${message.timeStr}]` : ''}</span>
-							<span>{getRealName(historicalPlayers[message.uid])}</span>
-							<Pfp
-								id={historicalPlayers[message.uid]?.profileId || message.uid}
-								className="avatar"
-								discordUser={historicalPlayers[message.uid]?.discordUser}
-								name={getRealName(historicalPlayers[message.uid])}
-								staticBaseUrl={staticBaseUrl}
-							/>
-						</>
-					)}
-				</div>
-			))}
+			{messagesToDisplay.map((message, index) => {
+				const player = historicalPlayers[message.uid] ?? message.author;
+				const playerName = getRealName(player);
+				return (
+					<div
+						key={`${message.timestamp}-${message.uid}-${message.message}-${index}`}
+						className={`chat-line flex items-center justify-center gap-1 px-2.5 py-1 text-center text-white ${message.isStateUpdate ? 'font-semibold' : ''} ${message.isSystem ? 'chat-line-system' : ''}`}
+					>
+						{message.isSystem ? (
+							<>
+								<span className="chat-message-text">
+									<EmojiText text={message.message} emojiRefs={message.emojiRefs} />
+								</span>
+								<span>{message.timeStr ? `[${message.timeStr}]` : ''}</span>
+								<span className="chat-system-label">System</span>
+							</>
+						) : (
+							<>
+								<span className="chat-message-text">
+									<EmojiText text={message.message} emojiRefs={message.emojiRefs} />
+								</span>
+								<span>{message.timeStr ? `[${message.timeStr}]` : ''}</span>
+								<span>{playerName}</span>
+								<Pfp
+									id={player?.profileId || message.uid}
+									className="avatar"
+									discordUser={player?.discordUser}
+									name={playerName}
+									staticBaseUrl={staticBaseUrl}
+								/>
+							</>
+						)}
+					</div>
+				);
+			})}
 		</div>
 	);
 }

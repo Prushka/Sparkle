@@ -93,6 +93,13 @@ export interface PlayerStatus {
 	lastSeen: number;
 }
 
+export interface ChatAuthor {
+	name: string;
+	id: string;
+	profileId?: string;
+	discordUser?: DiscordUser | null | undefined;
+}
+
 export interface YouTubeTabSyncState {
 	id: string;
 	open: boolean;
@@ -113,6 +120,7 @@ export type Chat = {
 	message: string;
 	emojis?: string[];
 	emojiRefs?: ChatEmojiRef[];
+	author?: ChatAuthor;
 	timestamp: number;
 	mediaSec: number;
 	uid: string;
@@ -757,7 +765,7 @@ export interface ServerData {
 	backendBaseUrl: string;
 }
 
-export function getRealName(player: Player | undefined) {
+export function getRealName(player: Pick<Player, 'name' | 'discordUser'> | ChatAuthor | undefined) {
 	const discordName = getName(player?.discordUser);
 	return discordName ? discordName : player?.name || 'Unknown';
 }

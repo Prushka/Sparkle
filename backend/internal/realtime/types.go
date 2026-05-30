@@ -91,9 +91,17 @@ type Chat struct {
 	Message   string         `json:"message"`
 	Emojis    []string       `json:"emojis,omitempty"`
 	EmojiRefs []ChatEmojiRef `json:"emojiRefs,omitempty"`
+	Author    *ChatAuthor    `json:"author,omitempty"`
 	Timestamp int64          `json:"timestamp"`
 	MediaSec  float64        `json:"mediaSec"`
 	Uid       string         `json:"uid"`
+}
+
+type ChatAuthor struct {
+	Name        string       `json:"name"`
+	Id          string       `json:"id"`
+	ProfileId   string       `json:"profileId,omitempty"`
+	DiscordUser *DiscordUser `json:"discordUser,omitempty"`
 }
 
 type ChatEmojiRef struct {

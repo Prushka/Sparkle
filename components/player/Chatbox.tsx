@@ -710,7 +710,7 @@ export function Chatbox({
 											.slice()
 											.reverse()
 											.map((message, index) => {
-												const player = historicalPlayers[message.uid];
+												const player = historicalPlayers[message.uid] ?? message.author;
 												const playerName = getRealName(player);
 												const timestamp = new Date(message.timestamp);
 												return (

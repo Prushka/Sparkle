@@ -694,10 +694,12 @@ func (r *Room) chat(sender *Player, message string, emojiRefs []ChatEmojiRef) {
 		return
 	}
 	sender.state.LastSeen = time.Now().Unix()
+	author := chatAuthorFromSnapshot(sender.state)
 	chat := Chat{
 		Message:   message,
 		Emojis:    extractEmojiIDs(message),
 		EmojiRefs: sanitizeEmojiRefs(message, emojiRefs),
+		Author:    &author,
 		Uid:       sender.state.Id,
 		Timestamp: time.Now().UnixMilli(),
 		MediaSec:  sender.state.Time,
@@ -736,6 +738,15 @@ func extractEmojiIDs(message string) []string {
 		}
 	}
 	return ids
+}
+
+func chatAuthorFromSnapshot(snapshot PlayerSnapshot) ChatAuthor {
+	return ChatAuthor{
+		Name:        snapshot.Name,
+		Id:          snapshot.Id,
+		ProfileId:   snapshot.ProfileId,
+		DiscordUser: snapshot.DiscordUser,
+	}
 }
 
 func sanitizeEmojiRefs(message string, refs []ChatEmojiRef) []ChatEmojiRef {
