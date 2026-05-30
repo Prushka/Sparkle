@@ -214,7 +214,7 @@ func TestSanitizeChessState(t *testing.T) {
 			Moves:  []ChessMoveState{{From: "e2", To: "e4", SAN: "e4"}},
 			Clocks: ChessClockState{WhiteMs: 0, BlackMs: 12000, LastTickAt: 99},
 			Settings: ChessSettingsState{
-				PieceSet:         "neo",
+				PieceSet:         "cartoon",
 				BoardTheme:       "blue",
 				Timed:            true,
 				Minutes:          5,
@@ -233,7 +233,7 @@ func TestSanitizeChessState(t *testing.T) {
 	if !tab.Open || tab.Phase != "ended" || tab.White.Name != "Alice" || tab.Black.Name != "Bob" {
 		t.Fatalf("sanitizeChessState() tab = %#v", tab)
 	}
-	if tab.Settings.PieceSet != "neo" || tab.Settings.BoardTheme != "blue" || tab.Settings.Minutes != 5 || tab.Settings.IncrementSeconds != 2 {
+	if tab.Settings.PieceSet != "cartoon" || tab.Settings.BoardTheme != "blue" || tab.Settings.Minutes != 5 || tab.Settings.IncrementSeconds != 2 {
 		t.Fatalf("sanitizeChessState() settings = %#v", tab.Settings)
 	}
 	if tab.Clocks.WhiteMs != 0 || tab.Clocks.BlackMs != 12000 || tab.Clocks.LastTickAt != 99 {

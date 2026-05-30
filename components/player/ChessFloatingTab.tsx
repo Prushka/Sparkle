@@ -9,7 +9,8 @@ import {
 	useRef,
 	useState
 } from 'react';
-import { Chess, type Color, type Move, type PieceSymbol, type Square } from 'chess.js';
+import Image from 'next/image';
+import { Chess, type Move, type PieceSymbol, type Square } from 'chess.js';
 import {
 	IconArrowsDiagonal,
 	IconChess,
@@ -32,7 +33,6 @@ import type {
 	ChessClockSyncState,
 	ChessColor,
 	ChessMoveSyncState,
-	ChessPieceSet,
 	ChessPlayerSyncState,
 	ChessResultSyncState,
 	ChessSettingsSyncState,
@@ -61,28 +61,22 @@ type PromotionChoice = {
 	options: PieceSymbol[];
 };
 
-const MIN_WIDTH = 420;
+const MIN_WIDTH = 760;
 const MIN_HEIGHT = 540;
-const DEFAULT_WIDTH = 560;
+const DEFAULT_WIDTH = 880;
 const DEFAULT_HEIGHT = 680;
 const CLOSE_CONFIRMATION_MS = 60_000;
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'] as const;
 const RANKS = ['1', '2', '3', '4', '5', '6', '7', '8'] as const;
 const PROMOTION_ORDER: PieceSymbol[] = ['q', 'r', 'b', 'n'];
 
-const PIECE_GLYPHS: Record<ChessPieceSet, Record<Color, Record<PieceSymbol, string>>> = {
-	classic: {
-		w: { k: '♔', q: '♕', r: '♖', b: '♗', n: '♘', p: '♙' },
-		b: { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' }
-	},
-	letters: {
-		w: { k: 'K', q: 'Q', r: 'R', b: 'B', n: 'N', p: 'P' },
-		b: { k: 'k', q: 'q', r: 'r', b: 'b', n: 'n', p: 'p' }
-	},
-	neo: {
-		w: { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' },
-		b: { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' }
-	}
+const PIECE_ASSET_NAMES: Record<PieceSymbol, string> = {
+	k: 'king',
+	q: 'queen',
+	r: 'rook',
+	b: 'bishop',
+	n: 'knight',
+	p: 'pawn'
 };
 
 const BOARD_THEMES: Record<
@@ -186,6 +180,15 @@ function isSameLayout(a: ChessTabLayout, b: ChessTabLayout) {
 
 function getNowMs() {
 	return Date.now();
+}
+
+function getPieceAsset(color: ChessColor, piece: PieceSymbol) {
+	const side = color === 'w' ? 'first' : 'second';
+	return `/media/chess/cartoon/${side}/${PIECE_ASSET_NAMES[piece]}.png`;
+}
+
+function pieceColorName(color: ChessColor) {
+	return color === 'w' ? 'White' : 'Black';
 }
 
 function playerLabel(player: ChessPlayerSyncState | null | undefined) {
@@ -830,7 +833,7 @@ export function ChessFloatingTab({
 		<div
 			ref={panelRef}
 			data-chess-tab={state.id}
-			className="fixed flex min-h-[540px] min-w-[420px] overflow-hidden rounded-lg border border-border bg-background shadow-2xl"
+			className="fixed flex min-h-[540px] min-w-[760px] overflow-hidden rounded-lg border border-border bg-background shadow-2xl"
 			onFocusCapture={bringToFront}
 			onPointerDownCapture={bringToFront}
 			style={{
@@ -872,93 +875,142 @@ export function ChessFloatingTab({
 				</div>
 
 				<div className="min-h-0 flex-1 overflow-auto bg-muted/20 p-3">
-					<div className="grid min-h-full gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
-						<div className="flex min-w-0 flex-col gap-2">
-							<div className="grid grid-cols-2 gap-2">
-								<div
-									className={`rounded-md border bg-background px-3 py-2 ${
-										activeColor === 'b' && state.phase === 'playing' ? 'border-primary' : ''
-									}`}
-								>
-									<div className="truncate text-sm font-semibold">{playerLabel(state.black)}</div>
-									<div className="mt-1 flex items-center gap-1 text-xs font-bold text-muted-foreground">
-										<IconClock size={14} stroke={2} />
-										{state.settings.timed ? formatClock(liveClocks.b) : 'Untimed'}
+					<div
+						className={
+							state.phase === 'setup'
+								? 'mx-auto grid min-h-full w-full max-w-2xl content-start gap-3'
+								: 'grid min-h-full min-w-[720px] grid-cols-[minmax(0,1fr)_260px] gap-3'
+						}
+					>
+						{state.phase === 'setup' ? null : (
+							<div className="flex min-w-0 flex-col gap-2">
+								<div className="grid grid-cols-2 gap-2">
+									<div
+										className={`rounded-md border bg-background px-3 py-2 ${
+											activeColor === 'b' && state.phase === 'playing' ? 'border-primary' : ''
+										}`}
+									>
+										<div className="truncate text-sm font-semibold">{playerLabel(state.black)}</div>
+										<div className="mt-1 flex items-center gap-1 text-xs font-bold text-muted-foreground">
+											<IconClock size={14} stroke={2} />
+											{state.settings.timed ? formatClock(liveClocks.b) : 'Untimed'}
+										</div>
+									</div>
+									<div
+										className={`rounded-md border bg-background px-3 py-2 ${
+											activeColor === 'w' && state.phase === 'playing' ? 'border-primary' : ''
+										}`}
+									>
+										<div className="truncate text-sm font-semibold">{playerLabel(state.white)}</div>
+										<div className="mt-1 flex items-center gap-1 text-xs font-bold text-muted-foreground">
+											<IconClock size={14} stroke={2} />
+											{state.settings.timed ? formatClock(liveClocks.w) : 'Untimed'}
+										</div>
 									</div>
 								</div>
-								<div
-									className={`rounded-md border bg-background px-3 py-2 ${
-										activeColor === 'w' && state.phase === 'playing' ? 'border-primary' : ''
-									}`}
-								>
-									<div className="truncate text-sm font-semibold">{playerLabel(state.white)}</div>
-									<div className="mt-1 flex items-center gap-1 text-xs font-bold text-muted-foreground">
-										<IconClock size={14} stroke={2} />
-										{state.settings.timed ? formatClock(liveClocks.w) : 'Untimed'}
-									</div>
-								</div>
-							</div>
 
-							<div
-								className={`grid aspect-square w-full shrink-0 grid-cols-8 overflow-hidden rounded-md border ${theme.border}`}
-							>
-								{squares.map((square) => {
-									const fileIndex = FILES.indexOf(square[0] as (typeof FILES)[number]);
-									const rankIndex = Number(square[1]) - 1;
-									const isLight = (fileIndex + rankIndex) % 2 === 0;
-									const piece = game.get(square);
-									const selected = selectedSquare === square;
-									const legal = legalTargets.has(square);
-									const pieceText = piece
-										? (PIECE_GLYPHS[state.settings.pieceSet]?.[piece.color]?.[piece.type] ??
-											PIECE_GLYPHS.classic[piece.color][piece.type])
-										: '';
-									return (
-										<button
-											key={square}
-											type="button"
-											className={`relative flex aspect-square min-h-0 min-w-0 items-center justify-center text-[2.6rem] font-black leading-none ${
-												isLight ? theme.light : theme.dark
-											} ${piece?.color === 'w' ? 'text-zinc-50 drop-shadow-[0_1px_1px_rgba(0,0,0,0.7)]' : 'text-zinc-950 drop-shadow-[0_1px_0_rgba(255,255,255,0.4)]'}`}
-											onClick={() => handleSquareClick(square)}
-											disabled={!isMyTurn || Boolean(closeRequest)}
-											aria-label={square}
-										>
-											{selected ? (
-												<span className="absolute inset-1 rounded bg-primary/30" />
-											) : null}
-											{legal ? (
-												<span
-													className={`absolute rounded-full ${piece ? 'inset-2 border-4 border-primary/55' : `h-3 w-3 ${theme.accent}`}`}
-												/>
-											) : null}
-											<span className="relative z-10">{pieceText}</span>
-											<span
-												className={`absolute bottom-1 right-1 text-[10px] font-bold ${
-													isLight ? 'text-black/35' : 'text-white/55'
-												}`}
+								<div
+									data-chess-board="true"
+									className={`grid aspect-square w-full shrink-0 grid-cols-8 overflow-hidden rounded-md border ${theme.border}`}
+								>
+									{squares.map((square) => {
+										const fileIndex = FILES.indexOf(square[0] as (typeof FILES)[number]);
+										const rankIndex = Number(square[1]) - 1;
+										const isLight = (fileIndex + rankIndex) % 2 === 0;
+										const piece = game.get(square);
+										const selected = selectedSquare === square;
+										const legal = legalTargets.has(square);
+										const pieceAsset = piece
+											? getPieceAsset(piece.color as ChessColor, piece.type)
+											: '';
+										return (
+											<button
+												key={square}
+												type="button"
+												className={`relative flex aspect-square min-h-0 min-w-0 items-center justify-center ${
+													isLight ? theme.light : theme.dark
+												} ${!isMyTurn || closeRequest ? 'cursor-default' : 'cursor-pointer'}`}
+												onClick={() => handleSquareClick(square)}
+												aria-disabled={!isMyTurn || Boolean(closeRequest)}
+												aria-label={square}
 											>
-												{orientation === 'w'
-													? square === `${square[0]}1`
-														? square[0]
-														: ''
-													: square === `${square[0]}8`
-														? square[0]
-														: ''}
-											</span>
-										</button>
-									);
-								})}
-							</div>
+												{selected ? (
+													<span className="absolute inset-1 rounded bg-primary/30" />
+												) : null}
+												{legal ? (
+													<span
+														className={`absolute rounded-full ${piece ? 'inset-2 border-4 border-primary/55' : `h-3 w-3 ${theme.accent}`}`}
+													/>
+												) : null}
+												{piece ? (
+													<Image
+														src={pieceAsset}
+														alt={`${pieceColorName(piece.color as ChessColor)} ${PIECE_ASSET_NAMES[piece.type]}`}
+														width={96}
+														height={96}
+														unoptimized
+														draggable={false}
+														className="relative z-10 h-[84%] w-[84%] select-none object-contain drop-shadow-[0_2px_2px_rgba(0,0,0,0.35)]"
+													/>
+												) : null}
+												<span
+													className={`absolute bottom-1 right-1 text-[10px] font-bold ${
+														isLight ? 'text-black/35' : 'text-white/55'
+													}`}
+												>
+													{orientation === 'w'
+														? square === `${square[0]}1`
+															? square[0]
+															: ''
+														: square === `${square[0]}8`
+															? square[0]
+															: ''}
+												</span>
+											</button>
+										);
+									})}
+								</div>
 
-							<div className="rounded-md border bg-background px-3 py-2 text-sm font-semibold">
-								{currentStatus}
+								<div className="rounded-md border bg-background px-3 py-2 text-sm font-semibold">
+									{currentStatus}
+								</div>
 							</div>
-						</div>
+						)}
 
-						<div className="flex min-h-0 flex-col gap-3">
+						<div
+							className={
+								state.phase === 'setup' ? 'grid content-start gap-3' : 'flex min-h-0 flex-col gap-3'
+							}
+						>
 							{state.phase === 'setup' ? (
 								<div className="flex flex-col gap-3">
+									<div className="rounded-md border bg-background p-4">
+										<div className="flex items-center justify-between gap-3">
+											<div className="min-w-0">
+												<div className="text-base font-bold">Game Setup</div>
+												<div className="text-xs font-semibold text-muted-foreground">
+													{state.white && state.black
+														? 'Ready to start'
+														: 'Waiting for two players'}
+												</div>
+											</div>
+											<div className="flex shrink-0 items-center gap-1">
+												{(['k', 'q', 'n'] as PieceSymbol[]).map((piece) => (
+													<Image
+														key={piece}
+														src={getPieceAsset(piece === 'n' ? 'b' : 'w', piece)}
+														alt=""
+														width={64}
+														height={64}
+														unoptimized
+														draggable={false}
+														className="h-10 w-10 object-contain drop-shadow-[0_2px_2px_rgba(0,0,0,0.35)]"
+													/>
+												))}
+											</div>
+										</div>
+									</div>
+
 									<div className="grid gap-2">
 										<SeatButton
 											color="w"
@@ -989,20 +1041,6 @@ export function ChessFloatingTab({
 									</div>
 
 									<div className="grid gap-2 rounded-md border bg-background p-3">
-										<label className="grid gap-1 text-xs font-bold text-muted-foreground">
-											Pieces
-											<select
-												value={state.settings.pieceSet}
-												onChange={(event) =>
-													updateSettings({ pieceSet: event.target.value as ChessPieceSet })
-												}
-												className="h-9 rounded-md border bg-background px-2 text-sm font-semibold text-foreground"
-											>
-												<option value="classic">Classic</option>
-												<option value="neo">Iconic</option>
-												<option value="letters">Letters</option>
-											</select>
-										</label>
 										<label className="grid gap-1 text-xs font-bold text-muted-foreground">
 											Board
 											<select
@@ -1129,7 +1167,10 @@ export function ChessFloatingTab({
 										)}
 									</div>
 
-									<div className="min-h-0 flex-1 overflow-auto rounded-md border bg-background">
+									<div
+										data-chess-moves="true"
+										className="min-h-0 flex-1 overflow-auto rounded-md border bg-background"
+									>
 										<div className="sticky top-0 border-b bg-background px-3 py-2 text-sm font-bold">
 											Moves
 										</div>
@@ -1179,15 +1220,22 @@ export function ChessFloatingTab({
 									key={piece}
 									type="button"
 									variant="outline"
-									className="h-12 text-2xl"
+									className="h-14 w-14 p-1"
 									onClick={() => {
 										makeMove(promotion.from, promotion.to, piece);
 										setPromotion(null);
 										setSelectedSquare(null);
 									}}
 								>
-									{PIECE_GLYPHS[state.settings.pieceSet]?.[myColor ?? 'w']?.[piece] ??
-										PIECE_GLYPHS.classic[myColor ?? 'w'][piece]}
+									<Image
+										src={getPieceAsset(myColor ?? 'w', piece)}
+										alt={PIECE_ASSET_NAMES[piece]}
+										width={64}
+										height={64}
+										unoptimized
+										draggable={false}
+										className="h-full w-full object-contain"
+									/>
 								</Button>
 							))}
 						</div>
