@@ -37,6 +37,7 @@ import type {
 	ChessClockSyncState,
 	ChessColor,
 	ChessMoveSyncState,
+	ChessPieceSet,
 	ChessPlayerSyncState,
 	ChessResultSyncState,
 	ChessSettingsSyncState,
@@ -86,6 +87,12 @@ const DEFAULT_WIDTH = 880;
 const DEFAULT_HEIGHT = 680;
 const COLLAPSED_HEIGHT = 44;
 const CLOSE_CONFIRMATION_MS = 60_000;
+const CHESS_PIECE_SET_OPTIONS: { value: ChessPieceSet; label: string }[] = [
+	{ value: 'cartoon', label: 'Cartoon' },
+	{ value: 'mushroom', label: 'Mushroom' },
+	{ value: 'sushi', label: 'Sushi' },
+	{ value: 'space', label: 'Space' }
+];
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'] as const;
 const RANKS = ['1', '2', '3', '4', '5', '6', '7', '8'] as const;
 const PROMOTION_ORDER: PieceSymbol[] = ['q', 'r', 'b', 'n'];
@@ -282,9 +289,10 @@ function getNowMs() {
 	return Date.now();
 }
 
-function getPieceAsset(color: ChessColor, piece: PieceSymbol) {
+function getPieceAsset(color: ChessColor, piece: PieceSymbol, pieceSet: ChessPieceSet) {
 	const side = color === 'w' ? 'first' : 'second';
-	return `/media/chess/cartoon/${side}/${PIECE_ASSET_NAMES[piece]}.png`;
+	const extension = pieceSet === 'cartoon' ? 'png' : 'svg';
+	return `/media/chess/${pieceSet}/${side}/${PIECE_ASSET_NAMES[piece]}.${extension}`;
 }
 
 function pieceColorName(color: ChessColor) {
@@ -870,6 +878,19 @@ export function ChessFloatingTab({
 		});
 	}
 
+	function updatePieceSet(pieceSet: ChessPieceSet) {
+		if (state.phase === 'setup') {
+			updateSettings({ pieceSet });
+			return;
+		}
+		onStateChange({
+			settings: {
+				...state.settings,
+				pieceSet
+			}
+		});
+	}
+
 	function joinSeat(color: ChessColor) {
 		if (!currentPlayer || state.phase !== 'setup') {
 			return;
@@ -1234,7 +1255,11 @@ export function ChessFloatingTab({
 										const selected = selectedSquare === square;
 										const legal = legalTargets.has(square);
 										const pieceAsset = piece
-											? getPieceAsset(piece.color as ChessColor, piece.type)
+											? getPieceAsset(
+													piece.color as ChessColor,
+													piece.type,
+													state.settings.pieceSet
+												)
 											: '';
 										return (
 											<button
@@ -1311,7 +1336,11 @@ export function ChessFloatingTab({
 												{(['k', 'q', 'n'] as PieceSymbol[]).map((piece) => (
 													<Image
 														key={piece}
-														src={getPieceAsset(piece === 'n' ? 'b' : 'w', piece)}
+														src={getPieceAsset(
+															piece === 'n' ? 'b' : 'w',
+															piece,
+															state.settings.pieceSet
+														)}
 														alt=""
 														width={64}
 														height={64}
@@ -1365,6 +1394,17 @@ export function ChessFloatingTab({
 											<option value="blue">Blue</option>
 											<option value="walnut">Walnut</option>
 										</ChessSelect>
+										<ChessSelect
+											label="Pieces"
+											value={state.settings.pieceSet}
+											onChange={(event) => updatePieceSet(event.target.value as ChessPieceSet)}
+										>
+											{CHESS_PIECE_SET_OPTIONS.map((option) => (
+												<option key={option.value} value={option.value}>
+													{option.label}
+												</option>
+											))}
+										</ChessSelect>
 										<ChessCheckbox
 											label="Timed"
 											checked={state.settings.timed}
@@ -1414,6 +1454,19 @@ export function ChessFloatingTab({
 								</div>
 							) : (
 								<div className="flex min-h-0 flex-1 flex-col gap-3">
+									<div className="rounded-md border bg-background p-3">
+										<ChessSelect
+											label="Pieces"
+											value={state.settings.pieceSet}
+											onChange={(event) => updatePieceSet(event.target.value as ChessPieceSet)}
+										>
+											{CHESS_PIECE_SET_OPTIONS.map((option) => (
+												<option key={option.value} value={option.value}>
+													{option.label}
+												</option>
+											))}
+										</ChessSelect>
+									</div>
 									<div className="grid gap-2">
 										{state.phase === 'playing' ? (
 											<>
@@ -1528,7 +1581,7 @@ export function ChessFloatingTab({
 									}}
 								>
 									<Image
-										src={getPieceAsset(myColor ?? 'w', piece)}
+										src={getPieceAsset(myColor ?? 'w', piece, state.settings.pieceSet)}
 										alt={PIECE_ASSET_NAMES[piece]}
 										width={64}
 										height={64}

@@ -348,7 +348,12 @@ function normalizeChessSettings(
 	settings: Partial<ChessSettingsSyncState> | null | undefined
 ): ChessSettingsSyncState {
 	const pieceSet: ChessPieceSet =
-		settings?.pieceSet === 'cartoon' ? settings.pieceSet : DEFAULT_CHESS_SETTINGS.pieceSet;
+		settings?.pieceSet === 'cartoon' ||
+		settings?.pieceSet === 'mushroom' ||
+		settings?.pieceSet === 'sushi' ||
+		settings?.pieceSet === 'space'
+			? settings.pieceSet
+			: DEFAULT_CHESS_SETTINGS.pieceSet;
 	const boardTheme: ChessBoardTheme =
 		settings?.boardTheme === 'blue' || settings?.boardTheme === 'walnut'
 			? settings.boardTheme

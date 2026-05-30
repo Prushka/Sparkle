@@ -118,7 +118,7 @@ export interface YouTubeSyncState {
 
 export type ChessColor = 'w' | 'b';
 export type ChessTabPhase = 'setup' | 'playing' | 'ended';
-export type ChessPieceSet = 'cartoon';
+export type ChessPieceSet = 'cartoon' | 'mushroom' | 'sushi' | 'space';
 export type ChessBoardTheme = 'green' | 'blue' | 'walnut';
 export type ChessResultWinner = ChessColor | 'draw' | '';
 

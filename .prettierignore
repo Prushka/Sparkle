@@ -6,3 +6,6 @@ next-env.d.ts
 
 # Vendored browser/worker assets.
 public/scripts
+
+# Generated chess piece media assets.
+public/media/chess/**/*.svg
