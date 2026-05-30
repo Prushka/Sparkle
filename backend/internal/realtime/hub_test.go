@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestExtractEmojiIDs(t *testing.T) {
@@ -259,6 +260,125 @@ func TestNewPlayerAdoptsExistingRoomPause(t *testing.T) {
 	}
 }
 
+func TestChatBroadcastSendsDeltaOnly(t *testing.T) {
+	room := &Room{
+		id:      "room",
+		players: make(map[string]*Player),
+		state:   defaultVideoState(),
+		youtube: defaultYouTubeState(),
+	}
+	sender := testPlayer("sender", "Sender", 4)
+	receiver := testPlayer("receiver", "Receiver", 4)
+	room.players[sender.state.Id] = sender
+	room.players[receiver.state.Id] = receiver
+
+	room.chat(sender, "hello :wave:", nil)
+
+	for _, player := range []*Player{sender, receiver} {
+		payload := readQueuedPayload(t, player)
+		if payload.Type != ChatSync {
+			t.Fatalf("chat payload type = %q, want %q", payload.Type, ChatSync)
+		}
+		if payload.Chat == nil || payload.Chat.Message != "hello :wave:" {
+			t.Fatalf("chat delta payload = %#v", payload.Chat)
+		}
+		if len(payload.Chats) != 0 {
+			t.Fatalf("chat delta included %d history messages, want 0", len(payload.Chats))
+		}
+	}
+}
+
+func TestNewPlayerReceivesFullChatHistory(t *testing.T) {
+	room := &Room{
+		id:      "room",
+		players: make(map[string]*Player),
+		state:   defaultVideoState(),
+		youtube: defaultYouTubeState(),
+		chats: []Chat{{
+			Message:   "history",
+			Timestamp: 123,
+			Uid:       "existing",
+		}},
+	}
+	joining := testPlayer("joining", "Joining", 4)
+	room.players[joining.state.Id] = joining
+
+	room.newPlayer(joining)
+
+	_ = readQueuedPayload(t, joining)
+	_ = readQueuedPayload(t, joining)
+	_ = readQueuedPayload(t, joining)
+	chatPayload := readQueuedPayload(t, joining)
+	if chatPayload.Type != ChatSync || len(chatPayload.Chats) != 1 {
+		t.Fatalf("history chat payload = %#v, want 1 full-history chat", chatPayload)
+	}
+	if chatPayload.Chat != nil {
+		t.Fatalf("history chat payload sent delta %#v, want full history only", chatPayload.Chat)
+	}
+}
+
+func TestSyncPlayerStateSendsFullDeltaAndHeartbeat(t *testing.T) {
+	room := &Room{
+		id:      "room",
+		players: make(map[string]*Player),
+		state:   defaultVideoState(),
+		youtube: defaultYouTubeState(),
+	}
+	alice := testPlayer("alice", "Alice", 8)
+	bob := testPlayer("bob", "Bob", 8)
+	room.players[alice.state.Id] = alice
+	room.players[bob.state.Id] = bob
+
+	firstSync := time.Unix(100, 0)
+	room.syncPlayerState(firstSync)
+
+	fullPayload := readQueuedPayload(t, alice)
+	if fullPayload.Type != PlayersStatusSync || len(fullPayload.Players) != 2 {
+		t.Fatalf("full player payload = %#v, want 2 players", fullPayload)
+	}
+	if fullPayload.PlayersCount != 2 {
+		t.Fatalf("full payload playersCount = %d, want 2", fullPayload.PlayersCount)
+	}
+	_ = readQueuedPayload(t, bob)
+
+	room.syncPlayerState(firstSync.Add(time.Second))
+	assertNoQueuedPayload(t, alice)
+	assertNoQueuedPayload(t, bob)
+
+	alice.state.Time = 42
+	alice.state.LastSeen = firstSync.Add(2 * time.Second).Unix()
+	room.syncPlayerState(firstSync.Add(2 * time.Second))
+
+	statusPayload := readQueuedPayload(t, alice)
+	if statusPayload.Type != PlayerStatusSync || len(statusPayload.PlayerStatuses) != 2 {
+		t.Fatalf("status payload = %#v, want 2 player statuses", statusPayload)
+	}
+	if len(statusPayload.Players) != 0 {
+		t.Fatalf("status payload included %d full players, want 0", len(statusPayload.Players))
+	}
+	_ = readQueuedPayload(t, bob)
+
+	room.syncPlayerState(firstSync.Add(5 * time.Second))
+	heartbeatPayload := readQueuedPayload(t, alice)
+	if heartbeatPayload.Type != HeartbeatSync || heartbeatPayload.PlayersCount != 2 {
+		t.Fatalf("heartbeat payload = %#v, want playersCount 2", heartbeatPayload)
+	}
+	if len(heartbeatPayload.Players) != 0 || len(heartbeatPayload.PlayerStatuses) != 0 {
+		t.Fatalf("heartbeat included player state: %#v", heartbeatPayload)
+	}
+	_ = readQueuedPayload(t, bob)
+}
+
+func testPlayer(id string, name string, sendBuffer int) *Player {
+	return &Player{
+		send: make(chan []byte, sendBuffer),
+		state: PlayerSnapshot{
+			VideoState:  defaultVideoState(),
+			PlayerState: PlayerState{Id: id, Name: name, LastSeen: time.Now().Unix()},
+		},
+	}
+}
+
 func readQueuedPayload(t *testing.T, player *Player) SendPayload {
 	t.Helper()
 
@@ -272,5 +392,15 @@ func readQueuedPayload(t *testing.T, player *Player) SendPayload {
 	default:
 		t.Fatal("expected queued payload")
 		return SendPayload{}
+	}
+}
+
+func assertNoQueuedPayload(t *testing.T, player *Player) {
+	t.Helper()
+
+	select {
+	case raw := <-player.send:
+		t.Fatalf("unexpected queued payload: %s", string(raw))
+	default:
 	}
 }

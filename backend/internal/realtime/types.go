@@ -7,6 +7,8 @@ const (
 	PauseSync         = "pause"
 	ChatSync          = "chat"
 	PlayersStatusSync = "players"
+	PlayerStatusSync  = "playerStatus"
+	HeartbeatSync     = "heartbeat"
 	PfpSync           = "pfp"
 	StateSync         = "state"
 	BroadcastSync     = "broadcast"
@@ -77,6 +79,14 @@ type PlayerSnapshot struct {
 	PlayerState
 }
 
+type PlayerStatus struct {
+	Id       string  `json:"id"`
+	Time     float64 `json:"time"`
+	Paused   bool    `json:"paused"`
+	InBg     bool    `json:"inBg"`
+	LastSeen int64   `json:"lastSeen"`
+}
+
 type Chat struct {
 	Message   string         `json:"message"`
 	Emojis    []string       `json:"emojis,omitempty"`
@@ -116,15 +126,18 @@ type ClientPayload struct {
 }
 
 type SendPayload struct {
-	Type      string           `json:"type"`
-	Time      *float64         `json:"time,omitempty"`
-	Paused    *bool            `json:"paused,omitempty"`
-	FiredBy   *PlayerSnapshot  `json:"firedBy,omitempty"`
-	Chats     []Chat           `json:"chats,omitempty"`
-	Players   []PlayerSnapshot `json:"players,omitempty"`
-	Timestamp int64            `json:"timestamp"`
-	Broadcast map[string]any   `json:"broadcast,omitempty"`
-	YouTube   *YouTubeState    `json:"youtube,omitempty"`
+	Type           string           `json:"type"`
+	Time           *float64         `json:"time,omitempty"`
+	Paused         *bool            `json:"paused,omitempty"`
+	FiredBy        *PlayerSnapshot  `json:"firedBy,omitempty"`
+	Chat           *Chat            `json:"chat,omitempty"`
+	Chats          []Chat           `json:"chats,omitempty"`
+	Players        []PlayerSnapshot `json:"players,omitempty"`
+	PlayerStatuses []PlayerStatus   `json:"playerStatuses,omitempty"`
+	PlayersCount   int              `json:"playersCount,omitempty"`
+	Timestamp      int64            `json:"timestamp"`
+	Broadcast      map[string]any   `json:"broadcast,omitempty"`
+	YouTube        *YouTubeState    `json:"youtube,omitempty"`
 }
 
 func defaultVideoState() VideoState {

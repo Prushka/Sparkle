@@ -78,10 +78,19 @@ export interface Player {
 	id: string;
 	profileId?: string;
 	inBg: boolean;
+	lastSeen?: number;
 	audio: string;
 	codec: string;
 	subtitle: string;
 	discordUser: DiscordUser | null | undefined;
+}
+
+export interface PlayerStatus {
+	id: string;
+	time: number;
+	paused: boolean;
+	inBg: boolean;
+	lastSeen: number;
 }
 
 export interface YouTubeTabSyncState {
@@ -166,6 +175,8 @@ export enum SyncTypes {
 	PauseSync = 'pause',
 	ChatSync = 'chat',
 	PlayersStatusSync = 'players',
+	PlayerStatusSync = 'playerStatus',
+	HeartbeatSync = 'heartbeat',
 	PfpSync = 'pfp',
 	StateSync = 'state',
 	BroadcastSync = 'broadcast',
@@ -187,10 +198,13 @@ export enum BroadcastTypes {
 export interface SendPayload {
 	type: string;
 	time?: number;
-	paused: boolean;
+	paused?: boolean;
 	firedBy?: Player;
-	chats: Chat[];
-	players: Player[];
+	chat?: Chat;
+	chats?: Chat[];
+	players?: Player[];
+	playerStatuses?: PlayerStatus[];
+	playersCount?: number;
 	timestamp: number;
 	broadcast?: BroadcastPayload;
 	audio?: string;

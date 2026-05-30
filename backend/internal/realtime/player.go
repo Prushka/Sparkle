@@ -44,7 +44,10 @@ func (p *Player) sendJSON(message any) bool {
 		log.Printf("marshal websocket payload: %v", err)
 		return false
 	}
+	return p.sendRaw(payload)
+}
 
+func (p *Player) sendRaw(payload []byte) bool {
 	p.sendMu.Lock()
 	defer p.sendMu.Unlock()
 	if p.closed {

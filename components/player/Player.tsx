@@ -76,6 +76,7 @@ import {
 	type Discord,
 	type Job,
 	type Player as RoomPlayer,
+	type PlayerStatus,
 	type SendPayload,
 	type ServerData,
 	type Stream,
@@ -608,7 +609,43 @@ function getLatestMessageTimestamp(messages: Chat[]) {
 	return 0;
 }
 
+function appendRoomChatMessage(current: Chat[], message: Chat) {
+	return [...current, message].slice(-MAX_ROOM_MESSAGES);
+}
+
+function mergeRoomPlayerStatuses(players: RoomPlayer[], statuses: PlayerStatus[]) {
+	if (statuses.length === 0 || players.length === 0) {
+		return players;
+	}
+	const statusById = new Map(statuses.map((status) => [status.id, status]));
+	let changed = false;
+	const next = players.map((player) => {
+		const status = statusById.get(player.id);
+		if (!status) {
+			return player;
+		}
+		if (
+			player.time === status.time &&
+			player.paused === status.paused &&
+			player.inBg === status.inBg &&
+			player.lastSeen === status.lastSeen
+		) {
+			return player;
+		}
+		changed = true;
+		return {
+			...player,
+			time: status.time,
+			paused: status.paused,
+			inBg: status.inBg,
+			lastSeen: status.lastSeen
+		};
+	});
+	return changed ? next : players;
+}
+
 const GENERATED_NAME_STORAGE_KEY = 'generatedName';
+const MAX_ROOM_MESSAGES = 200;
 const GENERATED_NAME_MESSAGE_PREFIX = 'generated-name-message';
 const SYSTEM_MESSAGE_DURATION_MS = 6000;
 const USERNAME_ADJECTIVES = [
@@ -2024,22 +2061,34 @@ export function Player({ data }: { data: ServerData }) {
 							break;
 						case SyncTypes.ChatSync:
 							setRoomMessages((prev) => {
+								if (state.chat) {
+									const next = appendRoomChatMessage(prev, state.chat);
+									if (next !== prev && inBgRef.current) {
+										notificationAudioRef.current?.play().catch(() => {});
+									}
+									return next;
+								}
+								const chats = state.chats ?? [];
 								if (
 									inBgRef.current &&
-									getLatestMessageTimestamp(prev) !== state.chats[state.chats.length - 1]?.timestamp
+									getLatestMessageTimestamp(prev) !== chats[chats.length - 1]?.timestamp
 								) {
 									notificationAudioRef.current?.play().catch(() => {});
 								}
-								return state.chats;
+								return chats;
 							});
 							break;
-						case SyncTypes.PlayersStatusSync:
+						case SyncTypes.PlayersStatusSync: {
+							const players = state.players;
+							if (!players) {
+								break;
+							}
 							reconnectAttemptRef.current = 0;
-							roomPlayersCountRef.current = state.players.length;
+							roomPlayersCountRef.current = players.length;
 							if (roomPlayersRef.current.length > 0) {
 								const { left, joined } = getLeftAndJoined(
 									roomPlayersRef.current,
-									state.players,
+									players,
 									playerId
 								);
 								const playerEvents = [
@@ -2058,13 +2107,13 @@ export function Player({ data }: { data: ServerData }) {
 									setControlsToDisplay((controls) => appendControlMessages(controls, playerEvents));
 								}
 							}
-							roomPlayersRef.current = state.players;
+							roomPlayersRef.current = players;
 							setRoomPlayers((current) =>
-								areRoomPlayersEqual(current, state.players) ? current : state.players
+								areRoomPlayersEqual(current, players) ? current : players
 							);
 							setHistoricalPlayers((prev) => {
 								let next = prev;
-								for (const player of state.players) {
+								for (const player of players) {
 									if (!areHistoricalPlayersEqual(next[player.id], player)) {
 										if (next === prev) {
 											next = { ...prev };
@@ -2074,14 +2123,41 @@ export function Player({ data }: { data: ServerData }) {
 								}
 								return next;
 							});
-							updateLastTicked(true, state.players.length);
+							updateLastTicked(true, players.length);
 							setCurrentlyWatching((value) => {
-								if (value && value.roomPlayers !== state.players.length) {
-									return { ...value, roomPlayers: state.players.length };
+								if (value && value.roomPlayers !== players.length) {
+									return { ...value, roomPlayers: players.length };
 								}
 								return value;
 							});
 							break;
+						}
+						case SyncTypes.PlayerStatusSync: {
+							const playerStatuses = state.playerStatuses ?? [];
+							const playersCount = state.playersCount ?? roomPlayersCountRef.current;
+							reconnectAttemptRef.current = 0;
+							roomPlayersCountRef.current = playersCount;
+							setRoomPlayers((current) => {
+								const next = mergeRoomPlayerStatuses(current, playerStatuses);
+								roomPlayersRef.current = next;
+								return next;
+							});
+							updateLastTicked(true, playersCount);
+							setCurrentlyWatching((value) => {
+								if (value && value.roomPlayers !== playersCount) {
+									return { ...value, roomPlayers: playersCount };
+								}
+								return value;
+							});
+							break;
+						}
+						case SyncTypes.HeartbeatSync: {
+							const playersCount = state.playersCount ?? roomPlayersCountRef.current;
+							reconnectAttemptRef.current = 0;
+							roomPlayersCountRef.current = playersCount;
+							updateLastTicked(true, playersCount);
+							break;
+						}
 						case SyncTypes.PauseSync:
 							awaitingInitialPlaybackSyncRef.current = false;
 							if (state.paused === true && player.paused === false) {

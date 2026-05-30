@@ -2,6 +2,7 @@ package realtime
 
 import (
 	"bytes"
+	"compress/flate"
 	"context"
 	"encoding/json"
 	"errors"
@@ -31,7 +32,10 @@ var (
 	safeYouTubeVideoID = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
 )
 
-const idleRoomTTL = 48 * time.Hour
+const (
+	idleRoomTTL            = 48 * time.Hour
+	statusHeartbeatTimeout = 3 * time.Second
+)
 
 type Hub struct {
 	outputDir      string
@@ -44,14 +48,17 @@ type Hub struct {
 }
 
 type Room struct {
-	id        string
-	players   map[string]*Player
-	chats     []Chat
-	lastSeek  time.Time
-	idleSince time.Time
-	state     VideoState
-	youtube   YouTubeState
-	mu        sync.RWMutex
+	id                        string
+	players                   map[string]*Player
+	chats                     []Chat
+	lastSeek                  time.Time
+	idleSince                 time.Time
+	lastPlayersSignature      string
+	lastPlayerStatusSignature string
+	lastStatusSent            time.Time
+	state                     VideoState
+	youtube                   YouTubeState
+	mu                        sync.RWMutex
 }
 
 func NewHub(options Options) *Hub {
@@ -60,9 +67,10 @@ func NewHub(options Options) *Hub {
 		maxUploadBytes: options.MaxUploadBytes,
 		rooms:          make(map[string]*Room),
 		upgrader: websocket.Upgrader{
-			ReadBufferSize:  1024,
-			WriteBufferSize: 1024,
-			CheckOrigin:     func(_ *http.Request) bool { return true },
+			ReadBufferSize:    1024,
+			WriteBufferSize:   1024,
+			EnableCompression: true,
+			CheckOrigin:       func(_ *http.Request) bool { return true },
 		},
 	}
 }
@@ -78,7 +86,7 @@ func (h *Hub) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-syncTicker.C:
-			h.syncPlayerStates()
+			h.syncPlayerStates(time.Now())
 		case <-cleanupTicker.C:
 			h.cleanupIdleRooms(time.Now())
 		}
@@ -115,6 +123,10 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("websocket upgrade failed: %v", err)
 		return
+	}
+	conn.EnableWriteCompression(true)
+	if err := conn.SetCompressionLevel(flate.BestSpeed); err != nil {
+		log.Printf("websocket compression level: %v", err)
 	}
 
 	player := newPlayer(conn, playerID)
@@ -193,6 +205,9 @@ func (h *Hub) addPlayerToRoom(id string, player *Player) *Room {
 	}
 	room.players[player.state.Id] = player
 	room.idleSince = time.Time{}
+	room.lastPlayersSignature = ""
+	room.lastPlayerStatusSignature = ""
+	room.lastStatusSent = time.Time{}
 	room.mu.Unlock()
 	h.mu.Unlock()
 
@@ -218,7 +233,7 @@ func (h *Hub) cleanupIdleRooms(now time.Time) {
 	}
 }
 
-func (h *Hub) syncPlayerStates() {
+func (h *Hub) syncPlayerStates(now time.Time) {
 	h.mu.RLock()
 	rooms := make([]*Room, 0, len(h.rooms))
 	for _, room := range h.rooms {
@@ -227,7 +242,7 @@ func (h *Hub) syncPlayerStates() {
 	h.mu.RUnlock()
 
 	for _, room := range rooms {
-		room.broadcastPlayerState()
+		room.syncPlayerState(now)
 	}
 }
 
@@ -263,6 +278,17 @@ func isExpectedWebSocketReadClose(err error) bool {
 		websocket.CloseGoingAway,
 		websocket.CloseNoStatusReceived,
 	) || errors.Is(err, net.ErrClosed) || strings.Contains(err.Error(), "use of closed network connection")
+}
+
+func sendPayloadToPlayers(players []*Player, message any) {
+	payload, err := json.Marshal(message)
+	if err != nil {
+		log.Printf("marshal websocket payload: %v", err)
+		return
+	}
+	for _, player := range players {
+		player.sendRaw(payload)
+	}
 }
 
 func (h *Hub) broadcastPFP(id string, timestamp int64) {
@@ -321,6 +347,9 @@ func (r *Room) remove(player *Player) {
 		r.youtube = defaultYouTubeState()
 		r.lastSeek = time.Time{}
 		r.idleSince = time.Now()
+		r.lastPlayersSignature = ""
+		r.lastPlayerStatusSignature = ""
+		r.lastStatusSent = time.Time{}
 	}
 }
 
@@ -445,9 +474,7 @@ func (r *Room) broadcast(sender *Player, broadcast map[string]any) {
 	r.mu.Unlock()
 
 	payload := SendPayload{Type: BroadcastSync, FiredBy: &firedBy, Timestamp: now, Broadcast: broadcast}
-	for _, player := range targets {
-		player.sendJSON(payload)
-	}
+	sendPayloadToPlayers(targets, payload)
 }
 
 func broadcastTargetID(broadcast map[string]any) (string, bool) {
@@ -574,9 +601,7 @@ func (r *Room) syncYouTube(sender *Player, incoming *YouTubeState) {
 		return
 	}
 	payload := SendPayload{Type: YouTubeSync, YouTube: &state, FiredBy: &firedBy, Timestamp: now.UnixMilli()}
-	for _, player := range targets {
-		player.sendJSON(payload)
-	}
+	sendPayloadToPlayers(targets, payload)
 }
 
 func shouldBroadcastYouTubeState(previous YouTubeState, next YouTubeState) bool {
@@ -662,7 +687,6 @@ func (r *Room) chat(sender *Player, message string, emojiRefs []ChatEmojiRef) {
 		message = string(messageRunes[:maxChatLength])
 	}
 
-	var chats []Chat
 	var targets []*Player
 	r.mu.Lock()
 	if r.players[sender.state.Id] != sender {
@@ -682,14 +706,11 @@ func (r *Room) chat(sender *Player, message string, emojiRefs []ChatEmojiRef) {
 	if len(r.chats) > maxChatMessages {
 		r.chats = append([]Chat(nil), r.chats[len(r.chats)-maxChatMessages:]...)
 	}
-	chats = append([]Chat(nil), r.chats...)
 	targets = r.playersLocked()
 	r.mu.Unlock()
 
-	payload := SendPayload{Type: ChatSync, Chats: chats, Timestamp: time.Now().UnixMilli()}
-	for _, player := range targets {
-		player.sendJSON(payload)
-	}
+	payload := SendPayload{Type: ChatSync, Chat: &chat, Timestamp: time.Now().UnixMilli()}
+	sendPayloadToPlayers(targets, payload)
 }
 
 func extractEmojiIDs(message string) []string {
@@ -848,9 +869,7 @@ func (r *Room) syncTime(sender *Player, next *float64) {
 		return
 	}
 	payload := SendPayload{Type: TimeSync, Time: next, FiredBy: &firedBy, Timestamp: time.Now().UnixMilli()}
-	for _, player := range targets {
-		player.sendJSON(payload)
-	}
+	sendPayloadToPlayers(targets, payload)
 }
 
 func (r *Room) syncPause(sender *Player, paused *bool) {
@@ -882,9 +901,7 @@ func (r *Room) syncPause(sender *Player, paused *bool) {
 		return
 	}
 	payload := SendPayload{Type: PauseSync, Paused: paused, FiredBy: &firedBy, Timestamp: time.Now().UnixMilli()}
-	for _, player := range targets {
-		player.sendJSON(payload)
-	}
+	sendPayloadToPlayers(targets, payload)
 }
 
 func (r *Room) newPlayer(sender *Player) {
@@ -948,40 +965,122 @@ func (r *Room) broadcastPFP(id string, timestamp int64) {
 		return
 	}
 	payload := SendPayload{Type: PfpSync, FiredBy: firedBy, Timestamp: timestamp}
-	for _, player := range targets {
-		player.sendJSON(payload)
-	}
+	sendPayloadToPlayers(targets, payload)
 }
 
-func (r *Room) broadcastPlayerState() {
+type playerPresenceSignature struct {
+	Id          string       `json:"id"`
+	Name        string       `json:"name"`
+	ProfileId   string       `json:"profileId,omitempty"`
+	Codec       string       `json:"codec,omitempty"`
+	Audio       string       `json:"audio,omitempty"`
+	Subtitle    string       `json:"subtitle,omitempty"`
+	DiscordUser *DiscordUser `json:"discordUser,omitempty"`
+}
+
+func (r *Room) syncPlayerState(now time.Time) {
 	var players []PlayerSnapshot
+	var statuses []PlayerStatus
+	var presences []playerPresenceSignature
 	var targets []*Player
 
-	r.mu.RLock()
+	r.mu.Lock()
 	for _, player := range r.players {
 		targets = append(targets, player)
 		if player.state.Name == "" {
 			continue
 		}
 		players = append(players, player.state)
-	}
-	r.mu.RUnlock()
-
-	if len(players) == 0 {
-		return
+		statuses = append(statuses, playerStatusFromSnapshot(player.state))
+		presences = append(presences, playerPresenceSignature{
+			Id:          player.state.Id,
+			Name:        player.state.Name,
+			ProfileId:   player.state.ProfileId,
+			Codec:       player.state.Codec,
+			Audio:       player.state.Audio,
+			Subtitle:    player.state.Subtitle,
+			DiscordUser: player.state.DiscordUser,
+		})
 	}
 
 	sort.Slice(players, func(i, j int) bool {
-		if players[i].Name == players[j].Name {
-			return players[i].Id < players[j].Id
-		}
-		return players[i].Name < players[j].Name
+		return comparePlayerSnapshots(players[i], players[j])
+	})
+	sort.Slice(statuses, func(i, j int) bool {
+		return statuses[i].Id < statuses[j].Id
+	})
+	sort.Slice(presences, func(i, j int) bool {
+		return presences[i].Id < presences[j].Id
 	})
 
-	payload := SendPayload{Type: PlayersStatusSync, Players: players, Timestamp: time.Now().UnixMilli()}
-	for _, player := range targets {
-		player.sendJSON(payload)
+	playersSignature := signatureFor(presences)
+	statusSignature := signatureFor(statuses)
+	var payload *SendPayload
+	timestamp := now.UnixMilli()
+	switch {
+	case len(players) == 0:
+		r.lastPlayersSignature = ""
+		r.lastPlayerStatusSignature = ""
+		r.lastStatusSent = time.Time{}
+	case playersSignature != r.lastPlayersSignature:
+		r.lastPlayersSignature = playersSignature
+		r.lastPlayerStatusSignature = statusSignature
+		r.lastStatusSent = now
+		payload = &SendPayload{
+			Type:         PlayersStatusSync,
+			Players:      players,
+			PlayersCount: len(players),
+			Timestamp:    timestamp,
+		}
+	case statusSignature != r.lastPlayerStatusSignature:
+		r.lastPlayerStatusSignature = statusSignature
+		r.lastStatusSent = now
+		payload = &SendPayload{
+			Type:           PlayerStatusSync,
+			PlayerStatuses: statuses,
+			PlayersCount:   len(players),
+			Timestamp:      timestamp,
+		}
+	case r.lastStatusSent.IsZero() || now.Sub(r.lastStatusSent) >= statusHeartbeatTimeout:
+		r.lastStatusSent = now
+		payload = &SendPayload{
+			Type:         HeartbeatSync,
+			PlayersCount: len(players),
+			Timestamp:    timestamp,
+		}
 	}
+	r.mu.Unlock()
+
+	if payload == nil || len(targets) == 0 {
+		return
+	}
+	sendPayloadToPlayers(targets, *payload)
+}
+
+func comparePlayerSnapshots(left PlayerSnapshot, right PlayerSnapshot) bool {
+	if left.Name == right.Name {
+		return left.Id < right.Id
+	}
+	return left.Name < right.Name
+}
+
+func playerStatusFromSnapshot(snapshot PlayerSnapshot) PlayerStatus {
+	return PlayerStatus{
+		Id:       snapshot.Id,
+		Time:     snapshot.Time,
+		Paused:   snapshot.Paused,
+		InBg:     snapshot.InBg,
+		LastSeen: snapshot.LastSeen,
+	}
+}
+
+func signatureFor(value any) string {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		log.Printf("marshal websocket signature: %v", err)
+		return ""
+	}
+	return string(payload)
 }
 
 func (r *Room) playersLocked() []*Player {
