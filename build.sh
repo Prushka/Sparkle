@@ -1,1 +1,6 @@
-docker buildx build --platform linux/amd64 -f Dockerfile --tag meinya/sparkle-fe:latest --push .
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+exec "$ROOT_DIR/scripts/docker-build-all.sh"

@@ -147,18 +147,37 @@ third-party media CDNs at runtime.
 
 ## Docker Compose
 
+See [`compose.example.yml`](compose.example.yml) for a complete two-service
+example using the published frontend and backend images. Build and push both
+images with:
+
+```sh
+./scripts/docker-build-all.sh
+```
+
 ```yaml
 services:
-  sparkle-fe:
-    image: meinya/sparkle-fe:latest
+  sparkle-api:
+    image: meinya/sparkle-api:latest
     restart: unless-stopped
+    environment:
+      - ADDR=:1323
+      - OUTPUT=/data/output
+    volumes:
+      - ./output:/data/output
+
+  sparkle-next:
+    image: meinya/sparkle-next:latest
+    restart: unless-stopped
+    depends_on:
+      - sparkle-api
     ports:
       - '3000:3000'
     environment:
       - SERVER_BE=/be
       - SERVER_STATIC=/static
-      - SERVER_INTERNAL_BE=http://sparkle-backend:1323
-      - SERVER_INTERNAL_STATIC=http://sparkle-backend:1323/static
+      - SERVER_INTERNAL_BE=http://sparkle-api:1323
+      - SERVER_INTERNAL_STATIC=http://sparkle-api:1323/static
       - PUBLIC_DISCORD_CLIENT_ID=
       - SERVER_DISCORD_CLIENT_SECRET=
 ```

@@ -18,7 +18,9 @@ import {
 	Poster,
 	TextTrack,
 	type MediaKeyShortcuts,
-	type MediaPlayerInstance
+	type MediaPlayerInstance,
+	type MediaProviderInstance,
+	type MediaSrc
 } from '@vidstack/react';
 import {
 	DefaultMenuButton,
@@ -27,7 +29,6 @@ import {
 	DefaultVideoLayout,
 	defaultLayoutIcons
 } from '@vidstack/react/player/layouts/default';
-import JASSUB from 'jassub';
 import {
 	IconBrandYoutubeFilled,
 	IconCheck,
@@ -93,7 +94,7 @@ import { YouTubeFloatingTab } from '@/components/player/YouTubeFloatingTab';
 
 type VideoSource = {
 	src: string;
-	type: string;
+	type: 'video/mp4';
 	codec: string;
 	sCodec: string;
 	audio: string;
@@ -656,6 +657,52 @@ async function waitForTextTracks(player: any) {
 	return null;
 }
 
+type AssRenderer = {
+	ready?: Promise<void>;
+	destroy?: () => void | Promise<void>;
+};
+
+type AssRendererConstructor = new (options: Record<string, unknown>) => AssRenderer;
+
+type VidstackProviderElement = MediaProviderInstance & {
+	el?: HTMLElement | null;
+	load?: (target: HTMLElement | null | undefined) => void;
+};
+
+const JASSUB_SCRIPT_URL = '/scripts/jassub.es.js';
+let assRendererConstructorPromise: Promise<AssRendererConstructor> | null = null;
+
+function loadAssRendererConstructor() {
+	assRendererConstructorPromise ??= Promise.resolve()
+		.then(() => new URL(JASSUB_SCRIPT_URL, window.location.origin).toString())
+		.then((scriptUrl) =>
+			import(/* webpackIgnore: true */ scriptUrl).then(
+				(module) => (module as { default: AssRendererConstructor }).default
+			)
+		);
+	return assRendererConstructorPromise;
+}
+
+function destroyAssRenderer(renderer: AssRenderer | null | undefined) {
+	if (!renderer?.destroy) {
+		return;
+	}
+	try {
+		// JASSUB cleanup is async; dev remounts can close the worker before abslink settles.
+		void Promise.resolve(renderer.destroy()).catch(() => undefined);
+	} catch {
+		// Ignore cleanup races from a partially initialized subtitle worker.
+	}
+}
+
+function ignoreMediaRequestFailure(action: () => unknown) {
+	try {
+		void Promise.resolve(action()).catch(() => undefined);
+	} catch {
+		// Vidstack may throw synchronously when a provider capability is unavailable.
+	}
+}
+
 export function Player({ data }: { data: ServerData }) {
 	const { job } = data;
 	const router = useRouter();
@@ -714,6 +761,7 @@ export function Player({ data }: { data: ServerData }) {
 	const playbackSyncSuppressionTimerRef = useRef<number | null>(null);
 	const [mounted, setMounted] = useState(false);
 	const [playerEl, setPlayerEl] = useState<MediaPlayerInstance | null>(null);
+	const [mediaProviderEl, setMediaProviderEl] = useState<VidstackProviderElement | null>(null);
 	const [playerCanPlay, setPlayerCanPlay] = useState(false);
 	const [controlsShowing, setControlsShowing] = useState(false);
 	const [playerSmallLayout, setPlayerSmallLayout] = useState(false);
@@ -805,6 +853,16 @@ export function Player({ data }: { data: ServerData }) {
 		selectedCodec,
 		supportedCodecs
 	]);
+	const playerSrc = useMemo<MediaSrc | undefined>(() => {
+		if (!videoSrc) {
+			return undefined;
+		}
+		return {
+			src: videoSrc.src,
+			type: videoSrc.type
+		};
+	}, [videoSrc]);
+	const playerSrcUrl = videoSrc?.src ?? '';
 	const effectiveAudio = videoSrc?.audio || selectedAudio;
 	const autoCodec =
 		videoSrc?.sCodec && selectedCodec === 'auto' ? `(${codecDisplayMap[videoSrc.sCodec]})` : '';
@@ -1252,6 +1310,25 @@ export function Player({ data }: { data: ServerData }) {
 		sendSettings();
 	}, [playerEl, sendSettings, videoSrc]);
 
+	useEffect(() => {
+		if (!mediaProviderEl || !playerEl || !playerSrc) {
+			return;
+		}
+		const animationFrame = window.requestAnimationFrame(() => {
+			const videoElement =
+				(mediaProviderEl.el?.querySelector('video') as HTMLVideoElement | null) ??
+				(typeof document === 'undefined'
+					? null
+					: (document.querySelector('.media-provider video') as HTMLVideoElement | null));
+			if (!videoElement) {
+				return;
+			}
+			mediaProviderEl.load?.(videoElement);
+			playerEl.startLoading?.();
+		});
+		return () => window.cancelAnimationFrame(animationFrame);
+	}, [mediaProviderEl, playerEl, playerSrc]);
+
 	const applyYouTubeState = useCallback((nextState: YouTubeSyncState) => {
 		const normalized = normalizeYouTubeSyncState(nextState);
 		youtubeStateRef.current = normalized;
@@ -1503,7 +1580,7 @@ export function Player({ data }: { data: ServerData }) {
 				supPlayingRef.current = false;
 			}
 			if (jasRef.current != null) {
-				jasRef.current.destroy();
+				destroyAssRenderer(jasRef.current);
 				jasRef.current = null;
 			}
 			const canvas = canvasRef.current;
@@ -2070,12 +2147,12 @@ export function Player({ data }: { data: ServerData }) {
 				send({ state: 'bg', type: SyncTypes.StateSync, paused: player.paused });
 				inBgRef.current = true;
 				if (!player.paused) {
-					player.enterPictureInPicture?.();
+					ignoreMediaRequestFailure(() => player.enterPictureInPicture?.());
 				}
 			} else {
 				send({ state: 'fg', type: SyncTypes.StateSync, paused: player.paused });
 				inBgRef.current = false;
-				player.exitPictureInPicture?.();
+				ignoreMediaRequestFailure(() => player.exitPictureInPicture?.());
 			}
 		};
 		document.addEventListener('visibilitychange', visibilityChange);
@@ -2089,7 +2166,7 @@ export function Player({ data }: { data: ServerData }) {
 				player.remoteControl?.toggleControls?.();
 			}
 		};
-		player.addEventListener?.('mouseleave', mouseLeave);
+		player.el?.addEventListener('mouseleave', mouseLeave);
 
 		const interval = window.setInterval(() => {
 			updateTime();
@@ -2111,7 +2188,7 @@ export function Player({ data }: { data: ServerData }) {
 					supPlayingRef.current = false;
 				}
 				if (jasRef.current) {
-					jasRef.current.destroy();
+					destroyAssRenderer(jasRef.current);
 					jasRef.current = null;
 				}
 				canvasRef.current
@@ -2152,18 +2229,34 @@ export function Player({ data }: { data: ServerData }) {
 						const availableFonts = {
 							[fallback[0]]: fallbackFontUrl
 						};
-						jasRef.current = new JASSUB({
-							video: videoElement,
-							subUrl: selectedTrack.src,
-							fallbackFont: fallback[0],
-							defaultFont: fallback[0],
-							availableFonts,
-							fonts: [...fontsRef.current, fallbackFontUrl],
-							queryFonts: false
-						} as any);
-						jasRef.current.ready?.catch((error: unknown) => {
-							console.error('Failed to initialize ASS subtitles:', error);
-						});
+						void loadAssRendererConstructor()
+							.then((JASSUB) => {
+								if (
+									prevTrackSrcRef.current !== selectedTrackSrc ||
+									!document.contains(videoElement)
+								) {
+									return;
+								}
+								jasRef.current = new JASSUB({
+									video: videoElement,
+									subUrl: selectedTrack.src,
+									workerUrl: getPublicAssetUrl('jassub-worker.js'),
+									wasmUrl: getPublicAssetUrl('jassub-worker.wasm'),
+									modernWasmUrl: getPublicAssetUrl('jassub-worker-modern.wasm'),
+									legacyWasmUrl: getPublicAssetUrl('jassub-worker.wasm.js'),
+									fallbackFont: fallback[0],
+									defaultFont: fallback[0],
+									availableFonts,
+									fonts: [...fontsRef.current, fallbackFontUrl],
+									queryFonts: false
+								});
+								jasRef.current.ready?.catch((error: unknown) => {
+									console.error('Failed to initialize ASS subtitles:', error);
+								});
+							})
+							.catch((error: unknown) => {
+								console.error('Failed to load ASS subtitles:', error);
+							});
 					}
 				}
 				prevTrackSrcRef.current = selectedTrackSrc;
@@ -2195,7 +2288,7 @@ export function Player({ data }: { data: ServerData }) {
 			window.clearInterval(interval);
 			document.removeEventListener('visibilitychange', visibilityChange);
 			document.removeEventListener('mousemove', mouseMove);
-			player.removeEventListener?.('mouseleave', mouseLeave);
+			player.el?.removeEventListener('mouseleave', mouseLeave);
 			playerCanPlayRef.current = false;
 			setPlayerCanPlay(false);
 			playerUnsubscribe?.();
@@ -2463,18 +2556,22 @@ export function Player({ data }: { data: ServerData }) {
 						showJoinOverlay ? 'pointer-events-none blur-sm' : 'blur-0'
 					}`}
 				>
-					{mounted && thumbnailVttSrc ? (
+					{mounted && thumbnailVttSrc && playerSrc ? (
 						<MediaPlayer
 							className={mediaPlayerClassName}
-							src={videoSrc?.src || undefined}
+							key={`${playerSrcUrl}:${thumbnailVttSrc}`}
+							src={playerSrc}
 							title={job.Input}
 							artist="Let's watch anime!"
 							controlsDelay={1500}
 							crossOrigin
 							keyShortcuts={PLAYER_KEY_SHORTCUTS}
+							load="eager"
 							ref={setPlayerElement}
 							muted={playerMuted}
+							posterLoad="eager"
 							playsInline
+							preload="auto"
 							volume={playerVolume}
 							onMediaPlayRequest={() => {
 								startWatchRoomConnection();
@@ -2514,7 +2611,8 @@ export function Player({ data }: { data: ServerData }) {
 								savePlayerVolume(volume, muted);
 							}}
 						>
-							<MediaProvider className="media-provider h-full w-full">
+							<MediaProvider className="media-provider h-full w-full" ref={setMediaProviderEl}>
+								<source key={playerSrcUrl} src={playerSrcUrl} type={videoSrc?.type} />
 								<Poster className="vds-poster" src={posterSrc} alt="" />
 								<canvas ref={canvasRef} id="sub-canvas" className="pointer-events-none absolute" />
 							</MediaProvider>
