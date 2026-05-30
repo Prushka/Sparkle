@@ -2257,6 +2257,36 @@ const chessNotificationSoundEffects: SoundEffect[] = [
 		tags: ['chess', 'game over', 'notification']
 	},
 	{
+		id: CHESS_NOTIFICATION_SOUND_IDS.win,
+		name: 'Chess Win',
+		icon: '♟',
+		category: 'game',
+		src: '/sound/chess-win.mp3',
+		duration: '0:01',
+		source: 'Mixkit',
+		tags: ['chess', 'win', 'notification']
+	},
+	{
+		id: CHESS_NOTIFICATION_SOUND_IDS.lose,
+		name: 'Chess Loss',
+		icon: '♟',
+		category: 'game',
+		src: '/sound/chess-lose.mp3',
+		duration: '0:01',
+		source: 'Mixkit',
+		tags: ['chess', 'lose', 'notification']
+	},
+	{
+		id: CHESS_NOTIFICATION_SOUND_IDS.spectatorGameOver,
+		name: 'Chess Spectator Finish',
+		icon: '♟',
+		category: 'game',
+		src: '/sound/chess-spectator-finish.mp3',
+		duration: '0:01',
+		source: 'Mixkit',
+		tags: ['chess', 'spectator', 'game over', 'notification']
+	},
+	{
 		id: CHESS_NOTIFICATION_SOUND_IDS.resign,
 		name: 'Chess Resign',
 		icon: '♟',

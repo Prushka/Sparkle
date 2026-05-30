@@ -166,6 +166,13 @@ export interface ChessResultSyncState {
 	message: string;
 }
 
+export interface ChessSoundEffectContext {
+	tabId: string;
+	whiteId: string;
+	blackId: string;
+	winner: ChessResultWinner;
+}
+
 export interface ChessTabSyncState {
 	id: string;
 	open: boolean;
@@ -305,6 +312,7 @@ export interface BroadcastPayload {
 
 export interface SoundEffectPayload {
 	id: string;
+	chess?: ChessSoundEffectContext;
 }
 
 export type VoiceSignalKind = 'hello' | 'offer' | 'answer' | 'ice' | 'leave' | 'status';

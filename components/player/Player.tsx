@@ -52,7 +52,10 @@ import { useAppState } from '@/lib/app-state';
 import { useTheme } from '@/lib/theme';
 import { createNotificationAudioUrl } from '@/lib/player/notification-audio';
 import { getSoundEffect } from '@/lib/player/sound-effects';
-import type { ChessNotificationSoundId } from '@/lib/player/chess-notifications';
+import {
+	CHESS_NOTIFICATION_SOUND_IDS,
+	type ChessNotificationSoundId
+} from '@/lib/player/chess-notifications';
 import {
 	BroadcastTypes,
 	codecDisplayMap,
@@ -81,6 +84,7 @@ import {
 	type PlayerStatus,
 	type SendPayload,
 	type ServerData,
+	type SoundEffectPayload,
 	type Stream,
 	type ChessBoardTheme,
 	type ChessClockSyncState,
@@ -90,6 +94,7 @@ import {
 	type ChessPlayerSyncState,
 	type ChessResultSyncState,
 	type ChessSettingsSyncState,
+	type ChessSoundEffectContext,
 	type ChessTabPhase,
 	type ChessTabSyncState,
 	type ChessSyncState,
@@ -438,6 +443,33 @@ function normalizeChessResult(
 		reason: typeof result.reason === 'string' ? result.reason.slice(0, 40) : '',
 		message: typeof result.message === 'string' ? result.message.slice(0, 160) : ''
 	};
+}
+
+function resolveBroadcastSoundEffectId(
+	soundEffect: SoundEffectPayload | undefined,
+	playerId: string
+) {
+	if (!soundEffect) {
+		return undefined;
+	}
+	if (soundEffect.id !== CHESS_NOTIFICATION_SOUND_IDS.gameOver || !soundEffect.chess) {
+		return soundEffect.id;
+	}
+	const playerColor =
+		soundEffect.chess.whiteId === playerId
+			? 'w'
+			: soundEffect.chess.blackId === playerId
+				? 'b'
+				: null;
+	if (!playerColor) {
+		return CHESS_NOTIFICATION_SOUND_IDS.spectatorGameOver;
+	}
+	if (soundEffect.chess.winner === 'draw') {
+		return CHESS_NOTIFICATION_SOUND_IDS.draw;
+	}
+	return soundEffect.chess.winner === playerColor
+		? CHESS_NOTIFICATION_SOUND_IDS.win
+		: CHESS_NOTIFICATION_SOUND_IDS.lose;
 }
 
 function normalizeChessCloseRequest(
@@ -1829,12 +1861,15 @@ export function Player({ data }: { data: ServerData }) {
 	}, []);
 
 	const sendChessNotification = useCallback(
-		(soundId: ChessNotificationSoundId) => {
+		(soundId: ChessNotificationSoundId, chess?: ChessSoundEffectContext) => {
 			send({
 				type: SyncTypes.BroadcastSync,
 				broadcast: {
 					type: BroadcastTypes.SoundEffect,
-					soundEffect: { id: soundId }
+					soundEffect: {
+						id: soundId,
+						...(chess ? { chess } : {})
+					}
 				}
 			});
 		},
@@ -2763,7 +2798,10 @@ export function Player({ data }: { data: ServerData }) {
 									void handleVoiceBroadcast(state.firedBy?.id, broadcast);
 									break;
 								case BroadcastTypes.SoundEffect:
-									playSoundEffect(broadcast.soundEffect?.id, state.firedBy?.id);
+									playSoundEffect(
+										resolveBroadcastSoundEffectId(broadcast.soundEffect, playerId),
+										state.firedBy?.id
+									);
 									pulseSoundEffectBadge(state.firedBy?.id);
 									break;
 							}

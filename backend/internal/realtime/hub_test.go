@@ -67,7 +67,14 @@ func TestSanitizeSoundEffectBroadcast(t *testing.T) {
 	got := sanitizeBroadcast(map[string]any{
 		"type": SoundEffectSync,
 		"soundEffect": map[string]any{
-			"id":    "level_complete",
+			"id": "level_complete",
+			"chess": map[string]any{
+				"tabId":   "game_1",
+				"whiteId": "white",
+				"blackId": "black",
+				"winner":  "w",
+				"extra":   "ignored",
+			},
 			"extra": "ignored",
 		},
 		"extra": "ignored",
@@ -76,8 +83,15 @@ func TestSanitizeSoundEffectBroadcast(t *testing.T) {
 	if !ok {
 		t.Fatalf("sanitizeBroadcast() soundEffect = %#v", got["soundEffect"])
 	}
-	if got["type"] != SoundEffectSync || effect["id"] != "level_complete" || len(got) != 2 {
+	chess, ok := effect["chess"].(map[string]any)
+	if !ok {
+		t.Fatalf("sanitizeBroadcast() chess context = %#v", effect["chess"])
+	}
+	if got["type"] != SoundEffectSync || effect["id"] != "level_complete" || len(got) != 2 || len(effect) != 2 {
 		t.Fatalf("sanitizeBroadcast() = %#v", got)
+	}
+	if chess["tabId"] != "game_1" || chess["whiteId"] != "white" || chess["blackId"] != "black" || chess["winner"] != "w" || len(chess) != 4 {
+		t.Fatalf("sanitizeBroadcast() chess context = %#v", chess)
 	}
 }
 

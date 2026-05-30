@@ -41,6 +41,7 @@ import type {
 	ChessPlayerSyncState,
 	ChessResultSyncState,
 	ChessSettingsSyncState,
+	ChessSoundEffectContext,
 	ChessTabSyncState
 } from '@/lib/player/t';
 import {
@@ -64,7 +65,7 @@ type ChessFloatingTabProps = {
 	state: ChessTabSyncState;
 	currentPlayer: ChessPlayerSyncState | null;
 	onStateChange: (patch: Partial<ChessTabSyncState>) => void;
-	onNotification: (soundId: ChessNotificationSoundId) => void;
+	onNotification: (soundId: ChessNotificationSoundId, chess?: ChessSoundEffectContext) => void;
 };
 
 type PromotionChoice = {
@@ -93,6 +94,11 @@ const CHESS_PIECE_SET_OPTIONS: { value: ChessPieceSet; label: string }[] = [
 	{ value: 'sushi', label: 'Sushi' },
 	{ value: 'space', label: 'Space' }
 ];
+const CHESS_BOARD_THEME_OPTIONS: { value: ChessBoardTheme; label: string }[] = [
+	{ value: 'green', label: 'Green' },
+	{ value: 'blue', label: 'Blue' },
+	{ value: 'walnut', label: 'Walnut' }
+];
 const FILES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'] as const;
 const RANKS = ['1', '2', '3', '4', '5', '6', '7', '8'] as const;
 const PROMOTION_ORDER: PieceSymbol[] = ['q', 'r', 'b', 'n'];
@@ -106,15 +112,14 @@ const PIECE_ASSET_NAMES: Record<PieceSymbol, string> = {
 	p: 'pawn'
 };
 
-const BOARD_THEMES: Record<
-	ChessBoardTheme,
-	{
-		light: string;
-		dark: string;
-		border: string;
-		accent: string;
-	}
-> = {
+type BoardThemeDefinition = {
+	light: string;
+	dark: string;
+	border: string;
+	accent: string;
+};
+
+const BOARD_THEMES: Record<ChessBoardTheme, BoardThemeDefinition> = {
 	green: {
 		light: 'bg-emerald-50',
 		dark: 'bg-emerald-600',
@@ -457,30 +462,148 @@ function SeatButton({
 	onLeave: () => void;
 }) {
 	const isSelf = isSameChessPlayer(player, currentPlayer);
+	const occupied = Boolean(player);
+	const colorLabel = colorName(color);
 	return (
-		<div className="flex min-w-0 items-center justify-between gap-2 rounded-md border bg-background/80 px-2.5 py-2">
-			<div className="min-w-0">
-				<div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-					{colorName(color)}
+		<div
+			className={`grid min-w-0 gap-3 rounded-md border p-3 ${
+				isSelf ? 'border-primary bg-primary/10' : occupied ? 'bg-muted/35' : 'bg-background'
+			}`}
+		>
+			<div className="flex min-w-0 items-center justify-between gap-3">
+				<div className="min-w-0">
+					<div className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+						{colorLabel} Seat
+					</div>
+					<div className="truncate text-base font-bold">
+						{occupied ? playerLabel(player) : 'Open seat'}
+					</div>
 				</div>
-				<div className="truncate text-sm font-semibold">{playerLabel(player)}</div>
+				<div
+					className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${
+						color === 'w' ? 'bg-white text-slate-950' : 'bg-slate-950 text-white'
+					}`}
+				>
+					<IconChess size={18} stroke={2} />
+				</div>
 			</div>
 			{isSelf ? (
-				<Button type="button" size="icon" variant="ghost" className="h-8 w-8" onClick={onLeave}>
+				<Button type="button" variant="outline" className="h-9 w-full gap-2" onClick={onLeave}>
 					<IconUserMinus size={17} stroke={2} />
+					Leave Seat
 				</Button>
 			) : (
 				<Button
 					type="button"
-					size="icon"
-					variant="outline"
-					className="h-8 w-8"
-					disabled={disabled || Boolean(player)}
+					variant={occupied ? 'outline' : 'default'}
+					className="h-9 w-full gap-2"
+					disabled={disabled || occupied}
 					onClick={onJoin}
 				>
 					<IconUserPlus size={17} stroke={2} />
+					{occupied ? 'Occupied' : `Join ${colorLabel}`}
 				</Button>
 			)}
+		</div>
+	);
+}
+
+function BoardThemePreview({ theme }: { theme: BoardThemeDefinition }) {
+	return (
+		<span
+			className={`grid h-12 w-12 shrink-0 grid-cols-4 overflow-hidden rounded border ${theme.border}`}
+		>
+			{Array.from({ length: 16 }, (_, index) => (
+				<span
+					key={index}
+					className={(Math.floor(index / 4) + index) % 2 === 0 ? theme.light : theme.dark}
+				/>
+			))}
+		</span>
+	);
+}
+
+function PieceSetPreview({ pieceSet }: { pieceSet: ChessPieceSet }) {
+	return (
+		<span className="flex shrink-0 items-center gap-0.5">
+			{(['k', 'q', 'n'] as PieceSymbol[]).map((piece) => (
+				<Image
+					key={piece}
+					src={getPieceAsset(piece === 'n' ? 'b' : 'w', piece, pieceSet)}
+					alt=""
+					width={48}
+					height={48}
+					unoptimized
+					draggable={false}
+					className="h-8 w-8 object-contain drop-shadow-[0_2px_2px_rgba(0,0,0,0.35)]"
+				/>
+			))}
+		</span>
+	);
+}
+
+function BoardThemePicker({
+	value,
+	onChange
+}: {
+	value: ChessBoardTheme;
+	onChange: (value: ChessBoardTheme) => void;
+}) {
+	return (
+		<div className="grid gap-2">
+			<div className="text-xs font-bold text-muted-foreground">Board</div>
+			<div className="grid grid-cols-3 gap-2">
+				{CHESS_BOARD_THEME_OPTIONS.map((option) => {
+					const selected = value === option.value;
+					return (
+						<button
+							key={option.value}
+							type="button"
+							onClick={() => onChange(option.value)}
+							aria-pressed={selected}
+							className={`grid min-w-0 justify-items-center gap-2 rounded-md border p-2 text-sm font-semibold transition-colors hover:bg-accent ${
+								selected ? 'border-primary bg-primary/10 text-primary' : 'bg-background'
+							}`}
+						>
+							<BoardThemePreview theme={BOARD_THEMES[option.value]} />
+							<span className="truncate">{option.label}</span>
+						</button>
+					);
+				})}
+			</div>
+		</div>
+	);
+}
+
+function PieceSetPicker({
+	value,
+	onChange
+}: {
+	value: ChessPieceSet;
+	onChange: (value: ChessPieceSet) => void;
+}) {
+	return (
+		<div className="grid gap-2">
+			<div className="text-xs font-bold text-muted-foreground">Pieces</div>
+			<div className="grid grid-cols-2 gap-2">
+				{CHESS_PIECE_SET_OPTIONS.map((option) => {
+					const selected = value === option.value;
+					return (
+						<button
+							key={option.value}
+							type="button"
+							onClick={() => onChange(option.value)}
+							aria-pressed={selected}
+							className={`flex min-w-0 items-center justify-between gap-2 rounded-md border p-2 text-sm font-semibold transition-colors hover:bg-accent ${
+								selected ? 'border-primary bg-primary/10 text-primary' : 'bg-background'
+							}`}
+						>
+							<span className="truncate">{option.label}</span>
+							<PieceSetPreview pieceSet={option.value} />
+						</button>
+					);
+				})}
+			</div>
 		</div>
 	);
 }
@@ -634,6 +757,21 @@ export function ChessFloatingTab({
 		currentPlayer &&
 		(isSameChessPlayer(state.white, currentPlayer) || isSameChessPlayer(state.black, currentPlayer))
 	);
+	const notifyGameEnd = useCallback(
+		(result: ChessResultSyncState) => {
+			if (!state.white || !state.black) {
+				onNotification(CHESS_NOTIFICATION_SOUND_IDS.gameOver);
+				return;
+			}
+			onNotification(CHESS_NOTIFICATION_SOUND_IDS.gameOver, {
+				tabId: state.id,
+				whiteId: state.white.id,
+				blackId: state.black.id,
+				winner: result.winner
+			});
+		},
+		[onNotification, state.black, state.id, state.white]
+	);
 
 	useEffect(() => {
 		return () => {
@@ -657,20 +795,21 @@ export function ChessFloatingTab({
 		if (liveClocks[activeColor] > 0) {
 			return;
 		}
+		const result = buildTimeoutResult(activeColor);
 		onStateChange({
 			phase: 'ended',
-			result: buildTimeoutResult(activeColor),
+			result,
 			clocks: { ...liveClocks, lastTickAt: 0 },
 			drawOffer: null
 		});
 		if (myColor === activeColor) {
-			onNotification(CHESS_NOTIFICATION_SOUND_IDS.gameOver);
+			notifyGameEnd(result);
 		}
 	}, [
 		activeColor,
 		liveClocks,
 		myColor,
-		onNotification,
+		notifyGameEnd,
 		onStateChange,
 		state.phase,
 		state.result,
@@ -1014,7 +1153,7 @@ export function ChessFloatingTab({
 			drawOffer: null
 		});
 		if (result) {
-			onNotification(CHESS_NOTIFICATION_SOUND_IDS.gameOver);
+			notifyGameEnd(result);
 		} else if (move.captured) {
 			onNotification(CHESS_NOTIFICATION_SOUND_IDS.capture);
 		} else if (nextGame.isCheck()) {
@@ -1060,13 +1199,14 @@ export function ChessFloatingTab({
 		if (!myColor || state.phase !== 'playing') {
 			return;
 		}
+		const result = buildResignationResult(myColor);
 		onStateChange({
 			phase: 'ended',
-			result: buildResignationResult(myColor),
+			result,
 			clocks: { ...liveClocks, lastTickAt: 0 },
 			drawOffer: null
 		});
-		onNotification(CHESS_NOTIFICATION_SOUND_IDS.resign);
+		notifyGameEnd(result);
 	}
 
 	function offerOrAnswerDraw(accept = false) {
@@ -1074,17 +1214,18 @@ export function ChessFloatingTab({
 			return;
 		}
 		if (accept && drawOffer && !isSameChessPlayer(drawOffer.offeredBy, currentPlayer)) {
+			const result: ChessResultSyncState = {
+				winner: 'draw',
+				reason: 'agreement',
+				message: 'Draw by agreement'
+			};
 			onStateChange({
 				phase: 'ended',
-				result: {
-					winner: 'draw',
-					reason: 'agreement',
-					message: 'Draw by agreement'
-				},
+				result,
 				clocks: { ...liveClocks, lastTickAt: 0 },
 				drawOffer: null
 			});
-			onNotification(CHESS_NOTIFICATION_SOUND_IDS.draw);
+			notifyGameEnd(result);
 			return;
 		}
 		onStateChange({
@@ -1212,7 +1353,7 @@ export function ChessFloatingTab({
 					<div
 						className={
 							state.phase === 'setup'
-								? 'mx-auto grid min-h-full w-full max-w-2xl content-start gap-3'
+								? 'mx-auto grid min-h-full w-full max-w-3xl content-start gap-3'
 								: 'grid min-h-full min-w-[720px] grid-cols-[minmax(0,1fr)_260px] gap-3'
 						}
 					>
@@ -1332,28 +1473,11 @@ export function ChessFloatingTab({
 														: 'Waiting for two players'}
 												</div>
 											</div>
-											<div className="flex shrink-0 items-center gap-1">
-												{(['k', 'q', 'n'] as PieceSymbol[]).map((piece) => (
-													<Image
-														key={piece}
-														src={getPieceAsset(
-															piece === 'n' ? 'b' : 'w',
-															piece,
-															state.settings.pieceSet
-														)}
-														alt=""
-														width={64}
-														height={64}
-														unoptimized
-														draggable={false}
-														className="h-10 w-10 object-contain drop-shadow-[0_2px_2px_rgba(0,0,0,0.35)]"
-													/>
-												))}
-											</div>
+											<PieceSetPreview pieceSet={state.settings.pieceSet} />
 										</div>
 									</div>
 
-									<div className="grid gap-2">
+									<div className="grid gap-2 sm:grid-cols-2">
 										<SeatButton
 											color="w"
 											player={state.white}
@@ -1370,6 +1494,9 @@ export function ChessFloatingTab({
 											onJoin={() => joinSeat('b')}
 											onLeave={leaveSeat}
 										/>
+									</div>
+
+									<div className="grid gap-2">
 										<Button
 											type="button"
 											variant="outline"
@@ -1382,29 +1509,12 @@ export function ChessFloatingTab({
 										</Button>
 									</div>
 
-									<div className="grid gap-2 rounded-md border bg-background p-3">
-										<ChessSelect
-											label="Board"
+									<div className="grid gap-4 rounded-md border bg-background p-3">
+										<BoardThemePicker
 											value={state.settings.boardTheme}
-											onChange={(event) =>
-												updateSettings({ boardTheme: event.target.value as ChessBoardTheme })
-											}
-										>
-											<option value="green">Green</option>
-											<option value="blue">Blue</option>
-											<option value="walnut">Walnut</option>
-										</ChessSelect>
-										<ChessSelect
-											label="Pieces"
-											value={state.settings.pieceSet}
-											onChange={(event) => updatePieceSet(event.target.value as ChessPieceSet)}
-										>
-											{CHESS_PIECE_SET_OPTIONS.map((option) => (
-												<option key={option.value} value={option.value}>
-													{option.label}
-												</option>
-											))}
-										</ChessSelect>
+											onChange={(boardTheme) => updateSettings({ boardTheme })}
+										/>
+										<PieceSetPicker value={state.settings.pieceSet} onChange={updatePieceSet} />
 										<ChessCheckbox
 											label="Timed"
 											checked={state.settings.timed}
@@ -1455,6 +1565,10 @@ export function ChessFloatingTab({
 							) : (
 								<div className="flex min-h-0 flex-1 flex-col gap-3">
 									<div className="rounded-md border bg-background p-3">
+										<div className="mb-2 flex items-center justify-between gap-2">
+											<div className="text-xs font-bold text-muted-foreground">Current Pieces</div>
+											<PieceSetPreview pieceSet={state.settings.pieceSet} />
+										</div>
 										<ChessSelect
 											label="Pieces"
 											value={state.settings.pieceSet}

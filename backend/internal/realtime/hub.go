@@ -789,12 +789,63 @@ func sanitizeBroadcast(broadcast map[string]any) map[string]any {
 	if !safeEmojiID.MatchString(id) {
 		return nil
 	}
-	return map[string]any{
-		"type": SoundEffectSync,
-		"soundEffect": map[string]any{
-			"id": id,
-		},
+	effect := map[string]any{
+		"id": id,
 	}
+	if chessContext, ok := sanitizeSoundEffectChessContext(rawEffect["chess"]); ok {
+		effect["chess"] = chessContext
+	}
+	return map[string]any{
+		"type":        SoundEffectSync,
+		"soundEffect": effect,
+	}
+}
+
+func sanitizeSoundEffectChessContext(value any) (map[string]any, bool) {
+	raw, ok := value.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	tabID, ok := raw["tabId"].(string)
+	if !ok {
+		return nil, false
+	}
+	tabID = strings.TrimSpace(tabID)
+	if !safeID.MatchString(tabID) {
+		return nil, false
+	}
+	whiteID, ok := raw["whiteId"].(string)
+	if !ok {
+		return nil, false
+	}
+	whiteID = strings.TrimSpace(whiteID)
+	if !safeID.MatchString(whiteID) {
+		return nil, false
+	}
+	blackID, ok := raw["blackId"].(string)
+	if !ok {
+		return nil, false
+	}
+	blackID = strings.TrimSpace(blackID)
+	if !safeID.MatchString(blackID) {
+		return nil, false
+	}
+	winner, ok := raw["winner"].(string)
+	if !ok {
+		return nil, false
+	}
+	winner = strings.TrimSpace(winner)
+	switch winner {
+	case "w", "b", "draw":
+	default:
+		return nil, false
+	}
+	return map[string]any{
+		"tabId":   tabID,
+		"whiteId": whiteID,
+		"blackId": blackID,
+		"winner":  winner,
+	}, true
 }
 
 func sanitizeDiscordUser(user *DiscordUser) *DiscordUser {
