@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { DiscordSDK } from '@discord/embedded-app-sdk';
-import { PUBLIC_DISCORD_CLIENT_ID } from '@/lib/env';
 import { formatSeconds, isExpired, type Discord, type Watching } from '@/lib/player/t';
 import { useAppState } from '@/lib/app-state';
 
@@ -11,6 +10,10 @@ const DISCORD_AUTH_STORAGE_KEY = 'sparkle:discord-auth';
 const DISCORD_SCOPES = ['identify', 'rpc.activities.write'] as const;
 const ACTIVITY_TEXT_LIMIT = 128;
 const MAX_PARTY_SIZE = 99;
+
+type RuntimeEnv = {
+	PUBLIC_DISCORD_CLIENT_ID?: string;
+};
 
 function hasDiscordFrameParams(params: Pick<URLSearchParams, 'has'>) {
 	return params.has('frame_id') || params.has('instance_id');
@@ -106,6 +109,7 @@ export function DiscordBridge() {
 	const setupStartedRef = useRef(false);
 	const authRef = useRef<Discord | null>(discordAuth);
 	const latestRoomRef = useRef<string | null>(null);
+	const [discordClientId, setDiscordClientId] = useState('');
 	const searchParamsString = searchParams.toString();
 	const isDiscordActivity = hasDiscordFrameParams(searchParams);
 
@@ -145,7 +149,39 @@ export function DiscordBridge() {
 	}, [discordAuth?.channelId, pathname, searchParamsString]);
 
 	useEffect(() => {
-		if (!PUBLIC_DISCORD_CLIENT_ID) {
+		if (typeof window === 'undefined') {
+			return;
+		}
+		if (!isDiscordActivity) {
+			return;
+		}
+
+		let cancelled = false;
+
+		async function loadRuntimeEnv() {
+			try {
+				const response = await fetch('/api/runtime-env', { cache: 'no-store' });
+				if (!response.ok) {
+					throw new Error(`Failed to load runtime env: ${response.status}`);
+				}
+				const runtimeEnv = (await response.json()) as RuntimeEnv;
+				if (!cancelled) {
+					setDiscordClientId(runtimeEnv.PUBLIC_DISCORD_CLIENT_ID ?? '');
+				}
+			} catch (error) {
+				console.error('Failed to load runtime env', error);
+			}
+		}
+
+		loadRuntimeEnv();
+
+		return () => {
+			cancelled = true;
+		};
+	}, [isDiscordActivity]);
+
+	useEffect(() => {
+		if (!discordClientId) {
 			return;
 		}
 		if (!isDiscordActivity) {
@@ -160,12 +196,12 @@ export function DiscordBridge() {
 
 		async function setupDiscordSdk() {
 			try {
-				const sdk = new DiscordSDK(PUBLIC_DISCORD_CLIENT_ID);
+				const sdk = new DiscordSDK(discordClientId);
 				sdkRef.current = sdk;
 				await sdk.ready();
 				console.log('Discord SDK is ready');
 				const { code } = await sdk.commands.authorize({
-					client_id: PUBLIC_DISCORD_CLIENT_ID,
+					client_id: discordClientId,
 					response_type: 'code',
 					state: '',
 					prompt: 'none',
@@ -226,7 +262,7 @@ export function DiscordBridge() {
 		return () => {
 			cancelled = true;
 		};
-	}, [isDiscordActivity, setDiscordAuth, setPageReloadCounter]);
+	}, [discordClientId, isDiscordActivity, setDiscordAuth, setPageReloadCounter]);
 
 	useEffect(() => {
 		const sdk = sdkRef.current;

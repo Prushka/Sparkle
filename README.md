@@ -86,8 +86,11 @@ SERVER_DISCORD_CLIENT_SECRET=...
 ```
 
 `SERVER_INTERNAL_BE` and `SERVER_INTERNAL_STATIC` are used by server-rendered
-pages and local rewrites. Keep them separate so backend API requests and static
-asset requests can resolve to different internal routes.
+pages and the runtime frontend proxy. Keep them separate so backend API requests
+and static asset requests can resolve to different internal routes. The frontend
+Docker image reads these values, `SERVER_BE`, `SERVER_STATIC`, and Discord OAuth
+settings at container runtime; rebuilding the image is not required for env
+changes.
 
 ### Desktop Activity
 
@@ -132,14 +135,14 @@ Video files are first processed and transcoded by the backend to:
 
 # Setup
 
-| Environment Variable           | Description                                                                                                                               |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `SERVER_BE`                    | Browser backend base. Values beginning with `http://` or `https://` stay absolute; other values become relative paths like `/be`          |
-| `SERVER_STATIC`                | Browser static asset base. Values beginning with `http://` or `https://` stay absolute; other values become relative paths like `/static` |
-| `SERVER_INTERNAL_BE`           | Private backend base for server-side fetches and local/standalone rewrites                                                                |
-| `SERVER_INTERNAL_STATIC`       | Private static asset base for server-side fetches and local/standalone rewrites                                                           |
-| `PUBLIC_DISCORD_CLIENT_ID`     | Your Discord application id / OAuth2 client id (runtime)                                                                                  |
-| `SERVER_DISCORD_CLIENT_SECRET` | Your Discord application OAuth2 client secret (runtime)                                                                                   |
+| Environment Variable           | Description                                                                                                                                         |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SERVER_BE`                    | Browser backend base (runtime). Values beginning with `http://` or `https://` stay absolute; other values become relative paths like `/be`          |
+| `SERVER_STATIC`                | Browser static asset base (runtime). Values beginning with `http://` or `https://` stay absolute; other values become relative paths like `/static` |
+| `SERVER_INTERNAL_BE`           | Private backend base for server-side fetches and the runtime frontend proxy (runtime)                                                               |
+| `SERVER_INTERNAL_STATIC`       | Private static asset base for server-side fetches and the runtime frontend proxy (runtime)                                                          |
+| `PUBLIC_DISCORD_CLIENT_ID`     | Your Discord application id / OAuth2 client id (runtime)                                                                                            |
+| `SERVER_DISCORD_CLIENT_SECRET` | Your Discord application OAuth2 client secret (runtime)                                                                                             |
 
 Built-in chat emotes and room sound effects are bundled in `public/media`, so the
 frontend can render and play the curated picker catalog without depending on

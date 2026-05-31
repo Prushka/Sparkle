@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
-import { PUBLIC_DISCORD_CLIENT_ID } from '@/lib/env';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+
+function getRuntimeEnv(key: string) {
+	return process.env[key] ?? '';
+}
 
 export async function POST(request: Request) {
 	try {
@@ -11,8 +14,9 @@ export async function POST(request: Request) {
 		if (typeof code !== 'string' || !code.trim()) {
 			return NextResponse.json({ error: 'Missing authorization code' }, { status: 400 });
 		}
-		const clientSecret = process.env.SERVER_DISCORD_CLIENT_SECRET;
-		if (!PUBLIC_DISCORD_CLIENT_ID || !clientSecret) {
+		const clientId = getRuntimeEnv('PUBLIC_DISCORD_CLIENT_ID');
+		const clientSecret = getRuntimeEnv('SERVER_DISCORD_CLIENT_SECRET');
+		if (!clientId || !clientSecret) {
 			return NextResponse.json({ error: 'Discord OAuth is not configured' }, { status: 500 });
 		}
 		const response = await fetch('https://discord.com/api/oauth2/token', {
@@ -21,7 +25,7 @@ export async function POST(request: Request) {
 				'Content-Type': 'application/x-www-form-urlencoded'
 			},
 			body: new URLSearchParams({
-				client_id: PUBLIC_DISCORD_CLIENT_ID,
+				client_id: clientId,
 				client_secret: clientSecret,
 				grant_type: 'authorization_code',
 				code: code.trim()
