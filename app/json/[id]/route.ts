@@ -19,6 +19,17 @@ export async function GET(
 	const room = await getRoomRecord(fetch, roomId);
 	const mediaId = room?.mediaId ?? resolvedParams.id;
 	const to = toAbsoluteUrl(`/${room?.roomId ?? roomId}`, origin);
+	if (!mediaId) {
+		return NextResponse.json({
+			version: '1.0',
+			type: 'link',
+			title: "It's anime time!",
+			author_name: `It's time to watch anime together!`,
+			author_url: to,
+			provider_url: to,
+			provider_name: `Let's watch anime!`
+		});
+	}
 	const jobs = await getJobs(fetch, mediaId);
 	const job = jobs.find((candidate) => candidate.Id === mediaId);
 	if (job) {

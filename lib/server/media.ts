@@ -11,6 +11,13 @@ import { createRoomRecord, getRoomRecord } from '@/lib/server/rooms';
 import type { Job, ServerData } from '@/lib/player/t';
 
 type SearchParams = Record<string, string | string[] | undefined>;
+export type HomePageData = {
+	jobs: Job[];
+	staticBaseUrl: string;
+	backendBaseUrl: string;
+	roomId?: string;
+};
+export type RoomPageData = ServerData | HomePageData;
 
 function getSearchValue(searchParams: SearchParams, key: string) {
 	const value = searchParams[key];
@@ -36,12 +43,17 @@ function getRedirectQuery(searchParams: SearchParams) {
 }
 
 export const loadHomePageData = cache(
-	async (_searchParams: SearchParams, fetchFn: typeof fetch) => {
+	async (
+		_searchParams: SearchParams,
+		fetchFn: typeof fetch,
+		roomID?: string
+	): Promise<HomePageData> => {
 		const jobs = await getJobs(fetchFn);
 		return {
 			jobs,
 			staticBaseUrl: getBrowserStaticBaseUrl(),
-			backendBaseUrl: getBrowserBackendBaseUrl()
+			backendBaseUrl: getBrowserBackendBaseUrl(),
+			...(roomID ? { roomId: roomID } : {})
 		};
 	}
 );
@@ -62,10 +74,10 @@ async function resolveRoomMediaID(
 	}
 
 	const room = await getRoomRecord(fetchFn, roomID);
-	if (!room?.mediaId) {
+	if (!room) {
 		redirect('/');
 	}
-	return room.mediaId;
+	return room.mediaId || null;
 }
 
 export const loadRoomPageData = cache(
@@ -74,8 +86,11 @@ export const loadRoomPageData = cache(
 		searchParams: SearchParams,
 		fetchFn: typeof fetch,
 		origin: string
-	): Promise<ServerData> => {
+	): Promise<RoomPageData> => {
 		const mediaID = await resolveRoomMediaID(roomID, searchParams, fetchFn);
+		if (!mediaID) {
+			return loadHomePageData(searchParams, fetchFn, roomID);
+		}
 		return loadMediaPageData(mediaID, searchParams, fetchFn, origin, roomID);
 	}
 );

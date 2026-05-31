@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
 	IconBadgeHd,
 	IconCalendar,
@@ -19,12 +19,26 @@ import {
 	IconVideo,
 	IconX
 } from '@tabler/icons-react';
-import { useMemo, useState, type CSSProperties, type ComponentType, type ReactNode } from 'react';
+import {
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+	type CSSProperties,
+	type ComponentType,
+	type ReactNode
+} from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import * as DropdownMenu from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import type { Job, TitleEpisode } from '@/lib/player/t';
+import {
+	BroadcastTypes,
+	randomString,
+	SyncTypes,
+	type Job,
+	type TitleEpisode
+} from '@/lib/player/t';
 
 type LibraryKind = 'all' | 'movies' | 'shows';
 type SortMode = 'recent' | 'title' | 'duration';
@@ -69,6 +83,185 @@ type ShowEntry = {
 
 type LibraryEntry = MovieEntry | ShowEntry;
 
+function joinBackendPath(base: string, path: string) {
+	return `${base.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
+}
+
+function getBackendWebSocketUrl(base: string, path: string) {
+	const fullPath = joinBackendPath(base, path);
+	if (/^https?:\/\//i.test(fullPath)) {
+		const url = new URL(fullPath);
+		url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+		return url.toString();
+	}
+	const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+	return `${wsProtocol}//${window.location.host}${fullPath}`;
+}
+
+function getLibraryRoomPlayerId() {
+	const storedPlayerId = window.sessionStorage.getItem('playerId');
+	if (storedPlayerId) {
+		return storedPlayerId;
+	}
+	const playerId = randomString(14);
+	window.sessionStorage.setItem('playerId', playerId);
+	return playerId;
+}
+
+function getLibraryProfileId() {
+	const storedProfileId = window.localStorage.getItem('id');
+	if (storedProfileId) {
+		return storedProfileId;
+	}
+	const profileId = randomString(14);
+	window.localStorage.setItem('id', profileId);
+	return profileId;
+}
+
+function LibraryRoomSync({ backendBaseUrl, roomId }: { backendBaseUrl?: string; roomId?: string }) {
+	const router = useRouter();
+	const routerRef = useRef(router);
+
+	useEffect(() => {
+		routerRef.current = router;
+	}, [router]);
+
+	useEffect(() => {
+		if (!backendBaseUrl || !roomId || typeof window === 'undefined') {
+			return;
+		}
+
+		let disposed = false;
+		let socket: WebSocket | null = null;
+		let reconnectTimer: number | null = null;
+		let reconnectAttempt = 0;
+		let roomMediaCheck: Promise<void> | null = null;
+		const playerId = getLibraryRoomPlayerId();
+		const socketUrl = getBackendWebSocketUrl(
+			backendBaseUrl,
+			`/sync/${encodeURIComponent(roomId)}/${encodeURIComponent(playerId)}`
+		);
+
+		const refreshIfRoomHasMedia = () => {
+			if (roomMediaCheck) {
+				return roomMediaCheck;
+			}
+			roomMediaCheck = fetch(
+				joinBackendPath(backendBaseUrl, `/rooms/${encodeURIComponent(roomId)}`),
+				{
+					cache: 'no-store'
+				}
+			)
+				.then((response) => (response.ok ? response.json() : null))
+				.then((record: { mediaId?: string } | null) => {
+					if (!disposed && record?.mediaId) {
+						routerRef.current.refresh();
+					}
+				})
+				.catch((error) => {
+					console.warn('Unable to refresh empty room media', error);
+				})
+				.finally(() => {
+					roomMediaCheck = null;
+				});
+			return roomMediaCheck;
+		};
+
+		const clearReconnectTimer = () => {
+			if (reconnectTimer !== null) {
+				window.clearTimeout(reconnectTimer);
+				reconnectTimer = null;
+			}
+		};
+
+		const connect = () => {
+			if (
+				disposed ||
+				socket?.readyState === WebSocket.CONNECTING ||
+				socket?.readyState === WebSocket.OPEN
+			) {
+				return;
+			}
+			clearReconnectTimer();
+			socket = new WebSocket(socketUrl);
+
+			socket.onopen = () => {
+				if (!socket || disposed) {
+					return;
+				}
+				reconnectAttempt = 0;
+				void refreshIfRoomHasMedia();
+				const name = window.localStorage.getItem('name') || '';
+				const profileId = getLibraryProfileId();
+				if (name && profileId) {
+					socket.send(
+						JSON.stringify({
+							type: SyncTypes.ProfileSync,
+							name,
+							profileId
+						})
+					);
+				}
+				socket.send(JSON.stringify({ type: SyncTypes.NewPlayer }));
+			};
+
+			socket.onmessage = (event) => {
+				const payload = JSON.parse(event.data);
+				if (
+					payload?.type === SyncTypes.BroadcastSync &&
+					payload.broadcast?.type === BroadcastTypes.MoveTo &&
+					payload.broadcast.moveTo
+				) {
+					routerRef.current.refresh();
+				}
+			};
+
+			socket.onerror = () => {
+				socket?.close();
+			};
+
+			socket.onclose = () => {
+				socket = null;
+				if (disposed) {
+					return;
+				}
+				const delay = Math.min(30000, 1000 * 2 ** Math.min(reconnectAttempt, 5));
+				reconnectAttempt += 1;
+				reconnectTimer = window.setTimeout(() => {
+					reconnectTimer = null;
+					connect();
+				}, delay);
+			};
+		};
+
+		void refreshIfRoomHasMedia();
+		connect();
+		const refreshInterval = window.setInterval(refreshIfRoomHasMedia, 10000);
+		const refreshOnFocus = () => {
+			void refreshIfRoomHasMedia();
+		};
+		window.addEventListener('focus', refreshOnFocus);
+		document.addEventListener('visibilitychange', refreshOnFocus);
+
+		return () => {
+			disposed = true;
+			clearReconnectTimer();
+			window.clearInterval(refreshInterval);
+			window.removeEventListener('focus', refreshOnFocus);
+			document.removeEventListener('visibilitychange', refreshOnFocus);
+			if (socket) {
+				socket.onopen = null;
+				socket.onmessage = null;
+				socket.onerror = null;
+				socket.onclose = null;
+				socket.close();
+			}
+		};
+	}, [backendBaseUrl, roomId]);
+
+	return null;
+}
+
 const kindOptions = [
 	{ value: 'all', label: 'All' },
 	{ value: 'movies', label: 'Movies' },
@@ -88,7 +281,17 @@ const dateFormatter = new Intl.DateTimeFormat('en-US', {
 	year: 'numeric'
 });
 
-export function LibraryHome({ jobs, staticBaseUrl }: { jobs: Job[]; staticBaseUrl: string }) {
+export function LibraryHome({
+	jobs,
+	staticBaseUrl,
+	backendBaseUrl,
+	roomId
+}: {
+	jobs: Job[];
+	staticBaseUrl: string;
+	backendBaseUrl?: string;
+	roomId?: string;
+}) {
 	const searchParams = useSearchParams();
 	const [query, setQuery] = useState('');
 	const [kind, setKind] = useState<LibraryKind>('all');
@@ -112,6 +315,9 @@ export function LibraryHome({ jobs, staticBaseUrl }: { jobs: Job[]; staticBaseUr
 	function hrefFor(id: string) {
 		const params = new URLSearchParams(searchString);
 		params.set('mediaId', id);
+		if (roomId) {
+			params.set('room', roomId);
+		}
 		const query = params.toString();
 		return query ? `/rooms/new?${query}` : `/rooms/new?mediaId=${encodeURIComponent(id)}`;
 	}
@@ -125,6 +331,7 @@ export function LibraryHome({ jobs, staticBaseUrl }: { jobs: Job[]; staticBaseUr
 
 	return (
 		<main className="min-h-screen w-full bg-[linear-gradient(180deg,#08090d_0%,#111017_42%,#08090d_100%)] text-zinc-50">
+			<LibraryRoomSync backendBaseUrl={backendBaseUrl} roomId={roomId} />
 			<div className="mx-auto flex w-full max-w-[1760px] flex-col gap-6 px-4 py-5 sm:px-6 md:px-8 lg:px-10">
 				<header className="flex flex-col gap-5 pt-2 md:flex-row md:items-end md:justify-between">
 					<div className="min-w-0">

@@ -72,7 +72,7 @@ type Room struct {
 
 type roomRequest struct {
 	RoomID  string `json:"roomId,omitempty"`
-	MediaID string `json:"mediaId"`
+	MediaID string `json:"mediaId,omitempty"`
 }
 
 type roomResponse struct {
@@ -212,8 +212,8 @@ func (h *Hub) HandleCreateRoom(w http.ResponseWriter, r *http.Request) {
 	}
 
 	mediaID := strings.TrimSpace(payload.MediaID)
-	if !safeID.MatchString(mediaID) {
-		http.Error(w, "mediaId is required", http.StatusBadRequest)
+	if mediaID != "" && !safeID.MatchString(mediaID) {
+		http.Error(w, "invalid mediaId", http.StatusBadRequest)
 		return
 	}
 
@@ -264,8 +264,8 @@ func (h *Hub) HandleUpdateRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	mediaID := strings.TrimSpace(payload.MediaID)
-	if !safeID.MatchString(mediaID) {
-		http.Error(w, "mediaId is required", http.StatusBadRequest)
+	if mediaID != "" && !safeID.MatchString(mediaID) {
+		http.Error(w, "invalid mediaId", http.StatusBadRequest)
 		return
 	}
 
@@ -369,9 +369,6 @@ func (h *Hub) roomSnapshot(roomID string) (roomResponse, bool) {
 
 	room.mu.RLock()
 	defer room.mu.RUnlock()
-	if room.mediaID == "" {
-		return roomResponse{}, false
-	}
 	return room.snapshotLocked(), true
 }
 

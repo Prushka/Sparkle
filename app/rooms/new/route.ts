@@ -18,13 +18,9 @@ export async function GET(request: Request) {
 	const requestedRoomId =
 		url.searchParams.get('room')?.trim() || url.searchParams.get('channel_id')?.trim() || '';
 
-	if (!mediaId) {
-		redirect('/');
-	}
-
 	let roomId: string;
 	try {
-		const room = await createRoomRecord(fetch, mediaId, requestedRoomId || undefined);
+		const room = await createRoomRecord(fetch, mediaId || undefined, requestedRoomId || undefined);
 		roomId = room.roomId;
 	} catch (error) {
 		console.error('Unable to create room', error);

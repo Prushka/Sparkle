@@ -118,6 +118,23 @@ func TestSanitizeMoveToBroadcast(t *testing.T) {
 	}
 }
 
+func TestEmptyRoomSnapshot(t *testing.T) {
+	hub := NewHub(Options{})
+
+	created := hub.upsertRoom("room", "", nil)
+	if created.RoomID != "room" || created.MediaID != "" {
+		t.Fatalf("created empty room = %#v", created)
+	}
+
+	snapshot, ok := hub.roomSnapshot("room")
+	if !ok {
+		t.Fatal("roomSnapshot() returned false for empty room")
+	}
+	if snapshot.RoomID != "room" || snapshot.MediaID != "" {
+		t.Fatalf("empty room snapshot = %#v", snapshot)
+	}
+}
+
 func TestSanitizeMoveToBroadcastRejectsInvalidID(t *testing.T) {
 	got := sanitizeBroadcast(map[string]any{
 		"type":   MoveToBroadcast,

@@ -38,7 +38,7 @@ export async function getRoomRecord(
 
 export async function createRoomRecord(
 	fetchFn: typeof fetch,
-	mediaId: string,
+	mediaId?: string,
 	roomId?: string | null
 ): Promise<RoomRecord> {
 	const response = await fetchFn(
@@ -46,7 +46,7 @@ export async function createRoomRecord(
 		fetchOptions({
 			method: 'POST',
 			body: JSON.stringify({
-				mediaId,
+				...(mediaId ? { mediaId } : {}),
 				...(roomId ? { roomId } : {})
 			})
 		})
