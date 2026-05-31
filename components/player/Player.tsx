@@ -1521,7 +1521,6 @@ export function Player({ data }: { data: ServerData }) {
 				const record = (await response.json()) as { mediaId?: string };
 				if (record.mediaId && record.mediaId !== job.Id) {
 					router.refresh();
-					setPageReloadCounter((value) => value + 1);
 					return true;
 				}
 			} catch (error) {
@@ -1534,7 +1533,7 @@ export function Player({ data }: { data: ServerData }) {
 
 		roomMediaCheckRef.current = check;
 		return check;
-	}, [backendBaseUrl, job.Id, room, router, setPageReloadCounter]);
+	}, [backendBaseUrl, job.Id, room, router]);
 
 	const pulseSoundEffectBadge = useCallback((playerId: string | undefined) => {
 		if (!playerId) {
@@ -2902,6 +2901,11 @@ export function Player({ data }: { data: ServerData }) {
 		});
 	}, [connect, joinVoice, refreshRoomMedia, setInteracted, voiceSupported]);
 
+	const handleMoveToastMove = useCallback(async () => {
+		await refreshRoomMedia();
+		setMoveToast(null);
+	}, [refreshRoomMedia]);
+
 	useEffect(() => {
 		if (!playerEl || !playerId || !interactedRef.current || !playerCanPlayRef.current) {
 			return;
@@ -3775,7 +3779,7 @@ export function Player({ data }: { data: ServerData }) {
 						seconds={moveToast.seconds}
 						firedBy={moveToast.firedBy}
 						job={moveToast.job}
-						onMove={refreshRoomMedia}
+						onMove={handleMoveToastMove}
 						staticBaseUrl={staticBaseUrl}
 					/>
 				</div>

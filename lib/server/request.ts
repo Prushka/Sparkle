@@ -38,3 +38,7 @@ export function getRequestOrigin(headers: HeaderReader) {
 		(host.startsWith('localhost') || host.startsWith('127.0.0.1') ? 'http' : 'https');
 	return `${protocol}://${host}`;
 }
+
+export function toAbsoluteUrl(value: string, origin: string) {
+	return new URL(value, origin).toString();
+}

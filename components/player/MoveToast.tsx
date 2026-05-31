@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Job, Player } from '@/lib/player/t';
 import { getRealName } from '@/lib/player/t';
@@ -29,10 +29,12 @@ export function MoveToast({
 	const router = useRouter();
 	const [remaining, setRemaining] = useState(seconds);
 	const [closed, setClosed] = useState(false);
+	const movedRef = useRef(false);
 
 	useEffect(() => {
 		if (remaining <= 0) {
-			if (job?.Id) {
+			if (job?.Id && !movedRef.current) {
+				movedRef.current = true;
 				if (onMove) {
 					void onMove();
 				} else {

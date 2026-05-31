@@ -3,7 +3,7 @@ import { headers } from 'next/headers';
 import { connection } from 'next/server';
 import { Player } from '@/components/player/Player';
 import { loadRoomPageData } from '@/lib/server/media';
-import { getRequestOrigin } from '@/lib/server/request';
+import { getRequestOrigin, toAbsoluteUrl } from '@/lib/server/request';
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type MediaPageProps = {
@@ -22,26 +22,44 @@ async function getMediaData({ params, searchParams }: MediaPageProps) {
 
 export async function generateMetadata(props: MediaPageProps): Promise<Metadata> {
 	const data = await getMediaData(props);
+	const requestHeaders = await headers();
+	const origin = getRequestOrigin(requestHeaders);
+	const pageUrl = toAbsoluteUrl(`/${data.roomId}`, origin);
+	const previewUrl = toAbsoluteUrl(data.preview, origin);
+	const videoUrl = toAbsoluteUrl(data.video, origin);
 
 	return {
+		metadataBase: new URL(origin),
 		title: data.displayTitle,
 		description: data.plot,
 		openGraph: {
 			title: data.displayTitle,
 			description: data.plot,
+			url: pageUrl,
 			images: [
 				{
-					url: data.preview,
+					url: previewUrl,
 					type: 'image/jpeg'
 				}
 			],
 			videos: [
 				{
-					url: data.video,
-					secureUrl: data.video,
+					url: videoUrl,
+					secureUrl: videoUrl,
 					type: 'video/mp4',
 					width: data.job?.width,
 					height: data.job?.height
+				}
+			]
+		},
+		twitter: {
+			card: 'summary_large_image',
+			title: data.displayTitle,
+			description: data.plot,
+			images: [
+				{
+					url: previewUrl,
+					type: 'image/jpeg'
 				}
 			]
 		},

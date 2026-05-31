@@ -615,6 +615,11 @@ media-google-cast-button {
 	aspect-ratio: unset !important;
 }
 
+.media-provider > .vds-poster {
+	object-fit: contain;
+	object-position: center;
+}
+
 .vds-time-slider.vds-slider {
 	--media-slider-height: 14px;
 	margin: 15px 0;
