@@ -5,6 +5,7 @@ import {
 	type ReactNode,
 	useCallback,
 	useEffect,
+	useLayoutEffect,
 	useMemo,
 	useRef,
 	useState
@@ -770,12 +771,23 @@ function getChapterTimeSeconds(chapter: Job['Chapters'][number], key: 'start' | 
 }
 
 function getPlayerVideoElement(player: MediaPlayerInstance | null) {
-	const provider = player?.provider;
-	const providerVideo = provider && 'video' in provider ? (provider.video as unknown) : null;
-	if (typeof HTMLVideoElement !== 'undefined' && providerVideo instanceof HTMLVideoElement) {
-		return providerVideo;
+	if (!player) {
+		return null;
 	}
-	return (player?.el?.querySelector?.('video') as HTMLVideoElement | null) ?? null;
+	try {
+		const provider = player.provider;
+		const providerVideo = provider && 'video' in provider ? (provider.video as unknown) : null;
+		if (typeof HTMLVideoElement !== 'undefined' && providerVideo instanceof HTMLVideoElement) {
+			return providerVideo;
+		}
+	} catch {
+		// Vidstack can briefly expose a torn-down provider while media is switching.
+	}
+	try {
+		return (player.el?.querySelector?.('video') as HTMLVideoElement | null) ?? null;
+	} catch {
+		return null;
+	}
 }
 
 function findSubtitleTrack(
@@ -840,12 +852,19 @@ function getSelectedSubtitleTrack(
 		return requestedTrack;
 	}
 
-	const directSelected = selectedFromVidstackTrack(player?.textTracks?.selected, tracks);
+	let playerTextTracks: any = null;
+	try {
+		playerTextTracks = player?.textTracks;
+	} catch {
+		playerTextTracks = null;
+	}
+
+	const directSelected = selectedFromVidstackTrack(playerTextTracks?.selected, tracks);
 	if (directSelected) {
 		return directSelected;
 	}
 
-	const showingTrack = toArray(player?.textTracks).find((track) => track?.mode === 'showing');
+	const showingTrack = toArray(playerTextTracks).find((track) => track?.mode === 'showing');
 	const selectedFromList = selectedFromVidstackTrack(showingTrack, tracks);
 	if (selectedFromList) {
 		return selectedFromList;
@@ -1150,7 +1169,12 @@ function VoiceControls({ voice }: { voice: VoiceChatController }) {
 
 async function waitForTextTracks(player: any) {
 	for (let i = 0; i < 60; i++) {
-		const textTracks = player?.textTracks;
+		let textTracks: any = null;
+		try {
+			textTracks = player?.textTracks;
+		} catch {
+			textTracks = null;
+		}
 		if (textTracks?.add) {
 			return textTracks;
 		}
@@ -1167,20 +1191,63 @@ type JASSUBRendererConfig = LibASSConfig & {
 
 type JASSUBManagedInstance = {
 	freeTrack: () => void;
+	setTrackByUrl?: (url: string) => void | Promise<void>;
 	destroy?: () => void | Promise<void>;
+	ready?: Promise<void>;
 };
 
 const JASSUB_SCRIPT_URL = '/scripts/jassub.es.js';
+const EMPTY_ASS_TRACK = `[Script Info]
+ScriptType: v4.00+
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+`;
 let assRendererModulePromise: Promise<{ default: LibASSConstructor }> | null = null;
 
 function withManagedAssRendererCleanup(Constructor: LibASSConstructor): LibASSConstructor {
 	const ManagedLibASS = function (config: ConstructorParameters<LibASSConstructor>[0]) {
-		const instance = new Constructor(config) as JASSUBManagedInstance;
+		const configWithInitialTrack = {
+			...config,
+			...(!config?.subUrl && !(config as { subContent?: string } | undefined)?.subContent
+				? { subContent: EMPTY_ASS_TRACK }
+				: {})
+		} as ConstructorParameters<LibASSConstructor>[0];
+		const instance = new Constructor(configWithInitialTrack) as JASSUBManagedInstance;
 		const freeTrack = instance.freeTrack.bind(instance);
+		const setTrackByUrl = instance.setTrackByUrl?.bind(instance);
 		let destroyed = false;
+		let trackRequestId = 0;
+
+		if (setTrackByUrl) {
+			instance.setTrackByUrl = (url: string) => {
+				const requestId = ++trackRequestId;
+				void Promise.resolve(instance.ready)
+					.then(() => {
+						if (destroyed || requestId !== trackRequestId) {
+							return;
+						}
+						return setTrackByUrl(url);
+					})
+					.catch((error) => {
+						if (!destroyed) {
+							console.warn('Unable to start ASS subtitle track', error);
+						}
+					});
+			};
+		}
 
 		instance.freeTrack = () => {
-			freeTrack();
+			trackRequestId++;
+			try {
+				freeTrack();
+			} catch {
+				// JASSUB may already have lost its worker after a fast media switch.
+			}
 			if (destroyed) {
 				return;
 			}
@@ -1216,6 +1283,63 @@ function ignoreMediaRequestFailure(action: () => unknown) {
 		// Vidstack may throw synchronously when a provider capability is unavailable.
 	}
 }
+
+function getSafePlayerCurrentTime(player: MediaPlayerInstance | null) {
+	if (!player) {
+		return null;
+	}
+	try {
+		const time = player.currentTime;
+		return Number.isFinite(time) ? time : null;
+	} catch {
+		return null;
+	}
+}
+
+function getSafePlayerPaused(player: MediaPlayerInstance | null) {
+	if (!player) {
+		return null;
+	}
+	try {
+		return player.paused === true;
+	} catch {
+		return null;
+	}
+}
+
+function getSafePlayerCanPlay(player: MediaPlayerInstance | null) {
+	if (!player) {
+		return false;
+	}
+	try {
+		return player.state.canPlay === true;
+	} catch {
+		return false;
+	}
+}
+
+function setSafePlayerCurrentTime(player: MediaPlayerInstance | null, time: number) {
+	if (!player || !Number.isFinite(time)) {
+		return false;
+	}
+	try {
+		player.currentTime = time;
+		return true;
+	} catch (error) {
+		console.warn('Unable to sync remote time', error);
+		return false;
+	}
+}
+
+type RemotePlaybackSync = {
+	time?: number;
+	paused?: boolean;
+};
+
+type PendingRemotePlaybackSync = RemotePlaybackSync & {
+	roomId: string;
+	mediaId: string;
+};
 
 export function Player({ data }: { data: ServerData }) {
 	const { job } = data;
@@ -1267,6 +1391,7 @@ export function Player({ data }: { data: ServerData }) {
 	const lastSentTimeRef = useRef(-100);
 	const suppressNextPlaybackSyncRef = useRef(false);
 	const awaitingInitialPlaybackSyncRef = useRef(false);
+	const pendingRemotePlaybackSyncRef = useRef<PendingRemotePlaybackSync | null>(null);
 	const inBgRef = useRef(false);
 	const exitedRef = useRef(false);
 	const interactedRef = useRef(interacted);
@@ -1355,6 +1480,8 @@ export function Player({ data }: { data: ServerData }) {
 	const [chatFocusedSecs, setChatFocusedSecs] = useState(0);
 	const posterSrc = data.preview;
 	const room = data.roomId;
+	const currentRoomRef = useRef(room);
+	const currentMediaIdRef = useRef(job.Id);
 	const youtubeRoomId = room;
 	const youtubeSyncRoom = `youtube:${youtubeRoomId}`;
 	const youtubeStateStorageKey = `sparkle:youtube-sync-state:${youtubeRoomId}`;
@@ -1363,6 +1490,12 @@ export function Player({ data }: { data: ServerData }) {
 	const chessSyncRoom = `chess:${chessRoomId}`;
 	const chessStateStorageKey = `sparkle:chess-sync-state:${chessRoomId}`;
 	const [chessState, setChessState] = useState<ChessSyncState>(DEFAULT_CHESS_SYNC_STATE);
+
+	useLayoutEffect(() => {
+		currentRoomRef.current = room;
+		currentMediaIdRef.current = job.Id;
+	}, [job.Id, room]);
+
 	const discord = discordAuth as Discord | null;
 	const discordUser = discord?.user;
 	const discordUserId = discordUser?.id || '';
@@ -1492,7 +1625,7 @@ export function Player({ data }: { data: ServerData }) {
 				uid: 'system',
 				message,
 				timestamp,
-				mediaSec: playerElementRef.current?.currentTime || 0,
+				mediaSec: getSafePlayerCurrentTime(playerElementRef.current) ?? 0,
 				isStateUpdate: true,
 				isSystem: true,
 				timeStr: ''
@@ -1632,7 +1765,7 @@ export function Player({ data }: { data: ServerData }) {
 											? 'Joined'
 											: '',
 					timestamp: control.timestamp,
-					mediaSec: playerEl?.currentTime || 0,
+					mediaSec: getSafePlayerCurrentTime(playerEl) ?? 0,
 					isStateUpdate: true,
 					timeStr: ''
 				});
@@ -2511,10 +2644,11 @@ export function Player({ data }: { data: ServerData }) {
 
 	const updateTime = useCallback(() => {
 		const player = playerElementRef.current;
-		if (!player) {
+		const currentTime = getSafePlayerCurrentTime(player);
+		if (currentTime === null) {
 			return;
 		}
-		const timeRounded = Math.ceil(player.currentTime);
+		const timeRounded = Math.ceil(currentTime);
 		if (lastSentTimeRef.current !== timeRounded) {
 			send({
 				type: SyncTypes.TimeSync,
@@ -2565,6 +2699,78 @@ export function Player({ data }: { data: ServerData }) {
 		}
 		return !consumePlaybackSyncSuppression();
 	}, [consumePlaybackSyncSuppression]);
+
+	const queueRemotePlaybackSync = useCallback((sync: RemotePlaybackSync) => {
+		const roomId = currentRoomRef.current;
+		const mediaId = currentMediaIdRef.current;
+		const pending = pendingRemotePlaybackSyncRef.current;
+		const sameTarget = pending?.roomId === roomId && pending.mediaId === mediaId;
+		pendingRemotePlaybackSyncRef.current = {
+			...(sameTarget && pending ? pending : {}),
+			...sync,
+			roomId,
+			mediaId
+		};
+	}, []);
+
+	const applyRemotePlaybackSync = useCallback(
+		(sync: RemotePlaybackSync | PendingRemotePlaybackSync) => {
+			if (
+				'roomId' in sync &&
+				(sync.roomId !== currentRoomRef.current || sync.mediaId !== currentMediaIdRef.current)
+			) {
+				return true;
+			}
+			const player = playerElementRef.current;
+			if (!player || !getPlayerVideoElement(player)) {
+				queueRemotePlaybackSync(sync);
+				return false;
+			}
+
+			let complete = true;
+			if (typeof sync.time === 'number') {
+				const currentTime = getSafePlayerCurrentTime(player);
+				if (currentTime === null) {
+					complete = false;
+				} else if (Math.abs(currentTime - sync.time) > 3) {
+					complete = setSafePlayerCurrentTime(player, sync.time) && complete;
+				}
+			}
+
+			if (typeof sync.paused === 'boolean') {
+				const paused = getSafePlayerPaused(player);
+				if (paused === null) {
+					complete = false;
+				} else if (sync.paused) {
+					if (!paused) {
+						armPlaybackSyncSuppression();
+						Promise.resolve(player.pause()).catch((error) => {
+							clearPlaybackSyncSuppression();
+							console.warn('Unable to sync remote pause', error);
+						});
+					}
+				} else if (!inBgRef.current || roomPlayersCountRef.current > 1) {
+					if (paused) {
+						if (getSafePlayerCanPlay(player)) {
+							armPlaybackSyncSuppression();
+							Promise.resolve(player.play()).catch((error) => {
+								clearPlaybackSyncSuppression();
+								console.warn('Unable to sync remote play', error);
+							});
+						} else {
+							complete = false;
+						}
+					}
+				}
+			}
+
+			if (!complete) {
+				queueRemotePlaybackSync(sync);
+			}
+			return complete;
+		},
+		[armPlaybackSyncSuppression, clearPlaybackSyncSuppression, queueRemotePlaybackSync]
+	);
 
 	useEffect(() => {
 		return () => clearPlaybackSyncSuppression();
@@ -2628,192 +2834,171 @@ export function Player({ data }: { data: ServerData }) {
 				if (socketRef.current !== socket) {
 					return;
 				}
-				const state: SendPayload = JSON.parse(event.data);
+				let state: SendPayload;
+				try {
+					state = JSON.parse(event.data) as SendPayload;
+				} catch (error) {
+					console.warn('Ignoring malformed sync payload', error);
+					return;
+				}
 				const broadcast = state.broadcast;
 				const persistControlState = (payload: any) => {
 					if (payload.firedBy !== undefined) {
 						setControlsToDisplay((prev) => appendControlMessages(prev, payload));
 					}
 				};
-				if (player) {
-					console.debug('received: ' + JSON.stringify(state));
-					const initiateMoveTo = (jobs: Job[]) => {
-						setMoveToast({
-							seconds: moveSeconds,
-							job: jobs.find((candidate: Job) => candidate.Id === broadcast!.moveTo),
-							firedBy: state.firedBy
-						});
-						const target = jobs.find((candidate) => candidate.Id === state.broadcast!.moveTo);
-						state.moveToText =
-							target?.Title.title + (target?.Title?.episode ? ` ${target.Title.episode.se}` : '');
-						setControlsToDisplay((prev) => appendControlMessages(prev, state));
-					};
-					switch (state.type) {
-						case SyncTypes.PfpSync:
-							if (state.firedBy?.id) {
-								updatePfp(state.firedBy.profileId || state.firedBy.id, state.timestamp);
-							}
-							break;
-						case SyncTypes.ChatSync:
-							setRoomMessages((prev) => {
-								if (state.chat) {
-									const next = appendRoomChatMessage(prev, state.chat);
-									if (next !== prev && inBgRef.current) {
-										notificationAudioRef.current?.play().catch(() => {});
-									}
-									return next;
-								}
-								const chats = state.chats ?? [];
-								if (
-									inBgRef.current &&
-									getLatestMessageTimestamp(prev) !== chats[chats.length - 1]?.timestamp
-								) {
+				console.debug('received: ' + JSON.stringify(state));
+				const initiateMoveTo = (jobs: Job[]) => {
+					pendingRemotePlaybackSyncRef.current = null;
+					setMoveToast({
+						seconds: moveSeconds,
+						job: jobs.find((candidate: Job) => candidate.Id === broadcast!.moveTo),
+						firedBy: state.firedBy
+					});
+					const target = jobs.find((candidate) => candidate.Id === state.broadcast!.moveTo);
+					state.moveToText =
+						target?.Title.title + (target?.Title?.episode ? ` ${target.Title.episode.se}` : '');
+					setControlsToDisplay((prev) => appendControlMessages(prev, state));
+				};
+				switch (state.type) {
+					case SyncTypes.PfpSync:
+						if (state.firedBy?.id) {
+							updatePfp(state.firedBy.profileId || state.firedBy.id, state.timestamp);
+						}
+						break;
+					case SyncTypes.ChatSync:
+						setRoomMessages((prev) => {
+							if (state.chat) {
+								const next = appendRoomChatMessage(prev, state.chat);
+								if (next !== prev && inBgRef.current) {
 									notificationAudioRef.current?.play().catch(() => {});
 								}
-								return chats;
-							});
-							break;
-						case SyncTypes.PlayersStatusSync: {
-							const players = state.players;
-							if (!players) {
-								break;
-							}
-							reconnectAttemptRef.current = 0;
-							roomPlayersCountRef.current = players.length;
-							if (roomPlayersRef.current.length > 0) {
-								const { left, joined } = getLeftAndJoined(
-									roomPlayersRef.current,
-									players,
-									playerId
-								);
-								const playerEvents = [
-									...left.map((player) => ({
-										...state,
-										type: SyncTypes.PlayerLeft,
-										firedBy: player
-									})),
-									...joined.map((player) => ({
-										...state,
-										type: SyncTypes.PlayerJoined,
-										firedBy: player
-									}))
-								];
-								if (playerEvents.length > 0) {
-									setControlsToDisplay((controls) => appendControlMessages(controls, playerEvents));
-								}
-							}
-							roomPlayersRef.current = players;
-							setRoomPlayers((current) =>
-								areRoomPlayersEqual(current, players) ? current : players
-							);
-							setHistoricalPlayers((prev) => {
-								let next = prev;
-								for (const player of players) {
-									if (!areHistoricalPlayersEqual(next[player.id], player)) {
-										if (next === prev) {
-											next = { ...prev };
-										}
-										next[player.id] = player;
-									}
-								}
 								return next;
-							});
-							updateLastTicked(true, players.length);
-							setCurrentlyWatching((value) => {
-								if (value && value.roomPlayers !== players.length) {
-									return { ...value, roomPlayers: players.length };
-								}
-								return value;
-							});
-							break;
-						}
-						case SyncTypes.PlayerStatusSync: {
-							const playerStatuses = state.playerStatuses ?? [];
-							const playersCount = state.playersCount ?? roomPlayersCountRef.current;
-							reconnectAttemptRef.current = 0;
-							roomPlayersCountRef.current = playersCount;
-							setRoomPlayers((current) => {
-								const next = mergeRoomPlayerStatuses(current, playerStatuses);
-								roomPlayersRef.current = next;
-								return next;
-							});
-							updateLastTicked(true, playersCount);
-							setCurrentlyWatching((value) => {
-								if (value && value.roomPlayers !== playersCount) {
-									return { ...value, roomPlayers: playersCount };
-								}
-								return value;
-							});
-							break;
-						}
-						case SyncTypes.HeartbeatSync: {
-							const playersCount = state.playersCount ?? roomPlayersCountRef.current;
-							reconnectAttemptRef.current = 0;
-							roomPlayersCountRef.current = playersCount;
-							updateLastTicked(true, playersCount);
-							break;
-						}
-						case SyncTypes.PauseSync:
-							awaitingInitialPlaybackSyncRef.current = false;
-							if (state.paused === true && player.paused === false) {
-								armPlaybackSyncSuppression();
-								Promise.resolve(player.pause()).catch((error) => {
-									clearPlaybackSyncSuppression();
-									console.warn('Unable to sync remote pause', error);
-								});
-								persistControlState(state);
-							} else if (
-								state.paused === false &&
-								player.paused === true &&
-								(!inBgRef.current || (inBgRef.current && roomPlayersCountRef.current > 1))
+							}
+							const chats = state.chats ?? [];
+							if (
+								inBgRef.current &&
+								getLatestMessageTimestamp(prev) !== chats[chats.length - 1]?.timestamp
 							) {
-								const playFromRemoteSync = () => {
-									armPlaybackSyncSuppression();
-									Promise.resolve(player.play()).catch((error) => {
-										clearPlaybackSyncSuppression();
-										console.warn('Unable to sync remote play', error);
-									});
-								};
-								if (player.state.canPlay) {
-									playFromRemoteSync();
-								} else {
-									player.canPlayQueue.enqueue('remote-pause-sync-play', playFromRemoteSync);
+								notificationAudioRef.current?.play().catch(() => {});
+							}
+							return chats;
+						});
+						break;
+					case SyncTypes.PlayersStatusSync: {
+						const players = state.players;
+						if (!players) {
+							break;
+						}
+						reconnectAttemptRef.current = 0;
+						roomPlayersCountRef.current = players.length;
+						if (roomPlayersRef.current.length > 0) {
+							const { left, joined } = getLeftAndJoined(roomPlayersRef.current, players, playerId);
+							const playerEvents = [
+								...left.map((player) => ({
+									...state,
+									type: SyncTypes.PlayerLeft,
+									firedBy: player
+								})),
+								...joined.map((player) => ({
+									...state,
+									type: SyncTypes.PlayerJoined,
+									firedBy: player
+								}))
+							];
+							if (playerEvents.length > 0) {
+								setControlsToDisplay((controls) => appendControlMessages(controls, playerEvents));
+							}
+						}
+						roomPlayersRef.current = players;
+						setRoomPlayers((current) =>
+							areRoomPlayersEqual(current, players) ? current : players
+						);
+						setHistoricalPlayers((prev) => {
+							let next = prev;
+							for (const player of players) {
+								if (!areHistoricalPlayersEqual(next[player.id], player)) {
+									if (next === prev) {
+										next = { ...prev };
+									}
+									next[player.id] = player;
 								}
-								persistControlState(state);
 							}
-							break;
-						case SyncTypes.TimeSync:
-							if (state.time !== undefined && Math.abs(player.currentTime - state.time) > 3) {
-								player.currentTime = state.time;
-								persistControlState(state);
+							return next;
+						});
+						updateLastTicked(true, players.length);
+						setCurrentlyWatching((value) => {
+							if (value && value.roomPlayers !== players.length) {
+								return { ...value, roomPlayers: players.length };
 							}
-							break;
-						case SyncTypes.BroadcastSync:
-							switch (broadcast?.type) {
-								case BroadcastTypes.MoveTo:
-									mediaSelectionRef.current?.updateList(broadcast.moveTo, (jobs: Job[]) => {
-										initiateMoveTo(jobs);
-									});
-									break;
-								case BroadcastTypes.VoiceSignal:
-									void handleVoiceBroadcast(state.firedBy?.id, broadcast);
-									break;
-								case BroadcastTypes.SoundEffect:
-									playSoundEffect(
-										resolveBroadcastSoundEffectId(broadcast.soundEffect, playerId),
-										state.firedBy?.id
-									);
-									pulseSoundEffectBadge(state.firedBy?.id);
-									break;
-							}
-							break;
-						case SyncTypes.ExitSync:
-							setExited(true);
-							exitedRef.current = true;
-							setInteracted(false);
-							setPageReloadCounter((value) => value + 1);
-							break;
+							return value;
+						});
+						break;
 					}
+					case SyncTypes.PlayerStatusSync: {
+						const playerStatuses = state.playerStatuses ?? [];
+						const playersCount = state.playersCount ?? roomPlayersCountRef.current;
+						reconnectAttemptRef.current = 0;
+						roomPlayersCountRef.current = playersCount;
+						setRoomPlayers((current) => {
+							const next = mergeRoomPlayerStatuses(current, playerStatuses);
+							roomPlayersRef.current = next;
+							return next;
+						});
+						updateLastTicked(true, playersCount);
+						setCurrentlyWatching((value) => {
+							if (value && value.roomPlayers !== playersCount) {
+								return { ...value, roomPlayers: playersCount };
+							}
+							return value;
+						});
+						break;
+					}
+					case SyncTypes.HeartbeatSync: {
+						const playersCount = state.playersCount ?? roomPlayersCountRef.current;
+						reconnectAttemptRef.current = 0;
+						roomPlayersCountRef.current = playersCount;
+						updateLastTicked(true, playersCount);
+						break;
+					}
+					case SyncTypes.PauseSync:
+						awaitingInitialPlaybackSyncRef.current = false;
+						if (typeof state.paused === 'boolean') {
+							applyRemotePlaybackSync({ paused: state.paused });
+							persistControlState(state);
+						}
+						break;
+					case SyncTypes.TimeSync:
+						if (state.time !== undefined) {
+							applyRemotePlaybackSync({ time: state.time });
+							persistControlState(state);
+						}
+						break;
+					case SyncTypes.BroadcastSync:
+						switch (broadcast?.type) {
+							case BroadcastTypes.MoveTo:
+								mediaSelectionRef.current?.updateList(broadcast.moveTo, (jobs: Job[]) => {
+									initiateMoveTo(jobs);
+								});
+								break;
+							case BroadcastTypes.VoiceSignal:
+								void handleVoiceBroadcast(state.firedBy?.id, broadcast);
+								break;
+							case BroadcastTypes.SoundEffect:
+								playSoundEffect(
+									resolveBroadcastSoundEffectId(broadcast.soundEffect, playerId),
+									state.firedBy?.id
+								);
+								pulseSoundEffectBadge(state.firedBy?.id);
+								break;
+						}
+						break;
+					case SyncTypes.ExitSync:
+						setExited(true);
+						exitedRef.current = true;
+						setInteracted(false);
+						setPageReloadCounter((value) => value + 1);
+						break;
 				}
 			};
 
@@ -2870,8 +3055,7 @@ export function Player({ data }: { data: ServerData }) {
 			handleVoiceBroadcast,
 			playSoundEffect,
 			pulseSoundEffectBadge,
-			armPlaybackSyncSuppression,
-			clearPlaybackSyncSuppression
+			applyRemotePlaybackSync
 		]
 	);
 
@@ -2970,14 +3154,23 @@ export function Player({ data }: { data: ServerData }) {
 				selectedSubtitleTrackRef.current = null;
 				return;
 			}
-			const requestedTrack =
-				typeof detail.index === 'number' ? playerEl.textTracks?.[detail.index] : null;
+			let requestedTrack = null;
+			try {
+				requestedTrack =
+					typeof detail.index === 'number' ? playerEl.textTracks?.[detail.index] : null;
+			} catch {
+				requestedTrack = null;
+			}
 			setSelectedSubtitleTrack(requestedTrack, detail.mode, { storeLanguage: true });
 		};
 
 		playerEl.addEventListener?.('text-track-change', handleTextTrackChange);
 		playerEl.addEventListener?.('media-text-track-change-request', handleTextTrackChangeRequest);
-		playerEl.textTracks?.addEventListener?.('mode-change', handleTextTrackChange);
+		try {
+			playerEl.textTracks?.addEventListener?.('mode-change', handleTextTrackChange);
+		} catch {
+			// Text tracks can disappear during provider teardown.
+		}
 
 		return () => {
 			playerEl.removeEventListener?.('text-track-change', handleTextTrackChange);
@@ -2985,7 +3178,11 @@ export function Player({ data }: { data: ServerData }) {
 				'media-text-track-change-request',
 				handleTextTrackChangeRequest
 			);
-			playerEl.textTracks?.removeEventListener?.('mode-change', handleTextTrackChange);
+			try {
+				playerEl.textTracks?.removeEventListener?.('mode-change', handleTextTrackChange);
+			} catch {
+				// Text tracks can disappear during provider teardown.
+			}
 		};
 	}, [playerEl]);
 
@@ -3007,6 +3204,11 @@ export function Player({ data }: { data: ServerData }) {
 		if (!playerEl || !playerCanPlay) {
 			return;
 		}
+		const pendingRemotePlaybackSync = pendingRemotePlaybackSyncRef.current;
+		if (pendingRemotePlaybackSync) {
+			pendingRemotePlaybackSyncRef.current = null;
+			applyRemotePlaybackSync(pendingRemotePlaybackSync);
+		}
 		if (interactedRef.current && !socketRef.current) {
 			connectRef.current?.();
 		}
@@ -3014,7 +3216,7 @@ export function Player({ data }: { data: ServerData }) {
 			restoreInitialVolume(playerEl);
 			volumeCanPlayRestoredRef.current = true;
 		}
-	}, [playerCanPlay, playerEl, restoreInitialVolume]);
+	}, [applyRemotePlaybackSync, playerCanPlay, playerEl, restoreInitialVolume]);
 
 	useEffect(() => {
 		if (!playerEl) {
@@ -3023,15 +3225,16 @@ export function Player({ data }: { data: ServerData }) {
 		const player = playerEl;
 
 		const visibilityChange = () => {
+			const paused = getSafePlayerPaused(player);
 			if (document.hidden) {
-				send({ state: 'bg', type: SyncTypes.StateSync, paused: player.paused });
+				send({ state: 'bg', type: SyncTypes.StateSync, paused: paused ?? true });
 				inBgRef.current = true;
-				if (!player.paused) {
+				if (paused === false) {
 					ignoreMediaRequestFailure(() => player.enterPictureInPicture?.());
 				}
 			} else {
 				void refreshRoomMedia();
-				send({ state: 'fg', type: SyncTypes.StateSync, paused: player.paused });
+				send({ state: 'fg', type: SyncTypes.StateSync, paused: paused ?? true });
 				inBgRef.current = false;
 				ignoreMediaRequestFailure(() => player.exitPictureInPicture?.());
 			}
@@ -3045,13 +3248,18 @@ export function Player({ data }: { data: ServerData }) {
 		};
 		document.addEventListener('mousemove', mouseMove);
 		const mouseLeave = () => {
-			if (!player.paused && controlsShowingRef.current) {
+			if (getSafePlayerPaused(player) === false && controlsShowingRef.current) {
 				player.controls.hide(0);
 			}
 		};
 		player.el?.addEventListener('mouseleave', mouseLeave);
 
 		const interval = window.setInterval(() => {
+			const pendingRemotePlaybackSync = pendingRemotePlaybackSyncRef.current;
+			if (pendingRemotePlaybackSync && playerCanPlayRef.current) {
+				pendingRemotePlaybackSyncRef.current = null;
+				applyRemotePlaybackSync(pendingRemotePlaybackSync);
+			}
 			updateTime();
 			updateLastTicked();
 			const videoElement = getPlayerVideoElement(player);
@@ -3132,7 +3340,15 @@ export function Player({ data }: { data: ServerData }) {
 			document.removeEventListener('mousemove', mouseMove);
 			player.el?.removeEventListener('mouseleave', mouseLeave);
 		};
-	}, [chatFocused, playerEl, refreshRoomMedia, send, updateLastTicked, updateTime]);
+	}, [
+		applyRemotePlaybackSync,
+		chatFocused,
+		playerEl,
+		refreshRoomMedia,
+		send,
+		updateLastTicked,
+		updateTime
+	]);
 
 	useEffect(() => {
 		if (discordAuth?.user) {
@@ -3247,7 +3463,7 @@ export function Player({ data }: { data: ServerData }) {
 	}
 
 	const showJoinOverlay = !socketConnected;
-	const mediaPlayerClassName = `media-player relative w-full bg-slate-900 ${discord ? 'h-[100dvh]' : 'aspect-video'} ${playerEl && !playerEl.paused && chatFocusedSecs > hideControlsOnChatFocused ? 'chat-controls-hidden' : ''}`;
+	const mediaPlayerClassName = `media-player relative w-full bg-slate-900 ${discord ? 'h-[100dvh]' : 'aspect-video'} ${getSafePlayerPaused(playerEl) === false && chatFocusedSecs > hideControlsOnChatFocused ? 'chat-controls-hidden' : ''}`;
 	const videoSettingsMenu = (
 		<Menu.Root className="vds-video-settings-menu vds-menu">
 			<DefaultMenuButton
@@ -3352,8 +3568,9 @@ export function Player({ data }: { data: ServerData }) {
 								startWatchRoomConnection();
 							}}
 							onSeeked={() => {
-								supRef.current?.seekedHandler(!playerEl?.paused);
-								supPlayingRef.current = Boolean(supRef.current && !playerEl?.paused);
+								const playing = getSafePlayerPaused(playerEl) === false;
+								supRef.current?.seekedHandler(playing);
+								supPlayingRef.current = Boolean(supRef.current && playing);
 							}}
 							onSeeking={() => {
 								supRef.current?.seekingHandler();
