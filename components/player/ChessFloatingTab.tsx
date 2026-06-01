@@ -87,6 +87,7 @@ const MIN_HEIGHT = 540;
 const DEFAULT_WIDTH = 880;
 const DEFAULT_HEIGHT = 680;
 const COLLAPSED_HEIGHT = 44;
+const VIEWPORT_MARGIN = 8;
 const CLOSE_CONFIRMATION_MS = 60_000;
 const CHESS_PIECE_SET_OPTIONS: { value: ChessPieceSet; label: string }[] = [
 	{ value: 'cartoon', label: 'Cartoon' },
@@ -194,14 +195,28 @@ function getDefaultLayout(initialIndex = 0): ChessTabLayout {
 	if (typeof window === 'undefined') {
 		return { x: 32, y: 88, width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT };
 	}
-	const width = Math.min(DEFAULT_WIDTH, Math.max(MIN_WIDTH, window.innerWidth - 32));
-	const height = Math.min(DEFAULT_HEIGHT, Math.max(MIN_HEIGHT, window.innerHeight - 32));
+	const limits = getLayoutLimits();
+	const preferredWidth = Math.min(DEFAULT_WIDTH, Math.max(0, window.innerWidth - 32));
+	const preferredHeight = Math.min(DEFAULT_HEIGHT, Math.max(0, window.innerHeight - 32));
+	const width = Math.min(limits.maxWidth, Math.max(limits.minWidth, preferredWidth));
+	const height = Math.min(limits.maxHeight, Math.max(limits.minHeight, preferredHeight));
 	const offset = Math.min(180, Math.max(0, initialIndex) * 34);
 	return {
-		x: Math.max(16, window.innerWidth - width - 32 - offset),
-		y: Math.min(88 + offset, Math.max(16, window.innerHeight - height - 24)),
+		x: Math.max(VIEWPORT_MARGIN, window.innerWidth - width - 32 - offset),
+		y: Math.min(88 + offset, Math.max(VIEWPORT_MARGIN, window.innerHeight - height - 24)),
 		width,
 		height
+	};
+}
+
+function getLayoutLimits() {
+	const maxWidth = Math.max(1, window.innerWidth - VIEWPORT_MARGIN * 2);
+	const maxHeight = Math.max(1, window.innerHeight - VIEWPORT_MARGIN * 2);
+	return {
+		minWidth: Math.min(MIN_WIDTH, maxWidth),
+		minHeight: Math.min(MIN_HEIGHT, maxHeight),
+		maxWidth,
+		maxHeight
 	};
 }
 
@@ -209,18 +224,19 @@ function clampLayout(layout: ChessTabLayout, visibleHeight = layout.height): Che
 	if (typeof window === 'undefined') {
 		return layout;
 	}
-	const width = Math.min(
-		Math.max(layout.width, MIN_WIDTH),
-		Math.max(MIN_WIDTH, window.innerWidth - 16)
-	);
-	const height = Math.min(
-		Math.max(layout.height, MIN_HEIGHT),
-		Math.max(MIN_HEIGHT, window.innerHeight - 16)
-	);
-	const boxHeight = Math.max(0, Math.min(visibleHeight, window.innerHeight - 16));
+	const limits = getLayoutLimits();
+	const width = Math.min(Math.max(layout.width, limits.minWidth), limits.maxWidth);
+	const height = Math.min(Math.max(layout.height, limits.minHeight), limits.maxHeight);
+	const boxHeight = Math.max(0, Math.min(visibleHeight, limits.maxHeight));
 	return {
-		x: Math.min(Math.max(8, layout.x), Math.max(8, window.innerWidth - width - 8)),
-		y: Math.min(Math.max(8, layout.y), Math.max(8, window.innerHeight - boxHeight - 8)),
+		x: Math.min(
+			Math.max(VIEWPORT_MARGIN, layout.x),
+			Math.max(VIEWPORT_MARGIN, window.innerWidth - width - VIEWPORT_MARGIN)
+		),
+		y: Math.min(
+			Math.max(VIEWPORT_MARGIN, layout.y),
+			Math.max(VIEWPORT_MARGIN, window.innerHeight - boxHeight - VIEWPORT_MARGIN)
+		),
 		width,
 		height
 	};
@@ -233,9 +249,10 @@ function constrainResizeSize(width: number, height: number) {
 			height: Math.max(height, MIN_HEIGHT)
 		};
 	}
+	const limits = getLayoutLimits();
 	return {
-		width: Math.min(Math.max(width, MIN_WIDTH), Math.max(MIN_WIDTH, window.innerWidth - 16)),
-		height: Math.min(Math.max(height, MIN_HEIGHT), Math.max(MIN_HEIGHT, window.innerHeight - 16))
+		width: Math.min(Math.max(width, limits.minWidth), limits.maxWidth),
+		height: Math.min(Math.max(height, limits.minHeight), limits.maxHeight)
 	};
 }
 
@@ -676,6 +693,7 @@ export function ChessFloatingTab({
 	const storageKey = `sparkle:chess-tab-layout:${roomId}:${state.id}`;
 	const collapsedStorageKey = `sparkle:chess-tab-collapsed:${roomId}:${state.id}`;
 	const panelRef = useRef<HTMLDivElement | null>(null);
+	const boardSlotRef = useRef<HTMLDivElement | null>(null);
 	const dragRef = useRef<{
 		pointerId: number;
 		startX: number;
@@ -683,6 +701,7 @@ export function ChessFloatingTab({
 		x: number;
 		y: number;
 	} | null>(null);
+	const dragCleanupRef = useRef<(() => void) | null>(null);
 	const resizeRef = useRef<{
 		pointerId: number;
 		startX: number;
@@ -706,6 +725,7 @@ export function ChessFloatingTab({
 	const [promotion, setPromotion] = useState<PromotionChoice | null>(null);
 	const [clockNow, setClockNow] = useState(() => getNowMs());
 	const [collapsed, setCollapsed] = useState(false);
+	const [boardSize, setBoardSize] = useState(0);
 
 	const game = useMemo(() => buildChessFromMoves(state.moves), [state.moves]);
 	const myColor = getPlayerColor(state, currentPlayer);
@@ -751,6 +771,7 @@ export function ChessFloatingTab({
 		Boolean(drawOffer && currentPlayer && !isSameChessPlayer(drawOffer.offeredBy, currentPlayer)) &&
 		isParticipant;
 	const panelCollapsed = collapsed && !closeRequest;
+	const compactLayout = !panelCollapsed && layout.width < MIN_WIDTH;
 	const canStartGame = Boolean(
 		state.white &&
 		state.black &&
@@ -775,6 +796,8 @@ export function ChessFloatingTab({
 
 	useEffect(() => {
 		return () => {
+			dragCleanupRef.current?.();
+			dragCleanupRef.current = null;
 			resizeCleanupRef.current?.();
 			resizeCleanupRef.current = null;
 		};
@@ -901,12 +924,43 @@ export function ChessFloatingTab({
 		return () => window.removeEventListener('resize', handleResize);
 	}, [state.open, updateLayout]);
 
+	useLayoutEffect(() => {
+		if (!state.open || panelCollapsed || compactLayout || state.phase === 'setup') {
+			setBoardSize(0);
+			return;
+		}
+		const node = boardSlotRef.current;
+		if (!node) {
+			return;
+		}
+
+		const updateBoardSize = () => {
+			const { width, height } = node.getBoundingClientRect();
+			const nextSize = Math.max(0, Math.floor(Math.min(width, height)));
+			setBoardSize((current) => (current === nextSize ? current : nextSize));
+		};
+
+		updateBoardSize();
+		if (typeof ResizeObserver === 'undefined') {
+			window.addEventListener('resize', updateBoardSize);
+			return () => window.removeEventListener('resize', updateBoardSize);
+		}
+
+		const observer = new ResizeObserver(updateBoardSize);
+		observer.observe(node);
+		return () => observer.disconnect();
+	}, [compactLayout, panelCollapsed, state.open, state.phase]);
+
 	function handleDragStart(event: ReactPointerEvent<HTMLDivElement>) {
 		if (event.button !== 0) {
 			return;
 		}
 		event.preventDefault();
-		event.currentTarget.setPointerCapture(event.pointerId);
+		try {
+			event.currentTarget.setPointerCapture(event.pointerId);
+		} catch {
+			// Window listeners below keep drag working when pointer capture is unavailable.
+		}
 		dragRef.current = {
 			pointerId: event.pointerId,
 			startX: event.clientX,
@@ -914,24 +968,51 @@ export function ChessFloatingTab({
 			x: layout.x,
 			y: layout.y
 		};
+		dragCleanupRef.current?.();
+
+		const handleWindowDragMove = (moveEvent: PointerEvent) => {
+			applyDrag(moveEvent.pointerId, moveEvent.clientX, moveEvent.clientY);
+		};
+		const handleWindowDragEnd = (endEvent: PointerEvent) => {
+			finishDrag(endEvent.pointerId);
+		};
+
+		window.addEventListener('pointermove', handleWindowDragMove);
+		window.addEventListener('pointerup', handleWindowDragEnd);
+		window.addEventListener('pointercancel', handleWindowDragEnd);
+		dragCleanupRef.current = () => {
+			window.removeEventListener('pointermove', handleWindowDragMove);
+			window.removeEventListener('pointerup', handleWindowDragEnd);
+			window.removeEventListener('pointercancel', handleWindowDragEnd);
+		};
 	}
 
-	function handleDragMove(event: ReactPointerEvent<HTMLDivElement>) {
+	function applyDrag(pointerId: number, clientX: number, clientY: number) {
 		const drag = dragRef.current;
-		if (!drag || drag.pointerId !== event.pointerId) {
+		if (!drag || drag.pointerId !== pointerId) {
 			return;
 		}
 		updateLayout({
 			...layout,
-			x: drag.x + event.clientX - drag.startX,
-			y: drag.y + event.clientY - drag.startY
+			x: drag.x + clientX - drag.startX,
+			y: drag.y + clientY - drag.startY
 		});
 	}
 
-	function handleDragEnd(event: ReactPointerEvent<HTMLDivElement>) {
-		if (dragRef.current?.pointerId === event.pointerId) {
+	function handleDragMove(event: ReactPointerEvent<HTMLDivElement>) {
+		applyDrag(event.pointerId, event.clientX, event.clientY);
+	}
+
+	function finishDrag(pointerId: number) {
+		if (dragRef.current?.pointerId === pointerId) {
 			dragRef.current = null;
+			dragCleanupRef.current?.();
+			dragCleanupRef.current = null;
 		}
+	}
+
+	function handleDragEnd(event: ReactPointerEvent<HTMLDivElement>) {
+		finishDrag(event.pointerId);
 	}
 
 	function handleResizeStart(event: ReactPointerEvent<HTMLDivElement>, corner: ResizeCorner) {
@@ -1290,8 +1371,8 @@ export function ChessFloatingTab({
 			ref={panelRef}
 			data-chess-tab={state.id}
 			data-collapsed={panelCollapsed ? 'true' : 'false'}
-			className={`fixed flex min-w-[760px] overflow-hidden rounded-lg border border-border bg-background shadow-2xl ${
-				panelCollapsed ? 'min-h-11' : 'min-h-[540px]'
+			className={`fixed flex min-w-0 overflow-hidden rounded-lg border border-border bg-background shadow-2xl ${
+				panelCollapsed ? 'min-h-11' : 'min-h-0'
 			}`}
 			onFocusCapture={bringToFront}
 			onPointerDownCapture={bringToFront}
@@ -1305,7 +1386,7 @@ export function ChessFloatingTab({
 		>
 			<div className="flex min-h-0 w-full flex-col">
 				<div
-					className="flex h-11 shrink-0 cursor-move items-center gap-2 border-b bg-muted/65 px-2"
+					className="flex h-11 shrink-0 cursor-move touch-none select-none items-center gap-2 border-b bg-muted/65 px-2"
 					onPointerDown={handleDragStart}
 					onPointerMove={handleDragMove}
 					onPointerUp={handleDragEnd}
@@ -1349,17 +1430,30 @@ export function ChessFloatingTab({
 					</Button>
 				</div>
 
-				<div className="min-h-0 flex-1 overflow-auto bg-muted/20 p-3" aria-hidden={panelCollapsed}>
+				<div
+					className={`min-h-0 flex-1 bg-muted/20 p-3 ${
+						state.phase === 'setup' || compactLayout ? 'overflow-auto' : 'overflow-hidden'
+					}`}
+					aria-hidden={panelCollapsed}
+				>
 					<div
 						className={
 							state.phase === 'setup'
 								? 'mx-auto grid min-h-full w-full max-w-3xl content-start gap-3'
-								: 'grid min-h-full min-w-[720px] grid-cols-[minmax(0,1fr)_260px] gap-3'
+								: compactLayout
+									? 'grid min-h-full w-full content-start gap-3'
+									: 'grid h-full min-h-0 min-w-0 grid-cols-[minmax(0,1fr)_260px] gap-3'
 						}
 					>
 						{state.phase === 'setup' ? null : (
-							<div className="flex min-w-0 flex-col gap-2">
-								<div className="grid grid-cols-2 gap-2">
+							<div
+								className={
+									compactLayout
+										? 'flex min-w-0 flex-col gap-2'
+										: 'flex min-h-0 min-w-0 flex-col gap-2'
+								}
+							>
+								<div className="grid shrink-0 grid-cols-2 gap-2">
 									<div
 										className={`rounded-md border bg-background px-3 py-2 ${
 											activeColor === 'b' && state.phase === 'playing' ? 'border-primary' : ''
@@ -1385,72 +1479,91 @@ export function ChessFloatingTab({
 								</div>
 
 								<div
-									data-chess-board="true"
-									className={`grid aspect-square w-full shrink-0 grid-cols-8 overflow-hidden rounded-md border ${theme.border}`}
+									ref={boardSlotRef}
+									className={
+										compactLayout
+											? 'flex min-h-0 items-center justify-center overflow-hidden'
+											: 'flex min-h-0 flex-1 items-center justify-center overflow-hidden'
+									}
 								>
-									{squares.map((square) => {
-										const fileIndex = FILES.indexOf(square[0] as (typeof FILES)[number]);
-										const rankIndex = Number(square[1]) - 1;
-										const isLight = (fileIndex + rankIndex) % 2 === 0;
-										const piece = game.get(square);
-										const selected = selectedSquare === square;
-										const legal = legalTargets.has(square);
-										const pieceAsset = piece
-											? getPieceAsset(
-													piece.color as ChessColor,
-													piece.type,
-													state.settings.pieceSet
-												)
-											: '';
-										return (
-											<button
-												key={square}
-												type="button"
-												className={`relative flex aspect-square min-h-0 min-w-0 items-center justify-center ${
-													isLight ? theme.light : theme.dark
-												} ${!isMyTurn || closeRequest ? 'cursor-default' : 'cursor-pointer'}`}
-												onClick={() => handleSquareClick(square)}
-												aria-disabled={!isMyTurn || Boolean(closeRequest)}
-												aria-label={square}
-											>
-												{selected ? (
-													<span className="absolute inset-1 rounded bg-primary/30" />
-												) : null}
-												{legal ? (
-													<span
-														className={`absolute rounded-full ${piece ? 'inset-2 border-4 border-primary/55' : `h-3 w-3 ${theme.accent}`}`}
-													/>
-												) : null}
-												{piece ? (
-													<Image
-														src={pieceAsset}
-														alt={`${pieceColorName(piece.color as ChessColor)} ${PIECE_ASSET_NAMES[piece.type]}`}
-														width={96}
-														height={96}
-														unoptimized
-														draggable={false}
-														className="relative z-10 h-[84%] w-[84%] select-none object-contain drop-shadow-[0_2px_2px_rgba(0,0,0,0.35)]"
-													/>
-												) : null}
-												<span
-													className={`absolute bottom-1 right-1 text-[10px] font-bold ${
-														isLight ? 'text-black/35' : 'text-white/55'
-													}`}
+									<div
+										data-chess-board="true"
+										className={`grid aspect-square max-w-full shrink-0 grid-cols-8 overflow-hidden rounded-md border ${theme.border} ${
+											compactLayout ? 'w-full' : 'h-full max-h-full'
+										}`}
+										style={
+											!compactLayout && boardSize > 0
+												? {
+														width: boardSize,
+														height: boardSize
+													}
+												: undefined
+										}
+									>
+										{squares.map((square) => {
+											const fileIndex = FILES.indexOf(square[0] as (typeof FILES)[number]);
+											const rankIndex = Number(square[1]) - 1;
+											const isLight = (fileIndex + rankIndex) % 2 === 0;
+											const piece = game.get(square);
+											const selected = selectedSquare === square;
+											const legal = legalTargets.has(square);
+											const pieceAsset = piece
+												? getPieceAsset(
+														piece.color as ChessColor,
+														piece.type,
+														state.settings.pieceSet
+													)
+												: '';
+											return (
+												<button
+													key={square}
+													type="button"
+													className={`relative flex aspect-square min-h-0 min-w-0 items-center justify-center ${
+														isLight ? theme.light : theme.dark
+													} ${!isMyTurn || closeRequest ? 'cursor-default' : 'cursor-pointer'}`}
+													onClick={() => handleSquareClick(square)}
+													aria-disabled={!isMyTurn || Boolean(closeRequest)}
+													aria-label={square}
 												>
-													{orientation === 'w'
-														? square === `${square[0]}1`
-															? square[0]
-															: ''
-														: square === `${square[0]}8`
-															? square[0]
-															: ''}
-												</span>
-											</button>
-										);
-									})}
+													{selected ? (
+														<span className="absolute inset-1 rounded bg-primary/30" />
+													) : null}
+													{legal ? (
+														<span
+															className={`absolute rounded-full ${piece ? 'inset-2 border-4 border-primary/55' : `h-3 w-3 ${theme.accent}`}`}
+														/>
+													) : null}
+													{piece ? (
+														<Image
+															src={pieceAsset}
+															alt={`${pieceColorName(piece.color as ChessColor)} ${PIECE_ASSET_NAMES[piece.type]}`}
+															width={96}
+															height={96}
+															unoptimized
+															draggable={false}
+															className="relative z-10 h-[84%] w-[84%] select-none object-contain drop-shadow-[0_2px_2px_rgba(0,0,0,0.35)]"
+														/>
+													) : null}
+													<span
+														className={`absolute bottom-1 right-1 text-[10px] font-bold ${
+															isLight ? 'text-black/35' : 'text-white/55'
+														}`}
+													>
+														{orientation === 'w'
+															? square === `${square[0]}1`
+																? square[0]
+																: ''
+															: square === `${square[0]}8`
+																? square[0]
+																: ''}
+													</span>
+												</button>
+											);
+										})}
+									</div>
 								</div>
 
-								<div className="rounded-md border bg-background px-3 py-2 text-sm font-semibold">
+								<div className="shrink-0 rounded-md border bg-background px-3 py-2 text-sm font-semibold">
 									{currentStatus}
 								</div>
 							</div>
@@ -1458,7 +1571,11 @@ export function ChessFloatingTab({
 
 						<div
 							className={
-								state.phase === 'setup' ? 'grid content-start gap-3' : 'flex min-h-0 flex-col gap-3'
+								state.phase === 'setup'
+									? 'grid content-start gap-3'
+									: compactLayout
+										? 'grid content-start gap-3'
+										: 'flex min-h-0 flex-col gap-3'
 							}
 						>
 							{state.phase === 'setup' ? (
@@ -1563,7 +1680,13 @@ export function ChessFloatingTab({
 									</Button>
 								</div>
 							) : (
-								<div className="flex min-h-0 flex-1 flex-col gap-3">
+								<div
+									className={
+										compactLayout
+											? 'grid content-start gap-3'
+											: 'flex min-h-0 flex-1 flex-col gap-3'
+									}
+								>
 									<div className="rounded-md border bg-background p-3">
 										<div className="mb-2 flex items-center justify-between gap-2">
 											<div className="text-xs font-bold text-muted-foreground">Current Pieces</div>
@@ -1636,7 +1759,9 @@ export function ChessFloatingTab({
 
 									<div
 										data-chess-moves="true"
-										className="min-h-0 flex-1 overflow-auto rounded-md border bg-background"
+										className={`overflow-auto rounded-md border bg-background ${
+											compactLayout ? 'max-h-56' : 'min-h-0 flex-1'
+										}`}
 									>
 										<div className="sticky top-0 border-b bg-background px-3 py-2 text-sm font-bold">
 											Moves
@@ -1759,7 +1884,7 @@ export function ChessFloatingTab({
 						aria-hidden="true"
 					/>
 					<div
-						className="absolute bottom-0 left-0 h-4 w-4 cursor-nesw-resize touch-none"
+						className="absolute bottom-0 left-0 z-10 h-5 w-5 cursor-nesw-resize touch-none sm:h-4 sm:w-4"
 						onPointerDown={(event) => handleResizeStart(event, 'bottom-left')}
 						onPointerMove={handleResizeMove}
 						onPointerUp={handleResizeEnd}
@@ -1767,7 +1892,7 @@ export function ChessFloatingTab({
 						aria-hidden="true"
 					/>
 					<div
-						className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize touch-none"
+						className="absolute bottom-0 right-0 z-10 h-5 w-5 cursor-nwse-resize touch-none sm:h-4 sm:w-4"
 						onPointerDown={(event) => handleResizeStart(event, 'bottom-right')}
 						onPointerMove={handleResizeMove}
 						onPointerUp={handleResizeEnd}

@@ -90,6 +90,7 @@ const MIN_HEIGHT = 260;
 const DEFAULT_WIDTH = 640;
 const DEFAULT_HEIGHT = 420;
 const COLLAPSED_HEIGHT = 44;
+const VIEWPORT_MARGIN = 8;
 const YOUTUBE_TIME_SYNC_THRESHOLD_SECONDS = 6;
 const YOUTUBE_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 
@@ -254,14 +255,28 @@ function getDefaultLayout(initialIndex = 0): YouTubeTabLayout {
 	if (typeof window === 'undefined') {
 		return { x: 24, y: 96, width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT };
 	}
-	const width = Math.min(DEFAULT_WIDTH, Math.max(MIN_WIDTH, window.innerWidth - 32));
-	const height = Math.min(DEFAULT_HEIGHT, Math.max(MIN_HEIGHT, window.innerHeight - 32));
+	const limits = getLayoutLimits();
+	const preferredWidth = Math.min(DEFAULT_WIDTH, Math.max(0, window.innerWidth - 32));
+	const preferredHeight = Math.min(DEFAULT_HEIGHT, Math.max(0, window.innerHeight - 32));
+	const width = Math.min(limits.maxWidth, Math.max(limits.minWidth, preferredWidth));
+	const height = Math.min(limits.maxHeight, Math.max(limits.minHeight, preferredHeight));
 	const offset = Math.min(160, Math.max(0, initialIndex) * 32);
 	return {
-		x: Math.max(16, window.innerWidth - width - 24 - offset),
-		y: Math.min(96 + offset, Math.max(16, window.innerHeight - height - 24)),
+		x: Math.max(VIEWPORT_MARGIN, window.innerWidth - width - 24 - offset),
+		y: Math.min(96 + offset, Math.max(VIEWPORT_MARGIN, window.innerHeight - height - 24)),
 		width,
 		height
+	};
+}
+
+function getLayoutLimits() {
+	const maxWidth = Math.max(1, window.innerWidth - VIEWPORT_MARGIN * 2);
+	const maxHeight = Math.max(1, window.innerHeight - VIEWPORT_MARGIN * 2);
+	return {
+		minWidth: Math.min(MIN_WIDTH, maxWidth),
+		minHeight: Math.min(MIN_HEIGHT, maxHeight),
+		maxWidth,
+		maxHeight
 	};
 }
 
@@ -269,18 +284,19 @@ function clampLayout(layout: YouTubeTabLayout, visibleHeight = layout.height): Y
 	if (typeof window === 'undefined') {
 		return layout;
 	}
-	const width = Math.min(
-		Math.max(layout.width, MIN_WIDTH),
-		Math.max(MIN_WIDTH, window.innerWidth - 16)
-	);
-	const height = Math.min(
-		Math.max(layout.height, MIN_HEIGHT),
-		Math.max(MIN_HEIGHT, window.innerHeight - 16)
-	);
-	const boxHeight = Math.max(0, Math.min(visibleHeight, window.innerHeight - 16));
+	const limits = getLayoutLimits();
+	const width = Math.min(Math.max(layout.width, limits.minWidth), limits.maxWidth);
+	const height = Math.min(Math.max(layout.height, limits.minHeight), limits.maxHeight);
+	const boxHeight = Math.max(0, Math.min(visibleHeight, limits.maxHeight));
 	return {
-		x: Math.min(Math.max(8, layout.x), Math.max(8, window.innerWidth - width - 8)),
-		y: Math.min(Math.max(8, layout.y), Math.max(8, window.innerHeight - boxHeight - 8)),
+		x: Math.min(
+			Math.max(VIEWPORT_MARGIN, layout.x),
+			Math.max(VIEWPORT_MARGIN, window.innerWidth - width - VIEWPORT_MARGIN)
+		),
+		y: Math.min(
+			Math.max(VIEWPORT_MARGIN, layout.y),
+			Math.max(VIEWPORT_MARGIN, window.innerHeight - boxHeight - VIEWPORT_MARGIN)
+		),
 		width,
 		height
 	};
@@ -293,9 +309,10 @@ function constrainResizeSize(width: number, height: number) {
 			height: Math.max(height, MIN_HEIGHT)
 		};
 	}
+	const limits = getLayoutLimits();
 	return {
-		width: Math.min(Math.max(width, MIN_WIDTH), Math.max(MIN_WIDTH, window.innerWidth - 16)),
-		height: Math.min(Math.max(height, MIN_HEIGHT), Math.max(MIN_HEIGHT, window.innerHeight - 16))
+		width: Math.min(Math.max(width, limits.minWidth), limits.maxWidth),
+		height: Math.min(Math.max(height, limits.minHeight), limits.maxHeight)
 	};
 }
 
@@ -377,6 +394,7 @@ export function YouTubeFloatingTab({
 		x: number;
 		y: number;
 	} | null>(null);
+	const dragCleanupRef = useRef<(() => void) | null>(null);
 	const resizeRef = useRef<{
 		pointerId: number;
 		startX: number;
@@ -407,6 +425,8 @@ export function YouTubeFloatingTab({
 
 	useEffect(() => {
 		return () => {
+			dragCleanupRef.current?.();
+			dragCleanupRef.current = null;
 			resizeCleanupRef.current?.();
 			resizeCleanupRef.current = null;
 		};
@@ -721,7 +741,11 @@ export function YouTubeFloatingTab({
 			return;
 		}
 		event.preventDefault();
-		event.currentTarget.setPointerCapture(event.pointerId);
+		try {
+			event.currentTarget.setPointerCapture(event.pointerId);
+		} catch {
+			// Window listeners below keep drag working when pointer capture is unavailable.
+		}
 		dragRef.current = {
 			pointerId: event.pointerId,
 			startX: event.clientX,
@@ -729,24 +753,51 @@ export function YouTubeFloatingTab({
 			x: layout.x,
 			y: layout.y
 		};
+		dragCleanupRef.current?.();
+
+		const handleWindowDragMove = (moveEvent: PointerEvent) => {
+			applyDrag(moveEvent.pointerId, moveEvent.clientX, moveEvent.clientY);
+		};
+		const handleWindowDragEnd = (endEvent: PointerEvent) => {
+			finishDrag(endEvent.pointerId);
+		};
+
+		window.addEventListener('pointermove', handleWindowDragMove);
+		window.addEventListener('pointerup', handleWindowDragEnd);
+		window.addEventListener('pointercancel', handleWindowDragEnd);
+		dragCleanupRef.current = () => {
+			window.removeEventListener('pointermove', handleWindowDragMove);
+			window.removeEventListener('pointerup', handleWindowDragEnd);
+			window.removeEventListener('pointercancel', handleWindowDragEnd);
+		};
 	}
 
-	function handleDragMove(event: ReactPointerEvent<HTMLDivElement>) {
+	function applyDrag(pointerId: number, clientX: number, clientY: number) {
 		const drag = dragRef.current;
-		if (!drag || drag.pointerId !== event.pointerId) {
+		if (!drag || drag.pointerId !== pointerId) {
 			return;
 		}
 		updateLayout({
 			...layout,
-			x: drag.x + event.clientX - drag.startX,
-			y: drag.y + event.clientY - drag.startY
+			x: drag.x + clientX - drag.startX,
+			y: drag.y + clientY - drag.startY
 		});
 	}
 
-	function handleDragEnd(event: ReactPointerEvent<HTMLDivElement>) {
-		if (dragRef.current?.pointerId === event.pointerId) {
+	function handleDragMove(event: ReactPointerEvent<HTMLDivElement>) {
+		applyDrag(event.pointerId, event.clientX, event.clientY);
+	}
+
+	function finishDrag(pointerId: number) {
+		if (dragRef.current?.pointerId === pointerId) {
 			dragRef.current = null;
+			dragCleanupRef.current?.();
+			dragCleanupRef.current = null;
 		}
+	}
+
+	function handleDragEnd(event: ReactPointerEvent<HTMLDivElement>) {
+		finishDrag(event.pointerId);
 	}
 
 	function handleResizeStart(event: ReactPointerEvent<HTMLDivElement>, corner: ResizeCorner) {
@@ -834,8 +885,8 @@ export function YouTubeFloatingTab({
 			ref={panelRef}
 			data-youtube-tab={state.id}
 			data-collapsed={collapsed ? 'true' : 'false'}
-			className={`fixed flex min-w-[320px] overflow-hidden rounded-lg border border-border bg-background shadow-2xl ${
-				collapsed ? 'min-h-11' : 'min-h-[260px]'
+			className={`fixed flex min-w-0 overflow-hidden rounded-lg border border-border bg-background shadow-2xl ${
+				collapsed ? 'min-h-11' : 'min-h-0'
 			}`}
 			onFocusCapture={bringToFront}
 			onPointerDownCapture={bringToFront}
@@ -849,7 +900,7 @@ export function YouTubeFloatingTab({
 		>
 			<div className="flex min-h-0 w-full flex-col">
 				<div
-					className="flex h-11 shrink-0 cursor-move items-center gap-2 border-b bg-muted/65 px-2"
+					className="flex h-11 shrink-0 cursor-move touch-none select-none items-center gap-2 border-b bg-muted/65 px-2"
 					onPointerDown={handleDragStart}
 					onPointerMove={handleDragMove}
 					onPointerUp={handleDragEnd}
@@ -957,7 +1008,7 @@ export function YouTubeFloatingTab({
 						aria-hidden="true"
 					/>
 					<div
-						className="absolute bottom-0 left-0 h-4 w-4 cursor-nesw-resize touch-none"
+						className="absolute bottom-0 left-0 z-10 h-5 w-5 cursor-nesw-resize touch-none sm:h-4 sm:w-4"
 						onPointerDown={(event) => handleResizeStart(event, 'bottom-left')}
 						onPointerMove={handleResizeMove}
 						onPointerUp={handleResizeEnd}
@@ -965,7 +1016,7 @@ export function YouTubeFloatingTab({
 						aria-hidden="true"
 					/>
 					<div
-						className="absolute bottom-0 right-0 h-4 w-4 cursor-nwse-resize touch-none"
+						className="absolute bottom-0 right-0 z-10 h-5 w-5 cursor-nwse-resize touch-none sm:h-4 sm:w-4"
 						onPointerDown={(event) => handleResizeStart(event, 'bottom-right')}
 						onPointerMove={handleResizeMove}
 						onPointerUp={handleResizeEnd}
