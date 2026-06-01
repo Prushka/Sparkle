@@ -194,10 +194,18 @@ export interface ChessSyncState {
 	updatedAt: number;
 }
 
-export type CottagePlayerAction = 'idle' | 'walking' | 'sitting' | 'sleeping' | 'interacting';
-export type CottagePlayerFacing = 'up' | 'down' | 'left' | 'right';
+export type FarmPlayerAction =
+	| 'idle'
+	| 'walking'
+	| 'watering'
+	| 'hoeing'
+	| 'harvesting'
+	| 'chopping'
+	| 'sitting'
+	| 'interacting';
+export type FarmPlayerFacing = 'up' | 'down' | 'left' | 'right';
 
-export interface CottagePlayerSyncState {
+export interface FarmPlayerSyncState {
 	id: string;
 	name: string;
 	profileId?: string;
@@ -205,14 +213,29 @@ export interface CottagePlayerSyncState {
 	y: number;
 	targetX?: number;
 	targetY?: number;
-	action: CottagePlayerAction;
-	facing: CottagePlayerFacing;
+	action: FarmPlayerAction;
+	facing: FarmPlayerFacing;
 	interactionId?: string;
 	updatedAt: number;
 }
 
-export interface CottageSyncState {
-	players: CottagePlayerSyncState[];
+export type FarmPlotState = 'tilled' | 'planted';
+
+export interface FarmPlotSyncState {
+	/** Tile key, "tx,ty". */
+	id: string;
+	state: FarmPlotState;
+	/** Crop id, present when planted. */
+	crop?: string;
+	plantedAt?: number;
+	waterCount?: number;
+	wateredAt?: number;
+	updatedAt: number;
+}
+
+export interface FarmSyncState {
+	players: FarmPlayerSyncState[];
+	plots: FarmPlotSyncState[];
 	updatedAt: number;
 }
 
@@ -290,7 +313,7 @@ export enum SyncTypes {
 	BroadcastSync = 'broadcast',
 	YouTubeSync = 'youtube',
 	ChessSync = 'chess',
-	CottageSync = 'cottage',
+	FarmSync = 'farm',
 	AudioSwitch = 'audio',
 	CodecSwitch = 'codec',
 	SubtitleSwitch = 'subtitle',
@@ -323,7 +346,7 @@ export interface SendPayload {
 	moveToText?: string;
 	youtube?: YouTubeSyncState;
 	chess?: ChessSyncState;
-	cottage?: CottageSyncState;
+	farm?: FarmSyncState;
 }
 
 export interface BroadcastPayload {

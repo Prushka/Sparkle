@@ -18,6 +18,7 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -26,15 +27,17 @@ import (
 )
 
 var (
-	safeID              = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
-	safeDiscordID       = regexp.MustCompile(`^[0-9]{1,32}$`)
-	safeDiscordAvatar   = regexp.MustCompile(`^(a_)?[A-Za-z0-9_]{2,128}$`)
-	emojiTokenPattern   = regexp.MustCompile(`:([a-z0-9][a-z0-9_+-]{1,39}):`)
-	safeEmojiID         = regexp.MustCompile(`^[a-z0-9][a-z0-9_+-]{1,39}$`)
-	safeYouTubeVideoID  = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
-	safeChessSquare     = regexp.MustCompile(`^[a-h][1-8]$`)
-	safeChessFEN        = regexp.MustCompile(`^[pnbrqkPNBRQK1-8/]+ [wb] (?:K?Q?k?q?|-)? (?:[a-h][36]|-) [0-9]{1,3} [0-9]{1,4}$`)
-	safeCottagePlayerID = regexp.MustCompile(`^[A-Za-z0-9_:-]{1,128}$`)
+	safeID             = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+	safeDiscordID      = regexp.MustCompile(`^[0-9]{1,32}$`)
+	safeDiscordAvatar  = regexp.MustCompile(`^(a_)?[A-Za-z0-9_]{2,128}$`)
+	emojiTokenPattern  = regexp.MustCompile(`:([a-z0-9][a-z0-9_+-]{1,39}):`)
+	safeEmojiID        = regexp.MustCompile(`^[a-z0-9][a-z0-9_+-]{1,39}$`)
+	safeYouTubeVideoID = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
+	safeChessSquare    = regexp.MustCompile(`^[a-h][1-8]$`)
+	safeChessFEN       = regexp.MustCompile(`^[pnbrqkPNBRQK1-8/]+ [wb] (?:K?Q?k?q?|-)? (?:[a-h][36]|-) [0-9]{1,3} [0-9]{1,4}$`)
+	safeFarmPlayerID   = regexp.MustCompile(`^[A-Za-z0-9_:-]{1,128}$`)
+	safeFarmPlotID     = regexp.MustCompile(`^\d+,\d+$`)
+	safeFarmCropID     = regexp.MustCompile(`^[a-z_]{1,20}$`)
 )
 
 const (
@@ -44,10 +47,12 @@ const (
 	youTubeTimeSyncThresholdSeconds = 6
 	generatedRoomIDLength           = 6
 	roomIDAlphabet                  = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	cottageMinX                     = 44
-	cottageMaxX                     = 1396
-	cottageMinY                     = 116
-	cottageMaxY                     = 316
+	farmMinX                        = 0
+	farmMaxX                        = 800
+	farmMinY                        = 0
+	farmMaxY                        = 288
+	farmTilesX                      = 50
+	farmTilesY                      = 18
 )
 
 type Hub struct {
@@ -74,7 +79,7 @@ type Room struct {
 	state                     VideoState
 	youtube                   YouTubeState
 	chess                     ChessState
-	cottage                   CottageState
+	farm                      FarmState
 	mu                        sync.RWMutex
 }
 
@@ -314,7 +319,7 @@ func newRoom(id string, mediaID string) *Room {
 		state:   defaultVideoState(),
 		youtube: defaultYouTubeState(),
 		chess:   defaultChessState(),
-		cottage: defaultCottageState(),
+		farm:    defaultFarmState(),
 	}
 	if mediaID != "" {
 		room.mediaUpdatedAt = time.Now().UnixMilli()
@@ -537,7 +542,7 @@ func (r *Room) remove(player *Player) {
 		r.state = defaultVideoState()
 		r.youtube = defaultYouTubeState()
 		r.chess = defaultChessState()
-		r.cottage = defaultCottageState()
+		r.farm = defaultFarmState()
 		r.lastSeek = time.Time{}
 		r.idleSince = time.Now()
 		r.lastPlayersSignature = ""
@@ -582,7 +587,7 @@ func (r *Room) applyMediaIDLocked(mediaID string, timestamp int64) {
 	r.state = defaultVideoState()
 	r.youtube = defaultYouTubeState()
 	r.chess = defaultChessState()
-	r.cottage = defaultCottageState()
+	r.farm = defaultFarmState()
 	r.lastSeek = time.Time{}
 	r.lastPlayersSignature = ""
 	r.lastPlayerStatusSignature = ""
@@ -644,8 +649,8 @@ func (r *Room) handlePayload(current *Player, payload ClientPayload) {
 		r.syncYouTube(current, payload.YouTube)
 	case ChessSync:
 		r.syncChess(current, payload.Chess)
-	case CottageSync:
-		r.syncCottage(current, payload.Cottage)
+	case FarmSync:
+		r.syncFarm(current, payload.Farm)
 	case ChatSync:
 		r.chat(current, payload.Chat, payload.EmojiRefs)
 	case TimeSync:
@@ -1310,21 +1315,21 @@ func sanitizeChessDrawOffer(offer *ChessDrawOfferState) *ChessDrawOfferState {
 	return &ChessDrawOfferState{OfferedBy: *offeredBy, OfferedAt: offeredAt}
 }
 
-func (r *Room) syncCottage(sender *Player, incoming *CottageState) {
+func (r *Room) syncFarm(sender *Player, incoming *FarmState) {
 	now := time.Now()
 	timestamp := now.UnixMilli()
-	state, ok := sanitizeCottageState(incoming, timestamp)
+	state, ok := sanitizeFarmState(incoming, timestamp)
 	if !ok {
 		return
 	}
-	if len(state.Players) == 0 {
-		r.sendCottageSnapshot(sender, timestamp)
+	if len(state.Players) == 0 && len(state.Plots) == 0 {
+		r.sendFarmSnapshot(sender, timestamp)
 		return
 	}
 
 	var firedBy PlayerSnapshot
 	var targets []*Player
-	var delta CottageState
+	var delta FarmState
 	shouldBroadcast := false
 
 	r.mu.Lock()
@@ -1333,12 +1338,12 @@ func (r *Room) syncCottage(sender *Player, incoming *CottageState) {
 		return
 	}
 	sender.state.LastSeen = now.Unix()
-	next, changedPlayers, changed := mergeCottageState(r.cottage, state.Players, timestamp)
+	next, changedPlayers, changedPlots, changed := mergeFarmState(r.farm, state.Players, state.Plots, timestamp)
 	if changed {
-		r.cottage = next
+		r.farm = next
 		firedBy = sender.state
 		targets = r.otherPlayersLocked(sender)
-		delta = CottageState{Players: changedPlayers, UpdatedAt: next.UpdatedAt}
+		delta = FarmState{Players: changedPlayers, Plots: changedPlots, UpdatedAt: next.UpdatedAt}
 		shouldBroadcast = true
 	}
 	r.mu.Unlock()
@@ -1346,62 +1351,80 @@ func (r *Room) syncCottage(sender *Player, incoming *CottageState) {
 	if !shouldBroadcast || len(targets) == 0 {
 		return
 	}
-	payload := SendPayload{Type: CottageSync, Cottage: &delta, FiredBy: &firedBy, Timestamp: timestamp}
+	payload := SendPayload{Type: FarmSync, Farm: &delta, FiredBy: &firedBy, Timestamp: timestamp}
 	sendPayloadToPlayers(targets, payload)
 }
 
-func (r *Room) sendCottageSnapshot(sender *Player, timestamp int64) {
-	var cottage CottageState
+func (r *Room) sendFarmSnapshot(sender *Player, timestamp int64) {
+	var farm FarmState
 	shouldSend := false
 
 	r.mu.Lock()
 	if r.players[sender.state.Id] == sender {
 		sender.state.LastSeen = time.Now().Unix()
-		cottage = cloneCottageState(r.cottage)
-		shouldSend = len(cottage.Players) > 0
+		farm = cloneFarmState(r.farm)
+		shouldSend = len(farm.Players) > 0 || len(farm.Plots) > 0
 	}
 	r.mu.Unlock()
 
 	if !shouldSend {
 		return
 	}
-	sender.sendJSON(SendPayload{Type: CottageSync, Cottage: &cottage, Timestamp: timestamp})
+	sender.sendJSON(SendPayload{Type: FarmSync, Farm: &farm, Timestamp: timestamp})
 }
 
-func sanitizeCottageState(incoming *CottageState, timestamp int64) (CottageState, bool) {
+func sanitizeFarmState(incoming *FarmState, timestamp int64) (FarmState, bool) {
 	if incoming == nil {
-		return CottageState{}, false
+		return FarmState{}, false
 	}
 
-	state := defaultCottageState()
-	seen := make(map[string]bool, len(incoming.Players))
+	state := defaultFarmState()
+	seenPlayers := make(map[string]bool, len(incoming.Players))
 	for _, rawPlayer := range incoming.Players {
-		if len(state.Players) >= maxCottagePlayers {
+		if len(state.Players) >= maxFarmPlayers {
 			break
 		}
-		player, ok := sanitizeCottagePlayer(rawPlayer, timestamp)
-		if !ok || seen[player.ID] {
+		player, ok := sanitizeFarmPlayer(rawPlayer, timestamp)
+		if !ok || seenPlayers[player.ID] {
 			continue
 		}
-		seen[player.ID] = true
+		seenPlayers[player.ID] = true
 		state.Players = append(state.Players, player)
 	}
 	if len(incoming.Players) > 0 && len(state.Players) == 0 {
-		return CottageState{}, false
+		return FarmState{}, false
 	}
-	if len(state.Players) > 0 {
+
+	seenPlots := make(map[string]bool, len(incoming.Plots))
+	for _, rawPlot := range incoming.Plots {
+		if len(state.Plots) >= maxFarmPlots {
+			break
+		}
+		plot, ok := sanitizeFarmPlot(rawPlot, timestamp)
+		if !ok || seenPlots[plot.ID] {
+			continue
+		}
+		seenPlots[plot.ID] = true
+		state.Plots = append(state.Plots, plot)
+	}
+	if len(incoming.Plots) > 0 && len(state.Plots) == 0 {
+		return FarmState{}, false
+	}
+
+	if len(state.Players) > 0 || len(state.Plots) > 0 {
 		sort.Slice(state.Players, func(i, j int) bool {
 			return state.Players[i].ID < state.Players[j].ID
 		})
+		sortFarmPlotsByID(state.Plots)
 		state.UpdatedAt = timestamp
 	}
 	return state, true
 }
 
-func sanitizeCottagePlayer(raw CottagePlayerState, timestamp int64) (CottagePlayerState, bool) {
+func sanitizeFarmPlayer(raw FarmPlayerState, timestamp int64) (FarmPlayerState, bool) {
 	id := strings.TrimSpace(raw.ID)
-	if !safeCottagePlayerID.MatchString(id) {
-		return CottagePlayerState{}, false
+	if !safeFarmPlayerID.MatchString(id) {
+		return FarmPlayerState{}, false
 	}
 
 	name := trimRunes(strings.TrimSpace(raw.Name), 80)
@@ -1414,28 +1437,28 @@ func sanitizeCottagePlayer(raw CottagePlayerState, timestamp int64) (CottagePlay
 		profileID = ""
 	}
 
-	x, ok := sanitizeCottageCoordinate(raw.X, cottageMinX, cottageMaxX)
+	x, ok := sanitizeFarmCoordinate(raw.X, farmMinX, farmMaxX)
 	if !ok {
-		return CottagePlayerState{}, false
+		return FarmPlayerState{}, false
 	}
-	y, ok := sanitizeCottageCoordinate(raw.Y, cottageMinY, cottageMaxY)
+	y, ok := sanitizeFarmCoordinate(raw.Y, farmMinY, farmMaxY)
 	if !ok {
-		return CottagePlayerState{}, false
+		return FarmPlayerState{}, false
 	}
 
-	player := CottagePlayerState{
+	player := FarmPlayerState{
 		ID:        id,
 		Name:      name,
 		ProfileID: profileID,
 		X:         x,
 		Y:         y,
-		Action:    sanitizeCottageAction(raw.Action),
-		Facing:    sanitizeCottageFacing(raw.Facing),
+		Action:    sanitizeFarmAction(raw.Action),
+		Facing:    sanitizeFarmFacing(raw.Facing),
 		UpdatedAt: timestamp,
 	}
 
-	if targetX, hasTargetX := sanitizeOptionalCottageCoordinate(raw.TargetX, cottageMinX, cottageMaxX); hasTargetX {
-		if targetY, hasTargetY := sanitizeOptionalCottageCoordinate(raw.TargetY, cottageMinY, cottageMaxY); hasTargetY {
+	if targetX, hasTargetX := sanitizeOptionalFarmCoordinate(raw.TargetX, farmMinX, farmMaxX); hasTargetX {
+		if targetY, hasTargetY := sanitizeOptionalFarmCoordinate(raw.TargetY, farmMinY, farmMaxY); hasTargetY {
 			player.TargetX = targetX
 			player.TargetY = targetY
 		}
@@ -1449,34 +1472,100 @@ func sanitizeCottagePlayer(raw CottagePlayerState, timestamp int64) (CottagePlay
 	return player, true
 }
 
-func sanitizeCottageCoordinate(value float64, minValue float64, maxValue float64) (float64, bool) {
+func sanitizeFarmPlot(raw FarmPlotState, timestamp int64) (FarmPlotState, bool) {
+	id := strings.TrimSpace(raw.ID)
+	if !safeFarmPlotID.MatchString(id) {
+		return FarmPlotState{}, false
+	}
+	parts := strings.SplitN(id, ",", 2)
+	tx, err := strconv.Atoi(parts[0])
+	if err != nil || tx < 0 || tx >= farmTilesX {
+		return FarmPlotState{}, false
+	}
+	ty, err := strconv.Atoi(parts[1])
+	if err != nil || ty < 0 || ty >= farmTilesY {
+		return FarmPlotState{}, false
+	}
+
+	plotState := strings.TrimSpace(raw.State)
+	if plotState != "tilled" && plotState != "planted" {
+		return FarmPlotState{}, false
+	}
+
+	plot := FarmPlotState{
+		ID:        id,
+		State:     plotState,
+		UpdatedAt: timestamp,
+	}
+
+	crop := strings.TrimSpace(raw.Crop)
+	if crop != "" && !safeFarmCropID.MatchString(crop) {
+		return FarmPlotState{}, false
+	}
+
+	if plotState == "tilled" {
+		plot.Crop = ""
+		plot.PlantedAt = 0
+		plot.WaterCount = 0
+		plot.WateredAt = 0
+		return plot, true
+	}
+
+	if crop == "" {
+		return FarmPlotState{}, false
+	}
+	plot.Crop = crop
+	plot.PlantedAt = clampFarmTimestamp(raw.PlantedAt)
+	plot.WateredAt = clampFarmTimestamp(raw.WateredAt)
+	plot.WaterCount = clampFarmWaterCount(raw.WaterCount)
+	return plot, true
+}
+
+func clampFarmTimestamp(value int64) int64 {
+	if value < 0 {
+		return 0
+	}
+	return value
+}
+
+func clampFarmWaterCount(value int) int {
+	if value < 0 {
+		return 0
+	}
+	if value > 8 {
+		return 8
+	}
+	return value
+}
+
+func sanitizeFarmCoordinate(value float64, minValue float64, maxValue float64) (float64, bool) {
 	if math.IsNaN(value) || math.IsInf(value, 0) {
 		return 0, false
 	}
 	return math.Min(maxValue, math.Max(minValue, value)), true
 }
 
-func sanitizeOptionalCottageCoordinate(value *float64, minValue float64, maxValue float64) (*float64, bool) {
+func sanitizeOptionalFarmCoordinate(value *float64, minValue float64, maxValue float64) (*float64, bool) {
 	if value == nil {
 		return nil, false
 	}
-	coordinate, ok := sanitizeCottageCoordinate(*value, minValue, maxValue)
+	coordinate, ok := sanitizeFarmCoordinate(*value, minValue, maxValue)
 	if !ok {
 		return nil, false
 	}
 	return &coordinate, true
 }
 
-func sanitizeCottageAction(value string) string {
+func sanitizeFarmAction(value string) string {
 	switch strings.TrimSpace(value) {
-	case "walking", "sitting", "sleeping", "interacting":
+	case "walking", "watering", "hoeing", "harvesting", "chopping", "sitting", "interacting":
 		return strings.TrimSpace(value)
 	default:
 		return "idle"
 	}
 }
 
-func sanitizeCottageFacing(value string) string {
+func sanitizeFarmFacing(value string) string {
 	switch strings.TrimSpace(value) {
 	case "up", "left", "right":
 		return strings.TrimSpace(value)
@@ -1485,100 +1574,171 @@ func sanitizeCottageFacing(value string) string {
 	}
 }
 
-func mergeCottageState(previous CottageState, updates []CottagePlayerState, timestamp int64) (CottageState, []CottagePlayerState, bool) {
-	if len(updates) == 0 {
-		return previous, nil, false
+func mergeFarmState(previous FarmState, players []FarmPlayerState, plots []FarmPlotState, timestamp int64) (FarmState, []FarmPlayerState, []FarmPlotState, bool) {
+	if len(players) == 0 && len(plots) == 0 {
+		return previous, nil, nil, false
 	}
 
-	playersByID := make(map[string]CottagePlayerState, len(previous.Players)+len(updates))
+	playersByID := make(map[string]FarmPlayerState, len(previous.Players)+len(players))
 	for _, player := range previous.Players {
 		playersByID[player.ID] = player
 	}
 
-	changedPlayers := make([]CottagePlayerState, 0, len(updates))
-	for _, update := range updates {
+	changedPlayers := make([]FarmPlayerState, 0, len(players))
+	for _, update := range players {
 		update.UpdatedAt = timestamp
 		existing, exists := playersByID[update.ID]
-		if exists && sameCottagePlayerState(existing, update) {
+		if exists && sameFarmPlayerState(existing, update) {
 			continue
 		}
 		playersByID[update.ID] = update
 		changedPlayers = append(changedPlayers, update)
 	}
-	if len(changedPlayers) == 0 {
-		return previous, nil, false
+
+	finalPlayers := previous.Players
+	if len(changedPlayers) > 0 {
+		finalPlayers = farmPlayersFromMap(playersByID)
+		if len(finalPlayers) > maxFarmPlayers {
+			sort.Slice(finalPlayers, func(i, j int) bool {
+				if finalPlayers[i].UpdatedAt == finalPlayers[j].UpdatedAt {
+					return finalPlayers[i].ID < finalPlayers[j].ID
+				}
+				return finalPlayers[i].UpdatedAt > finalPlayers[j].UpdatedAt
+			})
+			finalPlayers = finalPlayers[:maxFarmPlayers]
+			keep := make(map[string]bool, len(finalPlayers))
+			for _, player := range finalPlayers {
+				keep[player.ID] = true
+			}
+			filtered := changedPlayers[:0]
+			for _, player := range changedPlayers {
+				if keep[player.ID] {
+					filtered = append(filtered, player)
+				}
+			}
+			changedPlayers = filtered
+		}
+		sortFarmPlayersByID(finalPlayers)
+		sortFarmPlayersByID(changedPlayers)
 	}
 
-	players := cottagePlayersFromMap(playersByID)
-	if len(players) > maxCottagePlayers {
-		sort.Slice(players, func(i, j int) bool {
-			if players[i].UpdatedAt == players[j].UpdatedAt {
-				return players[i].ID < players[j].ID
-			}
-			return players[i].UpdatedAt > players[j].UpdatedAt
-		})
-		players = players[:maxCottagePlayers]
-		playersByID = make(map[string]CottagePlayerState, len(players))
-		for _, player := range players {
-			playersByID[player.ID] = player
-		}
-		filteredChangedPlayers := changedPlayers[:0]
-		for _, player := range changedPlayers {
-			if _, ok := playersByID[player.ID]; ok {
-				filteredChangedPlayers = append(filteredChangedPlayers, player)
-			}
-		}
-		changedPlayers = filteredChangedPlayers
+	plotsByID := make(map[string]FarmPlotState, len(previous.Plots)+len(plots))
+	for _, plot := range previous.Plots {
+		plotsByID[plot.ID] = plot
 	}
 
-	sortCottagePlayersByID(players)
-	sortCottagePlayersByID(changedPlayers)
-	return CottageState{Players: players, UpdatedAt: timestamp}, changedPlayers, true
+	changedPlots := make([]FarmPlotState, 0, len(plots))
+	for _, update := range plots {
+		update.UpdatedAt = timestamp
+		existing, exists := plotsByID[update.ID]
+		if exists && sameFarmPlotState(existing, update) {
+			continue
+		}
+		plotsByID[update.ID] = update
+		changedPlots = append(changedPlots, update)
+	}
+
+	finalPlots := previous.Plots
+	if len(changedPlots) > 0 {
+		finalPlots = farmPlotsFromMap(plotsByID)
+		if len(finalPlots) > maxFarmPlots {
+			sort.Slice(finalPlots, func(i, j int) bool {
+				if finalPlots[i].UpdatedAt == finalPlots[j].UpdatedAt {
+					return finalPlots[i].ID < finalPlots[j].ID
+				}
+				return finalPlots[i].UpdatedAt > finalPlots[j].UpdatedAt
+			})
+			finalPlots = finalPlots[:maxFarmPlots]
+			keep := make(map[string]bool, len(finalPlots))
+			for _, plot := range finalPlots {
+				keep[plot.ID] = true
+			}
+			filtered := changedPlots[:0]
+			for _, plot := range changedPlots {
+				if keep[plot.ID] {
+					filtered = append(filtered, plot)
+				}
+			}
+			changedPlots = filtered
+		}
+		sortFarmPlotsByID(finalPlots)
+		sortFarmPlotsByID(changedPlots)
+	}
+
+	if len(changedPlayers) == 0 && len(changedPlots) == 0 {
+		return previous, nil, nil, false
+	}
+
+	return FarmState{Players: finalPlayers, Plots: finalPlots, UpdatedAt: timestamp}, changedPlayers, changedPlots, true
 }
 
-func cottagePlayersFromMap(playersByID map[string]CottagePlayerState) []CottagePlayerState {
-	players := make([]CottagePlayerState, 0, len(playersByID))
+func farmPlayersFromMap(playersByID map[string]FarmPlayerState) []FarmPlayerState {
+	players := make([]FarmPlayerState, 0, len(playersByID))
 	for _, player := range playersByID {
 		players = append(players, player)
 	}
 	return players
 }
 
-func sortCottagePlayersByID(players []CottagePlayerState) {
+func farmPlotsFromMap(plotsByID map[string]FarmPlotState) []FarmPlotState {
+	plots := make([]FarmPlotState, 0, len(plotsByID))
+	for _, plot := range plotsByID {
+		plots = append(plots, plot)
+	}
+	return plots
+}
+
+func sortFarmPlayersByID(players []FarmPlayerState) {
 	sort.Slice(players, func(i, j int) bool {
 		return players[i].ID < players[j].ID
 	})
 }
 
-func cloneCottageState(state CottageState) CottageState {
-	return CottageState{
-		Players:   append([]CottagePlayerState(nil), state.Players...),
+func sortFarmPlotsByID(plots []FarmPlotState) {
+	sort.Slice(plots, func(i, j int) bool {
+		return plots[i].ID < plots[j].ID
+	})
+}
+
+func cloneFarmState(state FarmState) FarmState {
+	return FarmState{
+		Players:   append([]FarmPlayerState(nil), state.Players...),
+		Plots:     append([]FarmPlotState(nil), state.Plots...),
 		UpdatedAt: state.UpdatedAt,
 	}
 }
 
-func sameCottagePlayerState(left CottagePlayerState, right CottagePlayerState) bool {
+func sameFarmPlayerState(left FarmPlayerState, right FarmPlayerState) bool {
 	return left.ID == right.ID &&
 		left.Name == right.Name &&
 		left.ProfileID == right.ProfileID &&
-		sameCottageCoordinate(left.X, right.X) &&
-		sameCottageCoordinate(left.Y, right.Y) &&
-		sameOptionalCottageCoordinate(left.TargetX, right.TargetX) &&
-		sameOptionalCottageCoordinate(left.TargetY, right.TargetY) &&
+		sameFarmCoordinate(left.X, right.X) &&
+		sameFarmCoordinate(left.Y, right.Y) &&
+		sameOptionalFarmCoordinate(left.TargetX, right.TargetX) &&
+		sameOptionalFarmCoordinate(left.TargetY, right.TargetY) &&
 		left.Action == right.Action &&
 		left.Facing == right.Facing &&
 		left.InteractionID == right.InteractionID
 }
 
-func sameCottageCoordinate(left float64, right float64) bool {
+func sameFarmPlotState(left FarmPlotState, right FarmPlotState) bool {
+	return left.ID == right.ID &&
+		left.State == right.State &&
+		left.Crop == right.Crop &&
+		left.PlantedAt == right.PlantedAt &&
+		left.WaterCount == right.WaterCount &&
+		left.WateredAt == right.WateredAt
+}
+
+func sameFarmCoordinate(left float64, right float64) bool {
 	return math.Abs(left-right) <= 0.01
 }
 
-func sameOptionalCottageCoordinate(left *float64, right *float64) bool {
+func sameOptionalFarmCoordinate(left *float64, right *float64) bool {
 	if left == nil || right == nil {
 		return left == nil && right == nil
 	}
-	return sameCottageCoordinate(*left, *right)
+	return sameFarmCoordinate(*left, *right)
 }
 
 func (r *Room) chat(sender *Player, message string, emojiRefs []ChatEmojiRef) {
@@ -1824,7 +1984,7 @@ func (r *Room) newPlayer(sender *Player) {
 	var roomPaused bool
 	var youtube YouTubeState
 	var chess ChessState
-	var cottage CottageState
+	var farm FarmState
 	var chats []Chat
 
 	r.mu.Lock()
@@ -1843,7 +2003,7 @@ func (r *Room) newPlayer(sender *Player) {
 	sender.state.Paused = roomPaused
 	youtube = r.youtube
 	chess = r.chess
-	cottage = cloneCottageState(r.cottage)
+	farm = cloneFarmState(r.farm)
 	chats = append([]Chat(nil), r.chats...)
 	r.mu.Unlock()
 
@@ -1851,8 +2011,8 @@ func (r *Room) newPlayer(sender *Player) {
 	sender.sendJSON(SendPayload{Type: PauseSync, Paused: &roomPaused, Timestamp: time.Now().UnixMilli()})
 	sender.sendJSON(SendPayload{Type: YouTubeSync, YouTube: &youtube, Timestamp: time.Now().UnixMilli()})
 	sender.sendJSON(SendPayload{Type: ChessSync, Chess: &chess, Timestamp: time.Now().UnixMilli()})
-	if len(cottage.Players) > 0 {
-		sender.sendJSON(SendPayload{Type: CottageSync, Cottage: &cottage, Timestamp: time.Now().UnixMilli()})
+	if len(farm.Players) > 0 || len(farm.Plots) > 0 {
+		sender.sendJSON(SendPayload{Type: FarmSync, Farm: &farm, Timestamp: time.Now().UnixMilli()})
 	}
 	if len(chats) > 0 {
 		sender.sendJSON(SendPayload{Type: ChatSync, Chats: chats, Timestamp: time.Now().UnixMilli()})

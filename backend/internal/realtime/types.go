@@ -15,7 +15,7 @@ const (
 	SoundEffectSync   = "soundEffect"
 	YouTubeSync       = "youtube"
 	ChessSync         = "chess"
-	CottageSync       = "cottage"
+	FarmSync          = "farm"
 	ExitSync          = "exit"
 	CodecSwitch       = "codec"
 	AudioSwitch       = "audio"
@@ -27,13 +27,14 @@ const (
 )
 
 const (
-	maxChatMessages   = 200
-	maxChatLength     = 2000
-	maxChatEmojis     = 50
-	maxYouTubeTabs    = 12
-	maxChessTabs      = 64
-	maxChessMoves     = 600
-	maxCottagePlayers = 80
+	maxChatMessages = 200
+	maxChatLength   = 2000
+	maxChatEmojis   = 50
+	maxYouTubeTabs  = 12
+	maxChessTabs    = 64
+	maxChessMoves   = 600
+	maxFarmPlayers  = 80
+	maxFarmPlots    = 4000
 )
 
 type Options struct {
@@ -136,7 +137,7 @@ type ChessState struct {
 	UpdatedAt int64           `json:"updatedAt"`
 }
 
-type CottagePlayerState struct {
+type FarmPlayerState struct {
 	ID            string   `json:"id"`
 	Name          string   `json:"name"`
 	ProfileID     string   `json:"profileId,omitempty"`
@@ -150,9 +151,20 @@ type CottagePlayerState struct {
 	UpdatedAt     int64    `json:"updatedAt"`
 }
 
-type CottageState struct {
-	Players   []CottagePlayerState `json:"players,omitempty"`
-	UpdatedAt int64                `json:"updatedAt"`
+type FarmPlotState struct {
+	ID         string `json:"id"`
+	State      string `json:"state"`
+	Crop       string `json:"crop,omitempty"`
+	PlantedAt  int64  `json:"plantedAt,omitempty"`
+	WaterCount int    `json:"waterCount,omitempty"`
+	WateredAt  int64  `json:"wateredAt,omitempty"`
+	UpdatedAt  int64  `json:"updatedAt"`
+}
+
+type FarmState struct {
+	Players   []FarmPlayerState `json:"players,omitempty"`
+	Plots     []FarmPlotState   `json:"plots,omitempty"`
+	UpdatedAt int64             `json:"updatedAt"`
 }
 
 type PlayerState struct {
@@ -225,7 +237,7 @@ type ClientPayload struct {
 	Subtitle    string         `json:"subtitle,omitempty"`
 	YouTube     *YouTubeState  `json:"youtube,omitempty"`
 	Chess       *ChessState    `json:"chess,omitempty"`
-	Cottage     *CottageState  `json:"cottage,omitempty"`
+	Farm        *FarmState     `json:"farm,omitempty"`
 }
 
 type SendPayload struct {
@@ -242,7 +254,7 @@ type SendPayload struct {
 	Broadcast      map[string]any   `json:"broadcast,omitempty"`
 	YouTube        *YouTubeState    `json:"youtube,omitempty"`
 	Chess          *ChessState      `json:"chess,omitempty"`
-	Cottage        *CottageState    `json:"cottage,omitempty"`
+	Farm           *FarmState       `json:"farm,omitempty"`
 }
 
 func defaultVideoState() VideoState {
@@ -257,6 +269,6 @@ func defaultChessState() ChessState {
 	return ChessState{}
 }
 
-func defaultCottageState() CottageState {
-	return CottageState{}
+func defaultFarmState() FarmState {
+	return FarmState{}
 }

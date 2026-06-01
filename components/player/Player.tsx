@@ -117,7 +117,7 @@ import { Chats } from '@/components/player/Chats';
 import { useVoiceChat } from '@/components/player/useVoiceChat';
 import { YouTubeFloatingTab } from '@/components/player/YouTubeFloatingTab';
 import { ChessFloatingTab } from '@/components/player/ChessFloatingTab';
-import { CottageGame, CottageGamePlaceholder } from '@/components/player/CottageGame';
+import { FarmGame, FarmGamePlaceholder } from '@/components/player/FarmGame';
 
 type VideoSource = {
 	src: string;
@@ -1514,7 +1514,7 @@ export function Player({ data }: { data: ServerData }) {
 			...(profileId ? { profileId } : {})
 		};
 	}, [displayName, playerId, profileId]);
-	const currentCottagePlayer = currentChessPlayer;
+	const currentFarmPlayer = currentChessPlayer;
 	const videoSrc = useMemo<VideoSource | null>(() => {
 		const encodedCodecs = job.EncodedCodecs || [];
 		const autoCodec =
@@ -3666,15 +3666,15 @@ export function Player({ data }: { data: ServerData }) {
 				style={!discord ? { minHeight: 'calc(100dvh - min(100dvh, 56.25vw))' } : undefined}
 			>
 				{socketConnected ? (
-					<CottageGame
+					<FarmGame
 						backendBaseUrl={backendBaseUrl}
 						roomId={room}
 						socketConnected={socketConnected}
-						currentPlayer={currentCottagePlayer}
+						currentPlayer={currentFarmPlayer}
 						roomPlayers={displayedRoomPlayers}
 					/>
 				) : (
-					<CottageGamePlaceholder />
+					<FarmGamePlaceholder />
 				)}
 
 				<div className="mx-auto flex w-full max-w-[90rem] flex-wrap items-center justify-between gap-2 max-[760px]:justify-center">
