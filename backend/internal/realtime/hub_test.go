@@ -370,6 +370,73 @@ func TestNewPlayerAdoptsExistingRoomPause(t *testing.T) {
 	}
 }
 
+func TestSyncTimeBroadcastsOnlyToOtherPlayers(t *testing.T) {
+	room := &Room{
+		id:      "room",
+		players: make(map[string]*Player),
+		state:   VideoState{Time: 10, Paused: false},
+		youtube: defaultYouTubeState(),
+	}
+	sender := testPlayer("sender", "Sender", 1)
+	receiver := testPlayer("receiver", "Receiver", 1)
+	room.players[sender.state.Id] = sender
+	room.players[receiver.state.Id] = receiver
+
+	nextTime := 17.0
+	room.syncTime(sender, &nextTime)
+
+	assertNoQueuedPayload(t, sender)
+	payload := readQueuedPayload(t, receiver)
+	if payload.Type != TimeSync || payload.Time == nil || *payload.Time != nextTime {
+		t.Fatalf("receiver time payload = %#v, want time %.1f", payload, nextTime)
+	}
+	if payload.FiredBy == nil || payload.FiredBy.Id != sender.state.Id {
+		t.Fatalf("receiver time payload firedBy = %#v, want sender", payload.FiredBy)
+	}
+	if sender.state.Time != nextTime || receiver.state.Time != nextTime || room.state.Time != nextTime {
+		t.Fatalf(
+			"synced times sender=%v receiver=%v room=%v, want %.1f",
+			sender.state.Time,
+			receiver.state.Time,
+			room.state.Time,
+			nextTime,
+		)
+	}
+}
+
+func TestSyncPauseBroadcastsOnlyToOtherPlayers(t *testing.T) {
+	room := &Room{
+		id:      "room",
+		players: make(map[string]*Player),
+		state:   VideoState{Time: 10, Paused: false},
+		youtube: defaultYouTubeState(),
+	}
+	sender := testPlayer("sender", "Sender", 1)
+	receiver := testPlayer("receiver", "Receiver", 1)
+	room.players[sender.state.Id] = sender
+	room.players[receiver.state.Id] = receiver
+
+	paused := true
+	room.syncPause(sender, &paused)
+
+	assertNoQueuedPayload(t, sender)
+	payload := readQueuedPayload(t, receiver)
+	if payload.Type != PauseSync || payload.Paused == nil || !*payload.Paused {
+		t.Fatalf("receiver pause payload = %#v, want paused true", payload)
+	}
+	if payload.FiredBy == nil || payload.FiredBy.Id != sender.state.Id {
+		t.Fatalf("receiver pause payload firedBy = %#v, want sender", payload.FiredBy)
+	}
+	if !sender.state.Paused || !receiver.state.Paused || !room.state.Paused {
+		t.Fatalf(
+			"synced paused states sender=%v receiver=%v room=%v, want true",
+			sender.state.Paused,
+			receiver.state.Paused,
+			room.state.Paused,
+		)
+	}
+}
+
 func TestChatBroadcastSendsDeltaOnly(t *testing.T) {
 	room := &Room{
 		id:      "room",

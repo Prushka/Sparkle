@@ -156,6 +156,7 @@ type SelectedSubtitleTrack = Pick<SubtitleTrackInfo, 'format' | 'label' | 'langu
 const PLAYER_VOLUME_STORAGE_KEY = 'volume';
 const DEFAULT_PLAYER_VOLUME = 1;
 const SUBTITLE_LANGUAGE_STORAGE_KEY = 'subtitleLanguage';
+const ROOM_TIME_SYNC_THRESHOLD_SECONDS = 6;
 const AUDIO_LANGUAGE_PRIORITY = ['jpn', 'eng', 'chi'];
 const SUBTITLE_LANGUAGE_PRIORITY = ['en'];
 
@@ -2732,7 +2733,7 @@ export function Player({ data }: { data: ServerData }) {
 				const currentTime = getSafePlayerCurrentTime(player);
 				if (currentTime === null) {
 					complete = false;
-				} else if (Math.abs(currentTime - sync.time) > 3) {
+				} else if (Math.abs(currentTime - sync.time) > ROOM_TIME_SYNC_THRESHOLD_SECONDS) {
 					complete = setSafePlayerCurrentTime(player, sync.time) && complete;
 				}
 			}
@@ -2842,8 +2843,11 @@ export function Player({ data }: { data: ServerData }) {
 					return;
 				}
 				const broadcast = state.broadcast;
-				const persistControlState = (payload: any) => {
-					if (payload.firedBy !== undefined) {
+				const persistControlState = (payload: SendPayload) => {
+					const isOwnPlaybackControl =
+						(payload.type === SyncTypes.PauseSync || payload.type === SyncTypes.TimeSync) &&
+						payload.firedBy?.id === playerId;
+					if (payload.firedBy !== undefined && !isOwnPlaybackControl) {
 						setControlsToDisplay((prev) => appendControlMessages(prev, payload));
 					}
 				};

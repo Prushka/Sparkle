@@ -90,6 +90,7 @@ const MIN_HEIGHT = 260;
 const DEFAULT_WIDTH = 640;
 const DEFAULT_HEIGHT = 420;
 const COLLAPSED_HEIGHT = 44;
+const YOUTUBE_TIME_SYNC_THRESHOLD_SECONDS = 6;
 const YOUTUBE_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 
 let youTubeApiPromise: Promise<YouTubeNamespace> | null = null;
@@ -509,7 +510,7 @@ export function YouTubeFloatingTab({
 				lastAppliedVideoIdRef.current = nextState.videoId;
 			} else {
 				const currentTime = safeNumber(player.getCurrentTime(), 0);
-				if (Math.abs(currentTime - targetTime) > 2.5) {
+				if (Math.abs(currentTime - targetTime) > YOUTUBE_TIME_SYNC_THRESHOLD_SECONDS) {
 					player.seekTo(targetTime, true);
 				}
 			}
@@ -677,7 +678,10 @@ export function YouTubeFloatingTab({
 			const playing = playerState === namespace.PlayerState.PLAYING;
 			const previous = stateRef.current;
 			const drift = Math.abs(currentTime - previous.time);
-			if ((playing && drift >= 2) || drift > 3) {
+			if (
+				(playing && drift >= YOUTUBE_TIME_SYNC_THRESHOLD_SECONDS) ||
+				drift > YOUTUBE_TIME_SYNC_THRESHOLD_SECONDS
+			) {
 				emitPlayerState({ paused: !playing });
 			}
 		}, 1000);

@@ -37,10 +37,12 @@ var (
 )
 
 const (
-	idleRoomTTL            = 48 * time.Hour
-	statusHeartbeatTimeout = 3 * time.Second
-	generatedRoomIDLength  = 6
-	roomIDAlphabet         = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	idleRoomTTL                     = 48 * time.Hour
+	statusHeartbeatTimeout          = 3 * time.Second
+	roomTimeSyncThresholdSeconds    = 6
+	youTubeTimeSyncThresholdSeconds = 6
+	generatedRoomIDLength           = 6
+	roomIDAlphabet                  = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 )
 
 type Hub struct {
@@ -950,7 +952,7 @@ func shouldBroadcastYouTubeState(previous YouTubeState, next YouTubeState) bool 
 			if math.Abs(previousTab.Time-nextTab.Time) > 0.5 {
 				return true
 			}
-		} else if math.Abs(previousTab.Time-nextTab.Time) > 3 {
+		} else if math.Abs(previousTab.Time-nextTab.Time) > youTubeTimeSyncThresholdSeconds {
 			return true
 		}
 	}
@@ -1479,14 +1481,14 @@ func (r *Room) syncTime(sender *Player, next *float64) {
 	}
 	sender.state.LastSeen = time.Now().Unix()
 	sender.state.Time = *next
-	if math.Abs(r.state.Time-sender.state.Time) > 5 && r.lastSeek.Add(time.Second).Before(time.Now()) {
+	if math.Abs(r.state.Time-sender.state.Time) > roomTimeSyncThresholdSeconds && r.lastSeek.Add(time.Second).Before(time.Now()) {
 		shouldBroadcast = !sender.state.InBg
 		r.lastSeek = time.Now()
 	}
 	r.state.Time = sender.state.Time
 	firedBy = sender.state
 	if shouldBroadcast {
-		targets = r.playersLocked()
+		targets = r.otherPlayersLocked(sender)
 		for _, player := range targets {
 			player.state.Time = sender.state.Time
 		}
@@ -1518,7 +1520,7 @@ func (r *Room) syncPause(sender *Player, paused *bool) {
 	r.state.Paused = *paused
 	firedBy = sender.state
 	if !sender.state.InBg {
-		targets = r.playersLocked()
+		targets = r.otherPlayersLocked(sender)
 		for _, player := range targets {
 			player.state.Paused = *paused
 		}
