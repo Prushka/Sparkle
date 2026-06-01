@@ -26,14 +26,15 @@ import (
 )
 
 var (
-	safeID             = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
-	safeDiscordID      = regexp.MustCompile(`^[0-9]{1,32}$`)
-	safeDiscordAvatar  = regexp.MustCompile(`^(a_)?[A-Za-z0-9_]{2,128}$`)
-	emojiTokenPattern  = regexp.MustCompile(`:([a-z0-9][a-z0-9_+-]{1,39}):`)
-	safeEmojiID        = regexp.MustCompile(`^[a-z0-9][a-z0-9_+-]{1,39}$`)
-	safeYouTubeVideoID = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
-	safeChessSquare    = regexp.MustCompile(`^[a-h][1-8]$`)
-	safeChessFEN       = regexp.MustCompile(`^[pnbrqkPNBRQK1-8/]+ [wb] (?:K?Q?k?q?|-)? (?:[a-h][36]|-) [0-9]{1,3} [0-9]{1,4}$`)
+	safeID              = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+	safeDiscordID       = regexp.MustCompile(`^[0-9]{1,32}$`)
+	safeDiscordAvatar   = regexp.MustCompile(`^(a_)?[A-Za-z0-9_]{2,128}$`)
+	emojiTokenPattern   = regexp.MustCompile(`:([a-z0-9][a-z0-9_+-]{1,39}):`)
+	safeEmojiID         = regexp.MustCompile(`^[a-z0-9][a-z0-9_+-]{1,39}$`)
+	safeYouTubeVideoID  = regexp.MustCompile(`^[A-Za-z0-9_-]{11}$`)
+	safeChessSquare     = regexp.MustCompile(`^[a-h][1-8]$`)
+	safeChessFEN        = regexp.MustCompile(`^[pnbrqkPNBRQK1-8/]+ [wb] (?:K?Q?k?q?|-)? (?:[a-h][36]|-) [0-9]{1,3} [0-9]{1,4}$`)
+	safeCottagePlayerID = regexp.MustCompile(`^[A-Za-z0-9_:-]{1,128}$`)
 )
 
 const (
@@ -43,6 +44,10 @@ const (
 	youTubeTimeSyncThresholdSeconds = 6
 	generatedRoomIDLength           = 6
 	roomIDAlphabet                  = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	cottageMinX                     = 44
+	cottageMaxX                     = 1396
+	cottageMinY                     = 116
+	cottageMaxY                     = 316
 )
 
 type Hub struct {
@@ -69,6 +74,7 @@ type Room struct {
 	state                     VideoState
 	youtube                   YouTubeState
 	chess                     ChessState
+	cottage                   CottageState
 	mu                        sync.RWMutex
 }
 
@@ -308,6 +314,7 @@ func newRoom(id string, mediaID string) *Room {
 		state:   defaultVideoState(),
 		youtube: defaultYouTubeState(),
 		chess:   defaultChessState(),
+		cottage: defaultCottageState(),
 	}
 	if mediaID != "" {
 		room.mediaUpdatedAt = time.Now().UnixMilli()
@@ -530,6 +537,7 @@ func (r *Room) remove(player *Player) {
 		r.state = defaultVideoState()
 		r.youtube = defaultYouTubeState()
 		r.chess = defaultChessState()
+		r.cottage = defaultCottageState()
 		r.lastSeek = time.Time{}
 		r.idleSince = time.Now()
 		r.lastPlayersSignature = ""
@@ -574,6 +582,7 @@ func (r *Room) applyMediaIDLocked(mediaID string, timestamp int64) {
 	r.state = defaultVideoState()
 	r.youtube = defaultYouTubeState()
 	r.chess = defaultChessState()
+	r.cottage = defaultCottageState()
 	r.lastSeek = time.Time{}
 	r.lastPlayersSignature = ""
 	r.lastPlayerStatusSignature = ""
@@ -635,6 +644,8 @@ func (r *Room) handlePayload(current *Player, payload ClientPayload) {
 		r.syncYouTube(current, payload.YouTube)
 	case ChessSync:
 		r.syncChess(current, payload.Chess)
+	case CottageSync:
+		r.syncCottage(current, payload.Cottage)
 	case ChatSync:
 		r.chat(current, payload.Chat, payload.EmojiRefs)
 	case TimeSync:
@@ -1296,6 +1307,277 @@ func sanitizeChessDrawOffer(offer *ChessDrawOfferState) *ChessDrawOfferState {
 	return &ChessDrawOfferState{OfferedBy: *offeredBy, OfferedAt: offeredAt}
 }
 
+func (r *Room) syncCottage(sender *Player, incoming *CottageState) {
+	now := time.Now()
+	timestamp := now.UnixMilli()
+	state, ok := sanitizeCottageState(incoming, timestamp)
+	if !ok {
+		return
+	}
+	if len(state.Players) == 0 {
+		r.sendCottageSnapshot(sender, timestamp)
+		return
+	}
+
+	var firedBy PlayerSnapshot
+	var targets []*Player
+	var delta CottageState
+	shouldBroadcast := false
+
+	r.mu.Lock()
+	if r.players[sender.state.Id] != sender {
+		r.mu.Unlock()
+		return
+	}
+	sender.state.LastSeen = now.Unix()
+	next, changedPlayers, changed := mergeCottageState(r.cottage, state.Players, timestamp)
+	if changed {
+		r.cottage = next
+		firedBy = sender.state
+		targets = r.otherPlayersLocked(sender)
+		delta = CottageState{Players: changedPlayers, UpdatedAt: next.UpdatedAt}
+		shouldBroadcast = true
+	}
+	r.mu.Unlock()
+
+	if !shouldBroadcast || len(targets) == 0 {
+		return
+	}
+	payload := SendPayload{Type: CottageSync, Cottage: &delta, FiredBy: &firedBy, Timestamp: timestamp}
+	sendPayloadToPlayers(targets, payload)
+}
+
+func (r *Room) sendCottageSnapshot(sender *Player, timestamp int64) {
+	var cottage CottageState
+	shouldSend := false
+
+	r.mu.Lock()
+	if r.players[sender.state.Id] == sender {
+		sender.state.LastSeen = time.Now().Unix()
+		cottage = cloneCottageState(r.cottage)
+		shouldSend = len(cottage.Players) > 0
+	}
+	r.mu.Unlock()
+
+	if !shouldSend {
+		return
+	}
+	sender.sendJSON(SendPayload{Type: CottageSync, Cottage: &cottage, Timestamp: timestamp})
+}
+
+func sanitizeCottageState(incoming *CottageState, timestamp int64) (CottageState, bool) {
+	if incoming == nil {
+		return CottageState{}, false
+	}
+
+	state := defaultCottageState()
+	seen := make(map[string]bool, len(incoming.Players))
+	for _, rawPlayer := range incoming.Players {
+		if len(state.Players) >= maxCottagePlayers {
+			break
+		}
+		player, ok := sanitizeCottagePlayer(rawPlayer, timestamp)
+		if !ok || seen[player.ID] {
+			continue
+		}
+		seen[player.ID] = true
+		state.Players = append(state.Players, player)
+	}
+	if len(incoming.Players) > 0 && len(state.Players) == 0 {
+		return CottageState{}, false
+	}
+	if len(state.Players) > 0 {
+		sort.Slice(state.Players, func(i, j int) bool {
+			return state.Players[i].ID < state.Players[j].ID
+		})
+		state.UpdatedAt = timestamp
+	}
+	return state, true
+}
+
+func sanitizeCottagePlayer(raw CottagePlayerState, timestamp int64) (CottagePlayerState, bool) {
+	id := strings.TrimSpace(raw.ID)
+	if !safeCottagePlayerID.MatchString(id) {
+		return CottagePlayerState{}, false
+	}
+
+	name := trimRunes(strings.TrimSpace(raw.Name), 80)
+	if name == "" {
+		name = "Guest"
+	}
+
+	profileID := strings.TrimSpace(raw.ProfileID)
+	if profileID != "" && !safeID.MatchString(profileID) {
+		profileID = ""
+	}
+
+	x, ok := sanitizeCottageCoordinate(raw.X, cottageMinX, cottageMaxX)
+	if !ok {
+		return CottagePlayerState{}, false
+	}
+	y, ok := sanitizeCottageCoordinate(raw.Y, cottageMinY, cottageMaxY)
+	if !ok {
+		return CottagePlayerState{}, false
+	}
+
+	player := CottagePlayerState{
+		ID:        id,
+		Name:      name,
+		ProfileID: profileID,
+		X:         x,
+		Y:         y,
+		Action:    sanitizeCottageAction(raw.Action),
+		Facing:    sanitizeCottageFacing(raw.Facing),
+		UpdatedAt: timestamp,
+	}
+
+	if targetX, hasTargetX := sanitizeOptionalCottageCoordinate(raw.TargetX, cottageMinX, cottageMaxX); hasTargetX {
+		if targetY, hasTargetY := sanitizeOptionalCottageCoordinate(raw.TargetY, cottageMinY, cottageMaxY); hasTargetY {
+			player.TargetX = targetX
+			player.TargetY = targetY
+		}
+	}
+
+	interactionID := strings.TrimSpace(raw.InteractionID)
+	if interactionID != "" && safeID.MatchString(interactionID) {
+		player.InteractionID = interactionID
+	}
+
+	return player, true
+}
+
+func sanitizeCottageCoordinate(value float64, minValue float64, maxValue float64) (float64, bool) {
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return 0, false
+	}
+	return math.Min(maxValue, math.Max(minValue, value)), true
+}
+
+func sanitizeOptionalCottageCoordinate(value *float64, minValue float64, maxValue float64) (*float64, bool) {
+	if value == nil {
+		return nil, false
+	}
+	coordinate, ok := sanitizeCottageCoordinate(*value, minValue, maxValue)
+	if !ok {
+		return nil, false
+	}
+	return &coordinate, true
+}
+
+func sanitizeCottageAction(value string) string {
+	switch strings.TrimSpace(value) {
+	case "walking", "sitting", "sleeping", "interacting":
+		return strings.TrimSpace(value)
+	default:
+		return "idle"
+	}
+}
+
+func sanitizeCottageFacing(value string) string {
+	switch strings.TrimSpace(value) {
+	case "up", "left", "right":
+		return strings.TrimSpace(value)
+	default:
+		return "down"
+	}
+}
+
+func mergeCottageState(previous CottageState, updates []CottagePlayerState, timestamp int64) (CottageState, []CottagePlayerState, bool) {
+	if len(updates) == 0 {
+		return previous, nil, false
+	}
+
+	playersByID := make(map[string]CottagePlayerState, len(previous.Players)+len(updates))
+	for _, player := range previous.Players {
+		playersByID[player.ID] = player
+	}
+
+	changedPlayers := make([]CottagePlayerState, 0, len(updates))
+	for _, update := range updates {
+		update.UpdatedAt = timestamp
+		existing, exists := playersByID[update.ID]
+		if exists && sameCottagePlayerState(existing, update) {
+			continue
+		}
+		playersByID[update.ID] = update
+		changedPlayers = append(changedPlayers, update)
+	}
+	if len(changedPlayers) == 0 {
+		return previous, nil, false
+	}
+
+	players := cottagePlayersFromMap(playersByID)
+	if len(players) > maxCottagePlayers {
+		sort.Slice(players, func(i, j int) bool {
+			if players[i].UpdatedAt == players[j].UpdatedAt {
+				return players[i].ID < players[j].ID
+			}
+			return players[i].UpdatedAt > players[j].UpdatedAt
+		})
+		players = players[:maxCottagePlayers]
+		playersByID = make(map[string]CottagePlayerState, len(players))
+		for _, player := range players {
+			playersByID[player.ID] = player
+		}
+		filteredChangedPlayers := changedPlayers[:0]
+		for _, player := range changedPlayers {
+			if _, ok := playersByID[player.ID]; ok {
+				filteredChangedPlayers = append(filteredChangedPlayers, player)
+			}
+		}
+		changedPlayers = filteredChangedPlayers
+	}
+
+	sortCottagePlayersByID(players)
+	sortCottagePlayersByID(changedPlayers)
+	return CottageState{Players: players, UpdatedAt: timestamp}, changedPlayers, true
+}
+
+func cottagePlayersFromMap(playersByID map[string]CottagePlayerState) []CottagePlayerState {
+	players := make([]CottagePlayerState, 0, len(playersByID))
+	for _, player := range playersByID {
+		players = append(players, player)
+	}
+	return players
+}
+
+func sortCottagePlayersByID(players []CottagePlayerState) {
+	sort.Slice(players, func(i, j int) bool {
+		return players[i].ID < players[j].ID
+	})
+}
+
+func cloneCottageState(state CottageState) CottageState {
+	return CottageState{
+		Players:   append([]CottagePlayerState(nil), state.Players...),
+		UpdatedAt: state.UpdatedAt,
+	}
+}
+
+func sameCottagePlayerState(left CottagePlayerState, right CottagePlayerState) bool {
+	return left.ID == right.ID &&
+		left.Name == right.Name &&
+		left.ProfileID == right.ProfileID &&
+		sameCottageCoordinate(left.X, right.X) &&
+		sameCottageCoordinate(left.Y, right.Y) &&
+		sameOptionalCottageCoordinate(left.TargetX, right.TargetX) &&
+		sameOptionalCottageCoordinate(left.TargetY, right.TargetY) &&
+		left.Action == right.Action &&
+		left.Facing == right.Facing &&
+		left.InteractionID == right.InteractionID
+}
+
+func sameCottageCoordinate(left float64, right float64) bool {
+	return math.Abs(left-right) <= 0.01
+}
+
+func sameOptionalCottageCoordinate(left *float64, right *float64) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return sameCottageCoordinate(*left, *right)
+}
+
 func (r *Room) chat(sender *Player, message string, emojiRefs []ChatEmojiRef) {
 	message = strings.TrimSpace(message)
 	if message == "" {
@@ -1539,6 +1821,7 @@ func (r *Room) newPlayer(sender *Player) {
 	var roomPaused bool
 	var youtube YouTubeState
 	var chess ChessState
+	var cottage CottageState
 	var chats []Chat
 
 	r.mu.Lock()
@@ -1557,6 +1840,7 @@ func (r *Room) newPlayer(sender *Player) {
 	sender.state.Paused = roomPaused
 	youtube = r.youtube
 	chess = r.chess
+	cottage = cloneCottageState(r.cottage)
 	chats = append([]Chat(nil), r.chats...)
 	r.mu.Unlock()
 
@@ -1564,6 +1848,9 @@ func (r *Room) newPlayer(sender *Player) {
 	sender.sendJSON(SendPayload{Type: PauseSync, Paused: &roomPaused, Timestamp: time.Now().UnixMilli()})
 	sender.sendJSON(SendPayload{Type: YouTubeSync, YouTube: &youtube, Timestamp: time.Now().UnixMilli()})
 	sender.sendJSON(SendPayload{Type: ChessSync, Chess: &chess, Timestamp: time.Now().UnixMilli()})
+	if len(cottage.Players) > 0 {
+		sender.sendJSON(SendPayload{Type: CottageSync, Cottage: &cottage, Timestamp: time.Now().UnixMilli()})
+	}
 	if len(chats) > 0 {
 		sender.sendJSON(SendPayload{Type: ChatSync, Chats: chats, Timestamp: time.Now().UnixMilli()})
 	}

@@ -291,6 +291,145 @@ func TestSanitizeChessSettingsDefaultsInvalidPieceSet(t *testing.T) {
 	}
 }
 
+func TestSanitizeCottageState(t *testing.T) {
+	targetX := 250.0
+	targetY := 999.0
+	got, ok := sanitizeCottageState(&CottageState{
+		Players: []CottagePlayerState{
+			{
+				ID:            "player:one",
+				Name:          strings.Repeat("A", 90),
+				ProfileID:     "../bad",
+				X:             12,
+				Y:             240,
+				TargetX:       &targetX,
+				TargetY:       &targetY,
+				Action:        "dancing",
+				Facing:        "sideways",
+				InteractionID: "couch-left",
+			},
+			{
+				ID: "../bad",
+				X:  100,
+				Y:  200,
+			},
+		},
+	}, 1234)
+	if !ok {
+		t.Fatal("sanitizeCottageState() rejected valid state")
+	}
+	if len(got.Players) != 1 {
+		t.Fatalf("sanitizeCottageState() player count = %d, want 1", len(got.Players))
+	}
+	player := got.Players[0]
+	if player.ID != "player:one" || len([]rune(player.Name)) != 80 || player.ProfileID != "" {
+		t.Fatalf("sanitizeCottageState() identity = %#v", player)
+	}
+	if player.X != cottageMinX || player.Y != 240 {
+		t.Fatalf("sanitizeCottageState() position = (%v,%v), want (%v,240)", player.X, player.Y, cottageMinX)
+	}
+	if player.TargetX == nil || *player.TargetX != 250 || player.TargetY == nil || *player.TargetY != cottageMaxY {
+		t.Fatalf("sanitizeCottageState() target = (%v,%v), want (250,%v)", player.TargetX, player.TargetY, cottageMaxY)
+	}
+	if player.Action != "idle" || player.Facing != "down" || player.InteractionID != "couch-left" {
+		t.Fatalf("sanitizeCottageState() action fields = %#v", player)
+	}
+	if player.UpdatedAt != 1234 || got.UpdatedAt != 1234 {
+		t.Fatalf("sanitizeCottageState() timestamps = %#v", got)
+	}
+}
+
+func TestSyncCottageMergesDeltaAndBroadcastsToPeers(t *testing.T) {
+	room := newRoom("cottage:room", "")
+	sender := testPlayer("sender-cottage", "Sender socket", 4)
+	receiver := testPlayer("receiver-cottage", "Receiver socket", 4)
+	room.players[sender.state.Id] = sender
+	room.players[receiver.state.Id] = receiver
+	room.cottage = CottageState{
+		Players: []CottagePlayerState{{
+			ID:        "receiver",
+			Name:      "Receiver",
+			X:         500,
+			Y:         210,
+			Action:    "idle",
+			Facing:    "down",
+			UpdatedAt: 100,
+		}},
+		UpdatedAt: 100,
+	}
+
+	targetX := 300.0
+	targetY := 260.0
+	room.syncCottage(sender, &CottageState{
+		Players: []CottagePlayerState{{
+			ID:            "sender",
+			Name:          "Sender",
+			X:             120,
+			Y:             220,
+			TargetX:       &targetX,
+			TargetY:       &targetY,
+			Action:        "walking",
+			Facing:        "right",
+			InteractionID: "table-east",
+			UpdatedAt:     1,
+		}},
+		UpdatedAt: 1,
+	})
+
+	assertNoQueuedPayload(t, sender)
+	payload := readQueuedPayload(t, receiver)
+	if payload.Type != CottageSync || payload.Cottage == nil || len(payload.Cottage.Players) != 1 {
+		t.Fatalf("cottage payload = %#v, want one-player delta", payload)
+	}
+	if payload.FiredBy == nil || payload.FiredBy.Id != "sender-cottage" {
+		t.Fatalf("cottage payload firedBy = %#v, want sender-cottage", payload.FiredBy)
+	}
+	player := payload.Cottage.Players[0]
+	if player.ID != "sender" || player.Action != "walking" || player.Facing != "right" || player.InteractionID != "table-east" {
+		t.Fatalf("cottage player delta = %#v", player)
+	}
+	if len(room.cottage.Players) != 2 {
+		t.Fatalf("room cottage player count = %d, want 2", len(room.cottage.Players))
+	}
+
+	room.syncCottage(sender, &CottageState{
+		Players:   []CottagePlayerState{player},
+		UpdatedAt: player.UpdatedAt,
+	})
+	assertNoQueuedPayload(t, receiver)
+}
+
+func TestSyncCottageEmptyUpdateSendsSnapshotToRequester(t *testing.T) {
+	room := newRoom("cottage:room", "")
+	requester := testPlayer("requester-cottage", "Requester socket", 4)
+	other := testPlayer("other-cottage", "Other socket", 4)
+	room.players[requester.state.Id] = requester
+	room.players[other.state.Id] = other
+	room.cottage = CottageState{
+		Players: []CottagePlayerState{{
+			ID:        "other",
+			Name:      "Other",
+			X:         700,
+			Y:         240,
+			Action:    "sitting",
+			Facing:    "down",
+			UpdatedAt: 200,
+		}},
+		UpdatedAt: 200,
+	}
+
+	room.syncCottage(requester, &CottageState{})
+
+	payload := readQueuedPayload(t, requester)
+	if payload.Type != CottageSync || payload.Cottage == nil || len(payload.Cottage.Players) != 1 {
+		t.Fatalf("snapshot payload = %#v, want full cottage snapshot", payload)
+	}
+	if payload.Cottage.Players[0].ID != "other" {
+		t.Fatalf("snapshot player = %#v, want other", payload.Cottage.Players[0])
+	}
+	assertNoQueuedPayload(t, other)
+}
+
 func TestNewSoloPlayerStartsPlayback(t *testing.T) {
 	room := &Room{
 		id:      "room",

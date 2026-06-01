@@ -60,8 +60,7 @@ const ROOM_CROP_BOTTOM = 26;
 const GAME_HEIGHT = 178;
 const PLAYER_SPEED = 124;
 const PLAYER_RADIUS = 11;
-const SEND_INTERVAL_MS = 90;
-const HEARTBEAT_INTERVAL_MS = 2200;
+const INTERACTION_ACTION_MS = 2500;
 const PLAYER_ID_PATTERN = /^[A-Za-z0-9_:-]{1,128}$/;
 const COTTAGE_GAME_SURFACE_CLASS_NAME =
 	'relative mx-auto w-full max-w-[90rem] overflow-hidden bg-[#312820] outline-none focus-visible:outline-none';
@@ -438,20 +437,24 @@ function findClickedInteraction(x: number, y: number) {
 	);
 }
 
-function standPlayer(player: CottagePlayerSyncState): CottagePlayerSyncState {
+function standPlayer(
+	player: CottagePlayerSyncState,
+	updatedAt = Date.now()
+): CottagePlayerSyncState {
 	return {
 		...player,
 		action: 'idle',
 		interactionId: undefined,
 		targetX: undefined,
 		targetY: undefined,
-		updatedAt: Date.now()
+		updatedAt
 	};
 }
 
 function interactPlayer(
 	player: CottagePlayerSyncState,
-	interaction: CottageInteraction
+	interaction: CottageInteraction,
+	updatedAt = Date.now()
 ): CottagePlayerSyncState {
 	return {
 		...player,
@@ -462,7 +465,7 @@ function interactPlayer(
 		action: interaction.action,
 		facing: interaction.facing,
 		interactionId: interaction.id,
-		updatedAt: Date.now()
+		updatedAt
 	};
 }
 
@@ -478,6 +481,154 @@ function moveWithCollision(player: CottagePlayerSyncState, dx: number, dy: numbe
 		y = nextY;
 	}
 	return { x, y };
+}
+
+function getMoveTarget(player: CottagePlayerSyncState): MoveTarget | null {
+	if (player.targetX === undefined || player.targetY === undefined) {
+		return null;
+	}
+	return {
+		x: player.targetX,
+		y: player.targetY,
+		...(player.interactionId ? { interactionId: player.interactionId } : {})
+	};
+}
+
+function getFacingFromDelta(
+	dx: number,
+	dy: number,
+	fallback: CottagePlayerFacing
+): CottagePlayerFacing {
+	if (Math.abs(dx) < 0.01 && Math.abs(dy) < 0.01) {
+		return fallback;
+	}
+	return Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
+}
+
+function setPlayerMoveTarget(
+	player: CottagePlayerSyncState,
+	target: MoveTarget,
+	updatedAt = Date.now()
+): CottagePlayerSyncState {
+	const interaction = findInteraction(target.interactionId);
+	if (distance(player.x, player.y, target.x, target.y) < 5) {
+		if (interaction) {
+			return interactPlayer(player, interaction, updatedAt);
+		}
+		return {
+			...player,
+			action: 'idle',
+			interactionId: undefined,
+			targetX: undefined,
+			targetY: undefined,
+			updatedAt
+		};
+	}
+	return {
+		...player,
+		targetX: target.x,
+		targetY: target.y,
+		action: 'walking',
+		facing: getFacingFromDelta(target.x - player.x, target.y - player.y, player.facing),
+		...(target.interactionId
+			? { interactionId: target.interactionId }
+			: { interactionId: undefined }),
+		updatedAt
+	};
+}
+
+function finishPlayerMoveTarget(
+	player: CottagePlayerSyncState,
+	target: MoveTarget,
+	updatedAt: number
+): CottagePlayerSyncState {
+	const arrived = {
+		...player,
+		x: target.x,
+		y: target.y
+	};
+	const interaction = findInteraction(target.interactionId);
+	if (interaction && distance(target.x, target.y, interaction.anchorX, interaction.anchorY) <= 18) {
+		return interactPlayer(arrived, interaction, updatedAt);
+	}
+	return {
+		...arrived,
+		action: 'idle',
+		interactionId: undefined,
+		targetX: undefined,
+		targetY: undefined,
+		updatedAt
+	};
+}
+
+function advancePlayerTowardTarget(
+	player: CottagePlayerSyncState,
+	deltaSeconds: number,
+	updatedAt: number
+): CottagePlayerSyncState {
+	const target = getMoveTarget(player);
+	if (!target) {
+		return player.action === 'walking' ? standPlayer(player, updatedAt) : player;
+	}
+	const targetDistance = distance(player.x, player.y, target.x, target.y);
+	if (targetDistance < 5) {
+		return finishPlayerMoveTarget(player, target, updatedAt);
+	}
+	const stepDistance = Math.min(PLAYER_SPEED * deltaSeconds, targetDistance);
+	if (stepDistance <= 0) {
+		return player;
+	}
+	const dx = ((target.x - player.x) / targetDistance) * stepDistance;
+	const dy = ((target.y - player.y) / targetDistance) * stepDistance;
+	const moved = moveWithCollision(player, dx, dy);
+	const blocked = moved.x === player.x && moved.y === player.y;
+	if (blocked) {
+		return {
+			...player,
+			action: 'idle',
+			interactionId: undefined,
+			targetX: undefined,
+			targetY: undefined,
+			updatedAt
+		};
+	}
+	if (distance(moved.x, moved.y, target.x, target.y) < 5) {
+		return finishPlayerMoveTarget({ ...player, ...moved }, target, updatedAt);
+	}
+	return {
+		...player,
+		...moved,
+		action: 'walking',
+		facing: getFacingFromDelta(dx, dy, player.facing),
+		updatedAt
+	};
+}
+
+function getDirectionalDestination(
+	player: CottagePlayerSyncState,
+	moveX: number,
+	moveY: number
+): MoveTarget {
+	const magnitude = Math.hypot(moveX, moveY) || 1;
+	const stepX = (moveX / magnitude) * 8;
+	const stepY = (moveY / magnitude) * 8;
+	let cursor = { x: player.x, y: player.y };
+	for (let i = 0; i < 240; i += 1) {
+		const moved = moveWithCollision({ ...player, x: cursor.x, y: cursor.y }, stepX, stepY);
+		if (moved.x === cursor.x && moved.y === cursor.y) {
+			break;
+		}
+		cursor = moved;
+		if (
+			cursor.x <= FLOOR_BOUNDS.minX ||
+			cursor.x >= FLOOR_BOUNDS.maxX ||
+			cursor.y <= FLOOR_BOUNDS.minY ||
+			cursor.y >= FLOOR_BOUNDS.maxY
+		) {
+			break;
+		}
+	}
+	return cursor;
 }
 
 function hasPlayerChanged(a: CottagePlayerSyncState, b: CottagePlayerSyncState) {
@@ -975,6 +1126,56 @@ function getVisiblePlayers(
 	});
 }
 
+function shouldAutoStand(player: CottagePlayerSyncState) {
+	return player.action === 'interacting';
+}
+
+function applyIncomingCottagePlayer(
+	existing: CottagePlayerSyncState | undefined,
+	incoming: CottagePlayerSyncState,
+	now: number
+) {
+	const target = getMoveTarget(incoming);
+	if (target) {
+		const movementStartAt = incoming.updatedAt || now;
+		const base: CottagePlayerSyncState = {
+			...incoming,
+			x: incoming.x,
+			y: incoming.y,
+			action: incoming.action,
+			facing: incoming.facing,
+			targetX: undefined,
+			targetY: undefined,
+			updatedAt: movementStartAt
+		};
+		const moving = setPlayerMoveTarget(base, target, movementStartAt);
+		if (!incoming.updatedAt) {
+			return moving;
+		}
+		const elapsedSeconds = Math.min(30, Math.max(0, (now - incoming.updatedAt) / 1000));
+		return advancePlayerTowardTarget(moving, elapsedSeconds, now);
+	}
+
+	const interaction = findInteraction(incoming.interactionId);
+	if (
+		interaction &&
+		(incoming.action === 'sitting' ||
+			incoming.action === 'sleeping' ||
+			incoming.action === 'interacting')
+	) {
+		return interactPlayer(incoming, interaction, now);
+	}
+
+	return {
+		...incoming,
+		x: incoming.x,
+		y: incoming.y,
+		targetX: undefined,
+		targetY: undefined,
+		updatedAt: now
+	};
+}
+
 export function CottageGamePlaceholder() {
 	return (
 		<div
@@ -1063,23 +1264,23 @@ export function CottageGame({
 	const wrapperRef = useRef<HTMLDivElement | null>(null);
 	const socketRef = useRef<WebSocket | null>(null);
 	const reconnectTimerRef = useRef<number | null>(null);
-	const sendTimerRef = useRef<number | null>(null);
-	const heartbeatTimerRef = useRef<number | null>(null);
 	const reconnectAttemptRef = useRef(0);
 	const playersRef = useRef<Record<string, CottagePlayerSyncState>>({});
+	const incomingClockRef = useRef<Record<string, number>>({});
+	const remoteActionUntilRef = useRef<Record<string, number>>({});
 	const roomPlayersRef = useRef<RoomPlayer[]>(roomPlayers);
 	const currentPlayerRef = useRef<CottagePlayerIdentity | null>(currentPlayer);
 	const canvasSizeRef = useRef({ width: MAP_WIDTH, height: GAME_HEIGHT, dpr: 1 });
 	const cameraXRef = useRef(0);
 	const cameraYRef = useRef(ROOM_CROP_TOP);
 	const targetRef = useRef<MoveTarget | null>(null);
+	const keyboardDirectionRef = useRef('');
 	const keysRef = useRef<Set<string>>(new Set());
 	const actionUntilRef = useRef(0);
-	const lastSentAtRef = useRef(0);
 	const lastFrameAtRef = useRef(0);
 	const animationFrameRef = useRef<number | null>(null);
 
-	const sendSelfSnapshot = useCallback((queue = true) => {
+	const sendSelfSnapshot = useCallback(() => {
 		const self = currentPlayerRef.current;
 		if (!self) {
 			return;
@@ -1087,40 +1288,21 @@ export function CottageGame({
 		if (!playersRef.current[self.id]) {
 			return;
 		}
-		const sendNow = () => {
-			const latestSelf = currentPlayerRef.current;
-			const latestSocket = socketRef.current;
-			const latestPlayer = latestSelf ? playersRef.current[latestSelf.id] : null;
-			if (!latestPlayer || latestSocket?.readyState !== WebSocket.OPEN) {
-				return;
-			}
-			lastSentAtRef.current = Date.now();
-			latestSocket.send(
-				JSON.stringify({
-					type: SyncTypes.CottageSync,
-					cottage: {
-						players: [latestPlayer],
-						updatedAt: latestPlayer.updatedAt
-					}
-				})
-			);
-		};
-		if (!queue) {
-			sendNow();
+		const latestSelf = currentPlayerRef.current;
+		const latestSocket = socketRef.current;
+		const latestPlayer = latestSelf ? playersRef.current[latestSelf.id] : null;
+		if (!latestPlayer || latestSocket?.readyState !== WebSocket.OPEN) {
 			return;
 		}
-		const elapsed = Date.now() - lastSentAtRef.current;
-		if (elapsed >= SEND_INTERVAL_MS) {
-			sendNow();
-			return;
-		}
-		if (sendTimerRef.current !== null) {
-			return;
-		}
-		sendTimerRef.current = window.setTimeout(() => {
-			sendTimerRef.current = null;
-			sendNow();
-		}, SEND_INTERVAL_MS - elapsed);
+		latestSocket.send(
+			JSON.stringify({
+				type: SyncTypes.CottageSync,
+				cottage: {
+					players: [latestPlayer],
+					updatedAt: latestPlayer.updatedAt
+				}
+			})
+		);
 	}, []);
 
 	const requestPeerSnapshots = useCallback(() => {
@@ -1244,7 +1426,7 @@ export function CottageGame({
 				}
 				reconnectAttemptRef.current = 0;
 				socket.send(JSON.stringify({ type: SyncTypes.NewPlayer }));
-				sendSelfSnapshot(false);
+				sendSelfSnapshot();
 				requestPeerSnapshots();
 			};
 
@@ -1252,13 +1434,19 @@ export function CottageGame({
 				if (socketRef.current !== socket) {
 					return;
 				}
-				const payload: SendPayload = JSON.parse(event.data);
+				let payload: SendPayload;
+				try {
+					payload = JSON.parse(event.data) as SendPayload;
+				} catch (error) {
+					console.warn('Ignoring malformed cottage sync payload', error);
+					return;
+				}
 				if (payload.type !== SyncTypes.CottageSync || !payload.cottage) {
 					return;
 				}
 				const incoming = normalizeCottageSyncState(payload.cottage);
 				if (incoming.updatedAt === 0) {
-					sendSelfSnapshot(false);
+					sendSelfSnapshot();
 					return;
 				}
 				const selfId = currentPlayerRef.current?.id;
@@ -1268,9 +1456,20 @@ export function CottageGame({
 					if (incomingPlayer.id === selfId) {
 						continue;
 					}
+					const lastIncomingAt = incomingClockRef.current[incomingPlayer.id] ?? 0;
+					if (incomingPlayer.updatedAt < lastIncomingAt) {
+						continue;
+					}
 					const existingPlayer = nextPlayers[incomingPlayer.id];
-					if (!existingPlayer || incomingPlayer.updatedAt >= existingPlayer.updatedAt) {
-						nextPlayers[incomingPlayer.id] = incomingPlayer;
+					incomingClockRef.current[incomingPlayer.id] = incomingPlayer.updatedAt;
+					const nextPlayer = applyIncomingCottagePlayer(existingPlayer, incomingPlayer, Date.now());
+					if (!existingPlayer || hasPlayerChanged(existingPlayer, nextPlayer)) {
+						nextPlayers[incomingPlayer.id] = nextPlayer;
+						if (shouldAutoStand(nextPlayer)) {
+							remoteActionUntilRef.current[nextPlayer.id] = Date.now() + INTERACTION_ACTION_MS;
+						} else {
+							delete remoteActionUntilRef.current[nextPlayer.id];
+						}
 						changed = true;
 					}
 				}
@@ -1303,17 +1502,10 @@ export function CottageGame({
 		};
 
 		connect();
-		heartbeatTimerRef.current = window.setInterval(() => {
-			sendSelfSnapshot(false);
-		}, HEARTBEAT_INTERVAL_MS);
 
 		return () => {
 			disposed = true;
 			clearReconnectTimer();
-			if (heartbeatTimerRef.current !== null) {
-				window.clearInterval(heartbeatTimerRef.current);
-				heartbeatTimerRef.current = null;
-			}
 			const socket = socketRef.current;
 			if (socket) {
 				socket.onopen = null;
@@ -1345,6 +1537,7 @@ export function CottageGame({
 			}
 			const current = playersRef.current[selfId] ?? createDefaultPlayer(currentPlayerRef.current!);
 			let next = current;
+			let shouldSend = false;
 			const keys = keysRef.current;
 			const left = keys.has('arrowleft') || keys.has('a');
 			const right = keys.has('arrowright') || keys.has('d');
@@ -1353,6 +1546,7 @@ export function CottageGame({
 			const moveX = (right ? 1 : 0) - (left ? 1 : 0);
 			const moveY = (down ? 1 : 0) - (up ? 1 : 0);
 			const hasKeyboardMovement = moveX !== 0 || moveY !== 0;
+			const keyboardDirection = hasKeyboardMovement ? `${moveX}:${moveY}` : '';
 			const now = Date.now();
 
 			if (
@@ -1360,8 +1554,9 @@ export function CottageGame({
 				actionUntilRef.current > 0 &&
 				now > actionUntilRef.current
 			) {
-				next = standPlayer(next);
+				next = standPlayer(next, now);
 				actionUntilRef.current = 0;
+				shouldSend = true;
 			}
 
 			if (hasKeyboardMovement) {
@@ -1370,84 +1565,53 @@ export function CottageGame({
 					next.action === 'sleeping' ||
 					next.action === 'interacting'
 				) {
-					next = standPlayer(next);
+					next = standPlayer(next, now);
 					actionUntilRef.current = 0;
+					shouldSend = true;
 				}
-				targetRef.current = null;
-				const magnitude = Math.hypot(moveX, moveY) || 1;
-				const dx = (moveX / magnitude) * PLAYER_SPEED * deltaSeconds;
-				const dy = (moveY / magnitude) * PLAYER_SPEED * deltaSeconds;
-				const moved = moveWithCollision(next, dx, dy);
-				const facing =
-					Math.abs(moveX) > Math.abs(moveY)
-						? moveX > 0
-							? 'right'
-							: 'left'
-						: moveY > 0
-							? 'down'
-							: 'up';
-				next = {
-					...next,
-					...moved,
-					action: moved.x === next.x && moved.y === next.y ? 'idle' : 'walking',
-					facing,
-					interactionId: undefined,
-					targetX: undefined,
-					targetY: undefined,
-					updatedAt: now
-				};
-			} else if (targetRef.current) {
-				if (
-					next.action === 'sitting' ||
-					next.action === 'sleeping' ||
-					next.action === 'interacting'
-				) {
-					next = standPlayer(next);
-					actionUntilRef.current = 0;
-				}
-				const target = targetRef.current;
-				const targetDistance = distance(next.x, next.y, target.x, target.y);
-				if (targetDistance < 5) {
-					const interaction = findInteraction(target.interactionId);
-					if (
-						interaction &&
-						distance(next.x, next.y, interaction.anchorX, interaction.anchorY) <= 18
-					) {
-						next = interactPlayer(next, interaction);
-						actionUntilRef.current = interaction.action === 'interacting' ? Date.now() + 2500 : 0;
+				if (keyboardDirectionRef.current !== keyboardDirection || !targetRef.current) {
+					const destination = getDirectionalDestination(next, moveX, moveY);
+					keyboardDirectionRef.current = keyboardDirection;
+					if (distance(next.x, next.y, destination.x, destination.y) >= 5) {
+						targetRef.current = destination;
+						next = setPlayerMoveTarget(next, destination, now);
+						shouldSend = true;
 					} else {
-						next = {
-							...next,
-							action: 'idle',
-							targetX: undefined,
-							targetY: undefined,
-							updatedAt: now
-						};
-					}
-					targetRef.current = null;
-				} else {
-					const dx = ((target.x - next.x) / targetDistance) * PLAYER_SPEED * deltaSeconds;
-					const dy = ((target.y - next.y) / targetDistance) * PLAYER_SPEED * deltaSeconds;
-					const moved = moveWithCollision(next, dx, dy);
-					const blocked = moved.x === next.x && moved.y === next.y;
-					const facing =
-						Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : dy > 0 ? 'down' : 'up';
-					next = {
-						...next,
-						...moved,
-						action: blocked ? 'idle' : 'walking',
-						facing,
-						interactionId: undefined,
-						targetX: target.x,
-						targetY: target.y,
-						updatedAt: now
-					};
-					if (blocked) {
 						targetRef.current = null;
+						if (next.action === 'walking') {
+							next = standPlayer(next, now);
+							shouldSend = true;
+						}
 					}
 				}
-			} else if (next.action === 'walking') {
-				next = { ...next, action: 'idle', targetX: undefined, targetY: undefined, updatedAt: now };
+			} else if (keyboardDirectionRef.current) {
+				keyboardDirectionRef.current = '';
+				if (targetRef.current && !targetRef.current.interactionId) {
+					targetRef.current = null;
+				}
+				if (next.action === 'walking') {
+					next = standPlayer(next, now);
+					shouldSend = true;
+				}
+			}
+
+			if (targetRef.current) {
+				const activeTarget = targetRef.current;
+				const previousAction = next.action;
+				next = advancePlayerTowardTarget(next, deltaSeconds, now);
+				if (!getMoveTarget(next)) {
+					targetRef.current = null;
+					if (!hasKeyboardMovement || activeTarget.interactionId) {
+						shouldSend = true;
+					}
+				}
+				if (previousAction !== 'interacting' && next.action === 'interacting') {
+					actionUntilRef.current = now + INTERACTION_ACTION_MS;
+					shouldSend = true;
+				}
+			} else if (!hasKeyboardMovement && next.action === 'walking') {
+				next = standPlayer(next, now);
+				shouldSend = true;
 			}
 
 			if (hasPlayerChanged(current, next)) {
@@ -1455,11 +1619,52 @@ export function CottageGame({
 					...playersRef.current,
 					[selfId]: next
 				};
-				sendSelfSnapshot();
+				if (shouldSend) {
+					sendSelfSnapshot();
+				}
 			}
 		},
 		[sendSelfSnapshot]
 	);
+
+	const updateRemotePlayers = useCallback((deltaSeconds: number) => {
+		const selfId = currentPlayerRef.current?.id;
+		const now = Date.now();
+		let nextPlayers = playersRef.current;
+		let changed = false;
+
+		for (const [id, player] of Object.entries(playersRef.current)) {
+			if (id === selfId) {
+				continue;
+			}
+			let next = player;
+			const autoStandAt = remoteActionUntilRef.current[id];
+			if (next.action === 'interacting' && autoStandAt && now > autoStandAt) {
+				next = standPlayer(next, now);
+				delete remoteActionUntilRef.current[id];
+			}
+
+			const previousAction = next.action;
+			next = advancePlayerTowardTarget(next, deltaSeconds, now);
+			if (previousAction !== 'interacting' && next.action === 'interacting') {
+				remoteActionUntilRef.current[id] = now + INTERACTION_ACTION_MS;
+			} else if (next.action !== 'interacting') {
+				delete remoteActionUntilRef.current[id];
+			}
+
+			if (hasPlayerChanged(player, next)) {
+				if (!changed) {
+					nextPlayers = { ...playersRef.current };
+					changed = true;
+				}
+				nextPlayers[id] = next;
+			}
+		}
+
+		if (changed) {
+			playersRef.current = nextPlayers;
+		}
+	}, []);
 
 	useEffect(() => {
 		const draw = (time: number) => {
@@ -1473,6 +1678,7 @@ export function CottageGame({
 			const deltaSeconds = Math.min(0.05, Math.max(0, (time - previous) / 1000));
 			lastFrameAtRef.current = time;
 			updateSelf(deltaSeconds);
+			updateRemotePlayers(deltaSeconds);
 
 			const self = currentPlayerRef.current
 				? playersRef.current[currentPlayerRef.current.id]
@@ -1507,7 +1713,7 @@ export function CottageGame({
 				animationFrameRef.current = null;
 			}
 		};
-	}, [updateSelf]);
+	}, [updateRemotePlayers, updateSelf]);
 
 	const focusGame = useCallback(() => {
 		wrapperRef.current?.focus();
@@ -1549,16 +1755,18 @@ export function CottageGame({
 						y: clamp(target.y, FLOOR_BOUNDS.minY, FLOOR_BOUNDS.maxY)
 					};
 			targetRef.current = walkTarget;
+			keyboardDirectionRef.current = '';
 			const self = playersRef.current[selfId];
 			if (self) {
+				const now = Date.now();
+				const next = setPlayerMoveTarget(self, walkTarget, now);
+				if (!getMoveTarget(next)) {
+					targetRef.current = null;
+				}
+				actionUntilRef.current = next.action === 'interacting' ? now + INTERACTION_ACTION_MS : 0;
 				playersRef.current = {
 					...playersRef.current,
-					[selfId]: {
-						...self,
-						targetX: walkTarget.x,
-						targetY: walkTarget.y,
-						updatedAt: Date.now()
-					}
+					[selfId]: next
 				};
 				sendSelfSnapshot();
 			}
@@ -1577,16 +1785,6 @@ export function CottageGame({
 			}
 			const interaction = findClickedInteraction(point.x, point.y);
 			if (interaction) {
-				if (
-					distance(self.x, self.y, interaction.anchorX, interaction.anchorY) <= interaction.radius
-				) {
-					const next = interactPlayer(self, interaction);
-					playersRef.current = { ...playersRef.current, [self.id]: next };
-					targetRef.current = null;
-					actionUntilRef.current = interaction.action === 'interacting' ? Date.now() + 2500 : 0;
-					sendSelfSnapshot();
-					return;
-				}
 				setTarget({
 					x: interaction.anchorX,
 					y: interaction.anchorY,
@@ -1598,7 +1796,7 @@ export function CottageGame({
 				setTarget(point);
 			}
 		},
-		[focusGame, screenToWorld, sendSelfSnapshot, setTarget]
+		[focusGame, screenToWorld, setTarget]
 	);
 
 	const handleKeyDown = useCallback(
@@ -1624,36 +1822,28 @@ export function CottageGame({
 				self.action === 'sleeping' ||
 				self.action === 'interacting'
 			) {
-				const next = standPlayer(self);
+				const next = standPlayer(self, Date.now());
 				playersRef.current = { ...playersRef.current, [self.id]: next };
 				actionUntilRef.current = 0;
+				targetRef.current = null;
+				keyboardDirectionRef.current = '';
 				sendSelfSnapshot();
 				return;
 			}
 			const interaction = findNearestInteraction(self);
 			if (interaction) {
-				const next = interactPlayer(self, interaction);
-				playersRef.current = { ...playersRef.current, [self.id]: next };
-				actionUntilRef.current = interaction.action === 'interacting' ? Date.now() + 2500 : 0;
-				sendSelfSnapshot();
+				setTarget({
+					x: interaction.anchorX,
+					y: interaction.anchorY,
+					interactionId: interaction.id
+				});
 			}
 		},
-		[sendSelfSnapshot]
+		[sendSelfSnapshot, setTarget]
 	);
 
 	const handleKeyUp = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
 		keysRef.current.delete(event.key.toLowerCase());
-	}, []);
-
-	useEffect(() => {
-		return () => {
-			if (sendTimerRef.current !== null) {
-				window.clearTimeout(sendTimerRef.current);
-			}
-			if (heartbeatTimerRef.current !== null) {
-				window.clearInterval(heartbeatTimerRef.current);
-			}
-		};
 	}, []);
 
 	return (

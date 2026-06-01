@@ -15,6 +15,7 @@ const (
 	SoundEffectSync   = "soundEffect"
 	YouTubeSync       = "youtube"
 	ChessSync         = "chess"
+	CottageSync       = "cottage"
 	ExitSync          = "exit"
 	CodecSwitch       = "codec"
 	AudioSwitch       = "audio"
@@ -26,12 +27,13 @@ const (
 )
 
 const (
-	maxChatMessages = 200
-	maxChatLength   = 2000
-	maxChatEmojis   = 50
-	maxYouTubeTabs  = 12
-	maxChessTabs    = 64
-	maxChessMoves   = 600
+	maxChatMessages   = 200
+	maxChatLength     = 2000
+	maxChatEmojis     = 50
+	maxYouTubeTabs    = 12
+	maxChessTabs      = 64
+	maxChessMoves     = 600
+	maxCottagePlayers = 80
 )
 
 type Options struct {
@@ -134,6 +136,25 @@ type ChessState struct {
 	UpdatedAt int64           `json:"updatedAt"`
 }
 
+type CottagePlayerState struct {
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	ProfileID     string   `json:"profileId,omitempty"`
+	X             float64  `json:"x"`
+	Y             float64  `json:"y"`
+	TargetX       *float64 `json:"targetX,omitempty"`
+	TargetY       *float64 `json:"targetY,omitempty"`
+	Action        string   `json:"action"`
+	Facing        string   `json:"facing"`
+	InteractionID string   `json:"interactionId,omitempty"`
+	UpdatedAt     int64    `json:"updatedAt"`
+}
+
+type CottageState struct {
+	Players   []CottagePlayerState `json:"players,omitempty"`
+	UpdatedAt int64                `json:"updatedAt"`
+}
+
 type PlayerState struct {
 	Name        string       `json:"name"`
 	Id          string       `json:"id"`
@@ -204,6 +225,7 @@ type ClientPayload struct {
 	Subtitle    string         `json:"subtitle,omitempty"`
 	YouTube     *YouTubeState  `json:"youtube,omitempty"`
 	Chess       *ChessState    `json:"chess,omitempty"`
+	Cottage     *CottageState  `json:"cottage,omitempty"`
 }
 
 type SendPayload struct {
@@ -220,6 +242,7 @@ type SendPayload struct {
 	Broadcast      map[string]any   `json:"broadcast,omitempty"`
 	YouTube        *YouTubeState    `json:"youtube,omitempty"`
 	Chess          *ChessState      `json:"chess,omitempty"`
+	Cottage        *CottageState    `json:"cottage,omitempty"`
 }
 
 func defaultVideoState() VideoState {
@@ -232,4 +255,8 @@ func defaultYouTubeState() YouTubeState {
 
 func defaultChessState() ChessState {
 	return ChessState{}
+}
+
+func defaultCottageState() CottageState {
+	return CottageState{}
 }
