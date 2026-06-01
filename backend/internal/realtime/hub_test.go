@@ -576,6 +576,49 @@ func TestSyncPauseBroadcastsOnlyToOtherPlayers(t *testing.T) {
 	}
 }
 
+func TestSetForegroundStateUpdatesPlayerPauseWithoutRoomBroadcast(t *testing.T) {
+	room := newRoom("room", "")
+	sender := testPlayer("sender", "Sender", 2)
+	receiver := testPlayer("receiver", "Receiver", 2)
+	sender.state.Paused = false
+	receiver.state.Paused = false
+	room.state.Paused = false
+	room.players[sender.state.Id] = sender
+	room.players[receiver.state.Id] = receiver
+
+	paused := true
+	room.setForegroundState(sender, "bg", &paused)
+
+	if !sender.state.Paused || !sender.state.InBg {
+		t.Fatalf("sender state = %#v, want paused in background", sender.state)
+	}
+	if receiver.state.Paused {
+		t.Fatal("foreground state sync should not update receiver pause state")
+	}
+	if room.state.Paused {
+		t.Fatal("foreground state sync should not update room pause state")
+	}
+	assertNoQueuedPayload(t, sender)
+	assertNoQueuedPayload(t, receiver)
+
+	room.syncPlayerState(time.Unix(100, 0))
+	payload := readQueuedPayload(t, receiver)
+	if payload.Type != PlayersStatusSync || len(payload.Players) != 2 {
+		t.Fatalf("status payload = %#v, want full players", payload)
+	}
+	var senderStatus *PlayerSnapshot
+	for i := range payload.Players {
+		if payload.Players[i].Id == sender.state.Id {
+			senderStatus = &payload.Players[i]
+			break
+		}
+	}
+	if senderStatus == nil || !senderStatus.Paused || !senderStatus.InBg {
+		t.Fatalf("broadcast sender status = %#v, want paused in background", senderStatus)
+	}
+	_ = readQueuedPayload(t, sender)
+}
+
 func TestChatBroadcastSendsDeltaOnly(t *testing.T) {
 	room := &Room{
 		id:      "room",

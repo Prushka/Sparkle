@@ -619,7 +619,7 @@ func (r *Room) handlePayload(current *Player, payload ClientPayload) {
 	now := time.Now()
 	switch payload.Type {
 	case StateSync:
-		r.setForegroundState(current, payload.State)
+		r.setForegroundState(current, payload.State, payload.Paused)
 	case CodecSwitch:
 		r.updatePlayer(current, now, func(state *PlayerSnapshot) { state.Codec = payload.Codec })
 	case AudioSwitch:
@@ -676,7 +676,7 @@ func (r *Room) updatePlayer(player *Player, now time.Time, update func(*PlayerSn
 	update(&player.state)
 }
 
-func (r *Room) setForegroundState(player *Player, state string) {
+func (r *Room) setForegroundState(player *Player, state string, paused *bool) {
 	var chats []Chat
 
 	r.mu.Lock()
@@ -685,6 +685,9 @@ func (r *Room) setForegroundState(player *Player, state string) {
 		return
 	}
 	player.state.LastSeen = time.Now().Unix()
+	if paused != nil {
+		player.state.Paused = *paused
+	}
 	switch state {
 	case "bg":
 		player.state.InBg = true
