@@ -17,7 +17,7 @@ export async function GET(
 	const legacyRoom = url.searchParams.get('room') || url.searchParams.get('channel_id');
 	const roomId = legacyRoom || resolvedParams.id;
 	const room = await getRoomRecord(fetch, roomId);
-	const mediaId = room?.mediaId ?? resolvedParams.id;
+	const mediaId = legacyRoom ? resolvedParams.id : (room?.mediaId ?? resolvedParams.id);
 	const to = toAbsoluteUrl(`/${room?.roomId ?? roomId}`, origin);
 	if (!mediaId) {
 		return NextResponse.json({
@@ -35,18 +35,18 @@ export async function GET(
 		let showType = 'a movie';
 		const displayTitle = job.Title.episode
 			? `${job.Title.episode.se} - ${job.Title.episode.title}`
-			: job.Title.title;
+			: job.Title.title.trim();
 		const thumbnailUrl = toAbsoluteUrl(`${getBrowserStaticBaseUrl()}/${job.Id}/poster.jpg`, origin);
 		const res: Record<string, string | number> = {
 			version: '1.0',
 			type: 'link',
-			title: displayTitle,
+			title: displayTitle.trim(),
 			thumbnail_url: thumbnailUrl,
 			provider_url: to
 		};
 		if (job.Title.episode) {
 			showType = 'anime';
-			res.author_name = job.Title.title;
+			res.author_name = job.Title.title.trim();
 			res.author_url = to;
 		}
 		res.provider_name = `It's time to watch ${showType} together!`;
