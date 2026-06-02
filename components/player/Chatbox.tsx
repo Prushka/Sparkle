@@ -49,6 +49,7 @@ import { useAppState } from '@/lib/app-state';
 
 type Props = {
 	send: (_payload: any) => void;
+	onCommand?: (_message: string) => boolean | Promise<boolean>;
 	onFocus?: () => void;
 	onBlur?: () => void;
 	chatFocused?: boolean;
@@ -298,6 +299,7 @@ function ChatInputElement(props: RenderElementProps) {
 
 export function Chatbox({
 	send,
+	onCommand,
 	onFocus = () => {},
 	onBlur = () => {},
 	chatFocused = false,
@@ -437,9 +439,18 @@ export function Chatbox({
 		setSuggestionsDismissedFor(null);
 	}
 
-	function sendMessage() {
+	async function sendMessage() {
 		const chat = serializeNodes(editor.children as Descendant[]);
 		if (!chat) {
+			return;
+		}
+		if (onCommand && (await onCommand(chat))) {
+			clearEditor(editor);
+			setValue('');
+			setActiveEmojiToken(null);
+			setSuggestionIndex(0);
+			setSuggestionsDismissedFor(null);
+			setEmojiRefs([]);
 			return;
 		}
 		send({

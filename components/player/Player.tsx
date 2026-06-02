@@ -119,7 +119,7 @@ import { useVoiceChat } from '@/components/player/useVoiceChat';
 import { YouTubeFloatingTab } from '@/components/player/YouTubeFloatingTab';
 import { ChessFloatingTab } from '@/components/player/ChessFloatingTab';
 import { CottageGame, CottageGamePlaceholder } from '@/components/player/CottageGame';
-import { fetchJobs, joinBackendPath } from '@/lib/player/data';
+import { fetchJobs, joinBackendPath, updateRoomRecord } from '@/lib/player/data';
 
 type VideoSource = {
 	src: string;
@@ -180,6 +180,35 @@ function isSmallPlayerLayout(width: number, height: number) {
 const PLAYER_SMALL_LAYOUT_QUERY: MediaPlayerQuery = ({ width, height }) =>
 	isSmallPlayerLayout(width, height);
 
+function formatDuration(seconds: number) {
+	if (!Number.isFinite(seconds) || seconds <= 0) {
+		return '0 seconds';
+	}
+	const rounded = Math.ceil(seconds);
+	if (rounded < 60) {
+		return `${rounded} second${rounded === 1 ? '' : 's'}`;
+	}
+	const minutes = Math.floor(rounded / 60);
+	const remainingSeconds = rounded % 60;
+	return `${minutes} minute${minutes === 1 ? '' : 's'}${
+		remainingSeconds > 0 ? ` ${remainingSeconds} second${remainingSeconds === 1 ? '' : 's'}` : ''
+	}`;
+}
+
+function getCachePruneErrorMessage(payload: CachePruneResponse, status: number) {
+	const cooldownSeconds = payload.cooldownSeconds ?? payload.backend?.cooldownSeconds;
+	if (cooldownSeconds) {
+		return `Cache prune is on cooldown. Try again in ${formatDuration(cooldownSeconds)}.`;
+	}
+	if (payload.error) {
+		return `Cache prune failed: ${payload.error}`;
+	}
+	if (payload.backend?.error) {
+		return `Cache prune failed: ${payload.backend.error}`;
+	}
+	return `Cache prune failed with HTTP ${status}.`;
+}
+
 const DEFAULT_YOUTUBE_SYNC_STATE: YouTubeSyncState = {
 	tabs: [],
 	updatedAt: 0
@@ -206,6 +235,18 @@ const MAX_CHESS_TABS = 64;
 const MAX_CHESS_MOVES = 600;
 const CONTROL_MESSAGE_TTL_MS = 8000;
 const MAX_CONTROL_MESSAGES = 40;
+
+type CachePruneResponse = {
+	ok?: boolean;
+	cooldownSeconds?: number;
+	backend?: {
+		ok?: boolean;
+		cooldownSeconds?: number;
+		prunedAt?: number;
+		error?: string;
+	};
+	error?: string;
+};
 
 function createDefaultYouTubeTab(id: string): YouTubeTabSyncState {
 	return {
@@ -1635,6 +1676,33 @@ export function Player({
 		]);
 	}, []);
 
+	const handleChatCommand = useCallback(
+		async (message: string) => {
+			if (message.trim().toLowerCase() !== '/prune') {
+				return false;
+			}
+
+			try {
+				const response = await fetch('/api/cache/prune', {
+					method: 'POST',
+					cache: 'no-store'
+				});
+				const payload = (await response.json().catch(() => ({}))) as CachePruneResponse;
+				if (!response.ok || payload.ok === false) {
+					addSystemMessage(getCachePruneErrorMessage(payload, response.status));
+					return true;
+				}
+				addSystemMessage('Cache pruned successfully.');
+			} catch (error) {
+				addSystemMessage(
+					`Cache prune failed: ${error instanceof Error ? error.message : 'Unknown error'}`
+				);
+			}
+			return true;
+		},
+		[addSystemMessage]
+	);
+
 	const refreshRoomMedia = useCallback(async () => {
 		if (roomMediaCheckRef.current) {
 			return roomMediaCheckRef.current;
@@ -2855,12 +2923,16 @@ export function Player({
 				console.debug('received: ' + JSON.stringify(state));
 				const initiateMoveTo = (jobs: LibraryJob[]) => {
 					pendingRemotePlaybackSyncRef.current = null;
+					const target = jobs.find((candidate) => candidate.Id === broadcast!.moveTo);
+					if (roomPlayersCountRef.current === 1 && target?.Id) {
+						void onRoomMediaChanged?.(target.Id, state.timestamp);
+						return;
+					}
 					setMoveToast({
 						seconds: moveSeconds,
-						job: jobs.find((candidate) => candidate.Id === broadcast!.moveTo),
+						job: target,
 						firedBy: state.firedBy
 					});
-					const target = jobs.find((candidate) => candidate.Id === state.broadcast!.moveTo);
 					state.moveToText =
 						target?.Title.title + (target?.Title?.episode ? ` ${target.Title.episode.se}` : '');
 					setControlsToDisplay((prev) => appendControlMessages(prev, state));
@@ -3098,6 +3170,46 @@ export function Player({
 		}
 		setMoveToast(null);
 	}, [moveToast, onRoomMediaChanged, refreshRoomMedia]);
+
+	const switchRoomMedia = useCallback(
+		async (id: string) => {
+			if (id === job.Id) {
+				return;
+			}
+			if (socketConnected && roomPlayersCountRef.current === 1) {
+				try {
+					const record = await updateRoomRecord(backendBaseUrl, room, id);
+					await onRoomMediaChanged?.(id, record.mediaUpdated);
+				} catch (error) {
+					console.error(error);
+					addSystemMessage('Unable to switch media. Please try again.');
+				}
+				return;
+			}
+
+			const socket = socketRef.current;
+			pendingMediaSwitchRef.current = id;
+			if (socket?.readyState === WebSocket.OPEN) {
+				pendingMediaSwitchRef.current = null;
+				send({
+					type: SyncTypes.BroadcastSync,
+					broadcast: { type: BroadcastTypes.MoveTo, moveTo: id }
+				});
+			} else {
+				startWatchRoomConnection();
+			}
+		},
+		[
+			addSystemMessage,
+			backendBaseUrl,
+			job.Id,
+			onRoomMediaChanged,
+			room,
+			send,
+			socketConnected,
+			startWatchRoomConnection
+		]
+	);
 
 	useEffect(() => {
 		if (!playerEl || !playerId || !interactedRef.current || !playerCanPlayRef.current) {
@@ -3508,6 +3620,7 @@ export function Player({
 		>
 			<Chatbox
 				send={send}
+				onCommand={handleChatCommand}
 				chatFocused={chatFocused}
 				focusByShortcut
 				controlsShowing={null}
@@ -3736,6 +3849,7 @@ export function Player({
 				<div className="mx-auto flex w-full max-w-[90rem] items-center gap-2">
 					<Chatbox
 						send={send}
+						onCommand={handleChatCommand}
 						chatFocused={chatFocused}
 						controlsShowing={null}
 						className="w-full min-w-0"
@@ -3946,22 +4060,7 @@ export function Player({
 							data={data}
 							staticBaseUrl={staticBaseUrl}
 							backendBaseUrl={backendBaseUrl}
-							bounceToOverride={(id) => {
-								if (id === job.Id) {
-									return;
-								}
-								const socket = socketRef.current;
-								pendingMediaSwitchRef.current = id;
-								if (socket?.readyState === WebSocket.OPEN) {
-									pendingMediaSwitchRef.current = null;
-									send({
-										type: SyncTypes.BroadcastSync,
-										broadcast: { type: BroadcastTypes.MoveTo, moveTo: id }
-									});
-								} else {
-									startWatchRoomConnection();
-								}
-							}}
+							bounceToOverride={(id) => void switchRoomMedia(id)}
 						/>
 					</CardContent>
 				</Card>
