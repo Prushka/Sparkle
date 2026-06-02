@@ -45,6 +45,7 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	jobStore.RefreshAsync(ctx)
 	go hub.Run(ctx)
 
 	mux := http.NewServeMux()

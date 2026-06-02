@@ -140,18 +140,7 @@ func TestStorePayloadCompactsModernJobJSON(t *testing.T) {
 		"dominantColors": ["#514940"]
 	}`)
 
-	payload, _, err := NewStore(outputDir, time.Minute).Payload(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var jobs []map[string]any
-	if err := json.Unmarshal(payload, &jobs); err != nil {
-		t.Fatal(err)
-	}
-	if len(jobs) != 1 {
-		t.Fatalf("len(jobs) = %d, want 1", len(jobs))
-	}
+	jobs := waitForPayloadJobs(t, NewStore(outputDir, time.Minute), 1)
 	job := jobs[0]
 	if got := job["Id"]; got != "s6IKH" {
 		t.Fatalf("Id = %v, want s6IKH", got)
@@ -168,11 +157,88 @@ func TestStorePayloadCompactsModernJobJSON(t *testing.T) {
 	}
 }
 
+func TestStorePayloadReturnsCachedJobsWhileRefreshing(t *testing.T) {
+	outputDir := t.TempDir()
+	writeModernJob(t, outputDir, "first", "First Movie")
+
+	store := NewStore(outputDir, time.Hour)
+	jobs := waitForPayloadJobs(t, store, 1)
+	if got := jobs[0]["Id"]; got != "first" {
+		t.Fatalf("Id = %v, want first", got)
+	}
+
+	writeModernJob(t, outputDir, "second", "Second Movie")
+	store.Prune()
+
+	payload, _, err := store.Payload(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cachedJobs []map[string]any
+	if err := json.Unmarshal(payload, &cachedJobs); err != nil {
+		t.Fatal(err)
+	}
+	if len(cachedJobs) != 1 {
+		t.Fatalf("len(cachedJobs) = %d, want stale cache with 1 job", len(cachedJobs))
+	}
+	if got := cachedJobs[0]["Id"]; got != "first" {
+		t.Fatalf("cached Id = %v, want first", got)
+	}
+
+	refreshedJobs := waitForPayloadJobs(t, store, 2)
+	if got := refreshedJobs[0]["Id"]; got != "first" {
+		t.Fatalf("refreshedJobs[0].Id = %v, want first", got)
+	}
+	if got := refreshedJobs[1]["Id"]; got != "second" {
+		t.Fatalf("refreshedJobs[1].Id = %v, want second", got)
+	}
+}
+
+func writeModernJob(t *testing.T, outputDir, id, title string) {
+	t.Helper()
+	jobDir := filepath.Join(outputDir, id)
+	if err := os.Mkdir(jobDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, jobDir, "poster.jpg", "poster")
+	writeFile(t, jobDir, jobFile, `{
+		"id": "`+id+`",
+		"input": "`+title+` WEBDL-1080p.mkv",
+		"state": "complete",
+		"duration": 6840.013,
+		"encodedCodecs": ["av1"],
+		"dominantColors": ["#514940"]
+	}`)
+}
+
 func writeFile(t *testing.T, dir, name, content string) {
 	t.Helper()
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func waitForPayloadJobs(t *testing.T, store *Store, want int) []map[string]any {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	var lastLen int
+	for time.Now().Before(deadline) {
+		payload, _, err := store.Payload(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		var jobs []map[string]any
+		if err := json.Unmarshal(payload, &jobs); err != nil {
+			t.Fatal(err)
+		}
+		lastLen = len(jobs)
+		if len(jobs) == want {
+			return jobs
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("len(jobs) = %d, want %d", lastLen, want)
+	return nil
 }
 
 func assertMap(t *testing.T, value any) map[string]any {

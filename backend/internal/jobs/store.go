@@ -55,22 +55,23 @@ type Store struct {
 	outputDir string
 	ttl       time.Duration
 
-	mu        sync.RWMutex
-	expiresAt time.Time
-	cached    []byte
-	etag      string
+	mu         sync.RWMutex
+	expiresAt  time.Time
+	cached     []byte
+	etag       string
+	refreshing bool
 }
 
 func NewStore(outputDir string, ttl time.Duration) *Store {
-	return &Store{outputDir: outputDir, ttl: ttl}
+	store := &Store{outputDir: outputDir, ttl: ttl}
+	store.setPayload([]map[string]any{}, time.Time{})
+	return store
 }
 
 func (s *Store) Prune() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.cached = nil
-	s.etag = ""
 	s.expiresAt = time.Time{}
 }
 
@@ -130,39 +131,68 @@ func (s *Store) Payload(ctx context.Context) ([]byte, string, error) {
 	now := time.Now()
 
 	s.mu.RLock()
-	if len(s.cached) > 0 && now.Before(s.expiresAt) {
-		payload := append([]byte(nil), s.cached...)
-		etag := s.etag
-		s.mu.RUnlock()
-		return payload, etag, nil
-	}
+	cached := append([]byte(nil), s.cached...)
+	etag := s.etag
+	expired := !now.Before(s.expiresAt)
 	s.mu.RUnlock()
+
+	if expired {
+		s.RefreshAsync(ctx)
+	}
+	return cached, etag, nil
+}
+
+func (s *Store) RefreshAsync(ctx context.Context) {
+	s.mu.Lock()
+	if s.refreshing {
+		s.mu.Unlock()
+		return
+	}
+	s.refreshing = true
+	s.mu.Unlock()
+
+	go s.refresh(context.WithoutCancel(ctx))
+}
+
+func (s *Store) refresh(ctx context.Context) {
+	defer func() {
+		s.mu.Lock()
+		s.refreshing = false
+		s.mu.Unlock()
+	}()
+
+	jobs, err := s.scan(ctx)
+	if err != nil {
+		select {
+		case <-ctx.Done():
+			if errors.Is(err, ctx.Err()) {
+				return
+			}
+		default:
+		}
+		log.Printf("job scan failed; serving stale cache: %v", err)
+		return
+	}
+
+	if err := s.setPayload(jobs, time.Now()); err != nil {
+		log.Printf("job scan failed to update cache: %v", err)
+	}
+}
+
+func (s *Store) setPayload(jobs []map[string]any, now time.Time) error {
+	payload, err := json.Marshal(jobs)
+	if err != nil {
+		return err
+	}
+	sum := sha256.Sum256(payload)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if len(s.cached) > 0 && time.Now().Before(s.expiresAt) {
-		return append([]byte(nil), s.cached...), s.etag, nil
-	}
-
-	jobs, err := s.scan(ctx)
-	if err != nil {
-		if len(s.cached) > 0 {
-			log.Printf("job scan failed; serving stale cache: %v", err)
-			return append([]byte(nil), s.cached...), s.etag, nil
-		}
-		return nil, "", err
-	}
-
-	payload, err := json.Marshal(jobs)
-	if err != nil {
-		return nil, "", err
-	}
 	s.cached = payload
-	sum := sha256.Sum256(payload)
 	s.etag = fmt.Sprintf(`"%x"`, sum)
-	s.expiresAt = time.Now().Add(s.ttl)
-	return append([]byte(nil), payload...), s.etag, nil
+	s.expiresAt = now.Add(s.ttl)
+	return nil
 }
 
 func marshalJob(job map[string]any) ([]byte, string, error) {
