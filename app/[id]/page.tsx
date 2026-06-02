@@ -1,11 +1,10 @@
 import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
-import { connection } from 'next/server';
-import { LibraryHome } from '@/components/library-home';
-import { Player } from '@/components/player/Player';
-import { loadRoomPageData } from '@/lib/server/media';
+import { RoomClient } from '@/components/room-client';
+import { getJob } from '@/lib/server/jobs';
+import { getBrowserStaticBaseUrl } from '@/lib/server/env';
 import { getRequestOrigin, toAbsoluteUrl } from '@/lib/server/request';
-import type { ServerData } from '@/lib/player/t';
+import { getRoomRecord } from '@/lib/server/rooms';
 
 type SearchParams = Record<string, string | string[] | undefined>;
 type MediaPageProps = {
@@ -13,26 +12,60 @@ type MediaPageProps = {
 	searchParams?: Promise<SearchParams> | SearchParams;
 };
 
-async function getMediaData({ params, searchParams }: MediaPageProps) {
-	const resolvedParams = await Promise.resolve(params);
-	const resolvedSearchParams = await Promise.resolve(searchParams ?? {});
-	const requestHeaders = await headers();
-	const origin = getRequestOrigin(requestHeaders);
-
-	return loadRoomPageData(resolvedParams.id, resolvedSearchParams, fetch, origin);
+function getSearchValue(searchParams: SearchParams, key: string) {
+	const value = searchParams[key];
+	return Array.isArray(value) ? value[0] : value;
 }
 
-function isMediaData(data: Awaited<ReturnType<typeof getMediaData>>): data is ServerData {
-	return 'job' in data;
+function getRedirectQuery(searchParams: SearchParams) {
+	const params = new URLSearchParams();
+	for (const [key, value] of Object.entries(searchParams)) {
+		if (key === 'room' || key === 'mediaId') {
+			continue;
+		}
+		if (Array.isArray(value)) {
+			for (const item of value) {
+				params.append(key, item);
+			}
+		} else if (value !== undefined) {
+			params.set(key, value);
+		}
+	}
+	return params.toString();
+}
+
+async function getMetadataJob(props: MediaPageProps) {
+	const resolvedParams = await Promise.resolve(props.params);
+	const resolvedSearchParams = await Promise.resolve(props.searchParams ?? {});
+	const requestHeaders = await headers();
+	const origin = getRequestOrigin(requestHeaders);
+	const legacyRoomID =
+		getSearchValue(resolvedSearchParams, 'room') ||
+		getSearchValue(resolvedSearchParams, 'channel_id');
+	const roomId = legacyRoomID || resolvedParams.id;
+	const room = await getRoomRecord(fetch, roomId);
+	const mediaId = room?.mediaId || '';
+	if (!mediaId) {
+		return { origin, roomId, roomMediaId: '', job: null };
+	}
+	try {
+		return {
+			origin,
+			roomId,
+			roomMediaId: mediaId,
+			job: await getJob(fetch, mediaId)
+		};
+	} catch (error) {
+		console.error('Unable to load metadata media', error);
+		return { origin, roomId, roomMediaId: mediaId, job: null };
+	}
 }
 
 export async function generateMetadata(props: MediaPageProps): Promise<Metadata> {
-	const data = await getMediaData(props);
-	const requestHeaders = await headers();
-	const origin = getRequestOrigin(requestHeaders);
-	const pageUrl = toAbsoluteUrl(`/${data.roomId ?? ''}`, origin);
+	const { origin, roomId, job } = await getMetadataJob(props);
+	const pageUrl = toAbsoluteUrl(`/${roomId}`, origin);
 
-	if (!isMediaData(data)) {
+	if (!job) {
 		return {
 			metadataBase: new URL(origin),
 			title: "It's anime time!",
@@ -44,43 +77,37 @@ export async function generateMetadata(props: MediaPageProps): Promise<Metadata>
 			},
 			alternates: {
 				types: {
-					'application/json+oembed': toAbsoluteUrl(`/json/${data.roomId}`, origin)
+					'application/json+oembed': toAbsoluteUrl(`/json/${roomId}`, origin)
 				}
 			}
 		};
 	}
 
-	const previewUrl = toAbsoluteUrl(data.preview, origin);
-	const videoUrl = toAbsoluteUrl(data.video, origin);
+	const displayTitle = job.Title.episode
+		? `${job.Title.episode.se} - ${job.Title.episode.title}`
+		: job.Title.title;
+	const staticBase = getBrowserStaticBaseUrl();
+	const previewUrl = toAbsoluteUrl(`${staticBase}/${job.Id}/poster.jpg`, origin);
 
 	return {
 		metadataBase: new URL(origin),
-		title: data.displayTitle,
-		description: data.plot,
+		title: displayTitle,
+		description: '',
 		openGraph: {
-			title: data.displayTitle,
-			description: data.plot,
+			title: displayTitle,
+			description: '',
 			url: pageUrl,
 			images: [
 				{
 					url: previewUrl,
 					type: 'image/jpeg'
 				}
-			],
-			videos: [
-				{
-					url: videoUrl,
-					secureUrl: videoUrl,
-					type: 'video/mp4',
-					width: data.job?.width,
-					height: data.job?.height
-				}
 			]
 		},
 		twitter: {
 			card: 'summary_large_image',
-			title: data.displayTitle,
-			description: data.plot,
+			title: displayTitle,
+			description: '',
 			images: [
 				{
 					url: previewUrl,
@@ -90,34 +117,34 @@ export async function generateMetadata(props: MediaPageProps): Promise<Metadata>
 		},
 		alternates: {
 			types: {
-				'application/json+oembed': data.oembedJson
+				'application/json+oembed': toAbsoluteUrl(`/json/${roomId}`, origin)
 			}
 		}
 	};
 }
 
 export async function generateViewport(props: MediaPageProps): Promise<Viewport> {
-	const data = await getMediaData(props);
+	const { job } = await getMetadataJob(props);
 
 	return {
-		themeColor: isMediaData(data) ? data.dominantColor : '#f0f0f0'
+		themeColor: job?.DominantColors?.[0] ?? '#f0f0f0'
 	};
 }
 
-export default async function MediaPage(props: MediaPageProps) {
-	await connection();
-	const data = await getMediaData(props);
-
-	if (isMediaData(data)) {
-		return <Player data={data} />;
-	}
+export default async function MediaPage({ params, searchParams }: MediaPageProps) {
+	const resolvedParams = await Promise.resolve(params);
+	const resolvedSearchParams = await Promise.resolve(searchParams ?? {});
 
 	return (
-		<LibraryHome
-			jobs={data.jobs}
-			staticBaseUrl={data.staticBaseUrl}
-			backendBaseUrl={data.backendBaseUrl}
-			roomId={data.roomId}
+		<RoomClient
+			roomId={resolvedParams.id}
+			searchValues={{
+				legacyRoomId:
+					getSearchValue(resolvedSearchParams, 'room') ||
+					getSearchValue(resolvedSearchParams, 'channel_id') ||
+					undefined,
+				redirectQuery: getRedirectQuery(resolvedSearchParams) || undefined
+			}}
 		/>
 	);
 }

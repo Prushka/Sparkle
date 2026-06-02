@@ -10,11 +10,14 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
 
 const jobFile = "job.json"
+
+var ErrJobNotFound = errors.New("job not found")
 
 type Store struct {
 	outputDir string
@@ -30,9 +33,65 @@ func NewStore(outputDir string, ttl time.Duration) *Store {
 	return &Store{outputDir: outputDir, ttl: ttl}
 }
 
+func (s *Store) Prune() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.cached = nil
+	s.etag = ""
+	s.expiresAt = time.Time{}
+}
+
 func (s *Store) JSON(ctx context.Context) ([]byte, error) {
 	payload, _, err := s.Payload(ctx)
 	return payload, err
+}
+
+func (s *Store) Job(ctx context.Context, target string) ([]byte, string, error) {
+	job, err := s.loadJob(target)
+	if err == nil {
+		return marshalJob(job)
+	}
+	if !errors.Is(err, os.ErrNotExist) || len(target) < 4 {
+		return nil, "", ErrJobNotFound
+	}
+
+	entries, err := os.ReadDir(s.outputDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, "", ErrJobNotFound
+		}
+		return nil, "", err
+	}
+
+	var match string
+	for _, entry := range entries {
+		select {
+		case <-ctx.Done():
+			return nil, "", ctx.Err()
+		default:
+		}
+
+		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), target) {
+			continue
+		}
+		if match != "" {
+			return nil, "", ErrJobNotFound
+		}
+		match = entry.Name()
+	}
+	if match == "" {
+		return nil, "", ErrJobNotFound
+	}
+
+	job, err = s.loadJob(match)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, "", ErrJobNotFound
+		}
+		return nil, "", err
+	}
+	return marshalJob(job)
 }
 
 func (s *Store) Payload(ctx context.Context) ([]byte, string, error) {
@@ -74,6 +133,15 @@ func (s *Store) Payload(ctx context.Context) ([]byte, string, error) {
 	return append([]byte(nil), payload...), s.etag, nil
 }
 
+func marshalJob(job map[string]any) ([]byte, string, error) {
+	payload, err := json.Marshal(job)
+	if err != nil {
+		return nil, "", err
+	}
+	sum := sha256.Sum256(payload)
+	return payload, fmt.Sprintf(`"%x"`, sum), nil
+}
+
 func (s *Store) scan(ctx context.Context) ([]map[string]any, error) {
 	entries, err := os.ReadDir(s.outputDir)
 	if err != nil {
@@ -100,13 +168,42 @@ func (s *Store) scan(ctx context.Context) ([]map[string]any, error) {
 			log.Printf("skipping job %q: %v", entry.Name(), err)
 			continue
 		}
-		result = append(result, job)
+		result = append(result, compactJob(job))
 	}
 
 	sort.Slice(result, func(i, j int) bool {
 		return stringField(result[i], "Id") < stringField(result[j], "Id")
 	})
 	return result, nil
+}
+
+func compactJob(job map[string]any) map[string]any {
+	result := map[string]any{}
+	for _, key := range []string{
+		"Id",
+		"Input",
+		"State",
+		"EncodedCodecs",
+		"Duration",
+		"DominantColors",
+		"ExtractedQuality",
+		"JobModTime",
+		"Title",
+	} {
+		if value, ok := job[key]; ok {
+			result[key] = value
+		}
+	}
+	if files, ok := job["Files"].(map[string]int64); ok {
+		if posterSize, ok := files["poster.jpg"]; ok {
+			result["Files"] = map[string]int64{"poster.jpg": posterSize}
+		} else {
+			result["Files"] = map[string]int64{}
+		}
+	} else {
+		result["Files"] = map[string]any{}
+	}
+	return result
 }
 
 func (s *Store) loadJob(id string) (map[string]any, error) {

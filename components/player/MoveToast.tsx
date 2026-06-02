@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Job, Player } from '@/lib/player/t';
+import type { LibraryJob, Player } from '@/lib/player/t';
 import { getRealName } from '@/lib/player/t';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,7 @@ export function MoveToast({
 	historicalPlayers: Record<string, Player>;
 	seconds: number;
 	firedBy?: Player;
-	job: Job | undefined;
+	job: LibraryJob | undefined;
 	moveToPath?: (_id: string) => string;
 	onMove?: () => void | Promise<unknown>;
 	staticBaseUrl: string;

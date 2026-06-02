@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import {
 	IconBadgeHd,
 	IconCalendar,
@@ -26,6 +26,7 @@ import {
 	useState,
 	type CSSProperties,
 	type ComponentType,
+	type MouseEvent,
 	type ReactNode
 } from 'react';
 import { Button } from '@/components/ui/button';
@@ -36,12 +37,15 @@ import {
 	BroadcastTypes,
 	randomString,
 	SyncTypes,
-	type Job,
+	type LibraryJob,
 	type TitleEpisode
 } from '@/lib/player/t';
+import { fetchJobs, joinBackendPath, updateRoomRecord } from '@/lib/player/data';
 
 type LibraryKind = 'all' | 'movies' | 'shows';
 type SortMode = 'recent' | 'title' | 'duration';
+const INITIAL_LIBRARY_ITEMS = 100;
+const LIBRARY_ITEMS_BATCH = 100;
 
 type Option<T extends string> = {
 	value: T;
@@ -52,7 +56,7 @@ type IconComponent = ComponentType<{ className?: string; size?: number; stroke?:
 
 type MovieEntry = {
 	kind: 'movie';
-	job: Job;
+	job: LibraryJob;
 	title: string;
 	sortTitle: string;
 	modTime: number;
@@ -60,7 +64,7 @@ type MovieEntry = {
 };
 
 type EpisodeEntry = {
-	job: Job;
+	job: LibraryJob;
 	episode: TitleEpisode;
 };
 
@@ -75,17 +79,13 @@ type ShowEntry = {
 	titleId: string;
 	seasons: SeasonEntry[];
 	episodes: EpisodeEntry[];
-	rep: Job;
+	rep: LibraryJob;
 	sortTitle: string;
 	modTime: number;
 	duration: number;
 };
 
 type LibraryEntry = MovieEntry | ShowEntry;
-
-function joinBackendPath(base: string, path: string) {
-	return `${base.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
-}
 
 function getBackendWebSocketUrl(base: string, path: string) {
 	const fullPath = joinBackendPath(base, path);
@@ -118,13 +118,20 @@ function getLibraryProfileId() {
 	return profileId;
 }
 
-function LibraryRoomSync({ backendBaseUrl, roomId }: { backendBaseUrl?: string; roomId?: string }) {
-	const router = useRouter();
-	const routerRef = useRef(router);
+function LibraryRoomSync({
+	backendBaseUrl,
+	roomId,
+	onRoomMediaChanged
+}: {
+	backendBaseUrl?: string;
+	roomId?: string;
+	onRoomMediaChanged?: (mediaId: string, mediaUpdated?: number) => void | Promise<void>;
+}) {
+	const onRoomMediaChangedRef = useRef(onRoomMediaChanged);
 
 	useEffect(() => {
-		routerRef.current = router;
-	}, [router]);
+		onRoomMediaChangedRef.current = onRoomMediaChanged;
+	}, [onRoomMediaChanged]);
 
 	useEffect(() => {
 		if (!backendBaseUrl || !roomId || typeof window === 'undefined') {
@@ -153,9 +160,9 @@ function LibraryRoomSync({ backendBaseUrl, roomId }: { backendBaseUrl?: string; 
 				}
 			)
 				.then((response) => (response.ok ? response.json() : null))
-				.then((record: { mediaId?: string } | null) => {
+				.then((record: { mediaId?: string; mediaUpdated?: number } | null) => {
 					if (!disposed && record?.mediaId) {
-						routerRef.current.refresh();
+						void onRoomMediaChangedRef.current?.(record.mediaId, record.mediaUpdated);
 					}
 				})
 				.catch((error) => {
@@ -212,7 +219,7 @@ function LibraryRoomSync({ backendBaseUrl, roomId }: { backendBaseUrl?: string; 
 					payload.broadcast?.type === BroadcastTypes.MoveTo &&
 					payload.broadcast.moveTo
 				) {
-					routerRef.current.refresh();
+					void onRoomMediaChangedRef.current?.(payload.broadcast.moveTo);
 				}
 			};
 
@@ -282,47 +289,122 @@ const dateFormatter = new Intl.DateTimeFormat('en-US', {
 });
 
 export function LibraryHome({
-	jobs,
 	staticBaseUrl,
 	backendBaseUrl,
-	roomId
+	roomId,
+	onRoomMediaChanged
 }: {
-	jobs: Job[];
 	staticBaseUrl: string;
 	backendBaseUrl?: string;
 	roomId?: string;
+	onRoomMediaChanged?: (mediaId: string, mediaUpdated?: number) => void | Promise<void>;
 }) {
 	const searchParams = useSearchParams();
+	const sentinelRef = useRef<HTMLDivElement | null>(null);
+	const [jobs, setJobs] = useState<LibraryJob[]>([]);
+	const [loading, setLoading] = useState(true);
+	const [error, setError] = useState('');
 	const [query, setQuery] = useState('');
 	const [kind, setKind] = useState<LibraryKind>('all');
 	const [codec, setCodec] = useState('all');
 	const [sort, setSort] = useState<SortMode>('recent');
+	const [renderLimit, setRenderLimit] = useState(INITIAL_LIBRARY_ITEMS);
+
+	useEffect(() => {
+		if (!backendBaseUrl) {
+			return;
+		}
+
+		let disposed = false;
+		Promise.resolve()
+			.then(() => {
+				if (!disposed) {
+					setLoading(true);
+					setError('');
+				}
+				return fetchJobs(backendBaseUrl);
+			})
+			.then((nextJobs) => {
+				if (!disposed) {
+					setJobs(nextJobs);
+				}
+			})
+			.catch((caught) => {
+				if (!disposed) {
+					setError(caught instanceof Error ? caught.message : 'Unable to load media library');
+				}
+			})
+			.finally(() => {
+				if (!disposed) {
+					setLoading(false);
+				}
+			});
+		return () => {
+			disposed = true;
+		};
+	}, [backendBaseUrl]);
 
 	const codecOptions = useMemo(() => buildCodecOptions(jobs), [jobs]);
 	const filtered = useMemo(
 		() => buildLibraryEntries(jobs, { query, kind, codec, sort }),
 		[jobs, query, kind, codec, sort]
 	);
-	const movies = filtered.filter((entry): entry is MovieEntry => entry.kind === 'movie');
-	const shows = filtered.filter((entry): entry is ShowEntry => entry.kind === 'show');
+	const visibleFiltered = useMemo(
+		() => limitLibraryEntries(filtered, renderLimit),
+		[filtered, renderLimit]
+	);
+	const movies = visibleFiltered.filter((entry): entry is MovieEntry => entry.kind === 'movie');
+	const shows = visibleFiltered.filter((entry): entry is ShowEntry => entry.kind === 'show');
 	const stats = useMemo(() => getLibraryStats(jobs), [jobs]);
 	const freshJobIds = useMemo(() => getFreshJobIds(jobs), [jobs]);
 	const searchString = searchParams.toString();
 	const hasFilters = query.trim() !== '' || kind !== 'all' || codec !== 'all' || sort !== 'recent';
-	const visibleEpisodes = shows.reduce((count, show) => count + show.episodes.length, 0);
-	const visibleItems = movies.length + visibleEpisodes;
+	const matchingItems = countLibraryItems(filtered);
+	const renderedItems = countLibraryItems(visibleFiltered);
+	const hasMoreItems = renderedItems < matchingItems;
+	const visibleItems = matchingItems;
+	const displayError = backendBaseUrl ? error : 'Missing backend URL';
+	const displayLoading = backendBaseUrl ? loading : false;
+	const selectMediaInRoom = roomId && backendBaseUrl ? selectMedia : undefined;
+
+	useEffect(() => {
+		const sentinel = sentinelRef.current;
+		if (!sentinel || !hasMoreItems) {
+			return;
+		}
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries.some((entry) => entry.isIntersecting)) {
+					setRenderLimit((value) => value + LIBRARY_ITEMS_BATCH);
+				}
+			},
+			{ rootMargin: '900px 0px' }
+		);
+		observer.observe(sentinel);
+		return () => observer.disconnect();
+	}, [hasMoreItems, renderedItems]);
 
 	function hrefFor(id: string) {
+		if (roomId) {
+			return `/rooms/${encodeURIComponent(roomId)}/media/${encodeURIComponent(id)}`;
+		}
 		const params = new URLSearchParams(searchString);
 		params.set('mediaId', id);
-		if (roomId) {
-			params.set('room', roomId);
-		}
 		const query = params.toString();
 		return query ? `/rooms/new?${query}` : `/rooms/new?mediaId=${encodeURIComponent(id)}`;
 	}
 
+	async function selectMedia(id: string) {
+		if (!roomId || !backendBaseUrl) {
+			return;
+		}
+		const record = await updateRoomRecord(backendBaseUrl, roomId, id);
+		window.history.replaceState(null, '', `/${encodeURIComponent(roomId)}`);
+		await onRoomMediaChanged?.(record.mediaId, record.mediaUpdated);
+	}
+
 	function clearFilters() {
+		setRenderLimit(INITIAL_LIBRARY_ITEMS);
 		setQuery('');
 		setKind('all');
 		setCodec('all');
@@ -331,7 +413,11 @@ export function LibraryHome({
 
 	return (
 		<main className="min-h-screen w-full bg-[linear-gradient(180deg,#08090d_0%,#111017_42%,#08090d_100%)] text-zinc-50">
-			<LibraryRoomSync backendBaseUrl={backendBaseUrl} roomId={roomId} />
+			<LibraryRoomSync
+				backendBaseUrl={backendBaseUrl}
+				roomId={roomId}
+				onRoomMediaChanged={onRoomMediaChanged}
+			/>
 			<div className="mx-auto flex w-full max-w-[1760px] flex-col gap-6 px-4 py-5 sm:px-6 md:px-8 lg:px-10">
 				<header className="flex flex-col gap-5 pt-2 md:flex-row md:items-end md:justify-between">
 					<div className="min-w-0">
@@ -376,7 +462,10 @@ export function LibraryHome({
 							/>
 							<Input
 								value={query}
-								onChange={(event) => setQuery(event.target.value)}
+								onChange={(event) => {
+									setRenderLimit(INITIAL_LIBRARY_ITEMS);
+									setQuery(event.target.value);
+								}}
 								placeholder="Search title, episode, file"
 								className="h-11 rounded-lg border-white/10 bg-white/[0.06] pl-9 text-base text-white shadow-none placeholder:text-zinc-500 focus-visible:ring-[#8de8ce]"
 							/>
@@ -388,7 +477,10 @@ export function LibraryHome({
 									key={option.value}
 									type="button"
 									aria-pressed={kind === option.value}
-									onClick={() => setKind(option.value)}
+									onClick={() => {
+										setRenderLimit(INITIAL_LIBRARY_ITEMS);
+										setKind(option.value);
+									}}
 									className={cn(
 										'flex h-9 min-w-20 shrink-0 items-center justify-center rounded-md px-3 text-sm font-semibold text-zinc-400 outline-none transition focus-visible:ring-2 focus-visible:ring-[#8de8ce]',
 										kind === option.value
@@ -406,14 +498,20 @@ export function LibraryHome({
 							label="Codec"
 							value={codec}
 							options={codecOptions}
-							onChange={setCodec}
+							onChange={(value) => {
+								setRenderLimit(INITIAL_LIBRARY_ITEMS);
+								setCodec(value);
+							}}
 						/>
 						<MenuFilter
 							icon={IconSortDescending}
 							label="Sort"
 							value={sort}
 							options={sortOptions}
-							onChange={setSort}
+							onChange={(value) => {
+								setRenderLimit(INITIAL_LIBRARY_ITEMS);
+								setSort(value);
+							}}
 						/>
 					</div>
 					{hasFilters ? (
@@ -435,6 +533,19 @@ export function LibraryHome({
 				</section>
 
 				<section className="space-y-10 pb-12">
+					{displayLoading ? (
+						<div className="flex min-h-[38vh] items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] p-8 text-sm text-zinc-400">
+							Loading library...
+						</div>
+					) : null}
+
+					{displayError ? (
+						<div className="flex min-h-[38vh] flex-col items-center justify-center rounded-lg border border-dashed border-white/15 bg-white/[0.03] p-8 text-center">
+							<h2 className="text-lg font-semibold text-white">Library unavailable</h2>
+							<p className="mt-2 max-w-md text-sm text-zinc-400">{displayError}</p>
+						</div>
+					) : null}
+
 					{movies.length ? (
 						<div className="grid grid-cols-[repeat(auto-fill,minmax(9.5rem,1fr))] gap-x-4 gap-y-7 sm:grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] lg:grid-cols-[repeat(auto-fill,minmax(12.5rem,1fr))]">
 							{movies.map((movie) => (
@@ -442,6 +553,7 @@ export function LibraryHome({
 									key={movie.job.Id}
 									job={movie.job}
 									href={hrefFor(movie.job.Id)}
+									onSelectMedia={selectMediaInRoom}
 									staticBaseUrl={staticBaseUrl}
 									title={movie.title}
 									meta={movieMeta(movie.job)}
@@ -457,12 +569,20 @@ export function LibraryHome({
 							key={show.titleId}
 							show={show}
 							hrefFor={hrefFor}
+							onSelectMedia={selectMediaInRoom}
 							staticBaseUrl={staticBaseUrl}
 							freshJobIds={freshJobIds}
 						/>
 					))}
 
-					{!movies.length && !shows.length ? (
+					{hasMoreItems ? (
+						<div ref={sentinelRef} className="flex justify-center py-4 text-xs text-zinc-500">
+							Showing {numberFormatter.format(renderedItems)} of{' '}
+							{numberFormatter.format(matchingItems)}
+						</div>
+					) : null}
+
+					{!displayLoading && !displayError && !movies.length && !shows.length ? (
 						<div className="flex min-h-[38vh] flex-col items-center justify-center rounded-lg border border-dashed border-white/15 bg-white/[0.03] p-8 text-center">
 							<div className="mb-4 flex size-12 items-center justify-center rounded-lg bg-white/[0.06] text-zinc-400">
 								<IconMovieOff size={26} stroke={1.8} />
@@ -491,11 +611,13 @@ export function LibraryHome({
 function ShowSection({
 	show,
 	hrefFor,
+	onSelectMedia,
 	staticBaseUrl,
 	freshJobIds
 }: {
 	show: ShowEntry;
 	hrefFor: (id: string) => string;
+	onSelectMedia?: (id: string) => Promise<void>;
 	staticBaseUrl: string;
 	freshJobIds: Set<string>;
 }) {
@@ -605,6 +727,7 @@ function ShowSection({
 										job={job}
 										episode={episode}
 										href={hrefFor(job.Id)}
+										onSelectMedia={onSelectMedia}
 										staticBaseUrl={staticBaseUrl}
 										isFresh={freshJobIds.has(job.Id)}
 									/>
@@ -621,14 +744,16 @@ function ShowSection({
 function PosterCard({
 	job,
 	href,
+	onSelectMedia,
 	staticBaseUrl,
 	title,
 	meta,
 	isFresh,
 	posterClassName
 }: {
-	job: Job;
+	job: LibraryJob;
 	href: string;
+	onSelectMedia?: (id: string) => Promise<void>;
 	staticBaseUrl: string;
 	title: string;
 	meta: string;
@@ -640,6 +765,9 @@ function PosterCard({
 			<Link
 				href={href}
 				prefetch={false}
+				onClick={
+					onSelectMedia ? (event) => handleRoomMediaClick(event, job.Id, onSelectMedia) : undefined
+				}
 				className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8de8ce]"
 			>
 				<div className="relative overflow-hidden rounded-lg border border-white/10 bg-white/[0.04] shadow-2xl shadow-black/25 transition duration-200 group-hover:-translate-y-1 group-hover:border-white/25 group-hover:shadow-[#ec275f]/15">
@@ -672,12 +800,14 @@ function EpisodeCard({
 	job,
 	episode,
 	href,
+	onSelectMedia,
 	staticBaseUrl,
 	isFresh
 }: {
-	job: Job;
+	job: LibraryJob;
 	episode: TitleEpisode;
 	href: string;
+	onSelectMedia?: (id: string) => Promise<void>;
 	staticBaseUrl: string;
 	isFresh: boolean;
 }) {
@@ -686,6 +816,9 @@ function EpisodeCard({
 			<Link
 				href={href}
 				prefetch={false}
+				onClick={
+					onSelectMedia ? (event) => handleRoomMediaClick(event, job.Id, onSelectMedia) : undefined
+				}
 				className="block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8de8ce]"
 			>
 				<div className="relative overflow-hidden rounded-md">
@@ -724,7 +857,7 @@ function PosterArt({
 	title,
 	className
 }: {
-	job: Job;
+	job: LibraryJob;
 	staticBaseUrl: string;
 	title: string;
 	className?: string;
@@ -828,7 +961,7 @@ function InfoChip({ icon: Icon, children }: { icon: IconComponent; children: Rea
 	);
 }
 
-function CodecPill({ job, compact = false }: { job: Job; compact?: boolean }) {
+function CodecPill({ job, compact = false }: { job: LibraryJob; compact?: boolean }) {
 	const codecs = job.EncodedCodecs?.map(codecLabel).filter(Boolean) ?? [];
 	const label = codecs[0] ?? job.ExtractedQuality ?? 'Video';
 
@@ -853,7 +986,7 @@ function FreshBadge() {
 }
 
 function buildLibraryEntries(
-	jobs: Job[],
+	jobs: LibraryJob[],
 	filters: {
 		query: string;
 		kind: LibraryKind;
@@ -900,6 +1033,38 @@ function buildLibraryEntries(
 	const entries: LibraryEntry[] = [...movies, ...shows];
 
 	return sortEntries(entries, filters.sort);
+}
+
+function countLibraryItems(entries: LibraryEntry[]) {
+	return entries.reduce(
+		(count, entry) => count + (entry.kind === 'show' ? entry.episodes.length : 1),
+		0
+	);
+}
+
+function limitLibraryEntries(entries: LibraryEntry[], limit: number) {
+	let remaining = limit;
+	const result: LibraryEntry[] = [];
+
+	for (const entry of entries) {
+		if (remaining <= 0) {
+			break;
+		}
+		if (entry.kind === 'movie') {
+			result.push(entry);
+			remaining -= 1;
+			continue;
+		}
+
+		const episodes = entry.episodes.slice(0, remaining);
+		if (!episodes.length) {
+			break;
+		}
+		result.push(buildShowEntry(entry.titleId, entry.title, episodes));
+		remaining -= episodes.length;
+	}
+
+	return result;
 }
 
 function buildShowEntry(titleId: string, title: string, episodes: EpisodeEntry[]): ShowEntry {
@@ -956,7 +1121,7 @@ function sortEntries(entries: LibraryEntry[], sort: SortMode) {
 	});
 }
 
-function matchesQuery(job: Job, query: string) {
+function matchesQuery(job: LibraryJob, query: string) {
 	if (!query) {
 		return true;
 	}
@@ -979,14 +1144,14 @@ function matchesQuery(job: Job, query: string) {
 		.every((term) => haystack.includes(term));
 }
 
-function matchesCodec(job: Job, codec: string) {
+function matchesCodec(job: LibraryJob, codec: string) {
 	if (codec === 'all') {
 		return true;
 	}
 	return (job.EncodedCodecs ?? []).some((candidate) => normalizeCodec(candidate) === codec);
 }
 
-function buildCodecOptions(jobs: Job[]) {
+function buildCodecOptions(jobs: LibraryJob[]) {
 	const codecs = Array.from(
 		new Set(
 			jobs
@@ -1002,7 +1167,7 @@ function buildCodecOptions(jobs: Job[]) {
 	] satisfies Option<string>[];
 }
 
-function getLibraryStats(jobs: Job[]) {
+function getLibraryStats(jobs: LibraryJob[]) {
 	const shows = new Set<string>();
 	const movies = new Set<string>();
 	const codecs = new Set<string>();
@@ -1028,7 +1193,7 @@ function getLibraryStats(jobs: Job[]) {
 	};
 }
 
-function getFreshJobIds(jobs: Job[]) {
+function getFreshJobIds(jobs: LibraryJob[]) {
 	const ids = new Set<string>();
 	const recentCutoff = Date.now() / 1000 - 7 * 24 * 60 * 60;
 	for (const job of jobs) {
@@ -1067,7 +1232,7 @@ function normalizeSortTitle(title: string) {
 	return title.replace(/^(the|a|an)\s+/i, '').toLowerCase();
 }
 
-function movieMeta(job: Job) {
+function movieMeta(job: LibraryJob) {
 	return [job.ExtractedQuality, formatDuration(job.Duration), formatDate(job.JobModTime)]
 		.filter(Boolean)
 		.join(' / ');
@@ -1095,7 +1260,30 @@ function formatDate(seconds: number | undefined) {
 	return dateFormatter.format(new Date(seconds * 1000));
 }
 
-function getPosterColor(job: Job) {
+function getPosterColor(job: LibraryJob) {
 	const color = job.DominantColors?.find((value) => /^#[0-9a-f]{6}$/i.test(value));
 	return color ?? '#ec275f';
+}
+
+function handleRoomMediaClick(
+	event: MouseEvent<HTMLAnchorElement>,
+	id: string,
+	onSelectMedia: (id: string) => Promise<void>
+) {
+	if (
+		event.defaultPrevented ||
+		event.button !== 0 ||
+		event.metaKey ||
+		event.altKey ||
+		event.ctrlKey ||
+		event.shiftKey
+	) {
+		return;
+	}
+	event.preventDefault();
+	const href = event.currentTarget.href;
+	void onSelectMedia(id).catch((error) => {
+		console.warn('Unable to update room media', error);
+		window.location.href = href;
+	});
 }

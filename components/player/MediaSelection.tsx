@@ -15,13 +15,14 @@ import { Button } from '@/components/ui/button';
 import * as Popover from '@/components/ui/popover';
 import * as Command from '@/components/ui/command';
 import { TitlePoster } from '@/components/player/TitlePoster';
-import { getTitleComponentsByJobs, type Job, preprocessJobs } from '@/lib/player/t';
+import { getTitleComponentsByJobs, type Job, type LibraryJob } from '@/lib/player/t';
+import { fetchJobs } from '@/lib/player/data';
 
 export type MediaSelectionHandle = {
-	updateList: (_untilId?: string | null, _onSuccess?: (_jobs: Job[]) => void) => void;
+	updateList: (_untilId?: string | null, _onSuccess?: (_jobs: LibraryJob[]) => void) => void;
 };
 
-function areJobListsEquivalent(a: Job[], b: Job[]) {
+function areJobListsEquivalent(a: LibraryJob[], b: LibraryJob[]) {
 	if (a.length !== b.length) {
 		return false;
 	}
@@ -45,8 +46,9 @@ export const MediaSelection = forwardRef<
 	const router = useRouter();
 	const searchParams = useSearchParams();
 	const searchParamsString = searchParams.toString();
-	const [jobs, setJobs] = useState<Job[]>(data.jobs);
-	const jobsRef = useRef(jobs);
+	const [jobs, setJobs] = useState<LibraryJob[]>(data.jobs);
+	const jobsRef = useRef<LibraryJob[]>(data.jobs);
+	const jobsLoadedRef = useRef(data.jobs.length > 1);
 	const [titleSelectionOpen, setTitleSelectionOpen] = useState(false);
 	const [seSelectionOpen, setSeSelectionOpen] = useState(false);
 	const openEpisodeSelectionAfterTitleCloseRef = useRef(false);
@@ -54,11 +56,6 @@ export const MediaSelection = forwardRef<
 		data.job?.Title?.titleId
 	);
 	const [selectedSe, setSelectedSe] = useState<string | undefined>(data.job?.Title?.episode?.se);
-
-	useEffect(() => {
-		jobsRef.current = data.jobs;
-		setJobs(data.jobs);
-	}, [data.jobs]);
 
 	useEffect(() => {
 		jobsRef.current = jobs;
@@ -87,7 +84,7 @@ export const MediaSelection = forwardRef<
 	const newJobIds = useMemo(() => new Set(newJobs.map((job) => job.Id)), [newJobs]);
 	const newTitleIds = useMemo(() => new Set(newJobs.map((job) => job.Title.titleId)), [newJobs]);
 
-	function getNewJobs(jobs: Job[]): Job[] {
+	function getNewJobs(jobs: LibraryJob[]): LibraryJob[] {
 		const last7 = jobs
 			.slice()
 			.sort((a, b) => (a.JobModTime > b.JobModTime ? -1 : 1))
@@ -96,7 +93,7 @@ export const MediaSelection = forwardRef<
 			const diff = Date.now() - job.JobModTime * 1000;
 			return diff < 1000 * 60 * 60 * 24 * 7;
 		});
-		const results: Record<string, Job> = {};
+		const results: Record<string, LibraryJob> = {};
 		for (const next of last3Days) {
 			results[next.Id] = next;
 		}
@@ -117,36 +114,21 @@ export const MediaSelection = forwardRef<
 	}
 
 	const updateList = useCallback(
-		(untilId: string | null = null, onSuccess: (_jobs: Job[]) => void = () => {}) => {
+		(untilId: string | null = null, onSuccess: (_jobs: LibraryJob[]) => void = () => {}) => {
 			const currentJobs = jobsRef.current;
 			if (untilId !== null && currentJobs.find((candidate) => candidate.Id === untilId)) {
 				onSuccess(currentJobs);
 				return;
 			}
-			fetch(`${backendBaseUrl}/all`)
-				.then((response) => {
-					if (response.status === 304) {
-						return null;
-					}
-					if (!response.ok) {
-						throw new Error(`Failed to refresh media list: ${response.status}`);
-					}
-					return response.json();
-				})
-				.then((payload) => {
-					if (payload === null) {
-						onSuccess(jobsRef.current);
-						return;
-					}
-					if (payload?.length > 0) {
-						const nextJobs = preprocessJobs(payload);
-						setJobs((current) => {
-							const next = areJobListsEquivalent(current, nextJobs) ? current : nextJobs;
-							jobsRef.current = next;
-							return next;
-						});
-						onSuccess(nextJobs);
-					}
+			fetchJobs(backendBaseUrl, true)
+				.then((nextJobs) => {
+					jobsLoadedRef.current = true;
+					setJobs((current) => {
+						const next = areJobListsEquivalent(current, nextJobs) ? current : nextJobs;
+						jobsRef.current = next;
+						return next;
+					});
+					onSuccess(nextJobs);
 				})
 				.catch((error) => console.warn('Unable to refresh media list', error));
 		},
@@ -157,10 +139,19 @@ export const MediaSelection = forwardRef<
 
 	useEffect(() => {
 		const timer = window.setInterval(() => {
-			updateList();
+			if (jobsLoadedRef.current) {
+				updateList();
+			}
 		}, 60000);
 		return () => window.clearInterval(timer);
 	}, [updateList]);
+
+	useEffect(() => {
+		if (!titleSelectionOpen || jobsLoadedRef.current) {
+			return;
+		}
+		updateList();
+	}, [titleSelectionOpen, updateList]);
 
 	return (
 		<div className="md:grid md:grid-cols-[minmax(0,1fr)_min-content_minmax(0,1fr)] max-md:flex max-md:flex-col items-center justify-center gap-2 w-full">

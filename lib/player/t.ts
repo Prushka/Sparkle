@@ -367,6 +367,19 @@ export interface Job {
 	Title: Title;
 }
 
+export type LibraryJob = Pick<
+	Job,
+	| 'Id'
+	| 'Input'
+	| 'EncodedCodecs'
+	| 'Files'
+	| 'Duration'
+	| 'DominantColors'
+	| 'ExtractedQuality'
+	| 'JobModTime'
+	| 'Title'
+> & { State?: string };
+
 export interface Chapter {
 	start: number;
 	end: number;
@@ -694,6 +707,29 @@ export function preprocessJobs(jobs: Job[]) {
 	return filtered.map(preprocessJob).sort((a, b) => a.Input.localeCompare(b.Input));
 }
 
+export function preprocessLibraryJobs(jobs: LibraryJob[]) {
+	const filtered = jobs.filter((job) => !job.State || job.State === 'complete');
+	return filtered
+		.map((job) => {
+			const i = job.Input.replace(/\.[^/.]+$/, '');
+			const ks = replaceKeywordsAtEnd(i, '');
+			job.Input = ks.result;
+			job.ExtractedQuality = `${ks.replacedWord || ''}`;
+			if (job.EncodedCodecs) {
+				job.EncodedCodecs.sort((a, b) => codecsPriority.indexOf(a) - codecsPriority.indexOf(b));
+				for (const codec of [...job.EncodedCodecs]) {
+					if (!supportedCodecs.includes(codec)) {
+						job.EncodedCodecs.splice(job.EncodedCodecs.indexOf(codec), 1);
+					}
+				}
+			}
+			job.Files = job.Files ?? {};
+			job.Title = extractTitle(job as Job);
+			return job;
+		})
+		.sort((a, b) => a.Input.localeCompare(b.Input));
+}
+
 export interface Title {
 	titleId: string;
 	title: string;
@@ -747,7 +783,7 @@ export function extractTitle(job: Job): Title {
 	};
 }
 
-export function getTitleComponentsByJobs(jobs: Job[]): Titles {
+export function getTitleComponentsByJobs(jobs: LibraryJob[]): Titles {
 	const jobsById = new Map(jobs.map((job) => [job.Id, job]));
 	const _titles = jobs.reduce((acc: Titles, job) => {
 		if (!acc[job.Title.titleId]) {

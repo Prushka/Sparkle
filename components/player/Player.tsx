@@ -81,6 +81,7 @@ import {
 	type Chat,
 	type Discord,
 	type Job,
+	type LibraryJob,
 	type Player as RoomPlayer,
 	type PlayerStatus,
 	type SendPayload,
@@ -118,6 +119,7 @@ import { useVoiceChat } from '@/components/player/useVoiceChat';
 import { YouTubeFloatingTab } from '@/components/player/YouTubeFloatingTab';
 import { ChessFloatingTab } from '@/components/player/ChessFloatingTab';
 import { CottageGame, CottageGamePlaceholder } from '@/components/player/CottageGame';
+import { fetchJobs, joinBackendPath } from '@/lib/player/data';
 
 type VideoSource = {
 	src: string;
@@ -130,7 +132,7 @@ type VideoSource = {
 type MoveToastState = {
 	seconds: number;
 	firedBy?: RoomPlayer;
-	job: Job | undefined;
+	job: LibraryJob | undefined;
 };
 
 type LocalSystemMessage = Chat & {
@@ -1033,13 +1035,6 @@ function generatePlaceholderName() {
 	return `${adjective}${noun}`;
 }
 
-function joinBackendPath(base: string, path: string) {
-	if (!base) {
-		return path.startsWith('/') ? path : `/${path}`;
-	}
-	return `${base.replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
-}
-
 function getBackendWebSocketUrl(base: string, path: string) {
 	const fullPath = joinBackendPath(base, path);
 	if (/^https?:\/\//.test(fullPath)) {
@@ -1342,7 +1337,13 @@ type PendingRemotePlaybackSync = RemotePlaybackSync & {
 	mediaId: string;
 };
 
-export function Player({ data }: { data: ServerData }) {
+export function Player({
+	data,
+	onRoomMediaChanged
+}: {
+	data: ServerData;
+	onRoomMediaChanged?: (mediaId: string, mediaUpdated?: number) => void | Promise<void>;
+}) {
 	const { job } = data;
 	const router = useRouter();
 	const searchParams = useSearchParams();
@@ -1652,9 +1653,9 @@ export function Player({ data }: { data: ServerData }) {
 				if (!response.ok) {
 					throw new Error(`Room media check failed: ${response.status}`);
 				}
-				const record = (await response.json()) as { mediaId?: string };
+				const record = (await response.json()) as { mediaId?: string; mediaUpdated?: number };
 				if (record.mediaId && record.mediaId !== job.Id) {
-					router.refresh();
+					await onRoomMediaChanged?.(record.mediaId, record.mediaUpdated);
 					return true;
 				}
 			} catch (error) {
@@ -1667,7 +1668,7 @@ export function Player({ data }: { data: ServerData }) {
 
 		roomMediaCheckRef.current = check;
 		return check;
-	}, [backendBaseUrl, job.Id, room, router]);
+	}, [backendBaseUrl, job.Id, onRoomMediaChanged, room, router]);
 
 	const pulseSoundEffectBadge = useCallback((playerId: string | undefined) => {
 		if (!playerId) {
@@ -2852,11 +2853,11 @@ export function Player({ data }: { data: ServerData }) {
 					}
 				};
 				console.debug('received: ' + JSON.stringify(state));
-				const initiateMoveTo = (jobs: Job[]) => {
+				const initiateMoveTo = (jobs: LibraryJob[]) => {
 					pendingRemotePlaybackSyncRef.current = null;
 					setMoveToast({
 						seconds: moveSeconds,
-						job: jobs.find((candidate: Job) => candidate.Id === broadcast!.moveTo),
+						job: jobs.find((candidate) => candidate.Id === broadcast!.moveTo),
 						firedBy: state.firedBy
 					});
 					const target = jobs.find((candidate) => candidate.Id === state.broadcast!.moveTo);
@@ -2981,7 +2982,7 @@ export function Player({ data }: { data: ServerData }) {
 					case SyncTypes.BroadcastSync:
 						switch (broadcast?.type) {
 							case BroadcastTypes.MoveTo:
-								mediaSelectionRef.current?.updateList(broadcast.moveTo, (jobs: Job[]) => {
+								mediaSelectionRef.current?.updateList(broadcast.moveTo, (jobs: LibraryJob[]) => {
 									initiateMoveTo(jobs);
 								});
 								break;
@@ -3090,9 +3091,13 @@ export function Player({ data }: { data: ServerData }) {
 	}, [connect, joinVoice, refreshRoomMedia, setInteracted, voiceSupported]);
 
 	const handleMoveToastMove = useCallback(async () => {
-		await refreshRoomMedia();
+		if (moveToast?.job?.Id) {
+			await onRoomMediaChanged?.(moveToast.job.Id);
+		} else {
+			await refreshRoomMedia();
+		}
 		setMoveToast(null);
-	}, [refreshRoomMedia]);
+	}, [moveToast, onRoomMediaChanged, refreshRoomMedia]);
 
 	useEffect(() => {
 		if (!playerEl || !playerId || !interactedRef.current || !playerCanPlayRef.current) {

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getJobs } from '@/lib/server/jobs';
+import { getJob } from '@/lib/server/jobs';
 import { getRoomRecord } from '@/lib/server/rooms';
 import { getBrowserStaticBaseUrl } from '@/lib/server/env';
 import { getRequestOrigin, toAbsoluteUrl } from '@/lib/server/request';
@@ -30,8 +30,7 @@ export async function GET(
 			provider_name: `Let's watch anime!`
 		});
 	}
-	const jobs = await getJobs(fetch, mediaId);
-	const job = jobs.find((candidate) => candidate.Id === mediaId);
+	const job = await getJob(fetch, mediaId);
 	if (job) {
 		let showType = 'a movie';
 		const displayTitle = job.Title.episode

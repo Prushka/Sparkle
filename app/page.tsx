@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
-import { redirect } from 'next/navigation';
-import { createRoomRecord } from '@/lib/server/rooms';
+import { HomeClient } from '@/components/home-client';
 
 export const metadata: Metadata = {
 	title: "It's anime time!"
@@ -27,8 +26,7 @@ function getRedirectQuery(searchParams: SearchParams) {
 			params.set(key, value);
 		}
 	}
-	const query = params.toString();
-	return query ? `?${query}` : '';
+	return params.toString();
 }
 
 export default async function HomePage({
@@ -37,19 +35,17 @@ export default async function HomePage({
 	searchParams?: SearchParams | Promise<SearchParams>;
 }) {
 	const resolvedSearchParams = await Promise.resolve(searchParams ?? {});
-	const mediaId = getSearchValue(resolvedSearchParams, 'mediaId')?.trim() || '';
-	const requestedRoomId =
-		getSearchValue(resolvedSearchParams, 'room')?.trim() ||
-		getSearchValue(resolvedSearchParams, 'channel_id')?.trim() ||
-		'';
 
-	let roomId: string;
-	try {
-		const room = await createRoomRecord(fetch, mediaId || undefined, requestedRoomId || undefined);
-		roomId = room.roomId;
-	} catch (error) {
-		console.error('Unable to create room', error);
-		redirect(`/rooms/new${getRedirectQuery(resolvedSearchParams)}`);
-	}
-	redirect(`/${roomId}${getRedirectQuery(resolvedSearchParams)}`);
+	return (
+		<HomeClient
+			searchValues={{
+				mediaId: getSearchValue(resolvedSearchParams, 'mediaId')?.trim() || undefined,
+				requestedRoomId:
+					getSearchValue(resolvedSearchParams, 'room')?.trim() ||
+					getSearchValue(resolvedSearchParams, 'channel_id')?.trim() ||
+					undefined,
+				redirectQuery: getRedirectQuery(resolvedSearchParams) || undefined
+			}}
+		/>
+	);
 }

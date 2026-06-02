@@ -56,3 +56,21 @@ export async function createRoomRecord(
 	}
 	return response.json();
 }
+
+export async function updateRoomRecord(
+	fetchFn: typeof fetch,
+	roomId: string,
+	mediaId: string
+): Promise<RoomRecord> {
+	const response = await fetchFn(
+		roomUrl(roomId),
+		fetchOptions({
+			method: 'PUT',
+			body: JSON.stringify({ mediaId })
+		})
+	);
+	if (!response.ok) {
+		throw new Error(`Failed to update room ${roomId}: ${response.status}`);
+	}
+	return response.json();
+}

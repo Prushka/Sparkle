@@ -10,7 +10,9 @@ function getRuntimeEnv(key: string) {
 export async function GET() {
 	return NextResponse.json(
 		{
-			PUBLIC_DISCORD_CLIENT_ID: getRuntimeEnv('PUBLIC_DISCORD_CLIENT_ID')
+			PUBLIC_DISCORD_CLIENT_ID: getRuntimeEnv('PUBLIC_DISCORD_CLIENT_ID'),
+			backendBaseUrl: getRuntimeEnv('SERVER_BE'),
+			staticBaseUrl: getRuntimeEnv('SERVER_STATIC')
 		},
 		{
 			headers: {
