@@ -26,21 +26,14 @@ import {
 	useState,
 	type CSSProperties,
 	type ComponentType,
-	type MouseEvent,
 	type ReactNode
 } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import * as DropdownMenu from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
-import {
-	BroadcastTypes,
-	randomString,
-	SyncTypes,
-	type LibraryJob,
-	type TitleEpisode
-} from '@/lib/player/t';
-import { fetchJobs, joinBackendPath, updateRoomRecord } from '@/lib/player/data';
+import { type LibraryJob, type TitleEpisode } from '@/lib/player/t';
+import { fetchJobs } from '@/lib/player/data';
 
 type LibraryKind = 'all' | 'movies' | 'shows';
 type SortMode = 'recent' | 'title' | 'duration';
@@ -87,188 +80,6 @@ type ShowEntry = {
 
 type LibraryEntry = MovieEntry | ShowEntry;
 
-function getBackendWebSocketUrl(base: string, path: string) {
-	const fullPath = joinBackendPath(base, path);
-	if (/^https?:\/\//i.test(fullPath)) {
-		const url = new URL(fullPath);
-		url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-		return url.toString();
-	}
-	const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-	return `${wsProtocol}//${window.location.host}${fullPath}`;
-}
-
-function getLibraryRoomPlayerId() {
-	const storedPlayerId = window.sessionStorage.getItem('playerId');
-	if (storedPlayerId) {
-		return storedPlayerId;
-	}
-	const playerId = randomString(14);
-	window.sessionStorage.setItem('playerId', playerId);
-	return playerId;
-}
-
-function getLibraryProfileId() {
-	const storedProfileId = window.localStorage.getItem('id');
-	if (storedProfileId) {
-		return storedProfileId;
-	}
-	const profileId = randomString(14);
-	window.localStorage.setItem('id', profileId);
-	return profileId;
-}
-
-function LibraryRoomSync({
-	backendBaseUrl,
-	roomId,
-	onRoomMediaChanged
-}: {
-	backendBaseUrl?: string;
-	roomId?: string;
-	onRoomMediaChanged?: (mediaId: string, mediaUpdated?: number) => void | Promise<void>;
-}) {
-	const onRoomMediaChangedRef = useRef(onRoomMediaChanged);
-
-	useEffect(() => {
-		onRoomMediaChangedRef.current = onRoomMediaChanged;
-	}, [onRoomMediaChanged]);
-
-	useEffect(() => {
-		if (!backendBaseUrl || !roomId || typeof window === 'undefined') {
-			return;
-		}
-
-		let disposed = false;
-		let socket: WebSocket | null = null;
-		let reconnectTimer: number | null = null;
-		let reconnectAttempt = 0;
-		let roomMediaCheck: Promise<void> | null = null;
-		const playerId = getLibraryRoomPlayerId();
-		const socketUrl = getBackendWebSocketUrl(
-			backendBaseUrl,
-			`/sync/${encodeURIComponent(roomId)}/${encodeURIComponent(playerId)}`
-		);
-
-		const refreshIfRoomHasMedia = () => {
-			if (roomMediaCheck) {
-				return roomMediaCheck;
-			}
-			roomMediaCheck = fetch(
-				joinBackendPath(backendBaseUrl, `/rooms/${encodeURIComponent(roomId)}`),
-				{
-					cache: 'no-store'
-				}
-			)
-				.then((response) => (response.ok ? response.json() : null))
-				.then((record: { mediaId?: string; mediaUpdated?: number } | null) => {
-					if (!disposed && record?.mediaId) {
-						void onRoomMediaChangedRef.current?.(record.mediaId, record.mediaUpdated);
-					}
-				})
-				.catch((error) => {
-					console.warn('Unable to refresh empty room media', error);
-				})
-				.finally(() => {
-					roomMediaCheck = null;
-				});
-			return roomMediaCheck;
-		};
-
-		const clearReconnectTimer = () => {
-			if (reconnectTimer !== null) {
-				window.clearTimeout(reconnectTimer);
-				reconnectTimer = null;
-			}
-		};
-
-		const connect = () => {
-			if (
-				disposed ||
-				socket?.readyState === WebSocket.CONNECTING ||
-				socket?.readyState === WebSocket.OPEN
-			) {
-				return;
-			}
-			clearReconnectTimer();
-			socket = new WebSocket(socketUrl);
-
-			socket.onopen = () => {
-				if (!socket || disposed) {
-					return;
-				}
-				reconnectAttempt = 0;
-				void refreshIfRoomHasMedia();
-				const name = window.localStorage.getItem('name') || '';
-				const profileId = getLibraryProfileId();
-				if (name && profileId) {
-					socket.send(
-						JSON.stringify({
-							type: SyncTypes.ProfileSync,
-							name,
-							profileId
-						})
-					);
-				}
-				socket.send(JSON.stringify({ type: SyncTypes.NewPlayer }));
-			};
-
-			socket.onmessage = (event) => {
-				const payload = JSON.parse(event.data);
-				if (
-					payload?.type === SyncTypes.BroadcastSync &&
-					payload.broadcast?.type === BroadcastTypes.MoveTo &&
-					payload.broadcast.moveTo
-				) {
-					void onRoomMediaChangedRef.current?.(payload.broadcast.moveTo);
-				}
-			};
-
-			socket.onerror = () => {
-				socket?.close();
-			};
-
-			socket.onclose = () => {
-				socket = null;
-				if (disposed) {
-					return;
-				}
-				const delay = Math.min(30000, 1000 * 2 ** Math.min(reconnectAttempt, 5));
-				reconnectAttempt += 1;
-				reconnectTimer = window.setTimeout(() => {
-					reconnectTimer = null;
-					connect();
-				}, delay);
-			};
-		};
-
-		void refreshIfRoomHasMedia();
-		connect();
-		const refreshInterval = window.setInterval(refreshIfRoomHasMedia, 10000);
-		const refreshOnFocus = () => {
-			void refreshIfRoomHasMedia();
-		};
-		window.addEventListener('focus', refreshOnFocus);
-		document.addEventListener('visibilitychange', refreshOnFocus);
-
-		return () => {
-			disposed = true;
-			clearReconnectTimer();
-			window.clearInterval(refreshInterval);
-			window.removeEventListener('focus', refreshOnFocus);
-			document.removeEventListener('visibilitychange', refreshOnFocus);
-			if (socket) {
-				socket.onopen = null;
-				socket.onmessage = null;
-				socket.onerror = null;
-				socket.onclose = null;
-				socket.close();
-			}
-		};
-	}, [backendBaseUrl, roomId]);
-
-	return null;
-}
-
 const kindOptions = [
 	{ value: 'all', label: 'All' },
 	{ value: 'movies', label: 'Movies' },
@@ -291,13 +102,11 @@ const dateFormatter = new Intl.DateTimeFormat('en-US', {
 export function LibraryHome({
 	staticBaseUrl,
 	backendBaseUrl,
-	roomId,
-	onRoomMediaChanged
+	roomId
 }: {
 	staticBaseUrl: string;
 	backendBaseUrl?: string;
 	roomId?: string;
-	onRoomMediaChanged?: (mediaId: string, mediaUpdated?: number) => void | Promise<void>;
 }) {
 	const searchParams = useSearchParams();
 	const sentinelRef = useRef<HTMLDivElement | null>(null);
@@ -365,7 +174,6 @@ export function LibraryHome({
 	const visibleItems = matchingItems;
 	const displayError = backendBaseUrl ? error : 'Missing backend URL';
 	const displayLoading = backendBaseUrl ? loading : false;
-	const selectMediaInRoom = roomId && backendBaseUrl ? selectMedia : undefined;
 
 	useEffect(() => {
 		const sentinel = sentinelRef.current;
@@ -386,21 +194,12 @@ export function LibraryHome({
 
 	function hrefFor(id: string) {
 		if (roomId) {
-			return `/rooms/${encodeURIComponent(roomId)}/media/${encodeURIComponent(id)}`;
+			return `/${encodeURIComponent(roomId)}/media/${encodeURIComponent(id)}`;
 		}
 		const params = new URLSearchParams(searchString);
 		params.set('mediaId', id);
 		const query = params.toString();
-		return query ? `/rooms/new?${query}` : `/rooms/new?mediaId=${encodeURIComponent(id)}`;
-	}
-
-	async function selectMedia(id: string) {
-		if (!roomId || !backendBaseUrl) {
-			return;
-		}
-		const record = await updateRoomRecord(backendBaseUrl, roomId, id);
-		window.history.replaceState(null, '', `/${encodeURIComponent(roomId)}`);
-		await onRoomMediaChanged?.(record.mediaId, record.mediaUpdated);
+		return query ? `/?${query}` : `/?mediaId=${encodeURIComponent(id)}`;
 	}
 
 	function clearFilters() {
@@ -413,11 +212,6 @@ export function LibraryHome({
 
 	return (
 		<main className="min-h-screen w-full bg-[linear-gradient(180deg,#08090d_0%,#111017_42%,#08090d_100%)] text-zinc-50">
-			<LibraryRoomSync
-				backendBaseUrl={backendBaseUrl}
-				roomId={roomId}
-				onRoomMediaChanged={onRoomMediaChanged}
-			/>
 			<div className="mx-auto flex w-full max-w-[1760px] flex-col gap-6 px-4 py-5 sm:px-6 md:px-8 lg:px-10">
 				<header className="flex flex-col gap-5 pt-2 md:flex-row md:items-end md:justify-between">
 					<div className="min-w-0">
@@ -553,7 +347,6 @@ export function LibraryHome({
 									key={movie.job.Id}
 									job={movie.job}
 									href={hrefFor(movie.job.Id)}
-									onSelectMedia={selectMediaInRoom}
 									staticBaseUrl={staticBaseUrl}
 									title={movie.title}
 									meta={movieMeta(movie.job)}
@@ -569,7 +362,6 @@ export function LibraryHome({
 							key={show.titleId}
 							show={show}
 							hrefFor={hrefFor}
-							onSelectMedia={selectMediaInRoom}
 							staticBaseUrl={staticBaseUrl}
 							freshJobIds={freshJobIds}
 						/>
@@ -611,13 +403,11 @@ export function LibraryHome({
 function ShowSection({
 	show,
 	hrefFor,
-	onSelectMedia,
 	staticBaseUrl,
 	freshJobIds
 }: {
 	show: ShowEntry;
 	hrefFor: (id: string) => string;
-	onSelectMedia?: (id: string) => Promise<void>;
 	staticBaseUrl: string;
 	freshJobIds: Set<string>;
 }) {
@@ -727,7 +517,6 @@ function ShowSection({
 										job={job}
 										episode={episode}
 										href={hrefFor(job.Id)}
-										onSelectMedia={onSelectMedia}
 										staticBaseUrl={staticBaseUrl}
 										isFresh={freshJobIds.has(job.Id)}
 									/>
@@ -744,7 +533,6 @@ function ShowSection({
 function PosterCard({
 	job,
 	href,
-	onSelectMedia,
 	staticBaseUrl,
 	title,
 	meta,
@@ -753,7 +541,6 @@ function PosterCard({
 }: {
 	job: LibraryJob;
 	href: string;
-	onSelectMedia?: (id: string) => Promise<void>;
 	staticBaseUrl: string;
 	title: string;
 	meta: string;
@@ -765,9 +552,6 @@ function PosterCard({
 			<Link
 				href={href}
 				prefetch={false}
-				onClick={
-					onSelectMedia ? (event) => handleRoomMediaClick(event, job.Id, onSelectMedia) : undefined
-				}
 				className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8de8ce]"
 			>
 				<div className="relative overflow-hidden rounded-lg border border-white/10 bg-white/[0.04] shadow-2xl shadow-black/25 transition duration-200 group-hover:-translate-y-1 group-hover:border-white/25 group-hover:shadow-[#ec275f]/15">
@@ -800,14 +584,12 @@ function EpisodeCard({
 	job,
 	episode,
 	href,
-	onSelectMedia,
 	staticBaseUrl,
 	isFresh
 }: {
 	job: LibraryJob;
 	episode: TitleEpisode;
 	href: string;
-	onSelectMedia?: (id: string) => Promise<void>;
 	staticBaseUrl: string;
 	isFresh: boolean;
 }) {
@@ -816,9 +598,6 @@ function EpisodeCard({
 			<Link
 				href={href}
 				prefetch={false}
-				onClick={
-					onSelectMedia ? (event) => handleRoomMediaClick(event, job.Id, onSelectMedia) : undefined
-				}
 				className="block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8de8ce]"
 			>
 				<div className="relative overflow-hidden rounded-md">
@@ -1263,27 +1042,4 @@ function formatDate(seconds: number | undefined) {
 function getPosterColor(job: LibraryJob) {
 	const color = job.DominantColors?.find((value) => /^#[0-9a-f]{6}$/i.test(value));
 	return color ?? '#ec275f';
-}
-
-function handleRoomMediaClick(
-	event: MouseEvent<HTMLAnchorElement>,
-	id: string,
-	onSelectMedia: (id: string) => Promise<void>
-) {
-	if (
-		event.defaultPrevented ||
-		event.button !== 0 ||
-		event.metaKey ||
-		event.altKey ||
-		event.ctrlKey ||
-		event.shiftKey
-	) {
-		return;
-	}
-	event.preventDefault();
-	const href = event.currentTarget.href;
-	void onSelectMedia(id).catch((error) => {
-		console.warn('Unable to update room media', error);
-		window.location.href = href;
-	});
 }

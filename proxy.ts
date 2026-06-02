@@ -26,6 +26,35 @@ function matchesPathBase(pathname: string, base: string) {
 	return pathname === base || pathname.startsWith(`${base}/`);
 }
 
+function shouldServeFrontendShell(pathname: string) {
+	const segments = pathname.split('/').filter(Boolean);
+	const reservedRoots = new Set(['_next', 'api', 'favicon', 'json']);
+	if (!segments.length || reservedRoots.has(segments[0])) {
+		return false;
+	}
+	if (segments.length === 1 && !segments[0].includes('.')) {
+		return true;
+	}
+	if (
+		segments.length === 3 &&
+		segments[1] === 'media' &&
+		!segments[0].includes('.') &&
+		!segments[2].includes('.')
+	) {
+		return true;
+	}
+	if (segments[0] === 'rooms' && segments[1] === 'new' && segments.length === 2) {
+		return true;
+	}
+	return (
+		segments[0] === 'rooms' &&
+		segments.length === 4 &&
+		segments[2] === 'media' &&
+		!segments[1].includes('.') &&
+		!segments[3].includes('.')
+	);
+}
+
 function joinUrl(base: string, path: string) {
 	return `${trimTrailingSlash(base)}/${path.replace(/^\/+/, '')}`;
 }
@@ -51,6 +80,10 @@ export function proxy(request: NextRequest) {
 
 	if (destination) {
 		return NextResponse.rewrite(destination);
+	}
+
+	if (shouldServeFrontendShell(request.nextUrl.pathname)) {
+		return NextResponse.rewrite(new URL('/', request.url));
 	}
 
 	return NextResponse.next();

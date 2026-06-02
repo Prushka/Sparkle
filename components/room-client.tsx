@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { LibraryHome } from '@/components/library-home';
 import { Player } from '@/components/player/Player';
 import {
@@ -9,20 +10,48 @@ import {
 	fetchRoomRecord,
 	loadRuntimeConfig,
 	resetClientDataCache,
+	updateRoomRecord,
 	type RuntimeConfig
 } from '@/lib/player/data';
 import type { ServerData } from '@/lib/player/t';
 
+type RoomRoute =
+	| { roomId: string; view: 'library' }
+	| { roomId: string; view: 'media'; mediaId: string };
+
 type SearchValues = {
 	legacyRoomId?: string;
+	legacyMediaId?: string;
 	redirectQuery?: string;
 };
+
+function getRedirectQuery(searchParams: URLSearchParams) {
+	const params = new URLSearchParams(searchParams.toString());
+	params.delete('room');
+	params.delete('mediaId');
+	const query = params.toString();
+	return query || undefined;
+}
+
+function buildMediaPath(roomId: string, mediaId: string, suffix = '') {
+	return `/${encodeURIComponent(roomId)}/media/${encodeURIComponent(mediaId)}${suffix}`;
+}
 
 type LoadState =
 	| { status: 'loading' }
 	| { status: 'library'; config: RuntimeConfig; roomId: string }
 	| { status: 'player'; data: ServerData }
 	| { status: 'error'; message: string };
+
+function setThemeColor(color: string) {
+	let theme = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+	if (!theme) {
+		theme = document.createElement('meta');
+		theme.name = 'theme-color';
+		document.head.appendChild(theme);
+	}
+	theme.content = color;
+}
 
 function LoadingView() {
 	return (
@@ -53,16 +82,27 @@ function ErrorView({ message, onRetry }: { message: string; onRetry: () => void 
 }
 
 export function RoomClient({
-	roomId,
-	searchValues
+	route
 }: {
-	roomId: string;
-	searchValues: SearchValues;
+	route: RoomRoute;
 }) {
+	const router = useRouter();
+	const searchParams = useSearchParams();
 	const [state, setState] = useState<LoadState>({ status: 'loading' });
 	const [retryKey, setRetryKey] = useState(0);
 	const lastMediaKeyRef = useRef('');
 	const loadGenerationRef = useRef(0);
+	const searchValues = useMemo<SearchValues>(
+		() => ({
+			legacyRoomId:
+				searchParams.get('room')?.trim() ||
+				searchParams.get('channel_id')?.trim() ||
+				undefined,
+			legacyMediaId: searchParams.get('mediaId')?.trim() || undefined,
+			redirectQuery: getRedirectQuery(searchParams)
+		}),
+		[searchParams]
+	);
 	const redirectSuffix = useMemo(
 		() => (searchValues.redirectQuery ? `?${searchValues.redirectQuery}` : ''),
 		[searchValues.redirectQuery]
@@ -75,25 +115,28 @@ export function RoomClient({
 			if (loadGenerationRef.current !== generation) {
 				return;
 			}
-			let effectiveRoomId = roomId;
+			let effectiveRoomId = route.roomId;
+			let routeMediaId = route.view === 'media' ? route.mediaId : searchValues.legacyMediaId;
 
-			if (searchValues.legacyRoomId && searchValues.legacyRoomId !== roomId) {
+			if (searchValues.legacyRoomId && searchValues.legacyRoomId !== route.roomId) {
 				const legacy = await fetchRoomRecord(config.backendBaseUrl, searchValues.legacyRoomId);
 				if (loadGenerationRef.current !== generation) {
 					return;
 				}
 				if (!legacy) {
-					await createRoomRecord(config.backendBaseUrl, roomId, searchValues.legacyRoomId);
+					await createRoomRecord(
+						config.backendBaseUrl,
+						routeMediaId || route.roomId,
+						searchValues.legacyRoomId
+					);
 					if (loadGenerationRef.current !== generation) {
 						return;
 					}
 				}
 				effectiveRoomId = searchValues.legacyRoomId;
-				window.history.replaceState(
-					null,
-					'',
-					`/${encodeURIComponent(effectiveRoomId)}${redirectSuffix}`
-				);
+				routeMediaId = routeMediaId || route.roomId;
+				router.replace(buildMediaPath(effectiveRoomId, routeMediaId, redirectSuffix));
+				return;
 			}
 
 			const room = await fetchRoomRecord(config.backendBaseUrl, effectiveRoomId);
@@ -101,24 +144,45 @@ export function RoomClient({
 				return;
 			}
 			if (!room) {
-				window.location.replace('/');
+				router.replace('/');
 				return;
 			}
-			if (!room.mediaId) {
+
+			if (!routeMediaId) {
 				lastMediaKeyRef.current = '';
 				setState({ status: 'library', config, roomId: effectiveRoomId });
 				return;
 			}
 
-			const mediaKey = `${effectiveRoomId}:${room.mediaId}:${room.mediaUpdated ?? 0}`;
-			const data = await fetchMediaData(room.mediaId, effectiveRoomId, config);
+			if (route.view !== 'media') {
+				router.replace(buildMediaPath(effectiveRoomId, routeMediaId, redirectSuffix));
+				return;
+			}
+
+			let mediaUpdated = room.mediaUpdated;
+			if (room.mediaId !== routeMediaId) {
+				const updated = await updateRoomRecord(config.backendBaseUrl, effectiveRoomId, routeMediaId);
+				if (loadGenerationRef.current !== generation) {
+					return;
+				}
+				mediaUpdated = updated.mediaUpdated;
+			}
+
+			const mediaKey = `${effectiveRoomId}:${routeMediaId}:${mediaUpdated ?? 0}`;
+			const data = await fetchMediaData(routeMediaId, effectiveRoomId, config);
 			if (loadGenerationRef.current !== generation) {
 				return;
 			}
 			lastMediaKeyRef.current = mediaKey;
 			setState({ status: 'player', data });
 		},
-		[redirectSuffix, roomId, searchValues.legacyRoomId]
+		[
+			redirectSuffix,
+			route,
+			router,
+			searchValues.legacyMediaId,
+			searchValues.legacyRoomId
+		]
 	);
 
 	useEffect(() => {
@@ -138,19 +202,32 @@ export function RoomClient({
 		};
 	}, [loadRoom, retryKey]);
 
+	useEffect(() => {
+		if (state.status === 'player') {
+			document.title = state.data.displayTitle;
+			setThemeColor(state.data.dominantColor);
+			return;
+		}
+		document.title = "It's anime time!";
+		setThemeColor('#f0f0f0');
+	}, [state]);
+
 	const handleRoomMediaChanged = useCallback(
 		async (mediaId: string, mediaUpdated?: number) => {
-			if (state.status !== 'player' && state.status !== 'library') {
+			const currentRoomId = state.status === 'player' ? state.data.roomId : route.roomId;
+			const nextPath = buildMediaPath(currentRoomId, mediaId, redirectSuffix);
+			const currentPath = `${window.location.pathname}${window.location.search}`;
+			if (currentPath !== nextPath) {
+				router.push(nextPath);
 				return;
 			}
-			const currentRoomId = state.status === 'player' ? state.data.roomId : state.roomId;
-			const config =
-				state.status === 'player'
-					? {
-							backendBaseUrl: state.data.backendBaseUrl,
-							staticBaseUrl: state.data.staticBaseUrl
-						}
-					: state.config;
+			if (state.status !== 'player') {
+				return;
+			}
+			const config = {
+				backendBaseUrl: state.data.backendBaseUrl,
+				staticBaseUrl: state.data.staticBaseUrl
+			};
 			const mediaKey = `${currentRoomId}:${mediaId}:${mediaUpdated ?? 0}`;
 			if (lastMediaKeyRef.current === mediaKey) {
 				return;
@@ -158,9 +235,6 @@ export function RoomClient({
 			try {
 				const generation = loadGenerationRef.current + 1;
 				loadGenerationRef.current = generation;
-				if (state.status === 'library') {
-					setState({ status: 'loading' });
-				}
 				const data = await fetchMediaData(mediaId, currentRoomId, config);
 				if (loadGenerationRef.current !== generation) {
 					return;
@@ -174,7 +248,7 @@ export function RoomClient({
 				});
 			}
 		},
-		[state]
+		[redirectSuffix, route.roomId, router, state]
 	);
 
 	if (state.status === 'loading') {
@@ -197,7 +271,6 @@ export function RoomClient({
 				staticBaseUrl={state.config.staticBaseUrl}
 				backendBaseUrl={state.config.backendBaseUrl}
 				roomId={state.roomId}
-				onRoomMediaChanged={handleRoomMediaChanged}
 			/>
 		);
 	}

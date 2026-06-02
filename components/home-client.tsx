@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { createRoomRecord, loadRuntimeConfig, resetClientDataCache } from '@/lib/player/data';
 
@@ -9,6 +9,14 @@ type SearchValues = {
 	requestedRoomId?: string;
 	redirectQuery?: string;
 };
+
+function getRedirectQuery(searchParams: URLSearchParams) {
+	const params = new URLSearchParams(searchParams.toString());
+	params.delete('mediaId');
+	params.delete('room');
+	const query = params.toString();
+	return query || undefined;
+}
 
 function LoadingView() {
 	return (
@@ -38,14 +46,30 @@ function ErrorView({ message, onRetry }: { message: string; onRetry: () => void 
 	);
 }
 
-export function HomeClient({ searchValues }: { searchValues: SearchValues }) {
+export function HomeClient() {
 	const router = useRouter();
+	const searchParams = useSearchParams();
 	const [error, setError] = useState('');
 	const [retryKey, setRetryKey] = useState(0);
+	const searchValues = useMemo<SearchValues>(
+		() => ({
+			mediaId: searchParams.get('mediaId')?.trim() || undefined,
+			requestedRoomId:
+				searchParams.get('room')?.trim() ||
+				searchParams.get('channel_id')?.trim() ||
+				undefined,
+			redirectQuery: getRedirectQuery(searchParams)
+		}),
+		[searchParams]
+	);
 	const redirectSuffix = useMemo(
 		() => (searchValues.redirectQuery ? `?${searchValues.redirectQuery}` : ''),
 		[searchValues.redirectQuery]
 	);
+
+	useEffect(() => {
+		document.title = "It's anime time!";
+	}, []);
 
 	useEffect(() => {
 		let disposed = false;
@@ -65,7 +89,10 @@ export function HomeClient({ searchValues }: { searchValues: SearchValues }) {
 				if (disposed) {
 					return;
 				}
-				router.replace(`/${encodeURIComponent(room.roomId)}${redirectSuffix}`);
+				const roomPath = searchValues.mediaId
+					? `/${encodeURIComponent(room.roomId)}/media/${encodeURIComponent(searchValues.mediaId)}`
+					: `/${encodeURIComponent(room.roomId)}`;
+				router.replace(`${roomPath}${redirectSuffix}`);
 			} catch (caught) {
 				if (!disposed) {
 					setError(caught instanceof Error ? caught.message : 'Unknown error');

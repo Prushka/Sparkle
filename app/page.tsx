@@ -1,51 +1,20 @@
-import type { Metadata } from 'next';
-import { HomeClient } from '@/components/home-client';
+import { Suspense } from 'react';
+import { AppEntry } from '@/components/app-entry';
 
-export const metadata: Metadata = {
-	title: "It's anime time!"
-};
-
-type SearchParams = Record<string, string | string[] | undefined>;
-
-function getSearchValue(searchParams: SearchParams, key: string) {
-	const value = searchParams[key];
-	return Array.isArray(value) ? value[0] : value;
-}
-
-function getRedirectQuery(searchParams: SearchParams) {
-	const params = new URLSearchParams();
-	for (const [key, value] of Object.entries(searchParams)) {
-		if (key === 'mediaId' || key === 'room') {
-			continue;
-		}
-		if (Array.isArray(value)) {
-			for (const item of value) {
-				params.append(key, item);
-			}
-		} else if (value !== undefined) {
-			params.set(key, value);
-		}
-	}
-	return params.toString();
-}
-
-export default async function HomePage({
-	searchParams
-}: {
-	searchParams?: SearchParams | Promise<SearchParams>;
-}) {
-	const resolvedSearchParams = await Promise.resolve(searchParams ?? {});
-
+function ShellFallback() {
 	return (
-		<HomeClient
-			searchValues={{
-				mediaId: getSearchValue(resolvedSearchParams, 'mediaId')?.trim() || undefined,
-				requestedRoomId:
-					getSearchValue(resolvedSearchParams, 'room')?.trim() ||
-					getSearchValue(resolvedSearchParams, 'channel_id')?.trim() ||
-					undefined,
-				redirectQuery: getRedirectQuery(resolvedSearchParams) || undefined
-			}}
-		/>
+		<main className="flex min-h-screen w-full items-center justify-center bg-[#08090d] px-4 text-zinc-200">
+			<div className="rounded-lg border border-white/10 bg-white/[0.04] px-4 py-3 text-sm shadow-2xl shadow-black/25">
+				Loading...
+			</div>
+		</main>
+	);
+}
+
+export default function HomePage() {
+	return (
+		<Suspense fallback={<ShellFallback />}>
+			<AppEntry />
+		</Suspense>
 	);
 }

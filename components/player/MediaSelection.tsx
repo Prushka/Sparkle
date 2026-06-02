@@ -109,7 +109,7 @@ export const MediaSelection = forwardRef<
 		} else {
 			const params = new URLSearchParams(searchParamsString);
 			params.set('mediaId', id);
-			router.push(`/rooms/new?${params.toString()}`);
+			router.push(`/?${params.toString()}`);
 		}
 	}
 
@@ -147,11 +147,11 @@ export const MediaSelection = forwardRef<
 	}, [updateList]);
 
 	useEffect(() => {
-		if (!titleSelectionOpen || jobsLoadedRef.current) {
+		if ((!titleSelectionOpen && !seSelectionOpen) || jobsLoadedRef.current) {
 			return;
 		}
 		updateList();
-	}, [titleSelectionOpen, updateList]);
+	}, [seSelectionOpen, titleSelectionOpen, updateList]);
 
 	return (
 		<div className="md:grid md:grid-cols-[minmax(0,1fr)_min-content_minmax(0,1fr)] max-md:flex max-md:flex-col items-center justify-center gap-2 w-full">
