@@ -19,6 +19,38 @@ const jobFile = "job.json"
 
 var ErrJobNotFound = errors.New("job not found")
 
+var jobFieldAliases = map[string]string{
+	"id":             "Id",
+	"inputParent":    "InputParent",
+	"input":          "Input",
+	"state":          "State",
+	"encodedCodecs":  "EncodedCodecs",
+	"mappedAudio":    "MappedAudio",
+	"streams":        "Streams",
+	"duration":       "Duration",
+	"width":          "Width",
+	"height":         "Height",
+	"encodedExt":     "EncodedExt",
+	"chapters":       "Chapters",
+	"dominantColors": "DominantColors",
+	"oriSize":        "OriSize",
+	"oriModTime":     "OriModTime",
+}
+
+var streamFieldAliases = map[string]string{
+	"bitrate":    "Bitrate",
+	"codecName":  "CodecName",
+	"codecType":  "CodecType",
+	"index":      "Index",
+	"location":   "Location",
+	"language":   "Language",
+	"title":      "Title",
+	"filename":   "Filename",
+	"mimeType":   "MimeType",
+	"channels":   "Channels",
+	"sampleRate": "SampleRate",
+}
+
 type Store struct {
 	outputDir string
 	ttl       time.Duration
@@ -217,6 +249,7 @@ func (s *Store) loadJob(id string) (map[string]any, error) {
 	if err := json.Unmarshal(content, &job); err != nil {
 		return nil, err
 	}
+	normalizeJob(job)
 	if stringField(job, "Id") == "" {
 		job["Id"] = id
 	}
@@ -236,6 +269,61 @@ func (s *Store) loadJob(id string) (map[string]any, error) {
 	ensureArray(job, "Chapters")
 	ensureArray(job, "DominantColors")
 	return job, nil
+}
+
+func normalizeJob(job map[string]any) {
+	copyAliasedFields(job, jobFieldAliases)
+	normalizeStreamList(job["Streams"])
+	if mappedAudio, ok := job["MappedAudio"].(map[string]any); ok {
+		for _, streams := range mappedAudio {
+			normalizeStreamList(streams)
+		}
+	}
+}
+
+func normalizeStreamList(value any) {
+	streams, ok := value.([]any)
+	if !ok {
+		return
+	}
+	for _, value := range streams {
+		stream, ok := value.(map[string]any)
+		if !ok {
+			continue
+		}
+		copyAliasedFields(stream, streamFieldAliases)
+	}
+}
+
+func copyAliasedFields(target map[string]any, aliases map[string]string) {
+	for sourceKey, targetKey := range aliases {
+		if hasUsableField(target, targetKey) {
+			continue
+		}
+		if value, ok := target[sourceKey]; ok && value != nil {
+			target[targetKey] = value
+		}
+	}
+}
+
+func hasUsableField(target map[string]any, key string) bool {
+	value, ok := target[key]
+	if !ok || value == nil {
+		return false
+	}
+	if text, ok := value.(string); ok {
+		return text != ""
+	}
+	if values, ok := value.([]any); ok {
+		return len(values) > 0
+	}
+	if values, ok := value.(map[string]any); ok {
+		return len(values) > 0
+	}
+	if value == 0 || value == int64(0) || value == float64(0) {
+		return false
+	}
+	return true
 }
 
 func fileSizes(dir string) (map[string]int64, int64, error) {
