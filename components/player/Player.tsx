@@ -215,7 +215,7 @@ const DEFAULT_YOUTUBE_SYNC_STATE: YouTubeSyncState = {
 };
 
 const DEFAULT_CHESS_SETTINGS: ChessSettingsSyncState = {
-	pieceSet: 'cartoon',
+	pieceSet: 'classic',
 	boardTheme: 'green',
 	timed: true,
 	minutes: 10,
@@ -399,10 +399,10 @@ function normalizeChessSettings(
 	settings: Partial<ChessSettingsSyncState> | null | undefined
 ): ChessSettingsSyncState {
 	const pieceSet: ChessPieceSet =
-		settings?.pieceSet === 'cartoon' ||
-		settings?.pieceSet === 'mushroom' ||
-		settings?.pieceSet === 'sushi' ||
-		settings?.pieceSet === 'space'
+		settings?.pieceSet === 'classic' ||
+		settings?.pieceSet === 'pixel' ||
+		settings?.pieceSet === 'pixel-wood' ||
+		settings?.pieceSet === 'pixel-simple'
 			? settings.pieceSet
 			: DEFAULT_CHESS_SETTINGS.pieceSet;
 	const boardTheme: ChessBoardTheme =

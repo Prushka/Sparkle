@@ -90,10 +90,10 @@ const COLLAPSED_HEIGHT = 44;
 const VIEWPORT_MARGIN = 8;
 const CLOSE_CONFIRMATION_MS = 60_000;
 const CHESS_PIECE_SET_OPTIONS: { value: ChessPieceSet; label: string }[] = [
-	{ value: 'cartoon', label: 'Cartoon' },
-	{ value: 'mushroom', label: 'Mushroom' },
-	{ value: 'sushi', label: 'Sushi' },
-	{ value: 'space', label: 'Space' }
+	{ value: 'classic', label: 'Classic' },
+	{ value: 'pixel', label: 'Pixel' },
+	{ value: 'pixel-wood', label: 'Pixel Wood' },
+	{ value: 'pixel-simple', label: 'Pixel Simple' }
 ];
 const CHESS_BOARD_THEME_OPTIONS: { value: ChessBoardTheme; label: string }[] = [
 	{ value: 'green', label: 'Green' },
@@ -313,8 +313,11 @@ function getNowMs() {
 
 function getPieceAsset(color: ChessColor, piece: PieceSymbol, pieceSet: ChessPieceSet) {
 	const side = color === 'w' ? 'first' : 'second';
-	const extension = pieceSet === 'cartoon' ? 'png' : 'svg';
-	return `/media/chess/${pieceSet}/${side}/${PIECE_ASSET_NAMES[piece]}.${extension}`;
+	return `/media/chess/${pieceSet}/${side}/${PIECE_ASSET_NAMES[piece]}.png`;
+}
+
+function isPixelPieceSet(pieceSet: ChessPieceSet) {
+	return pieceSet === 'pixel' || pieceSet === 'pixel-wood' || pieceSet === 'pixel-simple';
 }
 
 function pieceColorName(color: ChessColor) {
@@ -635,7 +638,9 @@ function PieceSetPreview({ pieceSet }: { pieceSet: ChessPieceSet }) {
 					height={48}
 					unoptimized
 					draggable={false}
-					className="h-8 w-8 object-contain drop-shadow-[0_2px_2px_rgba(0,0,0,0.35)]"
+					className={`h-8 w-8 object-contain drop-shadow-[0_2px_2px_rgba(0,0,0,0.35)] ${
+						isPixelPieceSet(pieceSet) ? '[image-rendering:pixelated]' : ''
+					}`}
 				/>
 			))}
 		</span>
@@ -1656,7 +1661,11 @@ export function ChessFloatingTab({
 															height={96}
 															unoptimized
 															draggable={false}
-															className="relative z-10 h-[84%] w-[84%] select-none object-contain drop-shadow-[0_2px_2px_rgba(0,0,0,0.35)]"
+															className={`relative z-10 h-[84%] w-[84%] select-none object-contain drop-shadow-[0_2px_2px_rgba(0,0,0,0.35)] ${
+																isPixelPieceSet(state.settings.pieceSet)
+																	? '[image-rendering:pixelated]'
+																	: ''
+															}`}
 														/>
 													) : null}
 													<span
@@ -1924,7 +1933,9 @@ export function ChessFloatingTab({
 										height={64}
 										unoptimized
 										draggable={false}
-										className="h-full w-full object-contain"
+										className={`h-full w-full object-contain ${
+											isPixelPieceSet(state.settings.pieceSet) ? '[image-rendering:pixelated]' : ''
+										}`}
 									/>
 								</Button>
 							))}

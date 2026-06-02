@@ -1131,9 +1131,9 @@ func sanitizeChessPhase(value string) string {
 func sanitizeChessSettings(settings ChessSettingsState) ChessSettingsState {
 	pieceSet := strings.TrimSpace(settings.PieceSet)
 	switch pieceSet {
-	case "cartoon", "mushroom", "sushi", "space":
+	case "classic", "pixel", "pixel-wood", "pixel-simple":
 	default:
-		pieceSet = "cartoon"
+		pieceSet = "classic"
 	}
 
 	boardTheme := strings.TrimSpace(settings.BoardTheme)
