@@ -128,6 +128,7 @@ function loadYouTubeApi() {
 	youTubeApiPromise = new Promise((resolve, reject) => {
 		const previousReady = window.onYouTubeIframeAPIReady;
 		const timeout = window.setTimeout(() => {
+			youTubeApiPromise = null;
 			reject(new Error('Timed out loading the YouTube player API'));
 		}, 15000);
 
@@ -137,6 +138,7 @@ function loadYouTubeApi() {
 			if (window.YT?.Player) {
 				resolve(window.YT);
 			} else {
+				youTubeApiPromise = null;
 				reject(new Error('YouTube player API loaded without a player constructor'));
 			}
 		};
@@ -147,6 +149,7 @@ function loadYouTubeApi() {
 			script.async = true;
 			script.onerror = () => {
 				window.clearTimeout(timeout);
+				youTubeApiPromise = null;
 				reject(new Error('Unable to load the YouTube player API'));
 			};
 			document.head.appendChild(script);
@@ -387,6 +390,7 @@ export function YouTubeFloatingTab({
 	const applyingRemoteRef = useRef(false);
 	const lastAppliedVideoIdRef = useRef('');
 	const stateRef = useRef(state);
+	const playerReadyTimerRef = useRef<number | null>(null);
 	const dragRef = useRef<{
 		pointerId: number;
 		startX: number;
@@ -418,6 +422,7 @@ export function YouTubeFloatingTab({
 	const [urlError, setUrlError] = useState('');
 	const [playerError, setPlayerError] = useState('');
 	const [collapsed, setCollapsed] = useState(false);
+	const [playerMountKey, setPlayerMountKey] = useState(0);
 
 	useEffect(() => {
 		stateRef.current = state;
@@ -469,6 +474,23 @@ export function YouTubeFloatingTab({
 
 	const bringToFront = useCallback(() => {
 		setZIndex(nextFloatingTabZIndex());
+	}, []);
+
+	const resetPlayerInstance = useCallback(() => {
+		if (playerReadyTimerRef.current !== null) {
+			window.clearTimeout(playerReadyTimerRef.current);
+			playerReadyTimerRef.current = null;
+		}
+		if (playerRef.current) {
+			try {
+				playerRef.current.destroy();
+			} catch {
+				// YouTube can throw if the iframe was already removed by a fast tab close.
+			}
+			playerRef.current = null;
+		}
+		readyRef.current = false;
+		lastAppliedVideoIdRef.current = '';
 	}, []);
 
 	const toggleCollapsed = useCallback(() => {
@@ -605,13 +627,17 @@ export function YouTubeFloatingTab({
 	}, [handlePlaybackRateChange]);
 
 	useEffect(() => {
-		if (!state.open || !state.videoId) {
+		if (!state.open || !state.videoId || collapsed) {
 			return;
 		}
 		if (isDiscordActivityEnvironment()) {
 			return;
 		}
 		let cancelled = false;
+		if (playerReadyTimerRef.current !== null) {
+			window.clearTimeout(playerReadyTimerRef.current);
+			playerReadyTimerRef.current = null;
+		}
 		loadYouTubeApi()
 			.then((YT) => {
 				if (cancelled || playerRef.current) {
@@ -627,13 +653,25 @@ export function YouTubeFloatingTab({
 					},
 					events: {
 						onReady: () => {
+							if (playerReadyTimerRef.current !== null) {
+								window.clearTimeout(playerReadyTimerRef.current);
+								playerReadyTimerRef.current = null;
+							}
 							readyRef.current = true;
+							setPlayerError('');
 							applyStateToPlayer(stateRef.current, true);
 						},
 						onStateChange: (event) => handleYouTubeStateChangeRef.current(event.data),
 						onPlaybackRateChange: (event) => handlePlaybackRateChangeRef.current(event.data)
 					}
 				});
+				playerReadyTimerRef.current = window.setTimeout(() => {
+					if (cancelled || readyRef.current) {
+						return;
+					}
+					resetPlayerInstance();
+					setPlayerMountKey((key) => key + 1);
+				}, 8000);
 			})
 			.catch((error) => {
 				console.error(error);
@@ -643,8 +681,20 @@ export function YouTubeFloatingTab({
 			});
 		return () => {
 			cancelled = true;
+			if (playerReadyTimerRef.current !== null) {
+				window.clearTimeout(playerReadyTimerRef.current);
+				playerReadyTimerRef.current = null;
+			}
 		};
-	}, [applyStateToPlayer, playerElementId, state.open, state.videoId]);
+	}, [
+		applyStateToPlayer,
+		collapsed,
+		playerElementId,
+		playerMountKey,
+		resetPlayerInstance,
+		state.open,
+		state.videoId
+	]);
 
 	useEffect(() => {
 		if (!state.open || !state.videoId) {
@@ -665,23 +715,14 @@ export function YouTubeFloatingTab({
 		if (state.open) {
 			return;
 		}
-		if (playerRef.current) {
-			playerRef.current.destroy();
-			playerRef.current = null;
-		}
-		readyRef.current = false;
-		lastAppliedVideoIdRef.current = '';
-	}, [state.open]);
+		resetPlayerInstance();
+	}, [resetPlayerInstance, state.open]);
 
 	useEffect(() => {
 		return () => {
-			if (playerRef.current) {
-				playerRef.current.destroy();
-				playerRef.current = null;
-			}
-			readyRef.current = false;
+			resetPlayerInstance();
 		};
-	}, []);
+	}, [resetPlayerInstance]);
 
 	useEffect(() => {
 		if (!state.open || !state.videoId) {
@@ -875,10 +916,10 @@ export function YouTubeFloatingTab({
 		return null;
 	}
 
-	const playerUnavailableMessage =
+	const embedBlockedMessage =
 		state.videoId && isDiscordActivityEnvironment()
 			? 'YouTube embeds are blocked inside Discord Activities.'
-			: playerError;
+			: '';
 
 	return (
 		<div
@@ -966,9 +1007,9 @@ export function YouTubeFloatingTab({
 					aria-hidden={collapsed}
 				>
 					{state.videoId ? (
-						playerUnavailableMessage ? (
+						embedBlockedMessage ? (
 							<div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-sm font-semibold text-white/70">
-								<p>{playerUnavailableMessage}</p>
+								<p>{embedBlockedMessage}</p>
 								<Button asChild size="sm" variant="secondary">
 									<a
 										href={state.url || normalizeYouTubeURL(state.videoId)}
@@ -980,7 +1021,23 @@ export function YouTubeFloatingTab({
 								</Button>
 							</div>
 						) : (
-							<div id={playerElementId} className="h-full w-full" />
+							<>
+								<div key={playerMountKey} id={playerElementId} className="h-full w-full" />
+								{playerError ? (
+									<div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/85 px-6 text-center text-sm font-semibold text-white/70">
+										<p>{playerError}</p>
+										<Button asChild size="sm" variant="secondary">
+											<a
+												href={state.url || normalizeYouTubeURL(state.videoId)}
+												target="_blank"
+												rel="noreferrer"
+											>
+												Open YouTube
+											</a>
+										</Button>
+									</div>
+								) : null}
+							</>
 						)
 					) : (
 						<div className="flex h-full items-center justify-center px-6 text-center text-sm font-semibold text-white/70">

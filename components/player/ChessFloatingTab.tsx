@@ -333,6 +333,76 @@ function otherColor(color: ChessColor): ChessColor {
 	return color === 'w' ? 'b' : 'w';
 }
 
+function moveLabel(move: ChessMoveSyncState | undefined) {
+	if (!move) {
+		return 'No moves yet';
+	}
+	return `${move.from} to ${move.to}${move.san ? ` (${move.san})` : ''}`;
+}
+
+function moveColorForIndex(index: number): ChessColor {
+	return index % 2 === 0 ? 'w' : 'b';
+}
+
+function resultReasonLabel(result: ChessResultSyncState | null) {
+	if (!result?.reason) {
+		return '';
+	}
+	if (result.reason === 'resignation') {
+		return 'Resignation';
+	}
+	if (result.reason === 'timeout') {
+		return 'Time expired';
+	}
+	return result.reason
+		.split('-')
+		.filter(Boolean)
+		.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+		.join(' ');
+}
+
+function getPlayerForColor(tab: ChessTabSyncState, color: ChessColor) {
+	return color === 'w' ? tab.white : tab.black;
+}
+
+function buildResultSummary(tab: ChessTabSyncState) {
+	const result = tab.result;
+	if (!result) {
+		return null;
+	}
+	const reason = resultReasonLabel(result);
+	if (result.winner === 'draw') {
+		return {
+			title: 'Draw',
+			detail: result.message || reason || 'Game ended in a draw',
+			reason
+		};
+	}
+	const winnerColor = result.winner === 'b' ? 'b' : 'w';
+	const loserColor = otherColor(winnerColor);
+	const winner = getPlayerForColor(tab, winnerColor);
+	const loser = getPlayerForColor(tab, loserColor);
+	const winnerName = playerLabel(winner);
+	const loserName = playerLabel(loser);
+	const resultDetail =
+		result.reason === 'checkmate'
+			? `${winnerName} checkmated ${loserName}`
+			: result.reason === 'resignation'
+				? `${loserName} resigned`
+				: result.reason === 'timeout'
+					? `${loserName} ran out of time`
+					: result.message;
+	return {
+		title: `${winnerName} wins`,
+		detail: resultDetail || (reason ? `${reason}: ${loserName} loses` : `${loserName} loses`),
+		reason,
+		winnerName,
+		loserName,
+		winnerColor,
+		loserColor
+	};
+}
+
 function isSameChessPlayer(
 	left: ChessPlayerSyncState | null | undefined,
 	right: ChessPlayerSyncState | null | undefined
@@ -461,6 +531,19 @@ function boardSquares(orientation: ChessColor) {
 	const ranks = orientation === 'w' ? [...RANKS].reverse() : [...RANKS];
 	const files = orientation === 'w' ? [...FILES] : [...FILES].reverse();
 	return ranks.flatMap((rank) => files.map((file) => squareFromParts(file, rank)));
+}
+
+function findKingSquare(game: Chess, color: ChessColor): Square | null {
+	for (const rank of RANKS) {
+		for (const file of FILES) {
+			const square = squareFromParts(file, rank);
+			const piece = game.get(square);
+			if (piece?.type === 'k' && piece.color === color) {
+				return square;
+			}
+		}
+	}
+	return null;
 }
 
 function SeatButton({
@@ -730,6 +813,11 @@ export function ChessFloatingTab({
 	const game = useMemo(() => buildChessFromMoves(state.moves), [state.moves]);
 	const myColor = getPlayerColor(state, currentPlayer);
 	const activeColor = game.turn() as ChessColor;
+	const lastMove = state.moves.at(-1);
+	const lastMoveColor = state.moves.length > 0 ? moveColorForIndex(state.moves.length - 1) : null;
+	const resultSummary = buildResultSummary(state);
+	const checkmatedKingSquare =
+		state.result?.reason === 'checkmate' ? findKingSquare(game, activeColor) : null;
 	const isMyTurn = state.phase === 'playing' && myColor === activeColor;
 	const isParticipant = Boolean(myColor);
 	const orientation = myColor ?? 'w';
@@ -747,7 +835,9 @@ export function ChessFloatingTab({
 	const liveClocks = getLiveClocks(state, activeColor, clockNow);
 	const currentStatus = useMemo(() => {
 		if (state.result) {
-			return state.result.message;
+			return resultSummary
+				? `${resultSummary.title}: ${resultSummary.detail}`
+				: state.result.message;
 		}
 		if (state.phase === 'setup') {
 			return 'Waiting to start';
@@ -756,7 +846,7 @@ export function ChessFloatingTab({
 			return `${colorName(activeColor)} to move, in check`;
 		}
 		return `${colorName(activeColor)} to move`;
-	}, [activeColor, game, state.phase, state.result]);
+	}, [activeColor, game, resultSummary, state.phase, state.result]);
 	const theme = BOARD_THEMES[state.settings.boardTheme] ?? BOARD_THEMES.green;
 	const closeRequest = state.closeRequest;
 	const closeResponder =
@@ -780,15 +870,20 @@ export function ChessFloatingTab({
 	);
 	const notifyGameEnd = useCallback(
 		(result: ChessResultSyncState) => {
+			const soundId =
+				result.reason === 'checkmate'
+					? CHESS_NOTIFICATION_SOUND_IDS.checkmate
+					: CHESS_NOTIFICATION_SOUND_IDS.gameOver;
 			if (!state.white || !state.black) {
-				onNotification(CHESS_NOTIFICATION_SOUND_IDS.gameOver);
+				onNotification(soundId);
 				return;
 			}
-			onNotification(CHESS_NOTIFICATION_SOUND_IDS.gameOver, {
+			onNotification(soundId, {
 				tabId: state.id,
 				whiteId: state.white.id,
 				blackId: state.black.id,
-				winner: result.winner
+				winner: result.winner,
+				reason: result.reason
 			});
 		},
 		[onNotification, state.black, state.id, state.white]
@@ -926,7 +1021,6 @@ export function ChessFloatingTab({
 
 	useLayoutEffect(() => {
 		if (!state.open || panelCollapsed || compactLayout || state.phase === 'setup') {
-			setBoardSize(0);
 			return;
 		}
 		const node = boardSlotRef.current;
@@ -1507,6 +1601,10 @@ export function ChessFloatingTab({
 											const piece = game.get(square);
 											const selected = selectedSquare === square;
 											const legal = legalTargets.has(square);
+											const lastMoveFrom = lastMove?.from === square;
+											const lastMoveTo = lastMove?.to === square;
+											const lastMoveSquare = lastMoveFrom || lastMoveTo;
+											const checkedKing = checkmatedKingSquare === square;
 											const pieceAsset = piece
 												? getPieceAsset(
 														piece.color as ChessColor,
@@ -1525,6 +1623,23 @@ export function ChessFloatingTab({
 													aria-disabled={!isMyTurn || Boolean(closeRequest)}
 													aria-label={square}
 												>
+													{lastMoveSquare ? (
+														<span
+															className={`absolute inset-0 ring-2 ring-inset ${
+																lastMoveTo
+																	? 'bg-amber-300/55 ring-amber-950/45'
+																	: 'bg-amber-100/35 ring-amber-500/45'
+															}`}
+														/>
+													) : null}
+													{checkedKing ? (
+														<span className="absolute inset-0 bg-rose-500/35 ring-2 ring-inset ring-rose-950/50" />
+													) : null}
+													{lastMoveSquare ? (
+														<span className="absolute left-1 top-1 rounded bg-background/80 px-1 text-[10px] font-black uppercase leading-4 text-foreground shadow-sm">
+															{lastMoveFrom ? 'from' : 'to'}
+														</span>
+													) : null}
 													{selected ? (
 														<span className="absolute inset-1 rounded bg-primary/30" />
 													) : null}
@@ -1757,43 +1872,26 @@ export function ChessFloatingTab({
 										)}
 									</div>
 
-									<div
-										data-chess-moves="true"
-										className={`overflow-auto rounded-md border bg-background ${
-											compactLayout ? 'max-h-56' : 'min-h-0 flex-1'
-										}`}
-									>
-										<div className="sticky top-0 border-b bg-background px-3 py-2 text-sm font-bold">
-											Moves
+									<div className="grid gap-3 rounded-md border bg-background p-3">
+										<div className="grid gap-1">
+											<div className="text-xs font-bold text-muted-foreground">Last Move</div>
+											<div className="text-sm font-bold">
+												{lastMove && lastMoveColor
+													? `${colorName(lastMoveColor)}: ${moveLabel(lastMove)}`
+													: 'No moves yet'}
+											</div>
 										</div>
-										{state.moves.length === 0 ? (
-											<div className="px-3 py-6 text-center text-sm font-medium text-muted-foreground">
-												No moves yet
+										{resultSummary ? (
+											<div className="grid gap-1 border-t pt-3">
+												<div className="text-xs font-bold text-muted-foreground">
+													{resultSummary.reason || 'Result'}
+												</div>
+												<div className="text-base font-black">{resultSummary.title}</div>
+												<div className="text-sm font-semibold text-muted-foreground">
+													{resultSummary.detail}
+												</div>
 											</div>
-										) : (
-											<div className="grid gap-1 px-3 py-2 text-sm">
-												{Array.from({ length: Math.ceil(state.moves.length / 2) }, (_, index) => {
-													const whiteMove = state.moves[index * 2];
-													const blackMove = state.moves[index * 2 + 1];
-													return (
-														<div
-															key={`${index}-${whiteMove?.from ?? 'move'}`}
-															className="grid grid-cols-[3rem_1fr_1fr] gap-x-2"
-														>
-															<div className="py-1 text-xs font-bold text-muted-foreground">
-																{index + 1}.
-															</div>
-															<div className="rounded px-1 py-1 font-semibold">
-																{whiteMove?.san || ''}
-															</div>
-															<div className="rounded px-1 py-1 font-semibold">
-																{blackMove?.san || ''}
-															</div>
-														</div>
-													);
-												})}
-											</div>
-										)}
+										) : null}
 									</div>
 								</div>
 							)}

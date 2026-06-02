@@ -97,6 +97,7 @@ export function useVoiceChat({
 	const speakingIdsRef = useRef(new Set<string>());
 	const desiredJoinedRef = useRef(false);
 	const mutedRef = useRef(true);
+	const peerMutedRef = useRef<Record<string, boolean>>({});
 	const ensurePeerRef = useRef<
 		((_remoteId: string, _forceOffer?: boolean) => Promise<void>) | null
 	>(null);
@@ -131,6 +132,10 @@ export function useVoiceChat({
 		() => Object.entries(remoteStreams).map(([id, stream]) => ({ id, stream })),
 		[remoteStreams]
 	);
+
+	useEffect(() => {
+		peerMutedRef.current = peerMuted;
+	}, [peerMuted]);
 
 	const publishSpeakingIds = useCallback(() => {
 		const next = Array.from(speakingIdsRef.current);
@@ -259,6 +264,10 @@ export function useVoiceChat({
 		}));
 	}, []);
 
+	const shouldConnectToPeer = useCallback((remoteId: string) => {
+		return !mutedRef.current || peerMutedRef.current[remoteId] === false;
+	}, []);
+
 	const sendVoiceSignal = useCallback(
 		(targetId: string | undefined, signal: VoiceSignalPayload) => {
 			if (disabled || !desiredJoinedRef.current) {
@@ -330,6 +339,9 @@ export function useVoiceChat({
 
 	const schedulePeerRetry = useCallback(
 		(remoteId: string) => {
+			if (!shouldConnectToPeer(remoteId)) {
+				return;
+			}
 			const record = peersRef.current.get(remoteId);
 			if (!record || record.retryTimer !== null) {
 				return;
@@ -350,7 +362,7 @@ export function useVoiceChat({
 				void ensurePeerRef.current?.(remoteId, true);
 			}, delay);
 		},
-		[closePeer, updatePeerState]
+		[closePeer, shouldConnectToPeer, updatePeerState]
 	);
 
 	const createPeerConnection = useCallback(
@@ -378,9 +390,13 @@ export function useVoiceChat({
 				if (!event.candidate) {
 					return;
 				}
+				if (!shouldConnectToPeer(remoteId)) {
+					return;
+				}
 				sendVoiceSignal(remoteId, {
 					kind: 'ice',
 					sessionId: sessionIdRef.current,
+					muted: mutedRef.current,
 					candidate: event.candidate.toJSON()
 				});
 			};
@@ -415,7 +431,7 @@ export function useVoiceChat({
 			updatePeerState(remoteId, { connectionState: 'new', attempts: record.attempts });
 			return record;
 		},
-		[schedulePeerRetry, sendVoiceSignal, trackSpeakingStream, updatePeerState]
+		[schedulePeerRetry, sendVoiceSignal, shouldConnectToPeer, trackSpeakingStream, updatePeerState]
 	);
 
 	const createOffer = useCallback(
@@ -430,6 +446,7 @@ export function useVoiceChat({
 				sendVoiceSignal(record.id, {
 					kind: 'offer',
 					sessionId: sessionIdRef.current,
+					muted: mutedRef.current,
 					description: toSessionDescription(record.pc.localDescription)
 				});
 			} catch (error) {
@@ -447,6 +464,10 @@ export function useVoiceChat({
 			if (disabled || !desiredJoinedRef.current || !playerId || remoteId === playerId) {
 				return;
 			}
+			if (!shouldConnectToPeer(remoteId)) {
+				closePeer(remoteId);
+				return;
+			}
 			let record = peersRef.current.get(remoteId);
 			if (!record || record.pc.connectionState === 'closed') {
 				record = createPeerConnection(remoteId);
@@ -455,7 +476,7 @@ export function useVoiceChat({
 				await createOffer(record);
 			}
 		},
-		[createOffer, createPeerConnection, disabled, playerId]
+		[closePeer, createOffer, createPeerConnection, disabled, playerId, shouldConnectToPeer]
 	);
 
 	useEffect(() => {
@@ -572,13 +593,28 @@ export function useVoiceChat({
 		}
 		setMuted(nextMuted);
 		broadcastVoiceStatus();
+		if (nextMuted) {
+			for (const remoteId of Array.from(peersRef.current.keys())) {
+				if (peerMutedRef.current[remoteId] !== false) {
+					closePeer(remoteId);
+				}
+			}
+		} else {
+			for (const remoteId of roomPlayers.map((player) => player.id)) {
+				if (remoteId && remoteId !== playerIdRef.current) {
+					void ensurePeerRef.current?.(remoteId, true);
+				}
+			}
+		}
 	}, [
 		addSystemMessage,
 		attachLocalStreamToPeers,
 		broadcastVoiceStatus,
+		closePeer,
 		ensureMicrophone,
 		join,
 		markSpeaking,
+		roomPlayers,
 		disabled
 	]);
 
@@ -607,17 +643,29 @@ export function useVoiceChat({
 			}
 			if (typeof signal.muted === 'boolean') {
 				setPeerMuted((prev) => ({ ...prev, [fromId]: signal.muted ?? true }));
+				peerMutedRef.current = { ...peerMutedRef.current, [fromId]: signal.muted ?? true };
+				if (signal.muted && mutedRef.current) {
+					closePeer(fromId);
+				} else if (!signal.muted) {
+					await ensurePeer(fromId);
+				}
 			}
 			if (signal.kind === 'leave') {
 				closePeer(fromId);
 				return true;
 			}
 			if (signal.kind === 'hello') {
-				await ensurePeer(fromId);
 				broadcastVoiceStatus();
+				if (!mutedRef.current || peerMutedRef.current[fromId] === false) {
+					await ensurePeer(fromId);
+				}
 				return true;
 			}
 			if (signal.kind === 'status') {
+				return true;
+			}
+
+			if (mutedRef.current && peerMutedRef.current[fromId] !== false) {
 				return true;
 			}
 
@@ -640,6 +688,7 @@ export function useVoiceChat({
 					sendVoiceSignal(fromId, {
 						kind: 'answer',
 						sessionId: sessionIdRef.current,
+						muted: mutedRef.current,
 						description: toSessionDescription(record.pc.localDescription)
 					});
 				} else if (signal.kind === 'answer' && signal.description) {
@@ -679,14 +728,25 @@ export function useVoiceChat({
 			roomPlayers.map((player) => player.id).filter((id) => id && id !== playerId)
 		);
 		for (const remoteId of Array.from(peersRef.current.keys())) {
-			if (!remoteIds.has(remoteId)) {
+			if (!remoteIds.has(remoteId) || !shouldConnectToPeer(remoteId)) {
 				closePeer(remoteId);
 			}
 		}
 		for (const remoteId of remoteIds) {
-			void ensurePeer(remoteId);
+			if (shouldConnectToPeer(remoteId)) {
+				void ensurePeer(remoteId);
+			}
 		}
-	}, [closePeer, desiredJoined, disabled, ensurePeer, playerId, roomPlayers, socketCommunicating]);
+	}, [
+		closePeer,
+		desiredJoined,
+		disabled,
+		ensurePeer,
+		playerId,
+		roomPlayers,
+		shouldConnectToPeer,
+		socketCommunicating
+	]);
 
 	useEffect(() => {
 		const peers = peersRef.current;

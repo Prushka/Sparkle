@@ -3,6 +3,7 @@ export const CHESS_NOTIFICATION_SOUND_IDS = {
 	move: 'chess_move',
 	capture: 'chess_capture',
 	check: 'chess_check',
+	checkmate: 'chess_checkmate',
 	gameOver: 'chess_game_over',
 	win: 'chess_win',
 	lose: 'chess_lose',

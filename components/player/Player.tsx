@@ -498,8 +498,15 @@ function resolveBroadcastSoundEffectId(
 	if (!soundEffect) {
 		return undefined;
 	}
-	if (soundEffect.id !== CHESS_NOTIFICATION_SOUND_IDS.gameOver || !soundEffect.chess) {
+	if (
+		(soundEffect.id !== CHESS_NOTIFICATION_SOUND_IDS.gameOver &&
+			soundEffect.id !== CHESS_NOTIFICATION_SOUND_IDS.checkmate) ||
+		!soundEffect.chess
+	) {
 		return soundEffect.id;
+	}
+	if (soundEffect.chess.reason === 'checkmate') {
+		return CHESS_NOTIFICATION_SOUND_IDS.checkmate;
 	}
 	const playerColor =
 		soundEffect.chess.whiteId === playerId
@@ -3130,6 +3137,7 @@ export function Player({
 			updateLastTicked,
 			updatePfp,
 			handleVoiceBroadcast,
+			onRoomMediaChanged,
 			playSoundEffect,
 			pulseSoundEffectBadge,
 			applyRemotePlaybackSync

@@ -2247,6 +2247,16 @@ const chessNotificationSoundEffects: SoundEffect[] = [
 		tags: ['chess', 'check', 'notification']
 	},
 	{
+		id: CHESS_NOTIFICATION_SOUND_IDS.checkmate,
+		name: 'Chess Checkmate',
+		icon: '♟',
+		category: 'game',
+		src: '/media/sound-effects/epic_orchestra.mp3',
+		duration: '0:01',
+		source: 'Mixkit',
+		tags: ['chess', 'checkmate', 'notification']
+	},
+	{
 		id: CHESS_NOTIFICATION_SOUND_IDS.gameOver,
 		name: 'Chess Game Over',
 		icon: '♟',

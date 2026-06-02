@@ -853,12 +853,19 @@ func sanitizeSoundEffectChessContext(value any) (map[string]any, bool) {
 	default:
 		return nil, false
 	}
-	return map[string]any{
+	context := map[string]any{
 		"tabId":   tabID,
 		"whiteId": whiteID,
 		"blackId": blackID,
 		"winner":  winner,
-	}, true
+	}
+	if rawReason, ok := raw["reason"].(string); ok {
+		reason := trimRunes(strings.TrimSpace(rawReason), 40)
+		if reason != "" {
+			context["reason"] = reason
+		}
+	}
+	return context, true
 }
 
 func sanitizeDiscordUser(user *DiscordUser) *DiscordUser {

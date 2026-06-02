@@ -171,6 +171,7 @@ export interface ChessSoundEffectContext {
 	whiteId: string;
 	blackId: string;
 	winner: ChessResultWinner;
+	reason?: string;
 }
 
 export interface ChessTabSyncState {
