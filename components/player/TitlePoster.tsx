@@ -14,6 +14,7 @@ export function TitlePoster({
 }) {
 	return (
 		<div className="relative shrink-0 overflow-hidden">
+			{/* eslint-disable-next-line @next/next/no-img-element */}
 			<img
 				src={`${staticBaseUrl}/${title.id}/poster.jpg`}
 				alt={title.title}

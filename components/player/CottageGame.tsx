@@ -1630,8 +1630,7 @@ export function CottageGame({
 	const updateRemotePlayers = useCallback((deltaSeconds: number) => {
 		const selfId = currentPlayerRef.current?.id;
 		const now = Date.now();
-		let nextPlayers = playersRef.current;
-		let changed = false;
+		let nextPlayers: Record<string, CottagePlayerSyncState> | null = null;
 
 		for (const [id, player] of Object.entries(playersRef.current)) {
 			if (id === selfId) {
@@ -1653,15 +1652,14 @@ export function CottageGame({
 			}
 
 			if (hasPlayerChanged(player, next)) {
-				if (!changed) {
+				if (!nextPlayers) {
 					nextPlayers = { ...playersRef.current };
-					changed = true;
 				}
 				nextPlayers[id] = next;
 			}
 		}
 
-		if (changed) {
+		if (nextPlayers) {
 			playersRef.current = nextPlayers;
 		}
 	}, []);

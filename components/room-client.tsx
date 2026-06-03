@@ -81,11 +81,7 @@ function ErrorView({ message, onRetry }: { message: string; onRetry: () => void 
 	);
 }
 
-export function RoomClient({
-	route
-}: {
-	route: RoomRoute;
-}) {
+export function RoomClient({ route }: { route: RoomRoute }) {
 	const router = useRouter();
 	const searchParams = useSearchParams();
 	const [state, setState] = useState<LoadState>({ status: 'loading' });
@@ -95,9 +91,7 @@ export function RoomClient({
 	const searchValues = useMemo<SearchValues>(
 		() => ({
 			legacyRoomId:
-				searchParams.get('room')?.trim() ||
-				searchParams.get('channel_id')?.trim() ||
-				undefined,
+				searchParams.get('room')?.trim() || searchParams.get('channel_id')?.trim() || undefined,
 			legacyMediaId: searchParams.get('mediaId')?.trim() || undefined,
 			redirectQuery: getRedirectQuery(searchParams)
 		}),
@@ -161,7 +155,11 @@ export function RoomClient({
 
 			let mediaUpdated = room.mediaUpdated;
 			if (room.mediaId !== routeMediaId) {
-				const updated = await updateRoomRecord(config.backendBaseUrl, effectiveRoomId, routeMediaId);
+				const updated = await updateRoomRecord(
+					config.backendBaseUrl,
+					effectiveRoomId,
+					routeMediaId
+				);
 				if (loadGenerationRef.current !== generation) {
 					return;
 				}
@@ -176,13 +174,7 @@ export function RoomClient({
 			lastMediaKeyRef.current = mediaKey;
 			setState({ status: 'player', data });
 		},
-		[
-			redirectSuffix,
-			route,
-			router,
-			searchValues.legacyMediaId,
-			searchValues.legacyRoomId
-		]
+		[redirectSuffix, route, router, searchValues.legacyMediaId, searchValues.legacyRoomId]
 	);
 
 	useEffect(() => {

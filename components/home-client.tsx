@@ -55,9 +55,7 @@ export function HomeClient() {
 		() => ({
 			mediaId: searchParams.get('mediaId')?.trim() || undefined,
 			requestedRoomId:
-				searchParams.get('room')?.trim() ||
-				searchParams.get('channel_id')?.trim() ||
-				undefined,
+				searchParams.get('room')?.trim() || searchParams.get('channel_id')?.trim() || undefined,
 			redirectQuery: getRedirectQuery(searchParams)
 		}),
 		[searchParams]
