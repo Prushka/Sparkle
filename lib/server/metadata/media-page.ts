@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
 import { getBrowserStaticBaseUrl } from '@/lib/server/env';
+import { fallbackDescription, getJobDescription } from '@/lib/server/metadata/job';
 import { getJob } from '@/lib/server/jobs';
 import { getRequestOrigin, toAbsoluteUrl } from '@/lib/server/request';
 import { getRoomRecord } from '@/lib/server/rooms';
@@ -19,18 +20,12 @@ type MediaMetadataData = {
 };
 
 const fallbackTitle = "It's anime time!";
-const fallbackDescription = 'Choose something to watch together.';
 const siteName = "Let's watch anime!";
 
 function getDisplayTitle(job: Job) {
 	return (
 		job.Title.episode ? `${job.Title.episode.se} - ${job.Title.episode.title}` : job.Title.title
 	).trim();
-}
-
-function getDescription(job: Job) {
-	const title = (job.Title.episode ? job.Title.title : job.Title.title).trim();
-	return title ? `Watch ${title} together.` : fallbackDescription;
 }
 
 function getPageUrl({
@@ -120,7 +115,7 @@ export async function generateMediaPageMetadata(route: MediaPageRoute): Promise<
 	}
 
 	const displayTitle = getDisplayTitle(data.job);
-	const description = getDescription(data.job);
+	const description = await getJobDescription(fetch, data.job);
 	const previewUrl = toAbsoluteUrl(
 		`${getBrowserStaticBaseUrl()}/${data.job.Id}/poster.jpg`,
 		data.origin
