@@ -3,13 +3,11 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
-	IconBadgeHd,
 	IconCalendar,
 	IconChevronDown,
 	IconClock,
 	IconDeviceTv,
-	IconFilter,
-	IconLayoutGrid,
+	IconMovie,
 	IconMovieOff,
 	IconPhoto,
 	IconPlayerPlay,
@@ -36,7 +34,13 @@ import { type LibraryJob, type TitleEpisode } from '@/lib/player/t';
 import { fetchJobs } from '@/lib/player/data';
 
 type LibraryKind = 'all' | 'movies' | 'shows';
-type SortMode = 'recent' | 'title' | 'duration';
+type SortMode =
+	| 'recent-desc'
+	| 'recent-asc'
+	| 'title-asc'
+	| 'title-desc'
+	| 'duration-desc'
+	| 'duration-asc';
 const INITIAL_LIBRARY_ITEMS = 100;
 const LIBRARY_ITEMS_BATCH = 100;
 
@@ -87,9 +91,12 @@ const kindOptions = [
 ] satisfies Option<LibraryKind>[];
 
 const sortOptions = [
-	{ value: 'recent', label: 'Recently added' },
-	{ value: 'title', label: 'Title' },
-	{ value: 'duration', label: 'Runtime' }
+	{ value: 'recent-desc', label: 'Newest first' },
+	{ value: 'recent-asc', label: 'Oldest first' },
+	{ value: 'title-asc', label: 'Title A-Z' },
+	{ value: 'title-desc', label: 'Title Z-A' },
+	{ value: 'duration-desc', label: 'Runtime longest' },
+	{ value: 'duration-asc', label: 'Runtime shortest' }
 ] satisfies Option<SortMode>[];
 
 const numberFormatter = new Intl.NumberFormat('en-US');
@@ -115,8 +122,7 @@ export function LibraryHome({
 	const [error, setError] = useState('');
 	const [query, setQuery] = useState('');
 	const [kind, setKind] = useState<LibraryKind>('all');
-	const [codec, setCodec] = useState('all');
-	const [sort, setSort] = useState<SortMode>('recent');
+	const [sort, setSort] = useState<SortMode>('recent-desc');
 	const [renderLimit, setRenderLimit] = useState(INITIAL_LIBRARY_ITEMS);
 
 	useEffect(() => {
@@ -153,10 +159,9 @@ export function LibraryHome({
 		};
 	}, [backendBaseUrl]);
 
-	const codecOptions = useMemo(() => buildCodecOptions(jobs), [jobs]);
 	const filtered = useMemo(
-		() => buildLibraryEntries(jobs, { query, kind, codec, sort }),
-		[jobs, query, kind, codec, sort]
+		() => buildLibraryEntries(jobs, { query, kind, sort }),
+		[jobs, query, kind, sort]
 	);
 	const visibleFiltered = useMemo(
 		() => limitLibraryEntries(filtered, renderLimit),
@@ -167,7 +172,7 @@ export function LibraryHome({
 	const stats = useMemo(() => getLibraryStats(jobs), [jobs]);
 	const freshJobIds = useMemo(() => getFreshJobIds(jobs), [jobs]);
 	const searchString = searchParams.toString();
-	const hasFilters = query.trim() !== '' || kind !== 'all' || codec !== 'all' || sort !== 'recent';
+	const hasFilters = query.trim() !== '' || kind !== 'all' || sort !== 'recent-desc';
 	const matchingItems = countLibraryItems(filtered);
 	const renderedItems = countLibraryItems(visibleFiltered);
 	const hasMoreItems = renderedItems < matchingItems;
@@ -206,50 +211,34 @@ export function LibraryHome({
 		setRenderLimit(INITIAL_LIBRARY_ITEMS);
 		setQuery('');
 		setKind('all');
-		setCodec('all');
-		setSort('recent');
+		setSort('recent-desc');
 	}
 
 	return (
 		<main className="min-h-screen w-full bg-[linear-gradient(180deg,#08090d_0%,#111017_42%,#08090d_100%)] text-zinc-50">
 			<div className="mx-auto flex w-full max-w-[1760px] flex-col gap-6 px-4 py-5 sm:px-6 md:px-8 lg:px-10">
-				<header className="flex flex-col gap-5 pt-2 md:flex-row md:items-end md:justify-between">
-					<div className="min-w-0">
-						<div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-							<h1 className="truncate text-4xl font-black tracking-normal text-white sm:text-5xl">
-								Library
-							</h1>
-							<div className="flex min-w-0 flex-wrap items-center gap-2 text-sm text-zinc-400">
-								<IconFilter className="size-4 text-[#8de8ce]" stroke={2.2} />
-								<span>{numberFormatter.format(visibleItems)} visible</span>
-								<span className="h-4 w-px bg-white/10" aria-hidden="true" />
-								<span>{numberFormatter.format(jobs.length)} total files</span>
-							</div>
-						</div>
-						<div className="mt-4 flex flex-wrap gap-2">
-							<StatPill
-								icon={IconLayoutGrid}
-								label={`${numberFormatter.format(stats.titles)} titles`}
-							/>
-							<StatPill
-								icon={IconDeviceTv}
-								label={`${numberFormatter.format(stats.shows)} shows`}
-							/>
-							<StatPill
-								icon={IconVideo}
-								label={`${numberFormatter.format(stats.episodes)} episodes`}
-							/>
-							<StatPill
-								icon={IconBadgeHd}
-								label={`${numberFormatter.format(stats.codecs)} codecs`}
-							/>
+				<header className="pt-2">
+					<div className="flex min-w-0 flex-col gap-2 min-[960px]:flex-row min-[960px]:items-baseline min-[960px]:gap-4">
+						<h1 className="truncate text-4xl font-black tracking-normal text-white sm:text-5xl min-[960px]:shrink-0">
+							Library
+						</h1>
+						<div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-400">
+							<HeaderStat icon={IconDeviceTv}>
+								{numberFormatter.format(stats.shows)} shows
+							</HeaderStat>
+							<HeaderStat icon={IconVideo}>
+								{numberFormatter.format(stats.episodes)} episodes
+							</HeaderStat>
+							<HeaderStat icon={IconMovie}>
+								{numberFormatter.format(stats.movies)} movies
+							</HeaderStat>
 						</div>
 					</div>
 				</header>
 
 				<section className="sticky top-0 z-20 rounded-lg border border-white/10 bg-[#0d0f14]/90 p-3 shadow-2xl shadow-black/20 backdrop-blur-xl">
-					<div className="grid gap-3 min-[960px]:grid-cols-[minmax(15rem,1fr)_16rem_11rem_12rem]">
-						<label className="relative block min-w-0">
+					<div className="grid gap-3 min-[960px]:grid-cols-[minmax(15rem,1fr)_16rem_12rem]">
+						<label className="relative order-2 block min-w-0 min-[960px]:order-none">
 							<IconSearch
 								className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500"
 								stroke={2.3}
@@ -265,7 +254,7 @@ export function LibraryHome({
 							/>
 						</label>
 
-						<div className="flex w-fit max-w-full min-w-0 justify-self-start overflow-x-auto rounded-lg border border-white/10 bg-black/20 p-1">
+						<div className="order-1 flex w-fit max-w-full min-w-0 justify-self-center overflow-x-auto rounded-lg border border-white/10 bg-black/20 p-1 min-[960px]:order-none min-[960px]:justify-self-start">
 							{kindOptions.map((option) => (
 								<button
 									key={option.value}
@@ -288,20 +277,11 @@ export function LibraryHome({
 						</div>
 
 						<MenuFilter
-							icon={IconBadgeHd}
-							label="Codec"
-							value={codec}
-							options={codecOptions}
-							onChange={(value) => {
-								setRenderLimit(INITIAL_LIBRARY_ITEMS);
-								setCodec(value);
-							}}
-						/>
-						<MenuFilter
 							icon={IconSortDescending}
 							label="Sort"
 							value={sort}
 							options={sortOptions}
+							className="order-3 min-[960px]:order-none"
 							onChange={(value) => {
 								setRenderLimit(INITIAL_LIBRARY_ITEMS);
 								setSort(value);
@@ -381,7 +361,7 @@ export function LibraryHome({
 							</div>
 							<h2 className="text-lg font-semibold text-white">No matches</h2>
 							<p className="mt-2 max-w-md text-sm text-zinc-400">
-								Try a different search, media type, codec, or sort option.
+								Try a different search, media type, or sort option.
 							</p>
 							{hasFilters ? (
 								<Button
@@ -677,12 +657,14 @@ function MenuFilter<T extends string>({
 	label,
 	value,
 	options,
+	className,
 	onChange
 }: {
 	icon: IconComponent;
 	label: string;
 	value: T;
 	options: Option<T>[];
+	className?: string;
 	onChange: (value: T) => void;
 }) {
 	const current = options.find((option) => option.value === value)?.label ?? label;
@@ -692,7 +674,10 @@ function MenuFilter<T extends string>({
 			<DropdownMenu.Trigger asChild>
 				<Button
 					variant="outline"
-					className="h-11 w-full justify-between gap-3 rounded-lg border-white/10 bg-white/[0.06] px-3 text-zinc-100 shadow-none hover:bg-white/10 hover:text-white"
+					className={cn(
+						'h-11 w-full justify-between gap-3 rounded-lg border-white/10 bg-white/[0.06] px-3 text-zinc-100 shadow-none hover:bg-white/10 hover:text-white',
+						className
+					)}
 				>
 					<span className="flex min-w-0 items-center gap-2">
 						<Icon className="size-4 shrink-0 text-[#8de8ce]" stroke={2.2} />
@@ -722,11 +707,17 @@ function MenuFilter<T extends string>({
 	);
 }
 
-function StatPill({ icon: Icon, label }: { icon: IconComponent; label: string }) {
+function HeaderStat({
+	icon: Icon,
+	children
+}: {
+	icon?: IconComponent;
+	children: ReactNode;
+}) {
 	return (
-		<span className="inline-flex h-8 items-center gap-2 rounded-full border border-white/10 bg-white/[0.05] px-3 text-xs font-semibold text-zinc-300">
-			<Icon className="size-4 text-[#8de8ce]" stroke={2.2} />
-			{label}
+		<span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+			{Icon ? <Icon className="size-3.5 text-[#8de8ce]" stroke={2.2} /> : null}
+			{children}
 		</span>
 	);
 }
@@ -769,7 +760,6 @@ function buildLibraryEntries(
 	filters: {
 		query: string;
 		kind: LibraryKind;
-		codec: string;
 		sort: SortMode;
 	}
 ) {
@@ -781,7 +771,7 @@ function buildLibraryEntries(
 	const showTitles = new Map<string, string>();
 
 	for (const job of jobs) {
-		if (!matchesCodec(job, filters.codec) || !matchesQuery(job, query)) {
+		if (!matchesQuery(job, query)) {
 			continue;
 		}
 		if (job.Title.episode) {
@@ -890,11 +880,20 @@ function buildShowEntry(titleId: string, title: string, episodes: EpisodeEntry[]
 
 function sortEntries(entries: LibraryEntry[], sort: SortMode) {
 	return entries.slice().sort((a, b) => {
-		if (sort === 'title') {
-			return a.sortTitle.localeCompare(b.sortTitle);
+		if (sort === 'title-asc') {
+			return a.sortTitle.localeCompare(b.sortTitle) || b.modTime - a.modTime;
 		}
-		if (sort === 'duration') {
+		if (sort === 'title-desc') {
+			return b.sortTitle.localeCompare(a.sortTitle) || b.modTime - a.modTime;
+		}
+		if (sort === 'duration-desc') {
 			return b.duration - a.duration || a.sortTitle.localeCompare(b.sortTitle);
+		}
+		if (sort === 'duration-asc') {
+			return a.duration - b.duration || a.sortTitle.localeCompare(b.sortTitle);
+		}
+		if (sort === 'recent-asc') {
+			return a.modTime - b.modTime || a.sortTitle.localeCompare(b.sortTitle);
 		}
 		return b.modTime - a.modTime || a.sortTitle.localeCompare(b.sortTitle);
 	});
@@ -923,39 +922,12 @@ function matchesQuery(job: LibraryJob, query: string) {
 		.every((term) => haystack.includes(term));
 }
 
-function matchesCodec(job: LibraryJob, codec: string) {
-	if (codec === 'all') {
-		return true;
-	}
-	return (job.EncodedCodecs ?? []).some((candidate) => normalizeCodec(candidate) === codec);
-}
-
-function buildCodecOptions(jobs: LibraryJob[]) {
-	const codecs = Array.from(
-		new Set(
-			jobs
-				.flatMap((job) => job.EncodedCodecs ?? [])
-				.map(normalizeCodec)
-				.filter(Boolean)
-		)
-	).sort((a, b) => codecLabel(a).localeCompare(codecLabel(b)));
-
-	return [
-		{ value: 'all', label: 'All codecs' },
-		...codecs.map((value) => ({ value, label: codecLabel(value) }))
-	] satisfies Option<string>[];
-}
-
 function getLibraryStats(jobs: LibraryJob[]) {
 	const shows = new Set<string>();
 	const movies = new Set<string>();
-	const codecs = new Set<string>();
 	let episodes = 0;
 
 	for (const job of jobs) {
-		for (const codec of job.EncodedCodecs ?? []) {
-			codecs.add(normalizeCodec(codec));
-		}
 		if (job.Title.episode) {
 			shows.add(job.Title.titleId);
 			episodes += 1;
@@ -965,10 +937,9 @@ function getLibraryStats(jobs: LibraryJob[]) {
 	}
 
 	return {
-		titles: shows.size + movies.size,
 		shows: shows.size,
 		episodes,
-		codecs: codecs.size
+		movies: movies.size
 	};
 }
 
