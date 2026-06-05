@@ -3728,7 +3728,10 @@ export function Player({
 	}
 
 	function handleCopyRoomLink() {
-		const link = new URL(`/${room}`, window.location.origin).toString();
+		const link = new URL(
+			`/${encodeURIComponent(currentRoomRef.current)}/media/${encodeURIComponent(currentMediaIdRef.current)}`,
+			window.location.origin
+		).toString();
 		window.navigator.clipboard.writeText(link).then(() => {
 			setCopiedRoomLink(true);
 			window.setTimeout(() => {
