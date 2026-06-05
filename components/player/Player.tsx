@@ -162,7 +162,8 @@ const PLAYER_VOLUME_STORAGE_KEY = 'volume';
 const DEFAULT_PLAYER_VOLUME = 1;
 const REMOTE_MIC_VOLUME_STORAGE_KEY = 'remoteMicVolumes';
 const DEFAULT_REMOTE_MIC_VOLUME = 1;
-const MAX_REMOTE_MIC_VOLUME = 3;
+const MAX_REMOTE_MIC_VOLUME = 5;
+const MAX_REMOTE_MIC_VOLUME_PERCENT = MAX_REMOTE_MIC_VOLUME * 100;
 const SUBTITLE_LANGUAGE_STORAGE_KEY = 'subtitleLanguage';
 const ROOM_TIME_SYNC_THRESHOLD_SECONDS = 6;
 const AUDIO_LANGUAGE_PRIORITY = ['jpn', 'eng', 'chi'];
@@ -4167,7 +4168,7 @@ export function Player({
 														aria-label="Volume percent"
 														type="number"
 														min={0}
-														max={300}
+														max={MAX_REMOTE_MIC_VOLUME_PERCENT}
 														step={5}
 														value={remoteMicVolumePercent}
 														className="h-9 w-20 border-0 px-2 text-right text-lg font-extrabold tabular-nums shadow-none focus-visible:ring-0"
@@ -4184,7 +4185,7 @@ export function Player({
 												id={`remote-mic-volume-${player.id}`}
 												aria-label="Volume"
 												min={0}
-												max={300}
+												max={MAX_REMOTE_MIC_VOLUME_PERCENT}
 												step={5}
 												value={[remoteMicVolumePercent]}
 												onValueChange={([value]) =>
