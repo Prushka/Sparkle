@@ -45,9 +45,11 @@ import {
 	IconMoon,
 	IconPlayerPauseFilled,
 	IconPlayerPlayFilled,
+	IconRefresh,
 	IconSettings2,
 	IconSun,
-	IconTableExport
+	IconTableExport,
+	IconVolume
 } from '@tabler/icons-react';
 import { useAppState } from '@/lib/app-state';
 import { useTheme } from '@/lib/theme';
@@ -109,6 +111,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import * as Dialog from '@/components/ui/dialog';
 import * as Tooltip from '@/components/ui/tooltip';
 import { Input } from '@/components/ui/input';
+import { Slider } from '@/components/ui/slider';
 import { Chatbox } from '@/components/player/Chatbox';
 import { Pfp } from '@/components/player/Pfp';
 import { ConnectButton } from '@/components/player/ConnectButton';
@@ -157,6 +160,9 @@ type SelectedSubtitleTrack = Pick<SubtitleTrackInfo, 'format' | 'label' | 'langu
 
 const PLAYER_VOLUME_STORAGE_KEY = 'volume';
 const DEFAULT_PLAYER_VOLUME = 1;
+const REMOTE_MIC_VOLUME_STORAGE_KEY = 'remoteMicVolumes';
+const DEFAULT_REMOTE_MIC_VOLUME = 1;
+const MAX_REMOTE_MIC_VOLUME = 3;
 const SUBTITLE_LANGUAGE_STORAGE_KEY = 'subtitleLanguage';
 const ROOM_TIME_SYNC_THRESHOLD_SECONDS = 6;
 const AUDIO_LANGUAGE_PRIORITY = ['jpn', 'eng', 'chi'];
@@ -658,6 +664,66 @@ function normalizePlayerVolume(volume: number): number {
 	return Math.min(1, Math.max(0, volume));
 }
 
+function normalizeRemoteMicVolume(volume: number): number {
+	if (!Number.isFinite(volume)) {
+		return DEFAULT_REMOTE_MIC_VOLUME;
+	}
+	return Math.min(MAX_REMOTE_MIC_VOLUME, Math.max(0, volume));
+}
+
+function readStoredRemoteMicVolumes() {
+	if (typeof window === 'undefined') {
+		return {};
+	}
+
+	const stored = window.localStorage.getItem(REMOTE_MIC_VOLUME_STORAGE_KEY);
+	if (!stored) {
+		return {};
+	}
+
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(stored);
+	} catch {
+		return {};
+	}
+	if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+		return {};
+	}
+
+	const volumes: Record<string, number> = {};
+	for (const [playerId, volume] of Object.entries(parsed)) {
+		if (!playerId) {
+			continue;
+		}
+		const normalized = normalizeRemoteMicVolume(Number(volume));
+		if (normalized !== DEFAULT_REMOTE_MIC_VOLUME) {
+			volumes[playerId] = normalized;
+		}
+	}
+	return volumes;
+}
+
+function saveRemoteMicVolume(playerId: string, volume: number) {
+	if (typeof window === 'undefined' || !playerId) {
+		return;
+	}
+
+	const normalized = normalizeRemoteMicVolume(volume);
+	const volumes = readStoredRemoteMicVolumes();
+	if (normalized === DEFAULT_REMOTE_MIC_VOLUME) {
+		delete volumes[playerId];
+	} else {
+		volumes[playerId] = normalized;
+	}
+
+	if (Object.keys(volumes).length === 0) {
+		window.localStorage.removeItem(REMOTE_MIC_VOLUME_STORAGE_KEY);
+		return;
+	}
+	window.localStorage.setItem(REMOTE_MIC_VOLUME_STORAGE_KEY, JSON.stringify(volumes));
+}
+
 function savePlayerVolume(volume: number, muted: boolean) {
 	if (typeof window === 'undefined') {
 		return;
@@ -1096,8 +1162,22 @@ function getBackendWebSocketUrl(base: string, path: string) {
 
 type VoiceChatController = ReturnType<typeof useVoiceChat>;
 
-function RemoteVoiceAudio({ stream, deafened }: { stream: MediaStream; deafened: boolean }) {
+function RemoteVoiceAudio({
+	stream,
+	deafened,
+	volume
+}: {
+	stream: MediaStream;
+	deafened: boolean;
+	volume: number;
+}) {
 	const audioRef = useRef<HTMLAudioElement | null>(null);
+	const audioContextRef = useRef<AudioContext | null>(null);
+	const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+	const gainRef = useRef<GainNode | null>(null);
+	const normalizedVolume = normalizeRemoteMicVolume(volume);
+	const canUseGain = typeof AudioContext !== 'undefined';
+	const shouldUseGain = canUseGain && normalizedVolume > 1 && !deafened;
 
 	useEffect(() => {
 		if (!audioRef.current || audioRef.current.srcObject === stream) {
@@ -1107,10 +1187,64 @@ function RemoteVoiceAudio({ stream, deafened }: { stream: MediaStream; deafened:
 	}, [stream]);
 
 	useEffect(() => {
-		if (audioRef.current) {
-			audioRef.current.muted = deafened;
+		if (!audioRef.current) {
+			return;
 		}
-	}, [deafened]);
+		audioRef.current.muted = deafened || shouldUseGain;
+	}, [deafened, shouldUseGain]);
+
+	useEffect(() => {
+		if (!shouldUseGain) {
+			sourceRef.current?.disconnect();
+			gainRef.current?.disconnect();
+			sourceRef.current = null;
+			gainRef.current = null;
+			if (audioContextRef.current) {
+				void audioContextRef.current.close().catch(() => {});
+				audioContextRef.current = null;
+			}
+			return;
+		}
+
+		const context = audioContextRef.current ?? new AudioContext();
+		audioContextRef.current = context;
+		void context.resume().catch(() => {});
+		const source = context.createMediaStreamSource(stream);
+		const gain = context.createGain();
+		gain.gain.value = DEFAULT_REMOTE_MIC_VOLUME;
+		source.connect(gain);
+		gain.connect(context.destination);
+		sourceRef.current = source;
+		gainRef.current = gain;
+
+		return () => {
+			source.disconnect();
+			gain.disconnect();
+			if (sourceRef.current === source) {
+				sourceRef.current = null;
+			}
+			if (gainRef.current === gain) {
+				gainRef.current = null;
+			}
+		};
+	}, [shouldUseGain, stream]);
+
+	useEffect(() => {
+		if (gainRef.current) {
+			gainRef.current.gain.value = normalizedVolume;
+		}
+		if (audioRef.current) {
+			audioRef.current.volume = Math.min(1, normalizedVolume);
+		}
+	}, [normalizedVolume]);
+
+	useEffect(() => {
+		return () => {
+			sourceRef.current?.disconnect();
+			gainRef.current?.disconnect();
+			void audioContextRef.current?.close().catch(() => {});
+		};
+	}, []);
 
 	return <audio ref={audioRef} autoPlay playsInline className="hidden" />;
 }
@@ -1462,6 +1596,9 @@ export function Player({
 	const [localSystemMessages, setLocalSystemMessages] = useState<LocalSystemMessage[]>([]);
 	const [controlsToDisplay, setControlsToDisplay] = useState<SendPayload[]>([]);
 	const [soundEffectPlayerIds, setSoundEffectPlayerIds] = useState<Set<string>>(() => new Set());
+	const [remoteMicVolumes, setRemoteMicVolumes] = useState<Record<string, number>>(
+		readStoredRemoteMicVolumes
+	);
 	const [selectedCodec, setSelectedCodec] = useState('auto');
 	const [selectedAudio, setSelectedAudio] = useState('1-jpn');
 	const [supportedCodecs, setSupportedCodecs] = useState<string[]>([]);
@@ -2550,6 +2687,22 @@ export function Player({
 	});
 	const { handleVoiceBroadcast, join: joinVoice } = voice;
 	const speakingPlayerIds = useMemo(() => new Set(voice.speakingIds), [voice.speakingIds]);
+	const setRemoteMicVolume = useCallback((remotePlayerId: string, volume: number) => {
+		const normalized = normalizeRemoteMicVolume(volume);
+		setRemoteMicVolumes((prev) => {
+			const current = prev[remotePlayerId] ?? DEFAULT_REMOTE_MIC_VOLUME;
+			if (current === normalized) {
+				return prev;
+			}
+			if (normalized === DEFAULT_REMOTE_MIC_VOLUME) {
+				const next = { ...prev };
+				delete next[remotePlayerId];
+				return next;
+			}
+			return { ...prev, [remotePlayerId]: normalized };
+		});
+		saveRemoteMicVolume(remotePlayerId, normalized);
+	}, []);
 	const displayedRoomPlayers = useMemo(() => {
 		if (!playerId) {
 			return roomPlayers;
@@ -3669,7 +3822,12 @@ export function Player({
 	return (
 		<>
 			{voice.remoteAudioStreams.map(({ id, stream }) => (
-				<RemoteVoiceAudio key={id} stream={stream} deafened={voice.deafened} />
+				<RemoteVoiceAudio
+					key={id}
+					stream={stream}
+					deafened={voice.deafened}
+					volume={remoteMicVolumes[id] ?? DEFAULT_REMOTE_MIC_VOLUME}
+				/>
 			))}
 			<div className="relative w-full">
 				<div
@@ -3884,6 +4042,8 @@ export function Player({
 						const playerProfileId = player.profileId || player.id;
 						const isSpeaking = speakingPlayerIds.has(player.id);
 						const isUsingSoundEffect = soundEffectPlayerIds.has(player.id);
+						const remoteMicVolume = remoteMicVolumes[player.id] ?? DEFAULT_REMOTE_MIC_VOLUME;
+						const remoteMicVolumePercent = Math.round(remoteMicVolume * 100);
 						const playerMuted = voiceSupported
 							? isCurrentUser
 								? !voice.desiredJoined || voice.status === 'listen-only' || voice.muted
@@ -3892,13 +4052,18 @@ export function Player({
 						const playerBadge = (
 							<Button
 								variant="outline"
+								aria-label={
+									isCurrentUser
+										? 'Open profile settings'
+										: `Adjust ${player.name} microphone volume`
+								}
 								className={`group relative flex h-auto gap-2 overflow-visible rounded-full rounded-l-full rounded-r-full border-2 py-0 pl-0 pr-4 transition-[background-color,border-color,box-shadow] duration-200 ${
 									isSpeaking
 										? 'border-emerald-500 bg-emerald-500/10 shadow-[0_0_18px_rgba(16,185,129,0.28)]'
 										: isUsingSoundEffect
 											? 'border-sky-400 bg-sky-400/10 shadow-[0_0_18px_rgba(56,189,248,0.3)]'
 											: 'border-input'
-								} ${isCurrentUser ? '' : 'cursor-default'}`}
+								}`}
 							>
 								<span className="relative mr-0.5 shrink-0">
 									<Pfp
@@ -3948,15 +4113,101 @@ export function Player({
 								) : (
 									<IconPlayerPauseFilled size={18} stroke={2} />
 								)}
-								{isCurrentUser ? (
+								{isCurrentUser || voiceSupported ? (
 									<span className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background/95 text-muted-foreground shadow-sm transition-transform duration-200 group-hover:scale-110 group-hover:rotate-45 group-focus-visible:scale-110 group-focus-visible:rotate-45">
-										<IconSettings2 size={13} stroke={2} />
+										{isCurrentUser ? (
+											<IconSettings2 size={13} stroke={2} />
+										) : (
+											<IconVolume size={13} stroke={2} />
+										)}
 									</span>
 								) : null}
 							</Button>
 						);
 						if (!isCurrentUser) {
-							return <div key={player.id}>{playerBadge}</div>;
+							if (!voiceSupported) {
+								return <div key={player.id}>{playerBadge}</div>;
+							}
+							return (
+								<Dialog.Root key={player.id}>
+									<Dialog.Trigger asChild>{playerBadge}</Dialog.Trigger>
+									<Dialog.Content className="w-[calc(100vw-2rem)] max-w-sm gap-5">
+										<div className="flex items-center gap-3 pr-7">
+											<Pfp
+												id={playerProfileId}
+												className="h-12 w-12"
+												discordUser={
+													historicalPlayers[player.id]?.discordUser ?? player.discordUser
+												}
+												name={player.name}
+												staticBaseUrl={staticBaseUrl}
+											/>
+											<div className="min-w-0">
+												<Dialog.Title className="truncate text-lg font-bold">
+													{player.name}
+												</Dialog.Title>
+												<Dialog.Description className="text-sm text-muted-foreground">
+													Microphone volume
+												</Dialog.Description>
+											</div>
+										</div>
+										<div className="rounded-lg border border-border/70 bg-muted/30 p-4">
+											<div className="mb-4 flex items-center justify-between gap-3">
+												<label
+													htmlFor={`remote-mic-volume-${player.id}`}
+													className="text-sm font-bold"
+												>
+													Microphone gain
+												</label>
+												<div className="flex h-10 items-center rounded-md border border-input bg-background shadow-sm focus-within:ring-1 focus-within:ring-ring">
+													<Input
+														aria-label="Volume percent"
+														type="number"
+														min={0}
+														max={300}
+														step={5}
+														value={remoteMicVolumePercent}
+														className="h-9 w-20 border-0 px-2 text-right text-lg font-extrabold tabular-nums shadow-none focus-visible:ring-0"
+														onChange={(event) =>
+															setRemoteMicVolume(player.id, Number(event.currentTarget.value) / 100)
+														}
+													/>
+													<span className="pr-3 text-sm font-extrabold text-muted-foreground">
+														%
+													</span>
+												</div>
+											</div>
+											<Slider
+												id={`remote-mic-volume-${player.id}`}
+												aria-label="Volume"
+												min={0}
+												max={300}
+												step={5}
+												value={[remoteMicVolumePercent]}
+												onValueChange={([value]) =>
+													setRemoteMicVolume(player.id, (value ?? remoteMicVolumePercent) / 100)
+												}
+											/>
+											<div className="mt-3 flex items-center justify-between text-xs font-bold text-muted-foreground">
+												<span>Muted</span>
+												<span>Normal</span>
+												<span>Boost</span>
+											</div>
+										</div>
+										<div className="flex justify-end">
+											<Button
+												variant="outline"
+												className="gap-2"
+												disabled={remoteMicVolume === DEFAULT_REMOTE_MIC_VOLUME}
+												onClick={() => setRemoteMicVolume(player.id, DEFAULT_REMOTE_MIC_VOLUME)}
+											>
+												<IconRefresh data-icon="inline-start" stroke={2} />
+												Reset
+											</Button>
+										</div>
+									</Dialog.Content>
+								</Dialog.Root>
+							);
 						}
 						return (
 							<Dialog.Root
