@@ -3215,6 +3215,10 @@ export function Player({
 					case SyncTypes.BroadcastSync:
 						switch (broadcast?.type) {
 							case BroadcastTypes.MoveTo:
+								if (broadcast.moveTo === '') {
+									void onRoomMediaChanged?.('', state.timestamp);
+									break;
+								}
 								mediaSelectionRef.current?.updateList(broadcast.moveTo, (jobs: LibraryJob[]) => {
 									initiateMoveTo(jobs);
 								});

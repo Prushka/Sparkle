@@ -65,6 +65,7 @@ type Room struct {
 	mediaID                   string
 	mediaUpdatedAt            int64
 	players                   map[string]*Player
+	mediaSubscribers          map[string]*Player
 	chats                     []Chat
 	lastSeek                  time.Time
 	idleSince                 time.Time
@@ -146,6 +147,10 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "room and id are required", http.StatusBadRequest)
 		return
 	}
+	if !isValidSocketPlayerID(playerID) {
+		http.Error(w, "invalid player id", http.StatusBadRequest)
+		return
+	}
 
 	conn, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -163,6 +168,13 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	log.Printf("[%s] connected to room %s", playerID, roomID)
 	go player.writePump()
 	h.readPump(room, player)
+}
+
+func isValidSocketPlayerID(id string) bool {
+	if strings.HasPrefix(id, MediaSubscriberPrefix) {
+		return safeID.MatchString(strings.TrimPrefix(id, MediaSubscriberPrefix))
+	}
+	return safeID.MatchString(id)
 }
 
 func (h *Hub) HandlePFP(w http.ResponseWriter, r *http.Request) {
@@ -307,14 +319,15 @@ func writeJSON(w http.ResponseWriter, payload any) {
 
 func newRoom(id string, mediaID string) *Room {
 	room := &Room{
-		id:      id,
-		mediaID: mediaID,
-		players: make(map[string]*Player),
-		chats:   make([]Chat, 0),
-		state:   defaultVideoState(),
-		youtube: defaultYouTubeState(),
-		chess:   defaultChessState(),
-		cottage: defaultCottageState(),
+		id:               id,
+		mediaID:          mediaID,
+		players:          make(map[string]*Player),
+		mediaSubscribers: make(map[string]*Player),
+		chats:            make([]Chat, 0),
+		state:            defaultVideoState(),
+		youtube:          defaultYouTubeState(),
+		chess:            defaultChessState(),
+		cottage:          defaultCottageState(),
 	}
 	if mediaID != "" {
 		room.mediaUpdatedAt = time.Now().UnixMilli()
@@ -391,14 +404,21 @@ func (h *Hub) addPlayerToRoom(id string, player *Player) *Room {
 
 	var old *Player
 	room.mu.Lock()
-	if existing := room.players[player.state.Id]; existing != nil {
-		old = existing
+	if player.isMediaSubscriber() {
+		if existing := room.mediaSubscribers[player.state.Id]; existing != nil {
+			old = existing
+		}
+		room.mediaSubscribers[player.state.Id] = player
+	} else {
+		if existing := room.players[player.state.Id]; existing != nil {
+			old = existing
+		}
+		room.players[player.state.Id] = player
+		room.lastPlayersSignature = ""
+		room.lastPlayerStatusSignature = ""
+		room.lastStatusSent = time.Time{}
 	}
-	room.players[player.state.Id] = player
 	room.idleSince = time.Time{}
-	room.lastPlayersSignature = ""
-	room.lastPlayerStatusSignature = ""
-	room.lastStatusSent = time.Time{}
 	room.mu.Unlock()
 	h.mu.Unlock()
 
@@ -415,6 +435,7 @@ func (h *Hub) cleanupIdleRooms(now time.Time) {
 	for id, room := range h.rooms {
 		room.mu.RLock()
 		idle := len(room.players) == 0 &&
+			len(room.mediaSubscribers) == 0 &&
 			!room.idleSince.IsZero() &&
 			now.Sub(room.idleSince) >= idleRoomTTL
 		room.mu.RUnlock()
@@ -529,6 +550,16 @@ func (r *Room) remove(player *Player) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	if player.isMediaSubscriber() {
+		if current := r.mediaSubscribers[player.state.Id]; current == player {
+			delete(r.mediaSubscribers, player.state.Id)
+			if len(r.players) == 0 && len(r.mediaSubscribers) == 0 {
+				r.idleSince = time.Now()
+			}
+		}
+		return
+	}
+
 	if current := r.players[player.state.Id]; current != player {
 		return
 	}
@@ -554,7 +585,7 @@ func (r *Room) updateMediaID(mediaID string, firedBy *PlayerSnapshot) roomRespon
 	r.mu.Lock()
 	if r.mediaID != mediaID {
 		r.applyMediaIDLocked(mediaID, now)
-		targets = r.playersLocked()
+		targets = r.mediaWatchersLocked()
 		changed = true
 	}
 	response := r.snapshotLocked()
@@ -603,8 +634,11 @@ func (r *Room) snapshotLocked() roomResponse {
 
 func (r *Room) close() {
 	r.mu.RLock()
-	players := make([]*Player, 0, len(r.players))
+	players := make([]*Player, 0, len(r.players)+len(r.mediaSubscribers))
 	for _, player := range r.players {
+		players = append(players, player)
+	}
+	for _, player := range r.mediaSubscribers {
 		players = append(players, player)
 	}
 	r.mu.RUnlock()
@@ -715,7 +749,7 @@ func (r *Room) broadcast(sender *Player, broadcast map[string]any) {
 	mediaChanged := false
 
 	r.mu.Lock()
-	if r.players[sender.state.Id] != sender {
+	if sender.isMediaSubscriber() || r.players[sender.state.Id] != sender {
 		r.mu.Unlock()
 		return
 	}
@@ -735,6 +769,9 @@ func (r *Room) broadcast(sender *Player, broadcast map[string]any) {
 		}
 	} else {
 		targets = r.playersLocked()
+	}
+	if isMediaMove && !targeted {
+		targets = append(targets, r.mediaSubscribersLocked()...)
 	}
 	r.mu.Unlock()
 
@@ -765,7 +802,7 @@ func broadcastMoveToMediaID(broadcast map[string]any) (string, bool) {
 		return "", false
 	}
 	mediaID = strings.TrimSpace(mediaID)
-	if !safeID.MatchString(mediaID) {
+	if mediaID != "" && !safeID.MatchString(mediaID) {
 		return "", false
 	}
 	return mediaID, true
@@ -2016,6 +2053,25 @@ func signatureFor(value any) string {
 func (r *Room) playersLocked() []*Player {
 	players := make([]*Player, 0, len(r.players))
 	for _, player := range r.players {
+		players = append(players, player)
+	}
+	return players
+}
+
+func (r *Room) mediaSubscribersLocked() []*Player {
+	players := make([]*Player, 0, len(r.mediaSubscribers))
+	for _, player := range r.mediaSubscribers {
+		players = append(players, player)
+	}
+	return players
+}
+
+func (r *Room) mediaWatchersLocked() []*Player {
+	players := make([]*Player, 0, len(r.players)+len(r.mediaSubscribers))
+	for _, player := range r.players {
+		players = append(players, player)
+	}
+	for _, player := range r.mediaSubscribers {
 		players = append(players, player)
 	}
 	return players

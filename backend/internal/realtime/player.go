@@ -3,6 +3,7 @@ package realtime
 import (
 	"encoding/json"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -36,6 +37,10 @@ func newPlayer(conn *websocket.Conn, id string) *Player {
 		},
 	}
 	return p
+}
+
+func (p *Player) isMediaSubscriber() bool {
+	return strings.HasPrefix(p.state.Id, MediaSubscriberPrefix)
 }
 
 func (p *Player) sendJSON(message any) bool {

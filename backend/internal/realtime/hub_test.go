@@ -654,8 +654,10 @@ func TestMoveToBroadcastUpdatesRoomMedia(t *testing.T) {
 	room := newRoom("room", "old_media")
 	sender := testPlayer("sender", "Sender", 4)
 	receiver := testPlayer("receiver", "Receiver", 4)
+	subscriber := testPlayer(MediaSubscriberPrefix+"subscriber", "", 4)
 	room.players[sender.state.Id] = sender
 	room.players[receiver.state.Id] = receiver
+	room.mediaSubscribers[subscriber.state.Id] = subscriber
 
 	room.broadcast(sender, sanitizeBroadcast(map[string]any{
 		"type":   MoveToBroadcast,
@@ -665,7 +667,7 @@ func TestMoveToBroadcastUpdatesRoomMedia(t *testing.T) {
 	if room.mediaID != "new_media" {
 		t.Fatalf("room mediaID = %q, want new_media", room.mediaID)
 	}
-	for _, player := range []*Player{sender, receiver} {
+	for _, player := range []*Player{sender, receiver, subscriber} {
 		payload := readQueuedPayload(t, player)
 		if payload.Type != BroadcastSync || payload.Broadcast["type"] != MoveToBroadcast {
 			t.Fatalf("move payload = %#v", payload)
@@ -676,6 +678,48 @@ func TestMoveToBroadcastUpdatesRoomMedia(t *testing.T) {
 		if payload.FiredBy == nil || payload.FiredBy.Id != "sender" {
 			t.Fatalf("move payload firedBy = %#v, want sender", payload.FiredBy)
 		}
+	}
+}
+
+func TestMoveToBroadcastCanClearRoomMedia(t *testing.T) {
+	room := newRoom("room", "old_media")
+	sender := testPlayer("sender", "Sender", 4)
+	receiver := testPlayer("receiver", "Receiver", 4)
+	room.players[sender.state.Id] = sender
+	room.players[receiver.state.Id] = receiver
+
+	room.broadcast(sender, sanitizeBroadcast(map[string]any{
+		"type":   MoveToBroadcast,
+		"moveTo": "",
+	}))
+
+	if room.mediaID != "" {
+		t.Fatalf("room mediaID = %q, want empty", room.mediaID)
+	}
+	for _, player := range []*Player{sender, receiver} {
+		payload := readQueuedPayload(t, player)
+		if payload.Type != BroadcastSync || payload.Broadcast["type"] != MoveToBroadcast {
+			t.Fatalf("clear payload = %#v", payload)
+		}
+		if payload.Broadcast["moveTo"] != "" {
+			t.Fatalf("clear payload target = %#v, want empty", payload.Broadcast["moveTo"])
+		}
+	}
+}
+
+func TestUpdateMediaIDNotifiesMediaSubscribers(t *testing.T) {
+	room := newRoom("room", "")
+	subscriber := testPlayer(MediaSubscriberPrefix+"subscriber", "", 4)
+	room.mediaSubscribers[subscriber.state.Id] = subscriber
+
+	room.updateMediaID("new_media", nil)
+
+	payload := readQueuedPayload(t, subscriber)
+	if payload.Type != BroadcastSync || payload.Broadcast["type"] != MoveToBroadcast {
+		t.Fatalf("subscriber payload = %#v", payload)
+	}
+	if payload.Broadcast["moveTo"] != "new_media" {
+		t.Fatalf("subscriber target = %#v, want new_media", payload.Broadcast["moveTo"])
 	}
 }
 
