@@ -3979,7 +3979,7 @@ export function Player({
 								<Tooltip.Trigger asChild>
 									<Button
 										variant={theme === 'dark' ? 'outline' : 'default'}
-										className="h-10 px-3 max-[380px]:px-2"
+										className="h-10 w-28 flex-none justify-center px-3"
 										onClick={handleCopyRoomLink}
 									>
 										{copiedRoomLink ? (
@@ -4271,11 +4271,7 @@ export function Player({
 
 				<Card className="mt-auto w-full max-w-[90rem] self-center">
 					<CardHeader className="max-sm:pb-0 max-sm:pl-4 max-sm:pr-4 max-sm:pt-4">
-						<motion.div
-							layout
-							className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
-							transition={{ duration: 0.24, ease: 'easeOut' }}
-						>
+						<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 							<div className="flex min-w-0 flex-1 flex-col gap-1">
 								<CardTitle>Media</CardTitle>
 							</div>
@@ -4319,7 +4315,7 @@ export function Player({
 									</Tooltip.Root>
 								</Tooltip.Provider>
 							</div>
-						</motion.div>
+						</div>
 					</CardHeader>
 					<CardContent className="max-sm:p-4">
 						<MediaSelection
