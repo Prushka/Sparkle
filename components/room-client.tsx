@@ -32,6 +32,14 @@ type SearchValues = {
 	redirectQuery?: string;
 };
 
+const libraryReturnHistoryStateKey = '__sparkleLibraryReturn';
+
+type SparkleHistoryState = {
+	[libraryReturnHistoryStateKey]?: {
+		roomId?: unknown;
+	};
+};
+
 function getRedirectQuery(searchParams: URLSearchParams) {
 	const params = new URLSearchParams(searchParams.toString());
 	params.delete('room');
@@ -46,6 +54,44 @@ function buildMediaPath(roomId: string, mediaId: string, suffix = '') {
 
 function buildLibraryPath(roomId: string, suffix = '') {
 	return `/${encodeURIComponent(roomId)}${suffix}`;
+}
+
+function getHistoryLibraryReturnRoomId() {
+	if (typeof window === 'undefined') {
+		return undefined;
+	}
+	const state = window.history.state as SparkleHistoryState | null;
+	const roomId = state?.[libraryReturnHistoryStateKey]?.roomId;
+	return typeof roomId === 'string' ? roomId : undefined;
+}
+
+function replaceCurrentHistoryState(patch: SparkleHistoryState) {
+	if (typeof window === 'undefined') {
+		return;
+	}
+	const state = window.history.state;
+	const nextState =
+		state && typeof state === 'object' ? ({ ...state, ...patch } as SparkleHistoryState) : patch;
+	window.history.replaceState(nextState, '', window.location.href);
+}
+
+function markLibraryHistoryEntry(roomId: string) {
+	replaceCurrentHistoryState({
+		[libraryReturnHistoryStateKey]: { roomId }
+	});
+}
+
+function clearLibraryHistoryEntryMarker() {
+	if (typeof window === 'undefined') {
+		return;
+	}
+	const state = window.history.state;
+	if (!state || typeof state !== 'object' || !(libraryReturnHistoryStateKey in state)) {
+		return;
+	}
+	const nextState = { ...state } as SparkleHistoryState;
+	delete nextState[libraryReturnHistoryStateKey];
+	window.history.replaceState(nextState, '', window.location.href);
 }
 
 function getBackendWebSocketUrl(base: string, path: string) {
@@ -183,11 +229,12 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 			}
 
 			if (!routeMediaId) {
+				const fromMarkedLibraryHistory = getHistoryLibraryReturnRoomId() === effectiveRoomId;
 				if (
 					route.view === 'library' &&
 					room.mediaId &&
-					previousRoute?.view === 'media' &&
-					previousRoute.roomId === effectiveRoomId
+					((previousRoute?.view === 'media' && previousRoute.roomId === effectiveRoomId) ||
+						fromMarkedLibraryHistory)
 				) {
 					await updateRoomRecord(config.backendBaseUrl, effectiveRoomId, '');
 					if (loadGenerationRef.current !== generation) {
@@ -260,6 +307,17 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 		}
 		document.title = "It's anime time!";
 		setThemeColor('#f0f0f0');
+	}, [state]);
+
+	useEffect(() => {
+		if (state.status === 'library') {
+			markLibraryHistoryEntry(state.roomId);
+			window.addEventListener('beforeunload', clearLibraryHistoryEntryMarker);
+			return () => window.removeEventListener('beforeunload', clearLibraryHistoryEntryMarker);
+		}
+		if (state.status === 'player') {
+			clearLibraryHistoryEntryMarker();
+		}
 	}, [state]);
 
 	const handleRoomMediaChanged = useCallback(
