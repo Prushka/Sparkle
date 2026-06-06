@@ -211,11 +211,6 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 				return;
 			}
 
-			if (!room.mediaId) {
-				router.replace(buildLibraryPath(effectiveRoomId, redirectSuffix));
-				return;
-			}
-
 			let mediaUpdated = room.mediaUpdated;
 			if (room.mediaId !== routeMediaId) {
 				const updated = await updateRoomRecord(
