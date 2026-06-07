@@ -293,6 +293,7 @@ func (s *Store) loadJob(id string) (map[string]any, error) {
 	if latestModTime > int64Field(job, "JobModTime") {
 		job["JobModTime"] = latestModTime
 	}
+	filterEncodedCodecsByFiles(job, files)
 	ensureObject(job, "MappedAudio")
 	ensureArray(job, "EncodedCodecs")
 	ensureArray(job, "Streams")
@@ -309,6 +310,43 @@ func normalizeJob(job map[string]any) {
 			normalizeStreamList(streams)
 		}
 	}
+}
+
+func filterEncodedCodecsByFiles(job map[string]any, files map[string]int64) {
+	switch codecs := job["EncodedCodecs"].(type) {
+	case []any:
+		filtered := codecs[:0]
+		for _, value := range codecs {
+			codec, ok := value.(string)
+			if !ok || !codecFileExists(files, codec) {
+				continue
+			}
+			filtered = append(filtered, value)
+		}
+		job["EncodedCodecs"] = filtered
+	case []string:
+		filtered := codecs[:0]
+		for _, codec := range codecs {
+			if !codecFileExists(files, codec) {
+				continue
+			}
+			filtered = append(filtered, codec)
+		}
+		job["EncodedCodecs"] = filtered
+	}
+}
+
+func codecFileExists(files map[string]int64, codec string) bool {
+	if _, ok := files[codec+".mp4"]; ok {
+		return true
+	}
+	prefix := codec + "-"
+	for name := range files {
+		if strings.HasPrefix(name, prefix) && strings.HasSuffix(name, ".mp4") {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeStreamList(value any) {

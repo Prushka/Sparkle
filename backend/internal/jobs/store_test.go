@@ -81,7 +81,7 @@ func TestStoreJobSupportsModernJobJSON(t *testing.T) {
 	if got := job["Duration"]; got != 6840.013 {
 		t.Fatalf("Duration = %v, want 6840.013", got)
 	}
-	assertStringSlice(t, job["EncodedCodecs"], []string{"hevc", "av1"})
+	assertStringSlice(t, job["EncodedCodecs"], []string{"av1"})
 	assertStringSlice(t, job["DominantColors"], []string{"#514940"})
 
 	files := assertMap(t, job["Files"])
@@ -124,6 +124,32 @@ func TestStoreJobSupportsModernJobJSON(t *testing.T) {
 	}
 }
 
+func TestStoreJobKeepsCodecWithPlainEncodedFile(t *testing.T) {
+	outputDir := t.TempDir()
+	jobDir := filepath.Join(outputDir, "plain")
+	if err := os.Mkdir(jobDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, jobDir, "hevc.mp4", "video")
+	writeFile(t, jobDir, jobFile, `{
+		"id": "plain",
+		"input": "Plain Codec File.mkv",
+		"state": "complete",
+		"encodedCodecs": ["hevc", "av1"]
+	}`)
+
+	payload, _, err := NewStore(outputDir, time.Minute).Job(context.Background(), "plain")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var job map[string]any
+	if err := json.Unmarshal(payload, &job); err != nil {
+		t.Fatal(err)
+	}
+	assertStringSlice(t, job["EncodedCodecs"], []string{"hevc"})
+}
+
 func TestStorePayloadCompactsModernJobJSON(t *testing.T) {
 	outputDir := t.TempDir()
 	jobDir := filepath.Join(outputDir, "s6IKH")
@@ -131,6 +157,7 @@ func TestStorePayloadCompactsModernJobJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeFile(t, jobDir, "poster.jpg", "poster")
+	writeFile(t, jobDir, "av1-1-eng.mp4", "video")
 	writeFile(t, jobDir, jobFile, `{
 		"id": "s6IKH",
 		"input": "Remarkably Bright Creatures (2026) WEBDL-2160p.mkv",
@@ -201,6 +228,7 @@ func writeModernJob(t *testing.T, outputDir, id, title string) {
 		t.Fatal(err)
 	}
 	writeFile(t, jobDir, "poster.jpg", "poster")
+	writeFile(t, jobDir, "av1-1-eng.mp4", "video")
 	writeFile(t, jobDir, jobFile, `{
 		"id": "`+id+`",
 		"input": "`+title+` WEBDL-1080p.mkv",
