@@ -165,7 +165,6 @@ const DEFAULT_REMOTE_MIC_VOLUME = 1;
 const MAX_REMOTE_MIC_VOLUME = 5;
 const MAX_REMOTE_MIC_VOLUME_PERCENT = MAX_REMOTE_MIC_VOLUME * 100;
 const SUBTITLE_LANGUAGE_STORAGE_KEY = 'subtitleLanguage';
-const ASS_MAX_RENDER_HEIGHT = 1080;
 const ASS_BITMAP_CACHE_LIMIT_MB = 64;
 const ASS_GLYPH_CACHE_LIMIT_MB = 16;
 const ROOM_TIME_SYNC_THRESHOLD_SECONDS = 6;
@@ -1392,6 +1391,7 @@ type JASSUBManagedInstance = {
 	freeTrack: () => void;
 	setTrackByUrl?: (url: string) => void | Promise<void>;
 	destroy?: () => void | Promise<void>;
+	_computeCanvasSize?: (width?: number, height?: number) => { width: number; height: number };
 	ready?: Promise<void>;
 	_canvas?: HTMLCanvasElement | null;
 	_canvasctrl?: HTMLCanvasElement | OffscreenCanvas | null;
@@ -1442,6 +1442,16 @@ function canRenderAssFrame(instance: JASSUBManagedInstance) {
 	return !instance._destroyed && Boolean(instance._ctx && instance._canvasctrl);
 }
 
+function getAssCanvasScaleFactor(instance: JASSUBManagedInstance) {
+	const prescaleFactor =
+		(instance as { prescaleFactor?: number }).prescaleFactor &&
+		(instance as { prescaleFactor?: number }).prescaleFactor! > 0
+			? (instance as { prescaleFactor?: number }).prescaleFactor!
+			: 1;
+	const dpr = window.devicePixelRatio || 1;
+	return dpr * prescaleFactor;
+}
+
 function releaseAssRendererCanvas(instance: JASSUBManagedInstance) {
 	try {
 		if (instance._canvasctrl && 'width' in instance._canvasctrl) {
@@ -1479,10 +1489,24 @@ function withManagedAssRendererCleanup(Constructor: LibASSConstructor): LibASSCo
 		const freeTrack = instance.freeTrack.bind(instance);
 		const setTrackByUrl = instance.setTrackByUrl?.bind(instance);
 		const destroy = instance.destroy?.bind(instance);
+		const computeCanvasSize = instance._computeCanvasSize?.bind(instance);
 		const onmessage = instance._onmessage?.bind(instance);
 		const render = instance._render?.bind(instance);
 		let destroyed = false;
 		let trackRequestId = 0;
+
+		if (computeCanvasSize) {
+			instance._computeCanvasSize = (width = 0, height = 0) => {
+				if (width <= 0 || height <= 0) {
+					return { width: 0, height: 0 };
+				}
+				const scale = getAssCanvasScaleFactor(instance);
+				return {
+					width: Math.round(width * scale),
+					height: Math.round(height * scale)
+				};
+			};
+		}
 
 		if (render) {
 			instance._render = (payload: JASSUBRenderPayload) => {
@@ -1923,8 +1947,6 @@ export function Player({
 			wasmUrl: getPublicAssetUrl('jassub-worker.wasm'),
 			modernWasmUrl: getPublicAssetUrl('jassub-worker-modern.wasm'),
 			legacyWasmUrl: getPublicAssetUrl('jassub-worker.wasm.js'),
-			maxRenderHeight: ASS_MAX_RENDER_HEIGHT,
-			prescaleHeightLimit: ASS_MAX_RENDER_HEIGHT,
 			libassMemoryLimit: ASS_BITMAP_CACHE_LIMIT_MB,
 			libassGlyphLimit: ASS_GLYPH_CACHE_LIMIT_MB,
 			fallbackFont: defaultFallback[0].toLowerCase(),
