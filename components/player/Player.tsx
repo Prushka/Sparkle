@@ -13,7 +13,6 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-	LibASSTextRenderer,
 	MediaPlayer,
 	MediaProvider,
 	Menu,
@@ -25,7 +24,8 @@ import {
 	type MediaKeyShortcuts,
 	type MediaPlayerInstance,
 	type MediaPlayerQuery,
-	type MediaProviderInstance
+	type MediaProviderInstance,
+	type TextRenderer
 } from '@vidstack/react';
 import {
 	DefaultMenuButton,
@@ -1369,10 +1369,24 @@ type JASSUBRendererConfig = LibASSConfig & {
 };
 
 type JASSUBManagedInstance = {
+	addEventListener?: EventTarget['addEventListener'];
 	freeTrack: () => void;
 	setTrackByUrl?: (url: string) => void | Promise<void>;
 	destroy?: () => void | Promise<void>;
 	ready?: Promise<void>;
+	_canvas?: HTMLCanvasElement | null;
+	_canvasctrl?: HTMLCanvasElement | OffscreenCanvas | null;
+	_ctx?: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | false | null;
+	_destroyed?: boolean;
+	_onmessage?: (event: MessageEvent) => void;
+	_render?: (payload: JASSUBRenderPayload) => void;
+	_worker?: Worker;
+	busy?: boolean;
+};
+
+type JASSUBRenderPayload = {
+	images?: Array<{ image?: { close?: () => void } | null }>;
+	target?: string;
 };
 
 const JASSUB_SCRIPT_URL = '/scripts/jassub.es.js';
@@ -1388,6 +1402,27 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
 let assRendererModulePromise: Promise<{ default: LibASSConstructor }> | null = null;
 
+function closeAssRenderImages(payload: JASSUBRenderPayload | null | undefined) {
+	for (const image of payload?.images ?? []) {
+		try {
+			image.image?.close?.();
+		} catch {
+			// ImageBitmap.close() can throw after the browser has already detached it.
+		}
+	}
+}
+
+function isDetachedOffscreenCanvasError(error: unknown) {
+	if (!(error instanceof Error || error instanceof DOMException)) {
+		return false;
+	}
+	return error.name === 'InvalidStateError' && /OffscreenCanvas|detached/i.test(error.message);
+}
+
+function canRenderAssFrame(instance: JASSUBManagedInstance) {
+	return !instance._destroyed && Boolean(instance._ctx && instance._canvasctrl);
+}
+
 function withManagedAssRendererCleanup(Constructor: LibASSConstructor): LibASSConstructor {
 	const ManagedLibASS = function (config: ConstructorParameters<LibASSConstructor>[0]) {
 		const configWithInitialTrack = {
@@ -1399,8 +1434,56 @@ function withManagedAssRendererCleanup(Constructor: LibASSConstructor): LibASSCo
 		const instance = new Constructor(configWithInitialTrack) as JASSUBManagedInstance;
 		const freeTrack = instance.freeTrack.bind(instance);
 		const setTrackByUrl = instance.setTrackByUrl?.bind(instance);
+		const destroy = instance.destroy?.bind(instance);
+		const onmessage = instance._onmessage?.bind(instance);
+		const render = instance._render?.bind(instance);
 		let destroyed = false;
 		let trackRequestId = 0;
+
+		if (render) {
+			instance._render = (payload: JASSUBRenderPayload) => {
+				if (destroyed || !canRenderAssFrame(instance)) {
+					closeAssRenderImages(payload);
+					instance.busy = false;
+					return;
+				}
+				try {
+					render(payload);
+				} catch (error) {
+					closeAssRenderImages(payload);
+					if (isDetachedOffscreenCanvasError(error)) {
+						instance.busy = false;
+						return;
+					}
+					throw error;
+				}
+			};
+		}
+
+		if (onmessage) {
+			instance._onmessage = (event: MessageEvent) => {
+				const payload = event.data as JASSUBRenderPayload | undefined;
+				if (destroyed || instance._destroyed) {
+					closeAssRenderImages(payload);
+					return;
+				}
+				if (payload?.target === 'render' && !canRenderAssFrame(instance)) {
+					closeAssRenderImages(payload);
+					instance.busy = false;
+					return;
+				}
+				try {
+					onmessage(event);
+				} catch (error) {
+					closeAssRenderImages(payload);
+					if (payload?.target === 'render' && isDetachedOffscreenCanvasError(error)) {
+						instance.busy = false;
+						return;
+					}
+					throw error;
+				}
+			};
+		}
 
 		if (setTrackByUrl) {
 			instance.setTrackByUrl = (url: string) => {
@@ -1427,12 +1510,21 @@ function withManagedAssRendererCleanup(Constructor: LibASSConstructor): LibASSCo
 			} catch {
 				// JASSUB may already have lost its worker after a fast media switch.
 			}
+		};
+
+		instance.destroy = () => {
 			if (destroyed) {
 				return;
 			}
 			destroyed = true;
+			trackRequestId++;
+			const worker = instance._worker;
+			if (worker) {
+				worker.onmessage = null;
+				worker.onerror = null;
+			}
 			try {
-				void Promise.resolve(instance.destroy?.()).catch(() => undefined);
+				return void Promise.resolve(destroy?.()).catch(() => undefined);
 			} catch {
 				// JASSUB may already be half-torn-down after a fast track switch.
 			}
@@ -1453,6 +1545,130 @@ function loadAssRendererModule() {
 			}))
 		);
 	return assRendererModulePromise;
+}
+
+class ManagedLibASSTextRenderer implements TextRenderer {
+	readonly priority = 1;
+	private readonly typeRE = /(?:^|\.)s?s?ass(?:$|[?#])/i;
+	private instance: JASSUBManagedInstance | null = null;
+	private loadRequestId = 0;
+	private loadPromise: Promise<void> | null = null;
+	private track: TextTrack | null = null;
+	private video: HTMLVideoElement | null = null;
+
+	constructor(
+		readonly loader: () => Promise<{ default: LibASSConstructor }>,
+		readonly config?: LibASSConfig
+	) {}
+
+	canRender(track: TextTrack, video: HTMLVideoElement | null) {
+		return Boolean(
+			video &&
+			track.src &&
+			((typeof track.type === 'string' && this.typeRE.test(track.type)) ||
+				this.typeRE.test(track.src))
+		);
+	}
+
+	attach(video: HTMLVideoElement | null) {
+		if (!video) {
+			return;
+		}
+		this.video = video;
+		this.ensureInstance();
+	}
+
+	changeTrack(track: TextTrack | null) {
+		if (!track?.src || track.readyState === 3) {
+			this.track = null;
+			this.freeTrack();
+			return;
+		}
+
+		if (this.track === track) {
+			return;
+		}
+
+		this.track = track;
+		if (!this.instance) {
+			this.ensureInstance();
+			return;
+		}
+		this.instance.setTrackByUrl?.(track.src);
+	}
+
+	detach() {
+		this.loadRequestId++;
+		this.loadPromise = null;
+		this.track = null;
+		this.video = null;
+		this.disposeInstance();
+	}
+
+	private ensureInstance() {
+		if (!this.video || !this.track?.src || this.instance || this.loadPromise) {
+			return;
+		}
+
+		const requestId = ++this.loadRequestId;
+		const video = this.video;
+		this.loadPromise = this.loader()
+			.then((module) => {
+				if (this.loadRequestId !== requestId || this.video !== video || !this.track?.src) {
+					return;
+				}
+
+				const instance = new module.default({
+					...this.config,
+					video,
+					subUrl: this.track.src
+				}) as JASSUBManagedInstance;
+				this.instance = instance;
+				instance.addEventListener?.('ready', () => {
+					const canvas = instance._canvas;
+					if (canvas) {
+						canvas.style.pointerEvents = 'none';
+					}
+				});
+				instance.addEventListener?.('error', (event) => {
+					console.warn('ASS subtitle renderer error', (event as ErrorEvent).error);
+				});
+			})
+			.catch((error) => {
+				console.warn('Unable to load ASS subtitle renderer', error);
+			})
+			.finally(() => {
+				if (this.loadRequestId === requestId) {
+					this.loadPromise = null;
+				}
+			});
+	}
+
+	private freeTrack() {
+		try {
+			this.instance?.freeTrack();
+		} catch {
+			// JASSUB may already be between canvas/worker states during a track change.
+		}
+	}
+
+	private disposeInstance() {
+		const instance = this.instance;
+		if (!instance) {
+			return;
+		}
+		this.instance = null;
+		try {
+			instance.freeTrack();
+		} catch {
+			// JASSUB may already be between canvas/worker states during teardown.
+		}
+		try {
+			void Promise.resolve(instance.destroy?.()).catch(() => undefined);
+		} catch {
+			// JASSUB may already be half-torn-down after a fast media switch.
+		}
+	}
 }
 
 function ignoreMediaRequestFailure(action: () => unknown) {
@@ -2742,7 +2958,7 @@ export function Player({
 			return;
 		}
 
-		const assRenderer = new LibASSTextRenderer(loadAssRendererModule, assRendererConfig);
+		const assRenderer = new ManagedLibASSTextRenderer(loadAssRendererModule, assRendererConfig);
 		playerEl.textRenderers.add(assRenderer);
 
 		return () => {

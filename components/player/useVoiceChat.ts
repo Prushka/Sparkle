@@ -79,6 +79,14 @@ function createAudioSampleBuffer(size: number): Uint8Array<ArrayBuffer> {
 	return new Uint8Array(new ArrayBuffer(size));
 }
 
+function disconnectAudioNode(node: AudioNode | null | undefined) {
+	try {
+		node?.disconnect();
+	} catch {
+		// Audio nodes may already be disconnected when a stream or context is torn down.
+	}
+}
+
 export function useVoiceChat({
 	playerId,
 	roomPlayers,
@@ -186,23 +194,32 @@ export function useVoiceChat({
 			speakingFrameRef.current = null;
 			const now = performance.now();
 			for (const [id, monitor] of speakingMonitorsRef.current) {
-				const isLocalMuted = id === playerIdRef.current && mutedRef.current;
-				const hasLiveAudio = monitor.stream
-					.getAudioTracks()
-					.some((track) => track.readyState === 'live' && track.enabled);
-				if (!isLocalMuted && monitor.stream.active && hasLiveAudio) {
-					monitor.analyser.getByteTimeDomainData(monitor.data);
-					let sum = 0;
-					for (const value of monitor.data) {
-						const centered = (value - 128) / 128;
-						sum += centered * centered;
+				let active = false;
+				try {
+					const isLocalMuted = id === playerIdRef.current && mutedRef.current;
+					const hasLiveAudio = monitor.stream
+						.getAudioTracks()
+						.some((track) => track.readyState === 'live' && track.enabled);
+					if (!isLocalMuted && monitor.stream.active && hasLiveAudio) {
+						monitor.analyser.getByteTimeDomainData(monitor.data);
+						let sum = 0;
+						for (const value of monitor.data) {
+							const centered = (value - 128) / 128;
+							sum += centered * centered;
+						}
+						const rms = Math.sqrt(sum / monitor.data.length);
+						if (rms > speakingThreshold) {
+							monitor.activeUntil = now + speakingHoldMs;
+						}
 					}
-					const rms = Math.sqrt(sum / monitor.data.length);
-					if (rms > speakingThreshold) {
-						monitor.activeUntil = now + speakingHoldMs;
-					}
+					active = monitor.activeUntil > now && !isLocalMuted;
+				} catch (error) {
+					console.warn('Voice speaking monitor stopped', error);
+					disconnectAudioNode(monitor.source);
+					disconnectAudioNode(monitor.analyser);
+					speakingMonitorsRef.current.delete(id);
 				}
-				markSpeaking(id, monitor.activeUntil > now && !isLocalMuted);
+				markSpeaking(id, active);
 			}
 			if (speakingMonitorsRef.current.size > 0) {
 				speakingFrameRef.current = window.requestAnimationFrame(tick);
@@ -217,8 +234,8 @@ export function useVoiceChat({
 			if (!monitor) {
 				return;
 			}
-			monitor.source.disconnect();
-			monitor.analyser.disconnect();
+			disconnectAudioNode(monitor.source);
+			disconnectAudioNode(monitor.analyser);
 			speakingMonitorsRef.current.delete(id);
 			markSpeaking(id, false);
 		},
@@ -240,11 +257,18 @@ export function useVoiceChat({
 				return;
 			}
 			void context.resume().catch(() => {});
-			const source = context.createMediaStreamSource(stream);
-			const analyser = context.createAnalyser();
-			analyser.fftSize = 512;
-			analyser.smoothingTimeConstant = 0.45;
-			source.connect(analyser);
+			let source: MediaStreamAudioSourceNode;
+			let analyser: AnalyserNode;
+			try {
+				source = context.createMediaStreamSource(stream);
+				analyser = context.createAnalyser();
+				analyser.fftSize = 512;
+				analyser.smoothingTimeConstant = 0.45;
+				source.connect(analyser);
+			} catch (error) {
+				console.warn('Unable to monitor voice speaking state', error);
+				return;
+			}
 			speakingMonitorsRef.current.set(id, {
 				stream,
 				source,
@@ -766,8 +790,8 @@ export function useVoiceChat({
 			}
 			peers.clear();
 			for (const monitor of speakingMonitors.values()) {
-				monitor.source.disconnect();
-				monitor.analyser.disconnect();
+				disconnectAudioNode(monitor.source);
+				disconnectAudioNode(monitor.analyser);
 			}
 			speakingMonitors.clear();
 			speakingIdsSet.clear();
