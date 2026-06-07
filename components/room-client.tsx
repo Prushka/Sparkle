@@ -111,6 +111,14 @@ type LoadState =
 	| { status: 'player'; data: ServerData }
 	| { status: 'error'; message: string };
 
+function useLatestRef<T>(value: T) {
+	const ref = useRef(value);
+	useLayoutEffect(() => {
+		ref.current = value;
+	});
+	return ref;
+}
+
 function setThemeColor(color: string) {
 	let theme = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
 	if (!theme) {
@@ -367,26 +375,33 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 		},
 		[redirectSuffix, route.roomId, router, state]
 	);
+	const handleRoomMediaChangedRef = useLatestRef(handleRoomMediaChanged);
+
+	const mediaSubscriberStatus =
+		state.status === 'library' || state.status === 'player' ? state.status : null;
+	const mediaSubscriberBackendBaseUrl =
+		state.status === 'library'
+			? state.config.backendBaseUrl
+			: state.status === 'player'
+				? state.data.backendBaseUrl
+				: '';
+	const mediaSubscriberRoomId =
+		state.status === 'library' ? state.roomId : state.status === 'player' ? state.data.roomId : '';
 
 	useEffect(() => {
-		if (state.status !== 'library' && state.status !== 'player') {
+		if (!mediaSubscriberStatus || !mediaSubscriberBackendBaseUrl || !mediaSubscriberRoomId) {
 			return;
 		}
 
 		let disposed = false;
 		let socket: WebSocket | null = null;
 		let reconnectTimer: number | null = null;
-		const config =
-			state.status === 'library'
-				? state.config
-				: {
-						backendBaseUrl: state.data.backendBaseUrl,
-						staticBaseUrl: state.data.staticBaseUrl
-					};
-		const roomId = state.status === 'library' ? state.roomId : state.data.roomId;
+		const status = mediaSubscriberStatus;
+		const backendBaseUrl = mediaSubscriberBackendBaseUrl;
+		const roomId = mediaSubscriberRoomId;
 		const subscriberId = `media_${randomString(14)}`;
 		const socketUrl = getBackendWebSocketUrl(
-			config.backendBaseUrl,
+			backendBaseUrl,
 			`/sync/${encodeURIComponent(roomId)}/${encodeURIComponent(subscriberId)}`
 		);
 
@@ -399,18 +414,18 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 
 		const refreshRoomMedia = async () => {
 			try {
-				const room = await fetchRoomRecord(config.backendBaseUrl, roomId);
+				const room = await fetchRoomRecord(backendBaseUrl, roomId);
 				if (disposed || !room) {
 					return;
 				}
 				if (room.mediaId) {
-					if (state.status === 'library') {
-						await handleRoomMediaChanged(room.mediaId, room.mediaUpdated);
+					if (status === 'library') {
+						await handleRoomMediaChangedRef.current(room.mediaId, room.mediaUpdated);
 					}
 					return;
 				}
-				if (state.status === 'player') {
-					await handleRoomMediaChanged('', room.mediaUpdated);
+				if (status === 'player') {
+					await handleRoomMediaChangedRef.current('', room.mediaUpdated);
 				}
 			} catch (error) {
 				console.warn('Unable to refresh library room media', error);
@@ -437,8 +452,8 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 					payload.broadcast?.type === BroadcastTypes.MoveTo &&
 					typeof payload.broadcast.moveTo === 'string'
 				) {
-					if (payload.broadcast.moveTo === '' || state.status === 'library') {
-						void handleRoomMediaChanged(payload.broadcast.moveTo, payload.timestamp);
+					if (payload.broadcast.moveTo === '' || status === 'library') {
+						void handleRoomMediaChangedRef.current(payload.broadcast.moveTo, payload.timestamp);
 					}
 				}
 			};
@@ -466,7 +481,12 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 				socket.close();
 			}
 		};
-	}, [handleRoomMediaChanged, state]);
+	}, [
+		handleRoomMediaChangedRef,
+		mediaSubscriberBackendBaseUrl,
+		mediaSubscriberRoomId,
+		mediaSubscriberStatus
+	]);
 
 	if (state.status === 'loading') {
 		return <LoadingView />;

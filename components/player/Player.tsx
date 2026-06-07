@@ -165,6 +165,9 @@ const DEFAULT_REMOTE_MIC_VOLUME = 1;
 const MAX_REMOTE_MIC_VOLUME = 5;
 const MAX_REMOTE_MIC_VOLUME_PERCENT = MAX_REMOTE_MIC_VOLUME * 100;
 const SUBTITLE_LANGUAGE_STORAGE_KEY = 'subtitleLanguage';
+const ASS_MAX_RENDER_HEIGHT = 1080;
+const ASS_BITMAP_CACHE_LIMIT_MB = 64;
+const ASS_GLYPH_CACHE_LIMIT_MB = 16;
 const ROOM_TIME_SYNC_THRESHOLD_SECONDS = 6;
 const AUDIO_LANGUAGE_PRIORITY = ['jpn', 'eng', 'chi'];
 const SUBTITLE_LANGUAGE_PRIORITY = ['en'];
@@ -1184,7 +1187,16 @@ function RemoteVoiceAudio({
 		if (!audioRef.current || audioRef.current.srcObject === stream) {
 			return;
 		}
-		audioRef.current.srcObject = stream;
+		const audio = audioRef.current;
+		audio.srcObject = stream;
+		return () => {
+			if (audio.srcObject === stream) {
+				audio.pause();
+				audio.srcObject = null;
+				audio.removeAttribute('src');
+				audio.load();
+			}
+		};
 	}, [stream]);
 
 	useEffect(() => {
@@ -1240,7 +1252,14 @@ function RemoteVoiceAudio({
 	}, [normalizedVolume]);
 
 	useEffect(() => {
+		const audio = audioRef.current;
 		return () => {
+			if (audio) {
+				audio.pause();
+				audio.srcObject = null;
+				audio.removeAttribute('src');
+				audio.load();
+			}
 			sourceRef.current?.disconnect();
 			gainRef.current?.disconnect();
 			void audioContextRef.current?.close().catch(() => {});
@@ -1423,6 +1442,31 @@ function canRenderAssFrame(instance: JASSUBManagedInstance) {
 	return !instance._destroyed && Boolean(instance._ctx && instance._canvasctrl);
 }
 
+function releaseAssRendererCanvas(instance: JASSUBManagedInstance) {
+	try {
+		if (instance._canvasctrl && 'width' in instance._canvasctrl) {
+			instance._canvasctrl.width = 0;
+			instance._canvasctrl.height = 0;
+		}
+	} catch {
+		// Transferred OffscreenCanvas instances can be unavailable during teardown.
+	}
+	try {
+		if (instance._canvas) {
+			instance._canvas.width = 0;
+			instance._canvas.height = 0;
+			const parent = instance._canvas.parentElement;
+			if (parent?.classList.contains('JASSUB')) {
+				parent.remove();
+			} else {
+				instance._canvas.remove();
+			}
+		}
+	} catch {
+		// The renderer may have already removed its canvas while destroying.
+	}
+}
+
 function withManagedAssRendererCleanup(Constructor: LibASSConstructor): LibASSConstructor {
 	const ManagedLibASS = function (config: ConstructorParameters<LibASSConstructor>[0]) {
 		const configWithInitialTrack = {
@@ -1524,9 +1568,12 @@ function withManagedAssRendererCleanup(Constructor: LibASSConstructor): LibASSCo
 				worker.onerror = null;
 			}
 			try {
-				return void Promise.resolve(destroy?.()).catch(() => undefined);
+				return void Promise.resolve(destroy?.())
+					.catch(() => undefined)
+					.finally(() => releaseAssRendererCanvas(instance));
 			} catch {
 				// JASSUB may already be half-torn-down after a fast track switch.
+				releaseAssRendererCanvas(instance);
 			}
 		};
 
@@ -1736,6 +1783,14 @@ type PendingRemotePlaybackSync = RemotePlaybackSync & {
 	mediaId: string;
 };
 
+function useLatestRef<T>(value: T) {
+	const ref = useRef(value);
+	useLayoutEffect(() => {
+		ref.current = value;
+	});
+	return ref;
+}
+
 export function Player({
 	data,
 	onRoomMediaChanged
@@ -1803,6 +1858,7 @@ export function Player({
 	const volumeRestoringRef = useRef(false);
 	const volumeCanPlayRestoredRef = useRef(false);
 	const playbackSyncSuppressionTimerRef = useRef<number | null>(null);
+	const onRoomMediaChangedRef = useLatestRef(onRoomMediaChanged);
 	const [mounted, setMounted] = useState(false);
 	const [playerEl, setPlayerEl] = useState<MediaPlayerInstance | null>(null);
 	const [mediaProviderEl, setMediaProviderEl] = useState<MediaProviderInstance | null>(null);
@@ -1842,7 +1898,6 @@ export function Player({
 	const backendBaseUrl = data.backendBaseUrl;
 	const BASE_STATIC = `${staticBaseUrl}/${job.Id}`;
 	const assRendererConfig = useMemo<JASSUBRendererConfig>(() => {
-		const fallbackFontUrls = new Set<string>();
 		const availableFonts: Record<string, string> = {};
 
 		for (const [family, filename] of [defaultFallback, ...Object.values(fallbackFontsMap)]) {
@@ -1851,7 +1906,6 @@ export function Player({
 			}
 			const fontUrl = getPublicAssetUrl(filename);
 			availableFonts[family.toLowerCase()] = fontUrl;
-			fallbackFontUrls.add(fontUrl);
 		}
 
 		const attachmentFonts =
@@ -1869,9 +1923,13 @@ export function Player({
 			wasmUrl: getPublicAssetUrl('jassub-worker.wasm'),
 			modernWasmUrl: getPublicAssetUrl('jassub-worker-modern.wasm'),
 			legacyWasmUrl: getPublicAssetUrl('jassub-worker.wasm.js'),
+			maxRenderHeight: ASS_MAX_RENDER_HEIGHT,
+			prescaleHeightLimit: ASS_MAX_RENDER_HEIGHT,
+			libassMemoryLimit: ASS_BITMAP_CACHE_LIMIT_MB,
+			libassGlyphLimit: ASS_GLYPH_CACHE_LIMIT_MB,
 			fallbackFont: defaultFallback[0].toLowerCase(),
 			availableFonts,
-			fonts: Array.from(new Set([...attachmentFonts, ...fallbackFontUrls])),
+			fonts: Array.from(new Set(attachmentFonts)),
 			useLocalFonts: false
 		};
 	}, [BASE_STATIC, job.Streams]);
@@ -2085,7 +2143,7 @@ export function Player({
 				}
 				const record = (await response.json()) as { mediaId?: string; mediaUpdated?: number };
 				if (record.mediaId && record.mediaId !== job.Id) {
-					await onRoomMediaChanged?.(record.mediaId, record.mediaUpdated);
+					await onRoomMediaChangedRef.current?.(record.mediaId, record.mediaUpdated);
 					return true;
 				}
 			} catch (error) {
@@ -2098,7 +2156,7 @@ export function Player({
 
 		roomMediaCheckRef.current = check;
 		return check;
-	}, [backendBaseUrl, job.Id, onRoomMediaChanged, room, router]);
+	}, [backendBaseUrl, job.Id, onRoomMediaChangedRef, room, router]);
 
 	const pulseSoundEffectBadge = useCallback((playerId: string | undefined) => {
 		if (!playerId) {
@@ -2158,6 +2216,8 @@ export function Player({
 			}
 		});
 	}, []);
+	const playSoundEffectRef = useLatestRef(playSoundEffect);
+	const pulseSoundEffectBadgeRef = useLatestRef(pulseSoundEffectBadge);
 
 	const messagesToDisplay = useMemo(() => {
 		let nextMessages = [
@@ -2904,6 +2964,7 @@ export function Player({
 		addSystemMessage
 	});
 	const { handleVoiceBroadcast, join: joinVoice } = voice;
+	const handleVoiceBroadcastRef = useLatestRef(handleVoiceBroadcast);
 	const speakingPlayerIds = useMemo(() => new Set(voice.speakingIds), [voice.speakingIds]);
 	const setRemoteMicVolume = useCallback((remotePlayerId: string, volume: number) => {
 		const normalized = normalizeRemoteMicVolume(volume);
@@ -2963,6 +3024,7 @@ export function Player({
 
 		return () => {
 			playerEl.textRenderers.remove(assRenderer);
+			assRenderer.detach();
 		};
 	}, [assRendererConfig, playerEl]);
 
@@ -3219,6 +3281,10 @@ export function Player({
 		},
 		[armPlaybackSyncSuppression, clearPlaybackSyncSuppression, queueRemotePlaybackSync]
 	);
+	const applyRemotePlaybackSyncRef = useLatestRef(applyRemotePlaybackSync);
+	const sendProfileRef = useLatestRef(sendProfile);
+	const sendSettingsRef = useLatestRef(sendSettings);
+	const updateLastTickedRef = useLatestRef(updateLastTicked);
 
 	useEffect(() => {
 		return () => clearPlaybackSyncSuppression();
@@ -3263,10 +3329,10 @@ export function Player({
 				}
 				console.log(`Socket, connected to ${room}`);
 				setSocketConnected(true);
-				profileSyncedRef.current = sendProfile();
+				profileSyncedRef.current = sendProfileRef.current();
 				awaitingInitialPlaybackSyncRef.current = true;
 				send({ type: SyncTypes.NewPlayer });
-				sendSettings();
+				sendSettingsRef.current();
 				const pendingMediaID = pendingMediaSwitchRef.current;
 				if (pendingMediaID && pendingMediaID !== job.Id) {
 					pendingMediaSwitchRef.current = null;
@@ -3275,7 +3341,7 @@ export function Player({
 						broadcast: { type: BroadcastTypes.MoveTo, moveTo: pendingMediaID }
 					});
 				}
-				updateLastTicked(true);
+				updateLastTickedRef.current(true);
 			};
 
 			socket.onmessage = (event: MessageEvent) => {
@@ -3303,7 +3369,7 @@ export function Player({
 					pendingRemotePlaybackSyncRef.current = null;
 					const target = jobs.find((candidate) => candidate.Id === broadcast!.moveTo);
 					if (roomPlayersCountRef.current === 1 && target?.Id) {
-						void onRoomMediaChanged?.(target.Id, state.timestamp);
+						void onRoomMediaChangedRef.current?.(target.Id, state.timestamp);
 						return;
 					}
 					setMoveToast({
@@ -3381,7 +3447,7 @@ export function Player({
 							}
 							return next;
 						});
-						updateLastTicked(true, players.length);
+						updateLastTickedRef.current(true, players.length);
 						setCurrentlyWatching((value) => {
 							if (value && value.roomPlayers !== players.length) {
 								return { ...value, roomPlayers: players.length };
@@ -3400,7 +3466,7 @@ export function Player({
 							roomPlayersRef.current = next;
 							return next;
 						});
-						updateLastTicked(true, playersCount);
+						updateLastTickedRef.current(true, playersCount);
 						setCurrentlyWatching((value) => {
 							if (value && value.roomPlayers !== playersCount) {
 								return { ...value, roomPlayers: playersCount };
@@ -3413,19 +3479,19 @@ export function Player({
 						const playersCount = state.playersCount ?? roomPlayersCountRef.current;
 						reconnectAttemptRef.current = 0;
 						roomPlayersCountRef.current = playersCount;
-						updateLastTicked(true, playersCount);
+						updateLastTickedRef.current(true, playersCount);
 						break;
 					}
 					case SyncTypes.PauseSync:
 						awaitingInitialPlaybackSyncRef.current = false;
 						if (typeof state.paused === 'boolean') {
-							applyRemotePlaybackSync({ paused: state.paused });
+							applyRemotePlaybackSyncRef.current({ paused: state.paused });
 							persistControlState(state);
 						}
 						break;
 					case SyncTypes.TimeSync:
 						if (state.time !== undefined) {
-							applyRemotePlaybackSync({ time: state.time });
+							applyRemotePlaybackSyncRef.current({ time: state.time });
 							persistControlState(state);
 						}
 						break;
@@ -3433,7 +3499,7 @@ export function Player({
 						switch (broadcast?.type) {
 							case BroadcastTypes.MoveTo:
 								if (broadcast.moveTo === '') {
-									void onRoomMediaChanged?.('', state.timestamp);
+									void onRoomMediaChangedRef.current?.('', state.timestamp);
 									break;
 								}
 								mediaSelectionRef.current?.updateList(broadcast.moveTo, (jobs: LibraryJob[]) => {
@@ -3441,14 +3507,14 @@ export function Player({
 								});
 								break;
 							case BroadcastTypes.VoiceSignal:
-								void handleVoiceBroadcast(state.firedBy?.id, broadcast);
+								void handleVoiceBroadcastRef.current(state.firedBy?.id, broadcast);
 								break;
 							case BroadcastTypes.SoundEffect:
-								playSoundEffect(
+								playSoundEffectRef.current(
 									resolveBroadcastSoundEffectId(broadcast.soundEffect, playerId),
 									state.firedBy?.id
 								);
-								pulseSoundEffectBadge(state.firedBy?.id);
+								pulseSoundEffectBadgeRef.current(state.firedBy?.id);
 								break;
 						}
 						break;
@@ -3504,18 +3570,18 @@ export function Player({
 			playerId,
 			room,
 			send,
-			sendProfile,
-			sendSettings,
 			setCurrentlyWatching,
 			setInteracted,
 			setPageReloadCounter,
-			updateLastTicked,
 			updatePfp,
-			handleVoiceBroadcast,
-			onRoomMediaChanged,
-			playSoundEffect,
-			pulseSoundEffectBadge,
-			applyRemotePlaybackSync
+			applyRemotePlaybackSyncRef,
+			handleVoiceBroadcastRef,
+			onRoomMediaChangedRef,
+			playSoundEffectRef,
+			pulseSoundEffectBadgeRef,
+			sendProfileRef,
+			sendSettingsRef,
+			updateLastTickedRef
 		]
 	);
 
