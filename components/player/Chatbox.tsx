@@ -52,6 +52,7 @@ type Props = {
 	onCommand?: (_message: string) => boolean | Promise<boolean>;
 	onFocus?: () => void;
 	onBlur?: () => void;
+	onPickerOpenChange?: (_open: boolean) => void;
 	chatFocused?: boolean;
 	focusByShortcut?: boolean;
 	controlsShowing?: boolean | null;
@@ -302,6 +303,7 @@ export function Chatbox({
 	onCommand,
 	onFocus = () => {},
 	onBlur = () => {},
+	onPickerOpenChange,
 	chatFocused = false,
 	focusByShortcut = false,
 	controlsShowing = null,
@@ -320,6 +322,8 @@ export function Chatbox({
 	const [showSent, setShowSent] = useState(false);
 	const [showShortcut, setShowShortcut] = useState(true);
 	const [inputFocused, setInputFocused] = useState(false);
+	const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+	const [soundPickerOpen, setSoundPickerOpen] = useState(false);
 	const [activeEmojiToken, setActiveEmojiToken] = useState<ActiveEmojiToken | null>(null);
 	const [suggestionIndex, setSuggestionIndex] = useState(0);
 	const [suggestionsDismissedFor, setSuggestionsDismissedFor] = useState<string | null>(null);
@@ -344,6 +348,7 @@ export function Chatbox({
 			: `Chat ${controlsShowing === null && showShortcut ? '[Alt S]' : ''}`;
 	}, [chatHidden, controlsShowing, showShortcut]);
 	const placeholder = showSent ? 'Sent!' : chatTxt;
+	const pickerOpen = emojiPickerOpen || soundPickerOpen;
 
 	const syncActiveEmojiToken = useCallback(() => {
 		setActiveEmojiToken(getActiveEmojiToken(editor));
@@ -374,6 +379,10 @@ export function Chatbox({
 			window.clearTimeout(timeout);
 		};
 	}, [connected, controlsShowing, editor, focusByShortcut]);
+
+	useEffect(() => {
+		onPickerOpenChange?.(pickerOpen);
+	}, [onPickerOpenChange, pickerOpen]);
 
 	useEffect(() => {
 		if (!showEmojiSuggestions) {
@@ -522,6 +531,7 @@ export function Chatbox({
 						disabled={!connected}
 						showTriggerTooltip={useButton}
 						onSelect={(emoji) => insertEmoji(emoji, null)}
+						onOpenChange={setEmojiPickerOpen}
 						triggerClassName={
 							useButton
 								? 'h-10 w-10 shrink-0 rounded-l-none rounded-r-none border-r-0 px-0'
@@ -532,6 +542,7 @@ export function Chatbox({
 						disabled={!connected}
 						showTriggerTooltip={useButton}
 						onPlay={sendSoundEffect}
+						onOpenChange={setSoundPickerOpen}
 						triggerClassName={
 							useButton
 								? 'h-10 w-10 shrink-0 rounded-l-none rounded-r-none border-r-0 px-0'
@@ -631,7 +642,7 @@ export function Chatbox({
 						{showEmojiSuggestions && suggestionsRect && typeof document !== 'undefined'
 							? createPortal(
 									<div
-										className="emoji-suggestions pointer-events-auto fixed z-50 min-w-0 overflow-x-hidden overflow-y-hidden rounded-md border border-white/15 bg-background/95 p-1 text-foreground shadow-xl backdrop-blur-md"
+										className="emoji-suggestions pointer-events-auto fixed z-50 min-w-0 overflow-x-hidden overflow-y-hidden rounded-md border border-white/15 bg-background/45 p-1 text-foreground shadow-xl"
 										style={{
 											left: suggestionsRect.left,
 											top: suggestionsRect.top,

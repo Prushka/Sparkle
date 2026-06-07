@@ -17,6 +17,7 @@ type Props = {
 	disabled?: boolean;
 	showTriggerTooltip?: boolean;
 	triggerClassName?: string;
+	onOpenChange?: (open: boolean) => void;
 	onPlay: (effect: SoundEffect) => void;
 };
 
@@ -24,6 +25,7 @@ export function SoundEffectPicker({
 	disabled = false,
 	showTriggerTooltip = true,
 	triggerClassName = '',
+	onOpenChange,
 	onPlay
 }: Props) {
 	const [open, setOpen] = useState(false);
@@ -57,7 +59,13 @@ export function SoundEffectPicker({
 	);
 
 	return (
-		<Popover.Root open={open} onOpenChange={setOpen}>
+		<Popover.Root
+			open={open}
+			onOpenChange={(nextOpen) => {
+				setOpen(nextOpen);
+				onOpenChange?.(nextOpen);
+			}}
+		>
 			{showTriggerTooltip ? (
 				<Tooltip.Provider delayDuration={0}>
 					<Tooltip.Root>
@@ -74,10 +82,10 @@ export function SoundEffectPicker({
 				align="start"
 				side="top"
 				sideOffset={8}
-				className="w-[min(32rem,calc(100vw-1.25rem))] overflow-hidden rounded-lg border border-white/10 bg-background/95 p-0 shadow-2xl backdrop-blur-md"
+				className="w-[min(32rem,calc(100vw-1.25rem))] overflow-hidden rounded-lg border border-white/15 bg-background/45 p-0 shadow-2xl"
 			>
-				<div className="border-b border-white/10 bg-black/20 p-2">
-					<div className="flex h-11 items-center rounded-md border border-white/15 bg-black/30 px-3 ring-offset-background focus-within:border-primary/80 focus-within:ring-2 focus-within:ring-primary/45 focus-within:ring-offset-0">
+				<div className="border-b border-white/10 bg-black/15 p-2">
+					<div className="flex h-11 items-center rounded-md border border-white/15 bg-black/20 px-3 ring-offset-background focus-within:border-primary/80 focus-within:ring-2 focus-within:ring-primary/45 focus-within:ring-offset-0">
 						<IconSearch size={18} stroke={2} className="shrink-0 text-muted-foreground" />
 						<input
 							value={query}
@@ -104,7 +112,7 @@ export function SoundEffectPicker({
 									<div
 										data-category-header={section.label}
 										data-sticky-category={section.label}
-										className="sticky top-0 z-20 -mx-2 mb-1.5 flex h-7 items-center border-b border-white/10 bg-background/95 px-3 text-xs font-bold uppercase tracking-wide text-muted-foreground shadow-sm backdrop-blur-md"
+										className="sticky top-0 z-20 -mx-2 mb-1.5 flex h-7 items-center border-b border-white/10 bg-background/55 px-3 text-xs font-bold uppercase tracking-wide text-muted-foreground shadow-sm"
 									>
 										{section.label}
 									</div>
@@ -113,7 +121,7 @@ export function SoundEffectPicker({
 											<motion.button
 												key={effect.id}
 												type="button"
-												className="group flex min-h-10 min-w-0 items-center gap-1.5 rounded-md border border-transparent bg-muted/35 px-2.5 py-1.5 text-left transition-colors hover:border-primary/35 hover:bg-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+												className="group flex min-h-10 min-w-0 items-center gap-1.5 rounded-md border border-transparent bg-muted/25 px-2.5 py-1.5 text-left transition-colors hover:border-primary/35 hover:bg-accent/75 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
 												aria-label={`Play ${effect.name}`}
 												whileHover={{ y: -1, scale: 1.015 }}
 												whileTap={{ scale: 0.98 }}

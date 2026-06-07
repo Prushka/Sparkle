@@ -1609,6 +1609,7 @@ export function Player({
 	const [name, setName] = useState('');
 	const [profileId, setProfileId] = useState('');
 	const [playerId, setPlayerId] = useState('');
+	const [controlsChatPickerOpen, setControlsChatPickerOpen] = useState(false);
 	const lastSavedNameRef = useRef('');
 	const [initialVolume] = useState(() =>
 		normalizePlayerVolume(setGetLsNumber(PLAYER_VOLUME_STORAGE_KEY, DEFAULT_PLAYER_VOLUME))
@@ -3752,8 +3753,27 @@ export function Player({
 		startWatchRoomConnection();
 	}
 
+	const resetChatFocusTimer = useCallback(() => {
+		chatFocusedSecsRef.current = 0;
+		setChatFocusedSecs(0);
+	}, []);
+
+	const handleControlsChatPickerOpenChange = useCallback(
+		(open: boolean) => {
+			setControlsChatPickerOpen(open);
+			if (open) {
+				playerEl?.controls?.pause?.();
+				resetChatFocusTimer();
+				return;
+			}
+			playerEl?.controls?.resume?.();
+			resetChatFocusTimer();
+		},
+		[playerEl, resetChatFocusTimer]
+	);
+
 	const showJoinOverlay = !socketConnected;
-	const mediaPlayerClassName = `media-player relative w-full bg-slate-900 ${discord ? 'h-[100dvh]' : 'aspect-video'} ${getSafePlayerPaused(playerEl) === false && chatFocusedSecs > hideControlsOnChatFocused ? 'chat-controls-hidden' : ''}`;
+	const mediaPlayerClassName = `media-player relative w-full bg-slate-900 ${discord ? 'h-[100dvh]' : 'aspect-video'} ${getSafePlayerPaused(playerEl) === false && chatFocusedSecs > hideControlsOnChatFocused && !controlsChatPickerOpen ? 'chat-controls-hidden' : ''}`;
 	const videoSettingsMenu = (
 		<Menu.Root className="vds-video-settings-menu vds-menu">
 			<DefaultMenuButton
@@ -3806,9 +3826,9 @@ export function Player({
 				onBlur={() => {
 					playerEl?.controls?.resume?.();
 					setChatFocused(false);
-					chatFocusedSecsRef.current = 0;
-					setChatFocusedSecs(0);
+					resetChatFocusTimer();
 				}}
+				onPickerOpenChange={handleControlsChatPickerOpenChange}
 			/>
 		</div>
 	);
@@ -3969,6 +3989,29 @@ export function Player({
 					<CottageGamePlaceholder />
 				)}
 
+				<div className="mx-auto flex w-full max-w-[90rem] items-center gap-2">
+					<Chatbox
+						send={send}
+						onCommand={handleChatCommand}
+						chatFocused={chatFocused}
+						controlsShowing={null}
+						className="w-full min-w-0"
+						inputId="chat-page-input"
+						formId="chat-page-form"
+						useButton
+						messages={roomMessages}
+						historicalPlayers={historicalPlayers}
+						staticBaseUrl={staticBaseUrl}
+						onFocus={() => {
+							setChatFocused(true);
+						}}
+						onBlur={() => {
+							setChatFocused(false);
+							resetChatFocusTimer();
+						}}
+					/>
+				</div>
+
 				<div className="mx-auto flex w-full max-w-[90rem] flex-wrap items-center justify-between gap-2 max-[760px]:justify-center">
 					<div className="flex min-w-0 justify-start">
 						{voiceSupported ? <VoiceControls voice={voice} /> : null}
@@ -4018,30 +4061,6 @@ export function Player({
 							</Tooltip.Root>
 						</Tooltip.Provider>
 					</div>
-				</div>
-
-				<div className="mx-auto flex w-full max-w-[90rem] items-center gap-2">
-					<Chatbox
-						send={send}
-						onCommand={handleChatCommand}
-						chatFocused={chatFocused}
-						controlsShowing={null}
-						className="w-full min-w-0"
-						inputId="chat-page-input"
-						formId="chat-page-form"
-						useButton
-						messages={roomMessages}
-						historicalPlayers={historicalPlayers}
-						staticBaseUrl={staticBaseUrl}
-						onFocus={() => {
-							setChatFocused(true);
-						}}
-						onBlur={() => {
-							setChatFocused(false);
-							chatFocusedSecsRef.current = 0;
-							setChatFocusedSecs(0);
-						}}
-					/>
 				</div>
 
 				<div className="mb-3 flex flex-wrap justify-center gap-4 pt-2 sm:pt-3">
