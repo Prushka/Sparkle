@@ -19,7 +19,10 @@ import {
 	Menu,
 	Poster,
 	TextTrack,
+	TimeSlider,
 	useMediaState,
+	useSliderState,
+	useThumbnails,
 	type LibASSConfig,
 	type LibASSConstructor,
 	type MediaKeyShortcuts,
@@ -27,7 +30,8 @@ import {
 	type MediaPlayerQuery,
 	type MediaProviderInstance,
 	type TextRenderer,
-	type TextTrackInit
+	type TextTrackInit,
+	type TimeSliderInstance
 } from '@vidstack/react';
 import {
 	DefaultMenuButton,
@@ -36,7 +40,9 @@ import {
 	DefaultMenuRadioGroup,
 	DefaultMenuSection,
 	DefaultVideoLayout,
-	defaultLayoutIcons
+	defaultLayoutIcons,
+	useDefaultLayoutContext,
+	useDefaultLayoutWord
 } from '@vidstack/react/player/layouts/default';
 import {
 	IconBrandYoutubeFilled,
@@ -194,6 +200,36 @@ const PLAYER_KEY_SHORTCUTS: MediaKeyShortcuts = {
 	volumeDown: 'ArrowDown'
 };
 
+const STORYBOARD_PREVIEW_HEIGHT = 75;
+const STORYBOARD_PREVIEW_MIN_WIDTH = 96;
+const STORYBOARD_PREVIEW_MAX_WIDTH = 240;
+const STORYBOARD_TILE_CACHE_LIMIT = 96;
+const STORYBOARD_SPRITE_BLOB_CACHE_LIMIT = 8;
+const STORYBOARD_UNCACHED_DECODE_DELAY_MS = 35;
+const STORYBOARD_MAX_DEVICE_PIXEL_RATIO = 2;
+
+type StoryboardThumbnail = {
+	url: URL;
+	startTime: number;
+	endTime?: number;
+	width?: number;
+	height?: number;
+	coords?: {
+		x: number;
+		y: number;
+	};
+};
+
+type StoryboardPreviewSize = {
+	cssWidth: number;
+	cssHeight: number;
+	bitmapWidth: number;
+	bitmapHeight: number;
+};
+
+const storyboardSpriteBlobCache = new Map<string, Promise<Blob>>();
+const storyboardTileBitmapCache = new Map<string, ImageBitmap>();
+
 function isSmallPlayerLayout(width: number, height: number) {
 	return width < 576 || height < 380;
 }
@@ -214,6 +250,150 @@ function formatDuration(seconds: number) {
 	return `${minutes} minute${minutes === 1 ? '' : 's'}${
 		remainingSeconds > 0 ? ` ${remainingSeconds} second${remainingSeconds === 1 ? '' : 's'}` : ''
 	}`;
+}
+
+function getStoryboardDevicePixelRatio() {
+	if (typeof window === 'undefined') {
+		return 1;
+	}
+	return Math.max(1, Math.min(window.devicePixelRatio || 1, STORYBOARD_MAX_DEVICE_PIXEL_RATIO));
+}
+
+function getStoryboardPreviewSize(thumbnail: StoryboardThumbnail | null): StoryboardPreviewSize {
+	const tileWidth = Math.max(1, thumbnail?.width ?? 160);
+	const tileHeight = Math.max(1, thumbnail?.height ?? 90);
+	const aspectRatio = tileWidth / tileHeight;
+	const cssHeight = STORYBOARD_PREVIEW_HEIGHT;
+	const cssWidth = Math.min(
+		STORYBOARD_PREVIEW_MAX_WIDTH,
+		Math.max(STORYBOARD_PREVIEW_MIN_WIDTH, Math.round(cssHeight * aspectRatio))
+	);
+	const pixelRatio = getStoryboardDevicePixelRatio();
+
+	return {
+		cssWidth,
+		cssHeight,
+		bitmapWidth: Math.max(1, Math.round(cssWidth * pixelRatio)),
+		bitmapHeight: Math.max(1, Math.round(cssHeight * pixelRatio))
+	};
+}
+
+function findStoryboardThumbnail(thumbnails: StoryboardThumbnail[], time: number) {
+	let low = 0;
+	let high = thumbnails.length - 1;
+	let best: StoryboardThumbnail | null = null;
+
+	while (low <= high) {
+		const middle = Math.floor((low + high) / 2);
+		const thumbnail = thumbnails[middle];
+		if (time < thumbnail.startTime) {
+			high = middle - 1;
+			continue;
+		}
+		best = thumbnail;
+		low = middle + 1;
+	}
+
+	if (!best || (best.endTime && time >= best.endTime)) {
+		return null;
+	}
+
+	return best;
+}
+
+function getStoryboardTileKey(thumbnail: StoryboardThumbnail, size: StoryboardPreviewSize) {
+	const coords = thumbnail.coords;
+	return [
+		thumbnail.url.href,
+		coords?.x ?? 0,
+		coords?.y ?? 0,
+		thumbnail.width ?? 0,
+		thumbnail.height ?? 0,
+		size.bitmapWidth,
+		size.bitmapHeight
+	].join(':');
+}
+
+function readCachedStoryboardTile(key: string) {
+	const bitmap = storyboardTileBitmapCache.get(key);
+	if (!bitmap) {
+		return null;
+	}
+	storyboardTileBitmapCache.delete(key);
+	storyboardTileBitmapCache.set(key, bitmap);
+	return bitmap;
+}
+
+function cacheStoryboardTile(key: string, bitmap: ImageBitmap) {
+	storyboardTileBitmapCache.set(key, bitmap);
+
+	while (storyboardTileBitmapCache.size > STORYBOARD_TILE_CACHE_LIMIT) {
+		const oldestKey = storyboardTileBitmapCache.keys().next().value as string | undefined;
+		if (!oldestKey) {
+			break;
+		}
+		const oldestBitmap = storyboardTileBitmapCache.get(oldestKey);
+		storyboardTileBitmapCache.delete(oldestKey);
+		oldestBitmap?.close();
+	}
+}
+
+function getStoryboardSpriteBlob(src: string) {
+	let blobPromise = storyboardSpriteBlobCache.get(src);
+	if (blobPromise) {
+		storyboardSpriteBlobCache.delete(src);
+		storyboardSpriteBlobCache.set(src, blobPromise);
+		return blobPromise;
+	}
+
+	blobPromise = fetch(src, { credentials: 'same-origin' }).then((response) => {
+		if (!response.ok) {
+			throw new Error(`Unable to load storyboard sprite ${response.status}`);
+		}
+		return response.blob();
+	});
+	storyboardSpriteBlobCache.set(src, blobPromise);
+
+	while (storyboardSpriteBlobCache.size > STORYBOARD_SPRITE_BLOB_CACHE_LIMIT) {
+		const oldestKey = storyboardSpriteBlobCache.keys().next().value as string | undefined;
+		if (!oldestKey) {
+			break;
+		}
+		storyboardSpriteBlobCache.delete(oldestKey);
+	}
+
+	return blobPromise;
+}
+
+async function getStoryboardTileBitmap(
+	thumbnail: StoryboardThumbnail,
+	size: StoryboardPreviewSize
+) {
+	const key = getStoryboardTileKey(thumbnail, size);
+	const cached = readCachedStoryboardTile(key);
+	if (cached) {
+		return cached;
+	}
+
+	const blob = await getStoryboardSpriteBlob(thumbnail.url.href);
+	const sourceX = Math.max(0, Math.round(thumbnail.coords?.x ?? 0));
+	const sourceY = Math.max(0, Math.round(thumbnail.coords?.y ?? 0));
+	const sourceWidth = Math.max(1, Math.round(thumbnail.width ?? size.cssWidth));
+	const sourceHeight = Math.max(1, Math.round(thumbnail.height ?? size.cssHeight));
+	let bitmap: ImageBitmap;
+
+	try {
+		bitmap = await createImageBitmap(blob, sourceX, sourceY, sourceWidth, sourceHeight, {
+			resizeWidth: size.bitmapWidth,
+			resizeHeight: size.bitmapHeight,
+			resizeQuality: 'medium'
+		});
+	} catch {
+		bitmap = await createImageBitmap(blob, sourceX, sourceY, sourceWidth, sourceHeight);
+	}
+
+	cacheStoryboardTile(key, bitmap);
+	return bitmap;
 }
 
 function getCachePruneErrorMessage(payload: CachePruneResponse, status: number) {
@@ -1742,6 +1922,179 @@ function RemoteVoiceAudio({
 	}, []);
 
 	return <audio ref={audioRef} autoPlay playsInline className="hidden" />;
+}
+
+function StoryboardCanvasPreview({ thumbnailSrc }: { thumbnailSrc: string }) {
+	const canvasRef = useRef<HTMLCanvasElement | null>(null);
+	const drawRequestRef = useRef(0);
+	const [supportsCanvasTiles, setSupportsCanvasTiles] = useState(true);
+	const thumbnails = useThumbnails(thumbnailSrc, 'anonymous') as StoryboardThumbnail[];
+	const pointerRate = useSliderState('pointerRate');
+	const pointing = useSliderState('pointing');
+	const dragging = useSliderState('dragging');
+	const duration = useMediaState('duration');
+	const clipStartTime = useMediaState('clipStartTime');
+	const previewTime =
+		Number.isFinite(duration) && Number.isFinite(clipStartTime)
+			? clipStartTime + pointerRate * duration
+			: 0;
+	const activeThumbnail = useMemo(
+		() => findStoryboardThumbnail(thumbnails, previewTime),
+		[thumbnails, previewTime]
+	);
+	const previewSize = useMemo(() => getStoryboardPreviewSize(activeThumbnail), [activeThumbnail]);
+	const tileKey = activeThumbnail ? getStoryboardTileKey(activeThumbnail, previewSize) : '';
+	const visible = Boolean(activeThumbnail && (pointing || dragging));
+	const thumbnailStyle = useMemo(
+		() =>
+			({
+				'--thumbnail-width': `${previewSize.cssWidth}px`,
+				'--thumbnail-height': `${previewSize.cssHeight}px`,
+				'--thumbnail-aspect-ratio': String(previewSize.cssWidth / previewSize.cssHeight)
+			}) as CSSProperties,
+		[previewSize]
+	);
+
+	useEffect(() => {
+		setSupportsCanvasTiles(
+			typeof window !== 'undefined' && typeof createImageBitmap === 'function'
+		);
+	}, []);
+
+	useEffect(() => {
+		const canvas = canvasRef.current;
+		if (!canvas || !activeThumbnail || !visible || !supportsCanvasTiles) {
+			return;
+		}
+
+		const requestId = drawRequestRef.current + 1;
+		drawRequestRef.current = requestId;
+
+		const drawBitmap = (bitmap: ImageBitmap) => {
+			if (drawRequestRef.current !== requestId) {
+				return;
+			}
+
+			if (canvas.width !== previewSize.bitmapWidth || canvas.height !== previewSize.bitmapHeight) {
+				canvas.width = previewSize.bitmapWidth;
+				canvas.height = previewSize.bitmapHeight;
+			}
+
+			const context = canvas.getContext('2d');
+			if (!context) {
+				return;
+			}
+			context.clearRect(0, 0, canvas.width, canvas.height);
+			context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+		};
+
+		const cached = readCachedStoryboardTile(tileKey);
+		if (cached) {
+			drawBitmap(cached);
+			return;
+		}
+
+		const timeout = window.setTimeout(() => {
+			void getStoryboardTileBitmap(activeThumbnail, previewSize)
+				.then(drawBitmap)
+				.catch(() => {
+					if (drawRequestRef.current === requestId) {
+						const context = canvas.getContext('2d');
+						context?.clearRect(0, 0, canvas.width, canvas.height);
+					}
+				});
+		}, STORYBOARD_UNCACHED_DECODE_DELAY_MS);
+
+		return () => window.clearTimeout(timeout);
+	}, [activeThumbnail, previewSize, supportsCanvasTiles, tileKey, visible]);
+
+	if (!supportsCanvasTiles) {
+		return (
+			<TimeSlider.Thumbnail.Root src={thumbnailSrc} className="vds-slider-thumbnail vds-thumbnail">
+				<TimeSlider.Thumbnail.Img />
+			</TimeSlider.Thumbnail.Root>
+		);
+	}
+
+	if (!activeThumbnail) {
+		return null;
+	}
+
+	return (
+		<div
+			className="vds-slider-thumbnail vds-thumbnail sparkle-storyboard-thumbnail"
+			style={thumbnailStyle}
+		>
+			<canvas
+				ref={canvasRef}
+				width={previewSize.bitmapWidth}
+				height={previewSize.bitmapHeight}
+				style={{ width: previewSize.cssWidth, height: previewSize.cssHeight }}
+			/>
+		</div>
+	);
+}
+
+function OptimizedTimeSlider({ thumbnails }: { thumbnails: string | null }) {
+	const [instance, setInstance] = useState<TimeSliderInstance | null>(null);
+	const [width, setWidth] = useState(0);
+	const {
+		disableTimeSlider = false,
+		noScrubGesture = false,
+		seekStep = 10,
+		sliderChaptersMinWidth = 325
+	} = useDefaultLayoutContext();
+	const label = useDefaultLayoutWord('Seek');
+
+	useLayoutEffect(() => {
+		const el = instance?.el;
+		if (!el) {
+			return;
+		}
+
+		const updateWidth = () => setWidth(el.clientWidth);
+		updateWidth();
+
+		if (typeof ResizeObserver === 'undefined') {
+			return;
+		}
+
+		const observer = new ResizeObserver(updateWidth);
+		observer.observe(el);
+		return () => observer.disconnect();
+	}, [instance]);
+
+	return (
+		<TimeSlider.Root
+			className="vds-time-slider vds-slider"
+			aria-label={label}
+			disabled={disableTimeSlider}
+			noSwipeGesture={noScrubGesture}
+			keyStep={seekStep}
+			ref={setInstance}
+		>
+			<TimeSlider.Chapters
+				className="vds-slider-chapters"
+				disabled={width < sliderChaptersMinWidth}
+			>
+				{(cues, forwardRef) =>
+					cues.map((cue) => (
+						<div className="vds-slider-chapter" key={cue.startTime} ref={forwardRef}>
+							<TimeSlider.Track className="vds-slider-track" />
+							<TimeSlider.TrackFill className="vds-slider-track-fill vds-slider-track" />
+							<TimeSlider.Progress className="vds-slider-progress vds-slider-track" />
+						</div>
+					))
+				}
+			</TimeSlider.Chapters>
+			<TimeSlider.Thumb className="vds-slider-thumb" />
+			<TimeSlider.Preview className="vds-slider-preview">
+				{thumbnails ? <StoryboardCanvasPreview thumbnailSrc={thumbnails} /> : null}
+				<TimeSlider.ChapterTitle className="vds-slider-chapter-title" />
+				<TimeSlider.Value className="vds-slider-value" />
+			</TimeSlider.Preview>
+		</TimeSlider.Root>
+	);
 }
 
 function VoiceToggleButton({
@@ -5040,6 +5393,7 @@ export function Player({
 								smallLayoutWhen={PLAYER_SMALL_LAYOUT_QUERY}
 								thumbnails={thumbnailVttSrc}
 								slots={{
+									timeSlider: <OptimizedTimeSlider thumbnails={thumbnailVttSrc} />,
 									settingsMenuItemsStart: videoSettingsMenu,
 									settingsMenuItemsEnd: subtitleLayersSettingsMenu,
 									largeLayout: {

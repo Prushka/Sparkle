@@ -657,6 +657,21 @@ media-google-cast-button {
 	margin: 15px 0;
 }
 
+.sparkle-storyboard-thumbnail {
+	width: var(--thumbnail-width);
+	height: var(--thumbnail-height);
+	overflow: hidden;
+	background-color: black;
+	contain: strict;
+	pointer-events: none;
+}
+
+.sparkle-storyboard-thumbnail canvas {
+	display: block;
+	width: 100%;
+	height: 100%;
+}
+
 .media-provider > video,
 #sub-canvas {
 	width: 100% !important;
