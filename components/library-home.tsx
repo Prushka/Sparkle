@@ -707,13 +707,7 @@ function MenuFilter<T extends string>({
 	);
 }
 
-function HeaderStat({
-	icon: Icon,
-	children
-}: {
-	icon?: IconComponent;
-	children: ReactNode;
-}) {
+function HeaderStat({ icon: Icon, children }: { icon?: IconComponent; children: ReactNode }) {
 	return (
 		<span className="inline-flex items-center gap-1.5 whitespace-nowrap">
 			{Icon ? <Icon className="size-3.5 text-[#8de8ce]" stroke={2.2} /> : null}
