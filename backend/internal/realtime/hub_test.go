@@ -135,6 +135,21 @@ func TestEmptyRoomSnapshot(t *testing.T) {
 	}
 }
 
+func TestGenerateRoomIDDefaultLength(t *testing.T) {
+	hub := NewHub(Options{})
+
+	roomID, err := hub.generateRoomID()
+	if err != nil {
+		t.Fatalf("generateRoomID() error = %v", err)
+	}
+	if len(roomID) != 10 {
+		t.Fatalf("generateRoomID() returned length %d, want 10: %q", len(roomID), roomID)
+	}
+	if !safeID.MatchString(roomID) {
+		t.Fatalf("generateRoomID() returned unsafe ID %q", roomID)
+	}
+}
+
 func TestSanitizeMoveToBroadcastRejectsInvalidID(t *testing.T) {
 	got := sanitizeBroadcast(map[string]any{
 		"type":   MoveToBroadcast,

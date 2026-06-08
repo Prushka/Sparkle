@@ -42,7 +42,7 @@ const (
 	statusHeartbeatTimeout          = 3 * time.Second
 	roomTimeSyncThresholdSeconds    = 6
 	youTubeTimeSyncThresholdSeconds = 6
-	generatedRoomIDLength           = 6
+	generatedRoomIDLength           = 10
 	roomIDAlphabet                  = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	cottageMinX                     = 44
 	cottageMaxX                     = 1396
