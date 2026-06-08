@@ -163,6 +163,9 @@ type SelectedSubtitleTrack = Pick<SubtitleTrackInfo, 'format' | 'label' | 'langu
 	mode?: TextTrackMode;
 };
 
+type StackableSubtitleTrackFormat = Extract<SubtitleTrackFormat, 'ass' | 'vtt'>;
+type StoredSubtitleLayerLanguages = Partial<Record<StackableSubtitleTrackFormat, string[]>>;
+
 const PLAYER_VOLUME_STORAGE_KEY = 'volume';
 const DEFAULT_PLAYER_VOLUME = 1;
 const REMOTE_MIC_VOLUME_STORAGE_KEY = 'remoteMicVolumes';
@@ -792,7 +795,57 @@ function saveStoredSubtitleLanguage(language: string) {
 	window.localStorage.setItem(SUBTITLE_LANGUAGE_STORAGE_KEY, language);
 }
 
-function readStoredSubtitleLayerSrcs() {
+function isStackableSubtitleFormat(
+	format: SubtitleTrackFormat
+): format is StackableSubtitleTrackFormat {
+	return STACKABLE_SUBTITLE_FORMATS.has(format);
+}
+
+function dedupeStrings(values: string[]) {
+	const uniqueValues: string[] = [];
+	for (const value of values) {
+		if (value && !uniqueValues.includes(value)) {
+			uniqueValues.push(value);
+		}
+	}
+	return uniqueValues;
+}
+
+function areStringArraysEqual(a: string[], b: string[]) {
+	return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
+function readStoredSubtitleLayerLanguageMap(): StoredSubtitleLayerLanguages {
+	if (typeof window === 'undefined') {
+		return {};
+	}
+	try {
+		const parsed = JSON.parse(window.localStorage.getItem(SUBTITLE_LAYERS_STORAGE_KEY) || '[]');
+		if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+			return {};
+		}
+		const languages: StoredSubtitleLayerLanguages = {};
+		for (const format of ['ass', 'vtt'] as const) {
+			const storedLanguages = (parsed as Record<string, unknown>)[format];
+			if (!Array.isArray(storedLanguages)) {
+				continue;
+			}
+			const normalizedLanguages = dedupeStrings(
+				storedLanguages.filter(
+					(language): language is string => typeof language === 'string' && language.length > 0
+				)
+			);
+			if (normalizedLanguages.length > 0) {
+				languages[format] = normalizedLanguages;
+			}
+		}
+		return languages;
+	} catch {
+		return {};
+	}
+}
+
+function readLegacyStoredSubtitleLayerSrcs() {
 	if (typeof window === 'undefined') {
 		return [];
 	}
@@ -806,15 +859,29 @@ function readStoredSubtitleLayerSrcs() {
 	}
 }
 
-function saveStoredSubtitleLayerSrcs(srcs: string[]) {
+function readStoredSubtitleLayerLanguages(format: StackableSubtitleTrackFormat) {
+	return readStoredSubtitleLayerLanguageMap()[format] ?? [];
+}
+
+function saveStoredSubtitleLayerLanguages(
+	format: StackableSubtitleTrackFormat,
+	languages: string[]
+) {
 	if (typeof window === 'undefined') {
 		return;
 	}
-	if (srcs.length === 0) {
+	const storedLanguages = readStoredSubtitleLayerLanguageMap();
+	const normalizedLanguages = dedupeStrings(languages);
+	if (normalizedLanguages.length > 0) {
+		storedLanguages[format] = normalizedLanguages;
+	} else {
+		delete storedLanguages[format];
+	}
+	if (!storedLanguages.ass && !storedLanguages.vtt) {
 		window.localStorage.removeItem(SUBTITLE_LAYERS_STORAGE_KEY);
 		return;
 	}
-	window.localStorage.setItem(SUBTITLE_LAYERS_STORAGE_KEY, JSON.stringify(srcs));
+	window.localStorage.setItem(SUBTITLE_LAYERS_STORAGE_KEY, JSON.stringify(storedLanguages));
 }
 
 function getMergedSubtitleFontScale(count: number) {
@@ -830,11 +897,11 @@ function getStackableSubtitleTracks(
 	tracks: SubtitleTrackInfo[],
 	primaryTrack: SelectedSubtitleTrack | null
 ) {
-	if (!primaryTrack || !STACKABLE_SUBTITLE_FORMATS.has(primaryTrack.format)) {
+	if (!primaryTrack || !isStackableSubtitleFormat(primaryTrack.format)) {
 		return [];
 	}
 	return tracks.filter(
-		(track) => track.format === primaryTrack.format && STACKABLE_SUBTITLE_FORMATS.has(track.format)
+		(track) => track.format === primaryTrack.format && isStackableSubtitleFormat(track.format)
 	);
 }
 
@@ -852,6 +919,49 @@ function sanitizeSubtitleLayerSelection(
 		}
 	}
 	return nextSrcs;
+}
+
+function getSubtitleLayerLanguages(srcs: string[], tracks: SubtitleTrackInfo[]) {
+	return dedupeStrings(
+		srcs.map((src) => tracks.find((track) => track.src === src)?.language ?? '').filter(Boolean)
+	);
+}
+
+function getStoredSubtitleLayerSrcs(
+	tracks: SubtitleTrackInfo[],
+	primaryTrack: SelectedSubtitleTrack
+) {
+	if (!isStackableSubtitleFormat(primaryTrack.format)) {
+		return [];
+	}
+	const companionTracks = getStackableSubtitleTracks(tracks, primaryTrack).filter(
+		(track) => track.src !== primaryTrack.src
+	);
+	const storedLanguages = readStoredSubtitleLayerLanguages(primaryTrack.format);
+	const restoredSrcs: string[] = [];
+	for (const language of storedLanguages) {
+		const matchingTrack = companionTracks.find(
+			(track) =>
+				!restoredSrcs.includes(track.src) &&
+				(track.language === language || isSameSubtitleLanguage(track.language, language))
+		);
+		if (matchingTrack) {
+			restoredSrcs.push(matchingTrack.src);
+		}
+	}
+	if (restoredSrcs.length > 0 || storedLanguages.length > 0) {
+		return restoredSrcs;
+	}
+
+	const legacySrcs = readLegacyStoredSubtitleLayerSrcs();
+	const migratedSrcs = sanitizeSubtitleLayerSelection(legacySrcs, tracks, primaryTrack);
+	if (migratedSrcs.length > 0) {
+		saveStoredSubtitleLayerLanguages(
+			primaryTrack.format,
+			getSubtitleLayerLanguages(migratedSrcs, tracks)
+		);
+	}
+	return migratedSrcs;
 }
 
 function getSelectedSubtitleLayerCount(
@@ -1747,6 +1857,9 @@ function SubtitleLayerCheckbox({
 				label={label}
 				checked={checked}
 				onChange={(nextChecked, trigger) => {
+					if (nextChecked === checked) {
+						return;
+					}
 					if (!initializedRef.current && !trigger) {
 						initializedRef.current = true;
 						return;
@@ -2375,9 +2488,7 @@ export function Player({
 	const [subtitleTracks, setSubtitleTracks] = useState<SubtitleTrackInfo[]>([]);
 	const [selectedSubtitleTrack, setSelectedSubtitleTrackState] =
 		useState<SelectedSubtitleTrack | null>(null);
-	const [extraSubtitleLayerSrcs, setExtraSubtitleLayerSrcs] = useState<string[]>(
-		readStoredSubtitleLayerSrcs
-	);
+	const [extraSubtitleLayerSrcs, setExtraSubtitleLayerSrcs] = useState<string[]>([]);
 	const [supportedCodecs, setSupportedCodecs] = useState<string[]>([]);
 	const [copiedRoomLink, setCopiedRoomLink] = useState(false);
 	const [exited, setExited] = useState(false);
@@ -2762,19 +2873,17 @@ export function Player({
 				: track
 		);
 		if (!track) {
+			setExtraSubtitleLayerSrcs((current) => (current.length === 0 ? current : []));
 			return;
 		}
 		setExtraSubtitleLayerSrcs((current) => {
-			const next = sanitizeSubtitleLayerSelection(current, subtitleTracksRef.current, track);
-			if (next.length === current.length && next.every((src, index) => src === current[index])) {
-				return current;
-			}
-			saveStoredSubtitleLayerSrcs(next);
-			return next;
+			const next = getStoredSubtitleLayerSrcs(subtitleTracksRef.current, track);
+			return areStringArraysEqual(next, current) ? current : next;
 		});
 	}, []);
 	const toggleSubtitleLayer = useCallback((track: SubtitleTrackInfo, checked: boolean) => {
 		setExtraSubtitleLayerSrcs((current) => {
+			const selectedTrack = selectedSubtitleTrackRef.current;
 			const withToggle = checked
 				? current.includes(track.src)
 					? current
@@ -2783,12 +2892,28 @@ export function Player({
 			const next = sanitizeSubtitleLayerSelection(
 				withToggle,
 				subtitleTracksRef.current,
-				selectedSubtitleTrackRef.current
+				selectedTrack
 			);
-			saveStoredSubtitleLayerSrcs(next);
-			return next;
+			if (selectedTrack && isStackableSubtitleFormat(selectedTrack.format)) {
+				saveStoredSubtitleLayerLanguages(
+					selectedTrack.format,
+					getSubtitleLayerLanguages(next, subtitleTracksRef.current)
+				);
+			}
+			return areStringArraysEqual(next, current) ? current : next;
 		});
 	}, []);
+
+	useEffect(() => {
+		const selectedTrack = selectedSubtitleTrackRef.current;
+		if (!selectedTrack) {
+			return;
+		}
+		setExtraSubtitleLayerSrcs((current) => {
+			const next = getStoredSubtitleLayerSrcs(subtitleTracksRef.current, selectedTrack);
+			return areStringArraysEqual(next, current) ? current : next;
+		});
+	}, [subtitleTracks]);
 
 	const messagesToDisplay = useMemo(() => {
 		let nextMessages = [
