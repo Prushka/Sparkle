@@ -503,10 +503,42 @@ html::-webkit-scrollbar-thumb:hover,
 	opacity: 1 !important;
 }
 
+:where(.vds-video-layout .vds-captions) {
+	--cue-font-size: calc(
+		var(--cue-default-font-size) * var(--media-user-font-size, 1) *
+			var(--sparkle-subtitle-font-scale, 1)
+	);
+}
+
+:where(.vds-video-layout .vds-captions),
+:where([data-media-player][data-controls] .vds-video-layout .vds-captions),
+:where([data-media-player][data-controls] .vds-video-layout[data-sm] .vds-captions) {
+	bottom: 0 !important;
+	transition: none !important;
+}
+
 .vds-video-settings-menu > .vds-menu-item .vds-menu-item-hint {
 	max-width: min(12rem, 42vw);
 	overflow: hidden;
 	padding-left: 0.5rem;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.vds-player-settings-menu .vds-menu-section-body .vds-menu-item {
+	gap: 0.75rem;
+}
+
+.vds-player-settings-menu .vds-menu-section-body .vds-menu-item .vds-menu-item-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.vds-player-settings-menu .vds-menu-section-body .vds-menu-item .vds-menu-item-hint {
+	min-width: 0;
+	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
