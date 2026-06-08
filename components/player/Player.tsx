@@ -203,9 +203,9 @@ const PLAYER_KEY_SHORTCUTS: MediaKeyShortcuts = {
 const STORYBOARD_PREVIEW_HEIGHT = 75;
 const STORYBOARD_PREVIEW_MIN_WIDTH = 96;
 const STORYBOARD_PREVIEW_MAX_WIDTH = 240;
-const STORYBOARD_TILE_CACHE_LIMIT = 96;
 const STORYBOARD_SPRITE_BLOB_CACHE_LIMIT = 8;
-const STORYBOARD_UNCACHED_DECODE_DELAY_MS = 35;
+const STORYBOARD_SPRITE_BITMAP_CACHE_LIMIT = 6;
+const STORYBOARD_SPRITE_PREWARM_TIMEOUT_MS = 250;
 const STORYBOARD_MAX_DEVICE_PIXEL_RATIO = 2;
 
 type StoryboardThumbnail = {
@@ -228,7 +228,7 @@ type StoryboardPreviewSize = {
 };
 
 const storyboardSpriteBlobCache = new Map<string, Promise<Blob>>();
-const storyboardTileBitmapCache = new Map<string, ImageBitmap>();
+const storyboardSpriteBitmapCache = new Map<string, Promise<ImageBitmap>>();
 
 function isSmallPlayerLayout(width: number, height: number) {
 	return width < 576 || height < 380;
@@ -301,43 +301,6 @@ function findStoryboardThumbnail(thumbnails: StoryboardThumbnail[], time: number
 	return best;
 }
 
-function getStoryboardTileKey(thumbnail: StoryboardThumbnail, size: StoryboardPreviewSize) {
-	const coords = thumbnail.coords;
-	return [
-		thumbnail.url.href,
-		coords?.x ?? 0,
-		coords?.y ?? 0,
-		thumbnail.width ?? 0,
-		thumbnail.height ?? 0,
-		size.bitmapWidth,
-		size.bitmapHeight
-	].join(':');
-}
-
-function readCachedStoryboardTile(key: string) {
-	const bitmap = storyboardTileBitmapCache.get(key);
-	if (!bitmap) {
-		return null;
-	}
-	storyboardTileBitmapCache.delete(key);
-	storyboardTileBitmapCache.set(key, bitmap);
-	return bitmap;
-}
-
-function cacheStoryboardTile(key: string, bitmap: ImageBitmap) {
-	storyboardTileBitmapCache.set(key, bitmap);
-
-	while (storyboardTileBitmapCache.size > STORYBOARD_TILE_CACHE_LIMIT) {
-		const oldestKey = storyboardTileBitmapCache.keys().next().value as string | undefined;
-		if (!oldestKey) {
-			break;
-		}
-		const oldestBitmap = storyboardTileBitmapCache.get(oldestKey);
-		storyboardTileBitmapCache.delete(oldestKey);
-		oldestBitmap?.close();
-	}
-}
-
 function getStoryboardSpriteBlob(src: string) {
 	let blobPromise = storyboardSpriteBlobCache.get(src);
 	if (blobPromise) {
@@ -365,35 +328,112 @@ function getStoryboardSpriteBlob(src: string) {
 	return blobPromise;
 }
 
-async function getStoryboardTileBitmap(
-	thumbnail: StoryboardThumbnail,
-	size: StoryboardPreviewSize
-) {
-	const key = getStoryboardTileKey(thumbnail, size);
-	const cached = readCachedStoryboardTile(key);
-	if (cached) {
-		return cached;
+function cacheStoryboardSpriteBitmap(src: string, bitmapPromise: Promise<ImageBitmap>) {
+	storyboardSpriteBitmapCache.set(src, bitmapPromise);
+
+	while (storyboardSpriteBitmapCache.size > STORYBOARD_SPRITE_BITMAP_CACHE_LIMIT) {
+		const oldestKey = storyboardSpriteBitmapCache.keys().next().value as string | undefined;
+		if (!oldestKey) {
+			break;
+		}
+		const oldestBitmapPromise = storyboardSpriteBitmapCache.get(oldestKey);
+		storyboardSpriteBitmapCache.delete(oldestKey);
+		oldestBitmapPromise?.then((bitmap) => bitmap.close()).catch(() => {});
+	}
+}
+
+function getStoryboardSpriteBitmap(src: string) {
+	let bitmapPromise = storyboardSpriteBitmapCache.get(src);
+	if (bitmapPromise) {
+		storyboardSpriteBitmapCache.delete(src);
+		storyboardSpriteBitmapCache.set(src, bitmapPromise);
+		return bitmapPromise;
 	}
 
-	const blob = await getStoryboardSpriteBlob(thumbnail.url.href);
-	const sourceX = Math.max(0, Math.round(thumbnail.coords?.x ?? 0));
-	const sourceY = Math.max(0, Math.round(thumbnail.coords?.y ?? 0));
-	const sourceWidth = Math.max(1, Math.round(thumbnail.width ?? size.cssWidth));
-	const sourceHeight = Math.max(1, Math.round(thumbnail.height ?? size.cssHeight));
-	let bitmap: ImageBitmap;
-
-	try {
-		bitmap = await createImageBitmap(blob, sourceX, sourceY, sourceWidth, sourceHeight, {
-			resizeWidth: size.bitmapWidth,
-			resizeHeight: size.bitmapHeight,
-			resizeQuality: 'medium'
+	bitmapPromise = getStoryboardSpriteBlob(src)
+		.then((blob) => createImageBitmap(blob))
+		.catch((error) => {
+			if (storyboardSpriteBitmapCache.get(src) === bitmapPromise) {
+				storyboardSpriteBitmapCache.delete(src);
+			}
+			throw error;
 		});
-	} catch {
-		bitmap = await createImageBitmap(blob, sourceX, sourceY, sourceWidth, sourceHeight);
+	cacheStoryboardSpriteBitmap(src, bitmapPromise);
+	return bitmapPromise;
+}
+
+function getStoryboardSpriteSources(thumbnails: StoryboardThumbnail[]) {
+	const seen = new Set<string>();
+	const sources: string[] = [];
+
+	for (const thumbnail of thumbnails) {
+		const src = thumbnail.url.href;
+		if (!seen.has(src)) {
+			seen.add(src);
+			sources.push(src);
+		}
 	}
 
-	cacheStoryboardTile(key, bitmap);
-	return bitmap;
+	return sources;
+}
+
+function getNearbyStoryboardSpriteSources(activeSrc: string, sources: string[]) {
+	const activeIndex = sources.indexOf(activeSrc);
+	if (activeIndex === -1) {
+		return [activeSrc];
+	}
+
+	return [activeSrc, sources[activeIndex + 1], sources[activeIndex - 1]].filter(
+		(src): src is string => Boolean(src)
+	);
+}
+
+function getStoryboardSourceRect(thumbnail: StoryboardThumbnail, size: StoryboardPreviewSize) {
+	return {
+		x: Math.max(0, Math.round(thumbnail.coords?.x ?? 0)),
+		y: Math.max(0, Math.round(thumbnail.coords?.y ?? 0)),
+		width: Math.max(1, Math.round(thumbnail.width ?? size.cssWidth)),
+		height: Math.max(1, Math.round(thumbnail.height ?? size.cssHeight))
+	};
+}
+
+function clampStoryboardSourceRect(
+	rect: ReturnType<typeof getStoryboardSourceRect>,
+	bitmap: ImageBitmap
+) {
+	const x = Math.min(rect.x, Math.max(0, bitmap.width - 1));
+	const y = Math.min(rect.y, Math.max(0, bitmap.height - 1));
+
+	return {
+		x,
+		y,
+		width: Math.max(1, Math.min(rect.width, bitmap.width - x)),
+		height: Math.max(1, Math.min(rect.height, bitmap.height - y))
+	};
+}
+
+function prewarmStoryboardSprite(src: string) {
+	if (storyboardSpriteBitmapCache.has(src)) {
+		return;
+	}
+	void getStoryboardSpriteBitmap(src).catch(() => {});
+}
+
+function scheduleStoryboardPrewarm(callback: () => void) {
+	const idleWindow = window as Window & {
+		requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number;
+		cancelIdleCallback?: (handle: number) => void;
+	};
+
+	if (idleWindow.requestIdleCallback && idleWindow.cancelIdleCallback) {
+		const handle = idleWindow.requestIdleCallback(callback, {
+			timeout: STORYBOARD_SPRITE_PREWARM_TIMEOUT_MS
+		});
+		return () => idleWindow.cancelIdleCallback?.(handle);
+	}
+
+	const timeout = window.setTimeout(callback, STORYBOARD_SPRITE_PREWARM_TIMEOUT_MS);
+	return () => window.clearTimeout(timeout);
 }
 
 function getCachePruneErrorMessage(payload: CachePruneResponse, status: number) {
@@ -1927,8 +1967,13 @@ function RemoteVoiceAudio({
 function StoryboardCanvasPreview({ thumbnailSrc }: { thumbnailSrc: string }) {
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
 	const drawRequestRef = useRef(0);
-	const [supportsCanvasTiles, setSupportsCanvasTiles] = useState(true);
+	const supportsCanvasTiles =
+		typeof window === 'undefined' || typeof createImageBitmap === 'function';
 	const thumbnails = useThumbnails(thumbnailSrc, 'anonymous') as StoryboardThumbnail[];
+	const storyboardSpriteSources = useMemo(
+		() => getStoryboardSpriteSources(thumbnails),
+		[thumbnails]
+	);
 	const pointerRate = useSliderState('pointerRate');
 	const pointing = useSliderState('pointing');
 	const dragging = useSliderState('dragging');
@@ -1943,7 +1988,6 @@ function StoryboardCanvasPreview({ thumbnailSrc }: { thumbnailSrc: string }) {
 		[thumbnails, previewTime]
 	);
 	const previewSize = useMemo(() => getStoryboardPreviewSize(activeThumbnail), [activeThumbnail]);
-	const tileKey = activeThumbnail ? getStoryboardTileKey(activeThumbnail, previewSize) : '';
 	const visible = Boolean(activeThumbnail && (pointing || dragging));
 	const thumbnailStyle = useMemo(
 		() =>
@@ -1956,10 +2000,22 @@ function StoryboardCanvasPreview({ thumbnailSrc }: { thumbnailSrc: string }) {
 	);
 
 	useEffect(() => {
-		setSupportsCanvasTiles(
-			typeof window !== 'undefined' && typeof createImageBitmap === 'function'
-		);
-	}, []);
+		if (!activeThumbnail || !visible || !supportsCanvasTiles) {
+			return;
+		}
+
+		const activeSrc = activeThumbnail.url.href;
+		const nearbySources = getNearbyStoryboardSpriteSources(activeSrc, storyboardSpriteSources);
+		if (nearbySources.length <= 1) {
+			return;
+		}
+
+		return scheduleStoryboardPrewarm(() => {
+			for (const src of nearbySources.slice(1)) {
+				prewarmStoryboardSprite(src);
+			}
+		});
+	}, [activeThumbnail, storyboardSpriteSources, supportsCanvasTiles, visible]);
 
 	useEffect(() => {
 		const canvas = canvasRef.current;
@@ -1970,7 +2026,7 @@ function StoryboardCanvasPreview({ thumbnailSrc }: { thumbnailSrc: string }) {
 		const requestId = drawRequestRef.current + 1;
 		drawRequestRef.current = requestId;
 
-		const drawBitmap = (bitmap: ImageBitmap) => {
+		const drawSpriteBitmap = (bitmap: ImageBitmap) => {
 			if (drawRequestRef.current !== requestId) {
 				return;
 			}
@@ -1984,29 +2040,35 @@ function StoryboardCanvasPreview({ thumbnailSrc }: { thumbnailSrc: string }) {
 			if (!context) {
 				return;
 			}
+			const sourceRect = clampStoryboardSourceRect(
+				getStoryboardSourceRect(activeThumbnail, previewSize),
+				bitmap
+			);
+			context.imageSmoothingEnabled = true;
+			context.imageSmoothingQuality = 'medium';
 			context.clearRect(0, 0, canvas.width, canvas.height);
-			context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+			context.drawImage(
+				bitmap,
+				sourceRect.x,
+				sourceRect.y,
+				sourceRect.width,
+				sourceRect.height,
+				0,
+				0,
+				canvas.width,
+				canvas.height
+			);
 		};
 
-		const cached = readCachedStoryboardTile(tileKey);
-		if (cached) {
-			drawBitmap(cached);
-			return;
-		}
-
-		const timeout = window.setTimeout(() => {
-			void getStoryboardTileBitmap(activeThumbnail, previewSize)
-				.then(drawBitmap)
-				.catch(() => {
-					if (drawRequestRef.current === requestId) {
-						const context = canvas.getContext('2d');
-						context?.clearRect(0, 0, canvas.width, canvas.height);
-					}
-				});
-		}, STORYBOARD_UNCACHED_DECODE_DELAY_MS);
-
-		return () => window.clearTimeout(timeout);
-	}, [activeThumbnail, previewSize, supportsCanvasTiles, tileKey, visible]);
+		void getStoryboardSpriteBitmap(activeThumbnail.url.href)
+			.then(drawSpriteBitmap)
+			.catch(() => {
+				if (drawRequestRef.current === requestId) {
+					const context = canvas.getContext('2d');
+					context?.clearRect(0, 0, canvas.width, canvas.height);
+				}
+			});
+	}, [activeThumbnail, previewSize, supportsCanvasTiles, visible]);
 
 	if (!supportsCanvasTiles) {
 		return (
