@@ -15,6 +15,13 @@ export type PinyinAnnotators = {
 };
 
 type SegmentedChar = { origin: string; result: string };
+type JiebaTaggedWord = { word: string; tag: string };
+type PositionedJiebaTaggedWord = JiebaTaggedWord & { start: number; end: number };
+type JiebaTagger = (text: string) => JiebaTaggedWord[];
+type JiebaModule = {
+	default?: unknown;
+	tag?: (sentence: string, hmm?: boolean | null) => JiebaTaggedWord[];
+};
 
 const HAN_CHAR_RE = /\p{Script=Han}/u;
 // Kanji and hanja are Han script too; kana or hangul in a line means the text
@@ -29,6 +36,7 @@ const ASS_PINYIN_GAP = '\\h';
 const ASS_VISIBLE_TEXT_RE = /[^{}\s]/;
 const LATIN_WORD_RE = /[\p{Script=Latin}\p{N}]/u;
 const LATIN_WORD_GLOBAL_RE = /[\p{Script=Latin}\p{N}]+/gu;
+const MODAL_DEI_PINYIN = 'děi';
 
 let annotatorsPromise: Promise<PinyinAnnotators> | null = null;
 
@@ -108,6 +116,108 @@ export function annotateAssContent(content: string, annotateAssText: (text: stri
 
 function isAnnotatedHanChar(char: SegmentedChar) {
 	return Boolean(char.result) && char.result !== char.origin && HAN_CHAR_RE.test(char.origin);
+}
+
+async function createJiebaTagger(jiebaModule: JiebaModule): Promise<JiebaTagger | null> {
+	try {
+		if (typeof jiebaModule.default === 'function') {
+			await jiebaModule.default();
+		}
+		if (typeof jiebaModule.tag !== 'function') {
+			return null;
+		}
+		return (text) => jiebaModule.tag?.(text, true) ?? [];
+	} catch (error) {
+		console.warn('Unable to initialize Chinese tokenizer for pinyin disambiguation', error);
+		return null;
+	}
+}
+
+function getTaggedWordRanges(text: string, tagger: JiebaTagger): PositionedJiebaTaggedWord[] {
+	let cursor = 0;
+	return tagger(text)
+		.map((taggedWord) => {
+			const start = text.indexOf(taggedWord.word, cursor);
+			if (start === -1) {
+				return null;
+			}
+			const end = start + taggedWord.word.length;
+			cursor = end;
+			return { ...taggedWord, start, end };
+		})
+		.filter((taggedWord): taggedWord is PositionedJiebaTaggedWord => taggedWord !== null);
+}
+
+function isPredicateTag(tag: string) {
+	return tag.startsWith('v') || tag === 'a' || tag === 'ad' || tag === 'an';
+}
+
+function canStartModalDeiPredicate(taggedWords: PositionedJiebaTaggedWord[], index: number) {
+	const word = taggedWords[index];
+	if (!word) {
+		return false;
+	}
+	if (isPredicateTag(word.tag) || word.tag === 'd' || word.tag === 'p') {
+		return true;
+	}
+	// 得这样做 / 得这个人去: short pronominal bridges are still modal when a
+	// predicate follows immediately after.
+	if (word.tag === 'r') {
+		return taggedWords.slice(index + 1, index + 3).some((nextWord) => isPredicateTag(nextWord.tag));
+	}
+	return false;
+}
+
+function isModalDeiTaggedWord(taggedWords: PositionedJiebaTaggedWord[], index: number) {
+	const word = taggedWords[index];
+	if (!word || word.word !== '得') {
+		return false;
+	}
+
+	const previousWord = taggedWords[index - 1];
+	if (previousWord && isPredicateTag(previousWord.tag)) {
+		return false;
+	}
+
+	return canStartModalDeiPredicate(taggedWords, index + 1);
+}
+
+function getModalDeiOffsets(text: string, tagger: JiebaTagger | null) {
+	if (!tagger) {
+		return new Set<string>();
+	}
+
+	const taggedWords = getTaggedWordRanges(text, tagger);
+	return new Set(
+		taggedWords
+			.flatMap((taggedWord, index) =>
+				isModalDeiTaggedWord(taggedWords, index) ? [taggedWord] : []
+			)
+			.map((taggedWord) => `${taggedWord.start}:${taggedWord.end}`)
+	);
+}
+
+function applyContextualPinyinDisambiguation(
+	text: string,
+	segments: SegmentedChar[][],
+	tagger: JiebaTagger | null
+) {
+	const modalDeiOffsets = getModalDeiOffsets(text, tagger);
+	if (modalDeiOffsets.size === 0) {
+		return segments;
+	}
+
+	let offset = 0;
+	return segments.map((word) =>
+		word.map((char) => {
+			const start = offset;
+			const end = start + char.origin.length;
+			offset = end;
+			return char.origin === '得' && modalDeiOffsets.has(`${start}:${end}`)
+				? { ...char, result: MODAL_DEI_PINYIN }
+				: char;
+		})
+	);
 }
 
 function buildAnnotators(segmentWords: (text: string) => SegmentedChar[][]): PinyinAnnotators {
@@ -216,18 +326,20 @@ export function loadPinyinAnnotator() {
 	annotatorsPromise ??= Promise.all([
 		import('pinyin-pro'),
 		import('@pinyin-pro/data/modern'),
-		import('@pinyin-pro/data/traditional')
+		import('@pinyin-pro/data/traditional'),
+		import('jieba-wasm')
 	])
-		.then(([pinyinModule, modernDict, traditionalDict]) => {
+		.then(async ([pinyinModule, modernDict, traditionalDict, jiebaModule]) => {
 			pinyinModule.addDict(modernDict.default);
 			pinyinModule.addTraditionalDict(traditionalDict.default);
-			return buildAnnotators(
-				(text) =>
-					pinyinModule.segment(text, {
-						format: pinyinModule.OutputFormat.AllArray,
-						traditional: true
-					}) as SegmentedChar[][]
-			);
+			const tagger = await createJiebaTagger(jiebaModule);
+			return buildAnnotators((text) => {
+				const segments = pinyinModule.segment(text, {
+					format: pinyinModule.OutputFormat.AllArray,
+					traditional: true
+				}) as SegmentedChar[][];
+				return applyContextualPinyinDisambiguation(text, segments, tagger);
+			});
 		})
 		.catch((error) => {
 			annotatorsPromise = null;
