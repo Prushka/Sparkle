@@ -2742,14 +2742,6 @@ class ManagedLibASSTextRenderer implements TextRenderer {
 	}
 }
 
-function ignoreMediaRequestFailure(action: () => unknown) {
-	try {
-		void Promise.resolve(action()).catch(() => undefined);
-	} catch {
-		// Vidstack may throw synchronously when a provider capability is unavailable.
-	}
-}
-
 function getSafePlayerCurrentTime(player: MediaPlayerInstance | null) {
 	if (!player) {
 		return null;
@@ -2805,6 +2797,12 @@ type RemotePlaybackSync = {
 type PendingRemotePlaybackSync = RemotePlaybackSync & {
 	roomId: string;
 	mediaId: string;
+};
+
+type PendingAudioSwitchPlayback = {
+	audio: string;
+	time: number;
+	paused: boolean;
 };
 
 function useLatestRef<T>(value: T) {
@@ -2874,6 +2872,7 @@ export function Player({
 	const suppressNextPlaybackSyncRef = useRef(false);
 	const awaitingInitialPlaybackSyncRef = useRef(false);
 	const pendingRemotePlaybackSyncRef = useRef<PendingRemotePlaybackSync | null>(null);
+	const pendingAudioSwitchPlaybackRef = useRef<PendingAudioSwitchPlayback | null>(null);
 	const inBgRef = useRef(false);
 	const exitedRef = useRef(false);
 	const interactedRef = useRef(interacted);
@@ -3626,7 +3625,7 @@ export function Player({
 		return true;
 	}, [discordUser, displayName, profileId, send]);
 
-	const sendSettings = useCallback(() => {
+	const sendSettings = useCallback((options: { includeAudio?: boolean } = {}) => {
 		const selectedTrack = getSelectedSubtitleTrack(
 			playerEl,
 			getPlayerVideoElement(playerEl),
@@ -3637,10 +3636,12 @@ export function Player({
 			type: SyncTypes.SubtitleSwitch,
 			subtitle: selectedTrack?.src
 		});
-		send({
-			type: SyncTypes.AudioSwitch,
-			audio: effectiveAudio
-		});
+		if (options.includeAudio !== false) {
+			send({
+				type: SyncTypes.AudioSwitch,
+				audio: effectiveAudio
+			});
+		}
 		send({
 			type: SyncTypes.CodecSwitch,
 			codec: `${selectedCodec},${videoSrc?.sCodec}`
@@ -3655,20 +3656,44 @@ export function Player({
 		if (!player) {
 			return;
 		}
-		sendSettings();
-	}, [playerEl, sendSettings, videoSrc]);
+		const pendingAudioSwitch = pendingAudioSwitchPlaybackRef.current;
+		sendSettings({ includeAudio: pendingAudioSwitch?.audio !== effectiveAudio });
+	}, [effectiveAudio, playerEl, sendSettings, videoSrc]);
 
 	useEffect(() => {
 		if (!mediaProviderEl || !playerEl || !playerSrcUrl) {
 			return;
 		}
-		const animationFrame = window.requestAnimationFrame(() => {
+		let cancelled = false;
+		let animationFrame: number | null = null;
+		let attempts = 0;
+		const loadProvider = () => {
+			if (cancelled) {
+				return;
+			}
+			try {
+				playerEl.startLoading();
+			} catch {
+				// The player may already be loading while a source switch is in flight.
+			}
 			const videoElement = getPlayerVideoElement(playerEl);
 			if (videoElement) {
 				mediaProviderEl.load(videoElement);
 			}
-		});
-		return () => window.cancelAnimationFrame(animationFrame);
+			const needsRetry =
+				videoElement && !videoElement.currentSrc && videoElement.readyState === 0 && attempts < 30;
+			if (needsRetry) {
+				attempts += 1;
+				animationFrame = window.requestAnimationFrame(loadProvider);
+			}
+		};
+		animationFrame = window.requestAnimationFrame(loadProvider);
+		return () => {
+			cancelled = true;
+			if (animationFrame !== null) {
+				window.cancelAnimationFrame(animationFrame);
+			}
+		};
 	}, [mediaProviderEl, playerEl, playerSrcUrl]);
 
 	const applyYouTubeState = useCallback((nextState: YouTubeSyncState) => {
@@ -4347,6 +4372,9 @@ export function Player({
 	);
 
 	const updateTime = useCallback(() => {
+		if (pendingAudioSwitchPlaybackRef.current) {
+			return;
+		}
 		const player = playerElementRef.current;
 		const currentTime = getSafePlayerCurrentTime(player);
 		if (currentTime === null) {
@@ -4399,6 +4427,9 @@ export function Player({
 
 	const shouldSendPlaybackSync = useCallback(() => {
 		if (awaitingInitialPlaybackSyncRef.current) {
+			return false;
+		}
+		if (pendingAudioSwitchPlaybackRef.current) {
 			return false;
 		}
 		return !consumePlaybackSyncSuppression();
@@ -4475,6 +4506,48 @@ export function Player({
 		},
 		[armPlaybackSyncSuppression, clearPlaybackSyncSuppression, queueRemotePlaybackSync]
 	);
+	const restorePendingAudioSwitchPlayback = useCallback(() => {
+		const pending = pendingAudioSwitchPlaybackRef.current;
+		const player = playerElementRef.current;
+		if (!pending || !player || pending.audio !== effectiveAudio || !getSafePlayerCanPlay(player)) {
+			return;
+		}
+
+		pendingAudioSwitchPlaybackRef.current = null;
+		const time = Math.max(0, pending.time);
+		if (time > 0) {
+			setSafePlayerCurrentTime(player, time);
+		}
+		lastSentTimeRef.current = Math.ceil(time);
+		setCurrentlyWatching((value) =>
+			value ? { ...value, duration: Math.ceil(time), paused: pending.paused } : null
+		);
+
+		const currentlyPaused = getSafePlayerPaused(player);
+		if (pending.paused) {
+			if (currentlyPaused === false) {
+				armPlaybackSyncSuppression();
+				Promise.resolve(player.pause()).catch((error) => {
+					clearPlaybackSyncSuppression();
+					console.warn('Unable to preserve pause state after audio track switch', error);
+				});
+			}
+			return;
+		}
+
+		if (currentlyPaused !== false) {
+			armPlaybackSyncSuppression();
+			Promise.resolve(player.play()).catch((error) => {
+				clearPlaybackSyncSuppression();
+				console.warn('Unable to resume after audio track switch', error);
+			});
+		}
+	}, [
+		armPlaybackSyncSuppression,
+		clearPlaybackSyncSuppression,
+		effectiveAudio,
+		setCurrentlyWatching
+	]);
 	const applyRemotePlaybackSyncRef = useLatestRef(applyRemotePlaybackSync);
 	const sendProfileRef = useLatestRef(sendProfile);
 	const sendSettingsRef = useLatestRef(sendSettings);
@@ -4970,6 +5043,7 @@ export function Player({
 		if (!playerEl || !playerCanPlay) {
 			return;
 		}
+		restorePendingAudioSwitchPlayback();
 		const pendingRemotePlaybackSync = pendingRemotePlaybackSyncRef.current;
 		if (pendingRemotePlaybackSync) {
 			pendingRemotePlaybackSyncRef.current = null;
@@ -4982,7 +5056,13 @@ export function Player({
 			restoreInitialVolume(playerEl);
 			volumeCanPlayRestoredRef.current = true;
 		}
-	}, [applyRemotePlaybackSync, playerCanPlay, playerEl, restoreInitialVolume]);
+	}, [
+		applyRemotePlaybackSync,
+		playerCanPlay,
+		playerEl,
+		restoreInitialVolume,
+		restorePendingAudioSwitchPlayback
+	]);
 
 	useEffect(() => {
 		if (!playerEl) {
@@ -4995,14 +5075,10 @@ export function Player({
 			if (document.hidden) {
 				send({ state: 'bg', type: SyncTypes.StateSync, paused: paused ?? true });
 				inBgRef.current = true;
-				if (paused === false) {
-					ignoreMediaRequestFailure(() => player.enterPictureInPicture?.());
-				}
 			} else {
 				void refreshRoomMedia();
 				send({ state: 'fg', type: SyncTypes.StateSync, paused: paused ?? true });
 				inBgRef.current = false;
-				ignoreMediaRequestFailure(() => player.exitPictureInPicture?.());
 			}
 		};
 		document.addEventListener('visibilitychange', visibilityChange);
@@ -5134,6 +5210,12 @@ export function Player({
 
 	function changeAudio(curr: string) {
 		if (selectedAudio !== curr) {
+			const player = playerElementRef.current;
+			pendingAudioSwitchPlaybackRef.current = {
+				audio: curr,
+				time: getSafePlayerCurrentTime(player) ?? 0,
+				paused: getSafePlayerPaused(player) ?? true
+			};
 			setSelectedAudio(curr);
 		}
 	}

@@ -246,7 +246,7 @@ export function DiscordBridge() {
 					authenticatedRef.current = true;
 					sdk.commands
 						.setConfig({
-							use_interactive_pip: true
+							use_interactive_pip: false
 						})
 						.catch((error: unknown) => {
 							console.warn('Discord setConfig failed', error);
