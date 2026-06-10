@@ -66,6 +66,11 @@ import { useTheme } from '@/lib/theme';
 import { createNotificationAudioUrl } from '@/lib/player/notification-audio';
 import { getSoundEffect } from '@/lib/player/sound-effects';
 import {
+	annotateAssContent,
+	loadPinyinAnnotator,
+	subtitleContentLooksChinese
+} from '@/lib/player/pinyin';
+import {
 	CHESS_NOTIFICATION_SOUND_IDS,
 	type ChessNotificationSoundId
 } from '@/lib/player/chess-notifications';
@@ -180,6 +185,7 @@ const MAX_REMOTE_MIC_VOLUME = 5;
 const MAX_REMOTE_MIC_VOLUME_PERCENT = MAX_REMOTE_MIC_VOLUME * 100;
 const SUBTITLE_LANGUAGE_STORAGE_KEY = 'subtitleLanguage';
 const SUBTITLE_LAYERS_STORAGE_KEY = 'subtitleLayers';
+const SUBTITLE_PINYIN_STORAGE_KEY = 'subtitlePinyin';
 const ASS_BITMAP_CACHE_LIMIT_MB = 64;
 const ASS_GLYPH_CACHE_LIMIT_MB = 16;
 const ROOM_TIME_SYNC_THRESHOLD_SECONDS = 6;
@@ -1021,6 +1027,28 @@ function isStackableSubtitleFormat(
 	return STACKABLE_SUBTITLE_FORMATS.has(format);
 }
 
+function isChineseSubtitleLanguage(language: string) {
+	return /^(zh|chi|zho|chs|cht)/i.test(language);
+}
+
+function readStoredSubtitlePinyinEnabled() {
+	if (typeof window === 'undefined') {
+		return false;
+	}
+	return window.localStorage.getItem(SUBTITLE_PINYIN_STORAGE_KEY) === '1';
+}
+
+function saveStoredSubtitlePinyinEnabled(enabled: boolean) {
+	if (typeof window === 'undefined') {
+		return;
+	}
+	if (enabled) {
+		window.localStorage.setItem(SUBTITLE_PINYIN_STORAGE_KEY, '1');
+	} else {
+		window.localStorage.removeItem(SUBTITLE_PINYIN_STORAGE_KEY);
+	}
+}
+
 function dedupeStrings(values: string[]) {
 	const uniqueValues: string[] = [];
 	for (const value of values) {
@@ -1538,21 +1566,46 @@ function serializeMergedAss(cues: MergedSubtitleCue[], primaryContent: string, l
 	return `${header}${events}\n`;
 }
 
-async function buildMergedSubtitleContent(
+async function buildProcessedSubtitleContent(
 	tracks: SubtitleTrackInfo[],
+	annotatePinyin: boolean,
 	signal: AbortSignal
-): Promise<string> {
-	if (tracks.length === 0) {
-		return '';
+): Promise<{ content: string; format: StackableSubtitleTrackFormat } | null> {
+	if (tracks.length === 0 || !isStackableSubtitleFormat(tracks[0].format)) {
+		return null;
 	}
+	const format = tracks[0].format;
 	const parser = await loadCaptionsParserModule();
 	const documents = await Promise.all(
 		tracks.map((track) => parseSubtitleDocument(parser, track, signal))
 	);
-	const cues = mergeSubtitleCues(documents);
-	return tracks[0].format === 'ass'
-		? serializeMergedAss(cues, documents[0].content, tracks.length)
-		: serializeMergedVtt(cues);
+	const annotators =
+		annotatePinyin && documents.some((document) => subtitleContentLooksChinese(document.content))
+			? await loadPinyinAnnotator()
+			: null;
+	if (!annotators && tracks.length === 1) {
+		return null;
+	}
+	if (format === 'ass') {
+		// ASS keeps rendering through jassub. A single annotated track keeps its
+		// original header, styles, and event fields; only dialogue text gains
+		// inline pinyin. Merged stacks annotate the merged document the same way.
+		const content =
+			tracks.length === 1
+				? documents[0].content
+				: serializeMergedAss(mergeSubtitleCues(documents), documents[0].content, tracks.length);
+		return {
+			content: annotators ? annotateAssContent(content, annotators.annotateAss) : content,
+			format
+		};
+	}
+	const cues = documents.length === 1 ? documents[0].cues : mergeSubtitleCues(documents);
+	return {
+		content: serializeMergedVtt(
+			annotators ? cues.map((cue) => ({ ...cue, text: annotators.annotateHtml(cue.text) })) : cues
+		),
+		format
+	};
 }
 
 function getPublicAssetUrl(src: string) {
@@ -2903,6 +2956,12 @@ export function Player({
 	const [selectedSubtitleTrack, setSelectedSubtitleTrackState] =
 		useState<SelectedSubtitleTrack | null>(null);
 	const [extraSubtitleLayerSrcs, setExtraSubtitleLayerSrcs] = useState<string[]>([]);
+	const [subtitlePinyinEnabled, setSubtitlePinyinEnabled] = useState(
+		readStoredSubtitlePinyinEnabled
+	);
+	// Sniff results per track src: whether the subtitle content is Chinese.
+	const [chineseContentSrcs, setChineseContentSrcs] = useState<Record<string, boolean>>({});
+	const chineseContentSrcsRef = useLatestRef(chineseContentSrcs);
 	const [supportedCodecs, setSupportedCodecs] = useState<string[]>([]);
 	const [copiedRoomLink, setCopiedRoomLink] = useState(false);
 	const [exited, setExited] = useState(false);
@@ -3317,6 +3376,56 @@ export function Player({
 			return areStringArraysEqual(next, current) ? current : next;
 		});
 	}, []);
+	const toggleSubtitlePinyin = useCallback((enabled: boolean) => {
+		saveStoredSubtitlePinyinEnabled(enabled);
+		setSubtitlePinyinEnabled(enabled);
+	}, []);
+
+	// The pinyin toggle only appears when a selected subtitle layer contains
+	// Chinese text. Language metadata is unreliable in muxed files, so track
+	// content itself is sniffed (the fetch hits the browser cache once the
+	// track has been loaded for display).
+	const pinyinLayerTracks = useMemo(() => {
+		const selectedTrack = selectedSubtitleTrack;
+		if (!selectedTrack || !isStackableSubtitleFormat(selectedTrack.format)) {
+			return [];
+		}
+		const stackableTracks = getStackableSubtitleTracks(subtitleTracks, selectedTrack);
+		return [
+			selectedTrack,
+			...stackableTracks.filter((track) => extraSubtitleLayerSrcs.includes(track.src))
+		];
+	}, [extraSubtitleLayerSrcs, selectedSubtitleTrack, subtitleTracks]);
+	const subtitlePinyinEligible =
+		pinyinLayerTracks.some((track) => isChineseSubtitleLanguage(track.language)) ||
+		pinyinLayerTracks.some((track) => chineseContentSrcs[track.src]);
+	useEffect(() => {
+		const unsniffedSrcs = pinyinLayerTracks
+			.filter(
+				(track) =>
+					!isChineseSubtitleLanguage(track.language) &&
+					chineseContentSrcsRef.current[track.src] === undefined
+			)
+			.map((track) => track.src);
+		if (unsniffedSrcs.length === 0) {
+			return;
+		}
+		const abortController = new AbortController();
+		for (const src of unsniffedSrcs) {
+			void fetch(src, { signal: abortController.signal })
+				.then((response) => (response.ok ? response.text() : ''))
+				.then((content) => Boolean(content) && subtitleContentLooksChinese(content))
+				.catch(() => false)
+				.then((isChinese) => {
+					if (!abortController.signal.aborted) {
+						setChineseContentSrcs((current) => ({ ...current, [src]: isChinese }));
+					}
+				});
+		}
+		return () => {
+			abortController.abort();
+		};
+	}, [chineseContentSrcsRef, pinyinLayerTracks]);
 
 	useEffect(() => {
 		const selectedTrack = selectedSubtitleTrackRef.current;
@@ -3625,28 +3734,31 @@ export function Player({
 		return true;
 	}, [discordUser, displayName, profileId, send]);
 
-	const sendSettings = useCallback((options: { includeAudio?: boolean } = {}) => {
-		const selectedTrack = getSelectedSubtitleTrack(
-			playerEl,
-			getPlayerVideoElement(playerEl),
-			subtitleTracksRef.current,
-			selectedSubtitleTrackRef.current
-		);
-		send({
-			type: SyncTypes.SubtitleSwitch,
-			subtitle: selectedTrack?.src
-		});
-		if (options.includeAudio !== false) {
+	const sendSettings = useCallback(
+		(options: { includeAudio?: boolean } = {}) => {
+			const selectedTrack = getSelectedSubtitleTrack(
+				playerEl,
+				getPlayerVideoElement(playerEl),
+				subtitleTracksRef.current,
+				selectedSubtitleTrackRef.current
+			);
 			send({
-				type: SyncTypes.AudioSwitch,
-				audio: effectiveAudio
+				type: SyncTypes.SubtitleSwitch,
+				subtitle: selectedTrack?.src
 			});
-		}
-		send({
-			type: SyncTypes.CodecSwitch,
-			codec: `${selectedCodec},${videoSrc?.sCodec}`
-		});
-	}, [effectiveAudio, playerEl, send, selectedCodec, videoSrc?.sCodec]);
+			if (options.includeAudio !== false) {
+				send({
+					type: SyncTypes.AudioSwitch,
+					audio: effectiveAudio
+				});
+			}
+			send({
+				type: SyncTypes.CodecSwitch,
+				codec: `${selectedCodec},${videoSrc?.sCodec}`
+			});
+		},
+		[effectiveAudio, playerEl, send, selectedCodec, videoSrc?.sCodec]
+	);
 
 	useEffect(() => {
 		if (!playerEl || !videoSrc) {
@@ -4187,16 +4299,17 @@ export function Player({
 			.filter((track): track is SubtitleTrackInfo => Boolean(track));
 		const mergeTracks = primaryTrack ? [primaryTrack, ...companionTracks] : [];
 		const mergeFormat = primaryTrack?.format;
+		const applyPinyin = subtitlePinyinEnabled && subtitlePinyinEligible;
 		if (
 			!primaryTrack ||
-			companionTracks.length === 0 ||
+			(companionTracks.length === 0 && !applyPinyin) ||
 			(mergeFormat !== 'ass' && mergeFormat !== 'vtt')
 		) {
 			clearMergedSubtitleTrack('showing');
 			return;
 		}
 
-		const signature = getMergedSubtitleSignature(mergeTracks);
+		const signature = `${getMergedSubtitleSignature(mergeTracks)}${applyPinyin ? '\n#pinyin' : ''}`;
 		if (mergedSubtitleTrackRef.current?.signature === signature) {
 			return;
 		}
@@ -4209,18 +4322,18 @@ export function Player({
 		const requestId = ++mergedSubtitleRequestIdRef.current;
 		const abortController = new AbortController();
 
-		void buildMergedSubtitleContent(mergeTracks, abortController.signal)
-			.then((content) => {
-				if (
-					abortController.signal.aborted ||
-					mergedSubtitleRequestIdRef.current !== requestId ||
-					!content
-				) {
+		void buildProcessedSubtitleContent(mergeTracks, applyPinyin, abortController.signal)
+			.then((processed) => {
+				if (abortController.signal.aborted || mergedSubtitleRequestIdRef.current !== requestId) {
+					return;
+				}
+				if (!processed) {
+					clearMergedSubtitleTrack('showing');
 					return;
 				}
 
 				const objectUrl = URL.createObjectURL(
-					new Blob([content], { type: getSubtitleBlobMimeType(mergeFormat) })
+					new Blob([processed.content], { type: getSubtitleBlobMimeType(processed.format) })
 				);
 				const previousMergedTrack = mergedSubtitleTrackRef.current;
 				if (previousMergedTrack) {
@@ -4234,12 +4347,12 @@ export function Player({
 					default: false,
 					id: primaryTrack.src,
 					src: objectUrl,
-					type: mergeFormat
+					type: processed.format
 				});
 				textTracks.add(mergedTextTrack);
 				setPlayerTextTrackMode(mergedTextTrack, 'showing');
 				mergedSubtitleTrackRef.current = {
-					format: mergeFormat,
+					format: processed.format,
 					objectUrl,
 					primarySrc: primaryTrack.src,
 					signature,
@@ -4248,7 +4361,7 @@ export function Player({
 			})
 			.catch((error) => {
 				if (!abortController.signal.aborted) {
-					console.warn('Unable to merge subtitle layers', error);
+					console.warn('Unable to process subtitle layers', error);
 					clearMergedSubtitleTrack('showing');
 				}
 			});
@@ -4261,6 +4374,8 @@ export function Player({
 		extraSubtitleLayerSrcs,
 		playerEl,
 		selectedSubtitleTrack,
+		subtitlePinyinEligible,
+		subtitlePinyinEnabled,
 		subtitleTracks
 	]);
 
@@ -5358,23 +5473,40 @@ export function Player({
 			1 + companionTracks.filter((track) => extraSubtitleLayerSrcs.includes(track.src)).length;
 		return `${selectedCount} ${selectedSubtitleTrack.format.toUpperCase()}`;
 	})();
-	const subtitleLayersSettingsMenu = subtitleLayerSettingsSummary ? (
-		<Menu.Root className="vds-player-settings-menu vds-subtitle-layers-settings-menu vds-menu">
-			<DefaultMenuButton
-				label="Subtitle Layers"
-				hint={subtitleLayerSettingsSummary}
-				Icon={defaultLayoutIcons.Menu.Captions}
-			/>
-			<Menu.Items className="vds-menu-items">
-				<SubtitleLayersMenuSection
-					extraSubtitleLayerSrcs={extraSubtitleLayerSrcs}
-					onToggleLayer={toggleSubtitleLayer}
-					selectedTrack={selectedSubtitleTrack}
-					tracks={subtitleTracks}
+	const subtitlePinyinSummary = subtitlePinyinEligible && subtitlePinyinEnabled ? 'Pinyin' : '';
+	const subtitleLayersSettingsHint =
+		[subtitleLayerSettingsSummary, subtitlePinyinSummary].filter(Boolean).join(' + ') ||
+		(subtitlePinyinEligible ? 'Off' : '');
+	const subtitleLayersSettingsMenu =
+		subtitleLayerSettingsSummary || subtitlePinyinEligible ? (
+			<Menu.Root className="vds-player-settings-menu vds-subtitle-layers-settings-menu vds-menu">
+				<DefaultMenuButton
+					label="Subtitle Layers"
+					hint={subtitleLayersSettingsHint}
+					Icon={defaultLayoutIcons.Menu.Captions}
 				/>
-			</Menu.Items>
-		</Menu.Root>
-	) : null;
+				<Menu.Items className="vds-menu-items">
+					{subtitlePinyinEligible ? (
+						<DefaultMenuSection
+							label="Chinese Annotation"
+							value={subtitlePinyinEnabled ? 'Pinyin' : 'Off'}
+						>
+							<SubtitleLayerCheckbox
+								checked={subtitlePinyinEnabled}
+								label="Pinyin"
+								onChange={toggleSubtitlePinyin}
+							/>
+						</DefaultMenuSection>
+					) : null}
+					<SubtitleLayersMenuSection
+						extraSubtitleLayerSrcs={extraSubtitleLayerSrcs}
+						onToggleLayer={toggleSubtitleLayer}
+						selectedTrack={selectedSubtitleTrack}
+						tracks={subtitleTracks}
+					/>
+				</Menu.Items>
+			</Menu.Root>
+		) : null;
 	const videoSettingsMenu = (
 		<Menu.Root className="vds-player-settings-menu vds-video-settings-menu vds-menu">
 			<DefaultMenuButton

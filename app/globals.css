@@ -491,6 +491,29 @@ html::-webkit-scrollbar-thumb:hover,
 		0 0 3px black !important;
 }
 
+/* Pinyin annotations on Chinese subtitle cues. The default cue line-height
+   (1.2em) clips ruby text, so cues containing ruby get taller lines. */
+:where(.vds-captions [data-part='cue']):has(ruby) {
+	line-height: calc(var(--cue-font-size) * 1.8);
+}
+
+:where(.vds-captions [data-part='cue']) ruby {
+	ruby-align: center;
+	margin-inline: 0.08em;
+}
+
+:where(.vds-captions [data-part='cue']) rt {
+	font-size: 0.45em;
+	line-height: 1;
+	letter-spacing: 0.02em;
+	padding-bottom: 0.22em;
+	color: rgba(255, 235, 170, 0.96);
+	text-shadow:
+		0 0 2px black,
+		0 0 2px black,
+		0 0 3px black;
+}
+
 :where(.vds-video-layout .vds-controls[data-visible]) {
 	background-image: linear-gradient(
 		to top,
