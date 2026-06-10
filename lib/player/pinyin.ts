@@ -6,9 +6,8 @@
 //
 // VTT cues are annotated with HTML ruby markup, which the DOM captions
 // overlay renders as pinyin above each word. ASS dialogue keeps rendering
-// through jassub: the format has no ruby, so each word instead gets inline
-// pinyin in a smaller gold font via override tags, leaving the original
-// styles, positioning, and effects untouched.
+// through jassub: the format has no ruby, so Chinese lines are stacked as a
+// small pinyin line above the original subtitle line.
 
 export type PinyinAnnotators = {
 	annotateAss: (text: string) => string;
@@ -23,15 +22,13 @@ const HAN_CHAR_RE = /\p{Script=Han}/u;
 const NON_CHINESE_CJK_RE = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
 const HTML_TAG_SPLIT_RE = /(<[^>]*>)/;
 const ASS_BLOCK_SPLIT_RE = /({[^}]*})/;
-const ASS_ESCAPE_SPLIT_RE = /(\\[Nnh]|\n)/;
-const ASS_ESCAPE_RE = /^(?:\\[Nnh]|\n)$/;
-// Override tags that the pinyin tags below have to restore afterwards:
-// \r (style reset), \fscx/\fscy (font scale), \c or \1c (primary colour).
-// (?![a-z]) keeps \c from matching \clip.
-const ASS_STATE_TAG_RE =
-	/\\(?:r[^\\}]*|fscx([\d.]*)|fscy([\d.]*)|1?c(&H[0-9A-Fa-f]{1,8}&?)?(?![a-z]))/g;
+const ASS_LINE_SPLIT_RE = /(\\[Nn]|\n)/;
 const ASS_PINYIN_COLOR = '&HAAEBFF&';
 const ASS_PINYIN_SCALE = 60;
+const ASS_PINYIN_GAP = '\\h';
+const ASS_VISIBLE_TEXT_RE = /[^{}\s]/;
+const LATIN_WORD_RE = /[\p{Script=Latin}\p{N}]/u;
+const LATIN_WORD_GLOBAL_RE = /[\p{Script=Latin}\p{N}]+/gu;
 
 let annotatorsPromise: Promise<PinyinAnnotators> | null = null;
 
@@ -147,40 +144,68 @@ function buildAnnotators(segmentWords: (text: string) => SegmentedChar[][]): Pin
 	const annotateHtml = (text: string) => text.split('\n').map(annotateHtmlLine).join('\n');
 
 	const annotateAss = (text: string) => {
-		// Active overrides from the original line; pinyin tags restore them
-		// (a parameterless tag resets to the event style's value).
-		let color: string | null = null;
-		let fscx: string | null = null;
-		let fscy: string | null = null;
-		const renderAssWord = (origin: string, chars: SegmentedChar[]) => {
-			const pinyin = chars.map((char) => char.result).join('');
-			const revert = `\\fscx${fscx ?? ''}\\fscy${fscy ?? ''}\\c${color ?? ''}`;
-			return `${origin}{\\fscx${ASS_PINYIN_SCALE}\\fscy${ASS_PINYIN_SCALE}\\c${ASS_PINYIN_COLOR}}\\h${pinyin}{${revert}}`;
-		};
-		return text
-			.split(ASS_BLOCK_SPLIT_RE)
-			.map((part) => {
-				if (part.startsWith('{') && part.endsWith('}')) {
-					for (const match of part.matchAll(ASS_STATE_TAG_RE)) {
-						if (match[0].startsWith('\\r')) {
-							color = null;
-							fscx = null;
-							fscy = null;
-						} else if (match[0].startsWith('\\fscx')) {
-							fscx = match[1] || null;
-						} else if (match[0].startsWith('\\fscy')) {
-							fscy = match[2] || null;
-						} else {
-							color = match[3] || null;
-						}
-					}
-					return part;
+		const renderAssPinyinWord = (_origin: string, chars: SegmentedChar[]) =>
+			chars.map((char) => char.result).join(ASS_PINYIN_GAP);
+
+		const getPinyinChunk = (chunk: string) => {
+			if (!textLooksChinese(chunk)) {
+				return { hasPinyin: false, text: chunk.replace(LATIN_WORD_GLOBAL_RE, '') };
+			}
+
+			let hasPinyin = false;
+			let annotated = '';
+			for (const word of segmentWords(chunk)) {
+				const origin = word.map((char) => char.origin).join('');
+				if (word.every(isAnnotatedHanChar)) {
+					const pinyin = renderAssPinyinWord(origin, word);
+					annotated += annotated && pinyin ? `${ASS_PINYIN_GAP}${pinyin}` : pinyin;
+					hasPinyin = true;
+				} else {
+					annotated += LATIN_WORD_RE.test(origin) ? '' : origin;
 				}
-				return part
-					.split(ASS_ESCAPE_SPLIT_RE)
-					.map((run) => (ASS_ESCAPE_RE.test(run) ? run : annotateChunk(run, renderAssWord)))
-					.join('');
-			})
+			}
+			return { hasPinyin, text: annotated };
+		};
+
+		const annotateAssLine = (line: string) => {
+			let pinyinText = '';
+			let leadingTags = '';
+			let seenVisibleText = false;
+			let hasPinyin = false;
+
+			for (const part of line.split(ASS_BLOCK_SPLIT_RE)) {
+				if (!part) {
+					continue;
+				}
+				if (part.startsWith('{') && part.endsWith('}')) {
+					if (!seenVisibleText) {
+						leadingTags += part;
+					}
+					continue;
+				}
+
+				if (ASS_VISIBLE_TEXT_RE.test(part)) {
+					seenVisibleText = true;
+				}
+				const chunk = getPinyinChunk(part);
+				hasPinyin ||= chunk.hasPinyin;
+				pinyinText += chunk.text;
+			}
+
+			if (!hasPinyin) {
+				return line;
+			}
+
+			const compactPinyin = pinyinText.replace(/\s+/g, ASS_PINYIN_GAP).trim();
+			if (!compactPinyin) {
+				return line;
+			}
+			return `${leadingTags}{\\fscx${ASS_PINYIN_SCALE}\\fscy${ASS_PINYIN_SCALE}\\c${ASS_PINYIN_COLOR}}${compactPinyin}{\\r}\\N${line}`;
+		};
+
+		return text
+			.split(ASS_LINE_SPLIT_RE)
+			.map((part) => (ASS_LINE_SPLIT_RE.test(part) ? part : annotateAssLine(part)))
 			.join('');
 	};
 

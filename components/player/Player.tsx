@@ -1589,7 +1589,7 @@ async function buildProcessedSubtitleContent(
 	if (format === 'ass') {
 		// ASS keeps rendering through jassub. A single annotated track keeps its
 		// original header, styles, and event fields; only dialogue text gains
-		// inline pinyin. Merged stacks annotate the merged document the same way.
+		// a stacked pinyin line. Merged stacks annotate the merged document the same way.
 		const content =
 			tracks.length === 1
 				? documents[0].content
@@ -2326,6 +2326,39 @@ function SubtitleLayerCheckbox({
 				checked={checked}
 				onChange={(nextChecked, trigger) => {
 					if (nextChecked === checked) {
+						return;
+					}
+					if (!initializedRef.current && !trigger) {
+						initializedRef.current = true;
+						return;
+					}
+					initializedRef.current = true;
+					onChange(nextChecked);
+				}}
+			/>
+		</DefaultMenuItem>
+	);
+}
+
+function PinyinPreferenceCheckbox({
+	checked,
+	onChange
+}: {
+	checked: boolean;
+	onChange: (checked: boolean) => void;
+}) {
+	const initializedRef = useRef(false);
+
+	return (
+		<DefaultMenuItem label="Pinyin">
+			<DefaultMenuCheckbox
+				label="Pinyin"
+				checked={checked}
+				defaultChecked={checked}
+				storageKey={SUBTITLE_PINYIN_STORAGE_KEY}
+				onChange={(nextChecked, trigger) => {
+					if (nextChecked === checked) {
+						initializedRef.current = true;
 						return;
 					}
 					if (!initializedRef.current && !trigger) {
@@ -5491,9 +5524,8 @@ export function Player({
 							label="Chinese Annotation"
 							value={subtitlePinyinEnabled ? 'Pinyin' : 'Off'}
 						>
-							<SubtitleLayerCheckbox
+							<PinyinPreferenceCheckbox
 								checked={subtitlePinyinEnabled}
-								label="Pinyin"
 								onChange={toggleSubtitlePinyin}
 							/>
 						</DefaultMenuSection>
