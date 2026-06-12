@@ -29,6 +29,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import * as DropdownMenu from '@/components/ui/dropdown-menu';
+import { RoomNavigationInput } from '@/components/room-navigation-input';
 import { cn } from '@/lib/utils';
 import { type LibraryJob, type TitleEpisode } from '@/lib/player/t';
 import { fetchJobs } from '@/lib/player/data';
@@ -218,21 +219,29 @@ export function LibraryHome({
 		<main className="min-h-screen w-full bg-[linear-gradient(180deg,#08090d_0%,#111017_42%,#08090d_100%)] text-zinc-50">
 			<div className="mx-auto flex w-full max-w-[1760px] flex-col gap-6 px-4 py-5 sm:px-6 md:px-8 lg:px-10">
 				<header className="pt-2">
-					<div className="flex min-w-0 flex-col gap-2 min-[960px]:flex-row min-[960px]:items-baseline min-[960px]:gap-4">
-						<h1 className="truncate text-4xl font-black tracking-normal text-white sm:text-5xl min-[960px]:shrink-0">
-							Library
-						</h1>
-						<div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-400">
-							<HeaderStat icon={IconDeviceTv}>
-								{numberFormatter.format(stats.shows)} shows
-							</HeaderStat>
-							<HeaderStat icon={IconVideo}>
-								{numberFormatter.format(stats.episodes)} episodes
-							</HeaderStat>
-							<HeaderStat icon={IconMovie}>
-								{numberFormatter.format(stats.movies)} movies
-							</HeaderStat>
+					<div className="flex min-w-0 flex-col gap-4 min-[960px]:flex-row min-[960px]:items-end min-[960px]:justify-between">
+						<div className="flex min-w-0 flex-col gap-2 min-[960px]:flex-row min-[960px]:items-baseline min-[960px]:gap-4">
+							<h1 className="truncate text-4xl font-black tracking-normal text-white sm:text-5xl min-[960px]:shrink-0">
+								Library
+							</h1>
+							<div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-400">
+								<HeaderStat icon={IconDeviceTv}>
+									{numberFormatter.format(stats.shows)} shows
+								</HeaderStat>
+								<HeaderStat icon={IconVideo}>
+									{numberFormatter.format(stats.episodes)} episodes
+								</HeaderStat>
+								<HeaderStat icon={IconMovie}>
+									{numberFormatter.format(stats.movies)} movies
+								</HeaderStat>
+							</div>
 						</div>
+						<RoomNavigationInput
+							inputId="library-room-navigation-input"
+							className="w-full border-white/10 bg-white/[0.06] shadow-2xl shadow-black/20 min-[960px]:w-[min(32rem,42vw)]"
+							inputClassName="text-white placeholder:text-zinc-500"
+							buttonClassName="border-white/10 text-zinc-400 hover:bg-white/10 hover:text-white"
+						/>
 					</div>
 				</header>
 

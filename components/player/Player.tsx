@@ -3,8 +3,6 @@
 import {
 	type CSSProperties,
 	type ChangeEvent,
-	type FormEvent,
-	type KeyboardEvent,
 	type ReactNode,
 	useCallback,
 	useEffect,
@@ -48,7 +46,6 @@ import {
 } from '@vidstack/react/player/layouts/default';
 import {
 	IconBrandYoutubeFilled,
-	IconArrowRight,
 	IconCheck,
 	IconChess,
 	IconHeadphones,
@@ -135,6 +132,7 @@ import { useVoiceChat } from '@/components/player/useVoiceChat';
 import { YouTubeFloatingTab } from '@/components/player/YouTubeFloatingTab';
 import { ChessFloatingTab } from '@/components/player/ChessFloatingTab';
 import { CottageGame, CottageGamePlaceholder } from '@/components/player/CottageGame';
+import { RoomNavigationInput } from '@/components/room-navigation-input';
 import { fetchJobs, joinBackendPath, updateRoomRecord } from '@/lib/player/data';
 import type { ParsedCaptionsResult, VTTCue as MediaCaptionCue } from 'media-captions';
 
@@ -316,41 +314,6 @@ function getMediaSessionTitle(data: ServerData) {
 
 function getMediaSessionArtist(data: ServerData) {
 	return data.job.Title.title || 'Sparkle';
-}
-
-function isAbsoluteRoomUrl(value: string) {
-	return /^[a-z][a-z\d+.-]*:\/\//i.test(value) || value.startsWith('//');
-}
-
-function getRoomNavigationTarget(value: string, currentLocation: Location) {
-	const trimmedValue = value.trim();
-	if (!trimmedValue) {
-		return null;
-	}
-
-	const sameHostUrl =
-		trimmedValue === currentLocation.host || trimmedValue.startsWith(`${currentLocation.host}/`)
-			? `${currentLocation.protocol}//${trimmedValue}`
-			: trimmedValue;
-	const shouldTreatAsUrl =
-		isAbsoluteRoomUrl(sameHostUrl) || sameHostUrl.startsWith('/') || sameHostUrl.startsWith('#');
-
-	if (shouldTreatAsUrl) {
-		try {
-			const target = new URL(sameHostUrl, currentLocation.origin);
-			return target.host === currentLocation.host ? target.href : null;
-		} catch {
-			return null;
-		}
-	}
-
-	const roomId = trimmedValue.replace(/^\/+|\/+$/g, '');
-	if (!roomId) {
-		return null;
-	}
-
-	const target = new URL(`/${encodeURIComponent(roomId)}`, currentLocation.origin);
-	return target.href;
 }
 
 function getStoryboardDevicePixelRatio() {
@@ -3142,8 +3105,6 @@ export function Player({
 	const [extraSubtitleLayerSrcs, setExtraSubtitleLayerSrcs] = useState<string[]>([]);
 	const [supportedCodecs, setSupportedCodecs] = useState<string[]>([]);
 	const [copiedRoomLink, setCopiedRoomLink] = useState(false);
-	const [roomNavigationValue, setRoomNavigationValue] = useState('');
-	const [roomNavigationInvalid, setRoomNavigationInvalid] = useState(false);
 	const [exited, setExited] = useState(false);
 	const [moveToast, setMoveToast] = useState<MoveToastState | null>(null);
 	const [name, setName] = useState('');
@@ -5779,42 +5740,6 @@ export function Player({
 		});
 	}
 
-	function handleRoomNavigationChange(event: ChangeEvent<HTMLInputElement>) {
-		setRoomNavigationValue(event.target.value);
-		if (roomNavigationInvalid) {
-			setRoomNavigationInvalid(false);
-		}
-	}
-
-	function handleRoomNavigationKeyDown(event: KeyboardEvent<HTMLInputElement>) {
-		if (
-			event.key !== 'Enter' ||
-			event.altKey ||
-			event.ctrlKey ||
-			event.metaKey ||
-			event.shiftKey ||
-			event.nativeEvent.isComposing
-		) {
-			return;
-		}
-
-		event.preventDefault();
-		event.currentTarget.form?.requestSubmit();
-	}
-
-	function handleRoomNavigationSubmit(event: FormEvent<HTMLFormElement>) {
-		event.preventDefault();
-
-		const target = getRoomNavigationTarget(roomNavigationValue, window.location);
-		if (!target) {
-			setRoomNavigationInvalid(true);
-			return;
-		}
-
-		setRoomNavigationInvalid(false);
-		window.location.assign(target);
-	}
-
 	function handleJoinWatchRoom() {
 		if (socketCommunicating || !playerCanPlayRef.current) {
 			return;
@@ -6130,41 +6055,10 @@ export function Player({
 					<div className="order-2 flex min-w-0 justify-start min-[761px]:order-1">
 						{voiceSupported ? <VoiceControls voice={voice} /> : null}
 					</div>
-					<form
-						className={`order-1 flex h-10 w-full min-w-0 max-w-xl items-center overflow-hidden rounded-md border bg-background/70 shadow-sm backdrop-blur-sm transition-colors max-[760px]:mx-auto max-[760px]:mb-1 min-[761px]:order-2 min-[761px]:w-auto min-[761px]:flex-1 min-[761px]:max-w-lg ${
-							roomNavigationInvalid ? 'border-destructive' : 'border-input'
-						}`}
-						aria-label="Open room"
-						onSubmit={handleRoomNavigationSubmit}
-					>
-						<label className="sr-only" htmlFor="room-navigation-input">
-							Room URL or ID
-						</label>
-						<Input
-							id="room-navigation-input"
-							value={roomNavigationValue}
-							onChange={handleRoomNavigationChange}
-							onKeyDown={handleRoomNavigationKeyDown}
-							placeholder="Room URL or ID"
-							autoComplete="off"
-							autoCapitalize="none"
-							spellCheck={false}
-							aria-invalid={roomNavigationInvalid}
-							className="h-full min-w-0 flex-1 rounded-none border-0 bg-transparent px-3 py-1 text-sm shadow-none focus-visible:ring-0"
-						/>
-						<Button
-							type="submit"
-							variant="ghost"
-							className={`h-full w-10 flex-none rounded-none border-l p-0 ${
-								roomNavigationInvalid
-									? 'border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive'
-									: 'border-border/70 text-muted-foreground hover:text-foreground'
-							}`}
-							aria-label="Open room"
-						>
-							<IconArrowRight size={17} stroke={2} />
-						</Button>
-					</form>
+					<RoomNavigationInput
+						inputId="room-navigation-input"
+						className="order-1 w-full max-w-xl max-[760px]:mx-auto max-[760px]:mb-1 min-[761px]:order-2 min-[761px]:w-auto min-[761px]:flex-1 min-[761px]:max-w-lg"
+					/>
 					<div className="order-3 flex min-w-0 items-center justify-end gap-2">
 						<Tooltip.Provider delayDuration={0}>
 							<Tooltip.Root>
