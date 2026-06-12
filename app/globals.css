@@ -450,17 +450,17 @@ html::-webkit-scrollbar-thumb:hover,
 	display: none !important;
 }
 
-@media (max-width: 1000px) {
+@media (max-width: 850px) {
 	.player-chat-control .chat-pc .chat-input-wrap {
-		margin: 0 0.75rem;
-		width: 12rem;
+		margin: 0 0.6rem;
+		width: 18rem;
 	}
 }
 
 @media (max-width: 640px) {
 	.player-chat-control .chat-pc .chat-input-wrap {
 		margin: 0 0.5rem;
-		width: 8.5rem;
+		width: 10rem;
 	}
 }
 
