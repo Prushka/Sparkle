@@ -5,8 +5,15 @@ import '@vidstack/react/player/styles/default/layouts/video.css';
 import './globals.css';
 
 export const metadata: Metadata = {
+	title: {
+		default: 'Sparkle',
+		template: '%s | Sparkle'
+	},
+	applicationName: 'Sparkle',
+	description: 'A cozy watch-party app for rooms, chat, media, and games.',
 	icons: {
 		icon: [
+			{ url: '/favicon/icon-512x512.png', sizes: '512x512', type: 'image/png' },
 			{ url: '/favicon/android-icon-192x192.png', sizes: '192x192', type: 'image/png' },
 			{ url: '/favicon/favicon-32x32.png', sizes: '32x32', type: 'image/png' },
 			{ url: '/favicon/favicon-96x96.png', sizes: '96x96', type: 'image/png' },
@@ -26,17 +33,29 @@ export const metadata: Metadata = {
 			{ url: '/favicon/apple-icon-180x180.png', sizes: '180x180' }
 		]
 	},
-	manifest: '/favicon/manifest.json',
+	manifest: '/manifest.json',
+	appleWebApp: {
+		capable: true,
+		statusBarStyle: 'black-translucent',
+		title: 'Sparkle'
+	},
+	formatDetection: {
+		telephone: false
+	},
 	openGraph: {
 		locale: 'en_US',
 		type: 'website',
-		siteName: "Let's watch anime!"
+		siteName: 'Sparkle'
 	},
 	twitter: {
 		card: 'summary_large_image'
 	},
 	other: {
-		google: 'nositelinkssearchbox'
+		google: 'nositelinkssearchbox',
+		'mobile-web-app-capable': 'yes',
+		'apple-mobile-web-app-capable': 'yes',
+		'apple-mobile-web-app-status-bar-style': 'black-translucent',
+		'msapplication-TileColor': '#08090d'
 	}
 };
 
@@ -44,7 +63,8 @@ export const viewport: Viewport = {
 	width: 'device-width',
 	initialScale: 1,
 	maximumScale: 1,
-	themeColor: '#f0f0f0'
+	userScalable: false,
+	themeColor: '#08090d'
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

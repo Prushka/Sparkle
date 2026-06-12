@@ -6,6 +6,7 @@ import { ThemeProvider } from '@/lib/theme';
 import { AppStateProvider } from '@/lib/app-state';
 import { DiscordBridge } from '@/components/discord-bridge';
 import { AppShell, AppShellFallback } from '@/components/app-shell';
+import { ServiceWorkerRegistrar } from '@/components/sw-registrar';
 
 export function AppProviders({ children }: { children: ReactNode }) {
 	return (
@@ -14,6 +15,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
 				<Suspense fallback={null}>
 					<DiscordBridge />
 				</Suspense>
+				<ServiceWorkerRegistrar />
 				<Toaster
 					position="top-center"
 					richColors
