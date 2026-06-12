@@ -5961,7 +5961,7 @@ export function Player({
 					/>
 				</div>
 
-				<div className="mx-auto flex w-full max-w-[90rem] flex-wrap items-center justify-between gap-2 max-[760px]:justify-center">
+				<div className="order-2 mx-auto flex w-full max-w-[90rem] flex-wrap items-center justify-between gap-2 max-[760px]:justify-center">
 					<div className="order-2 flex min-w-0 justify-start min-[761px]:order-1">
 						{voiceSupported ? <VoiceControls voice={voice} /> : null}
 					</div>
@@ -6047,7 +6047,7 @@ export function Player({
 					</div>
 				</div>
 
-				<div className="mb-3 flex flex-wrap justify-center gap-4 pt-2 sm:pt-3">
+				<div className="order-1 flex flex-wrap justify-center gap-4">
 					{displayedRoomPlayers.map((player) => {
 						const isCurrentUser = player.id === playerId;
 						const playerProfileId = player.profileId || player.id;
@@ -6272,7 +6272,7 @@ export function Player({
 					})}
 				</div>
 
-				<Card className="mt-auto w-full max-w-[90rem] self-center">
+				<Card className="order-3 mt-auto w-full max-w-[90rem] self-center">
 					<CardHeader className="max-sm:pb-0 max-sm:pl-4 max-sm:pr-4 max-sm:pt-4">
 						<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 							<div className="flex min-w-0 flex-1 flex-col gap-1">
