@@ -207,6 +207,16 @@ const STORYBOARD_SPRITE_BLOB_CACHE_LIMIT = 8;
 const STORYBOARD_SPRITE_BITMAP_CACHE_LIMIT = 6;
 const STORYBOARD_SPRITE_PREWARM_TIMEOUT_MS = 250;
 const STORYBOARD_MAX_DEVICE_PIXEL_RATIO = 2;
+const MEDIA_SESSION_SEEK_SECONDS = 10;
+
+const mediaSessionActions = [
+	'play',
+	'pause',
+	'seekbackward',
+	'seekforward',
+	'seekto',
+	'stop'
+] as const;
 
 type StoryboardThumbnail = {
 	url: URL;
@@ -250,6 +260,53 @@ function formatDuration(seconds: number) {
 	return `${minutes} minute${minutes === 1 ? '' : 's'}${
 		remainingSeconds > 0 ? ` ${remainingSeconds} second${remainingSeconds === 1 ? '' : 's'}` : ''
 	}`;
+}
+
+function clampNumber(value: number, min: number, max: number) {
+	return Math.min(max, Math.max(min, value));
+}
+
+function getMediaSessionImageType(src: string) {
+	const path = src.split(/[?#]/)[0].toLowerCase();
+
+	if (path.endsWith('.png')) {
+		return 'image/png';
+	}
+	if (path.endsWith('.webp')) {
+		return 'image/webp';
+	}
+	return 'image/jpeg';
+}
+
+function getMediaSessionArtwork(posterSrc: string): MediaImage[] {
+	const fallbackIcon = '/favicon/icon-512x512.png';
+	const artworkSrc = posterSrc || fallbackIcon;
+	const artwork: MediaImage[] = [
+		{
+			src: artworkSrc,
+			sizes: '512x512',
+			type: getMediaSessionImageType(artworkSrc)
+		}
+	];
+
+	if (artworkSrc !== fallbackIcon) {
+		artwork.push({
+			src: fallbackIcon,
+			sizes: '512x512',
+			type: 'image/png'
+		});
+	}
+
+	return artwork;
+}
+
+function getMediaSessionTitle(data: ServerData) {
+	const episode = data.job.Title.episode;
+	return episode?.title || data.displayTitle || data.job.Input;
+}
+
+function getMediaSessionArtist(data: ServerData) {
+	return data.job.Title.title || 'Sparkle';
 }
 
 function getStoryboardDevicePixelRatio() {
@@ -2776,6 +2833,30 @@ function getSafePlayerCanPlay(player: MediaPlayerInstance | null) {
 	}
 }
 
+function getSafePlayerDuration(player: MediaPlayerInstance | null) {
+	if (!player) {
+		return null;
+	}
+	try {
+		const duration = player.duration;
+		return Number.isFinite(duration) && duration > 0 ? duration : null;
+	} catch {
+		return null;
+	}
+}
+
+function getSafePlayerPlaybackRate(player: MediaPlayerInstance | null) {
+	if (!player) {
+		return 1;
+	}
+	try {
+		const playbackRate = player.playbackRate;
+		return Number.isFinite(playbackRate) && playbackRate > 0 ? playbackRate : 1;
+	} catch {
+		return 1;
+	}
+}
+
 function setSafePlayerCurrentTime(player: MediaPlayerInstance | null, time: number) {
 	if (!player || !Number.isFinite(time)) {
 		return false;
@@ -2786,6 +2867,69 @@ function setSafePlayerCurrentTime(player: MediaPlayerInstance | null, time: numb
 	} catch (error) {
 		console.warn('Unable to sync remote time', error);
 		return false;
+	}
+}
+
+function getSparkleMediaSession() {
+	if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) {
+		return null;
+	}
+	return navigator.mediaSession;
+}
+
+function setSparkleMediaSessionActionHandler(
+	mediaSession: MediaSession,
+	action: MediaSessionAction,
+	handler: MediaSessionActionHandler | null
+) {
+	try {
+		mediaSession.setActionHandler(action, handler);
+	} catch {
+		// Browsers can expose Media Session while omitting individual actions.
+	}
+}
+
+function clearSparkleMediaSessionActionHandlers(mediaSession: MediaSession) {
+	for (const action of mediaSessionActions) {
+		setSparkleMediaSessionActionHandler(mediaSession, action, null);
+	}
+}
+
+function updateSparkleMediaSessionPlaybackState(
+	mediaSession: MediaSession,
+	player: MediaPlayerInstance | null
+) {
+	const paused = getSafePlayerPaused(player);
+
+	try {
+		mediaSession.playbackState = paused === false ? 'playing' : paused === true ? 'paused' : 'none';
+	} catch {
+		// Playback state is advisory; player controls should keep working if this fails.
+	}
+}
+
+function updateSparkleMediaSessionPositionState(
+	mediaSession: MediaSession,
+	player: MediaPlayerInstance | null
+) {
+	if (!mediaSession.setPositionState) {
+		return;
+	}
+
+	const position = getSafePlayerCurrentTime(player);
+	const duration = getSafePlayerDuration(player);
+	if (position === null || duration === null) {
+		return;
+	}
+
+	try {
+		mediaSession.setPositionState({
+			duration,
+			playbackRate: getSafePlayerPlaybackRate(player),
+			position: clampNumber(position, 0, duration)
+		});
+	} catch {
+		// Some platforms reject position state during provider teardown.
 	}
 }
 
@@ -2969,6 +3113,9 @@ export function Player({
 	const [tickedSecsAgo, setTickedSecsAgo] = useState(-1);
 	const [chatFocusedSecs, setChatFocusedSecs] = useState(0);
 	const posterSrc = data.preview;
+	const mediaSessionTitle = getMediaSessionTitle(data);
+	const mediaSessionArtist = getMediaSessionArtist(data);
+	const mediaSessionAlbum = job.Title.episode?.se || 'Sparkle';
 	const room = data.roomId;
 	const currentRoomRef = useRef(room);
 	const currentMediaIdRef = useRef(job.Id);
@@ -3625,28 +3772,31 @@ export function Player({
 		return true;
 	}, [discordUser, displayName, profileId, send]);
 
-	const sendSettings = useCallback((options: { includeAudio?: boolean } = {}) => {
-		const selectedTrack = getSelectedSubtitleTrack(
-			playerEl,
-			getPlayerVideoElement(playerEl),
-			subtitleTracksRef.current,
-			selectedSubtitleTrackRef.current
-		);
-		send({
-			type: SyncTypes.SubtitleSwitch,
-			subtitle: selectedTrack?.src
-		});
-		if (options.includeAudio !== false) {
+	const sendSettings = useCallback(
+		(options: { includeAudio?: boolean } = {}) => {
+			const selectedTrack = getSelectedSubtitleTrack(
+				playerEl,
+				getPlayerVideoElement(playerEl),
+				subtitleTracksRef.current,
+				selectedSubtitleTrackRef.current
+			);
 			send({
-				type: SyncTypes.AudioSwitch,
-				audio: effectiveAudio
+				type: SyncTypes.SubtitleSwitch,
+				subtitle: selectedTrack?.src
 			});
-		}
-		send({
-			type: SyncTypes.CodecSwitch,
-			codec: `${selectedCodec},${videoSrc?.sCodec}`
-		});
-	}, [effectiveAudio, playerEl, send, selectedCodec, videoSrc?.sCodec]);
+			if (options.includeAudio !== false) {
+				send({
+					type: SyncTypes.AudioSwitch,
+					audio: effectiveAudio
+				});
+			}
+			send({
+				type: SyncTypes.CodecSwitch,
+				codec: `${selectedCodec},${videoSrc?.sCodec}`
+			});
+		},
+		[effectiveAudio, playerEl, send, selectedCodec, videoSrc?.sCodec]
+	);
 
 	useEffect(() => {
 		if (!playerEl || !videoSrc) {
@@ -4399,6 +4549,122 @@ export function Player({
 			});
 		}
 	}, [job.Duration, send, setCurrentlyWatching]);
+
+	const updateMediaSessionState = useCallback(() => {
+		const mediaSession = getSparkleMediaSession();
+		if (!mediaSession) {
+			return;
+		}
+		const player = playerElementRef.current;
+		updateSparkleMediaSessionPlaybackState(mediaSession, player);
+		updateSparkleMediaSessionPositionState(mediaSession, player);
+	}, []);
+
+	useEffect(() => {
+		const mediaSession = getSparkleMediaSession();
+		if (!mediaSession || !playerSrcUrl) {
+			return;
+		}
+
+		if (typeof MediaMetadata !== 'undefined') {
+			mediaSession.metadata = new MediaMetadata({
+				title: mediaSessionTitle,
+				artist: mediaSessionArtist,
+				album: mediaSessionAlbum,
+				artwork: getMediaSessionArtwork(posterSrc)
+			});
+		}
+
+		const play = () => {
+			const player = playerElementRef.current;
+			if (!player) {
+				return;
+			}
+			Promise.resolve(player.play())
+				.then(updateMediaSessionState)
+				.catch((error) => {
+					console.warn('Unable to play from media session', error);
+				});
+		};
+
+		const pause = () => {
+			const player = playerElementRef.current;
+			if (!player) {
+				return;
+			}
+			Promise.resolve(player.pause())
+				.then(updateMediaSessionState)
+				.catch((error) => {
+					console.warn('Unable to pause from media session', error);
+				});
+		};
+
+		const seekToTime = (time: number) => {
+			const player = playerElementRef.current;
+			if (!player) {
+				return;
+			}
+
+			const duration = getSafePlayerDuration(player);
+			const targetTime = duration
+				? clampNumber(time, 0, duration)
+				: Math.max(0, Number.isFinite(time) ? time : 0);
+
+			if (setSafePlayerCurrentTime(player, targetTime)) {
+				updateTime();
+				updateMediaSessionState();
+			}
+		};
+
+		const seekBy = (offset: number) => {
+			const player = playerElementRef.current;
+			const currentTime = getSafePlayerCurrentTime(player);
+			if (currentTime === null) {
+				return;
+			}
+			seekToTime(currentTime + offset);
+		};
+
+		setSparkleMediaSessionActionHandler(mediaSession, 'play', play);
+		setSparkleMediaSessionActionHandler(mediaSession, 'pause', pause);
+		setSparkleMediaSessionActionHandler(mediaSession, 'seekbackward', (details) => {
+			seekBy(-(details.seekOffset || MEDIA_SESSION_SEEK_SECONDS));
+		});
+		setSparkleMediaSessionActionHandler(mediaSession, 'seekforward', (details) => {
+			seekBy(details.seekOffset || MEDIA_SESSION_SEEK_SECONDS);
+		});
+		setSparkleMediaSessionActionHandler(mediaSession, 'seekto', (details) => {
+			if (typeof details.seekTime === 'number') {
+				seekToTime(details.seekTime);
+			}
+		});
+		setSparkleMediaSessionActionHandler(mediaSession, 'stop', () => {
+			pause();
+			seekToTime(0);
+		});
+
+		updateMediaSessionState();
+		const positionTimer = window.setInterval(updateMediaSessionState, 10_000);
+
+		return () => {
+			window.clearInterval(positionTimer);
+			clearSparkleMediaSessionActionHandlers(mediaSession);
+			try {
+				mediaSession.metadata = null;
+				mediaSession.playbackState = 'none';
+			} catch {
+				// Browser session state can be unavailable while a tab is closing.
+			}
+		};
+	}, [
+		mediaSessionAlbum,
+		mediaSessionArtist,
+		mediaSessionTitle,
+		playerSrcUrl,
+		posterSrc,
+		updateMediaSessionState,
+		updateTime
+	]);
 
 	const clearPlaybackSyncSuppression = useCallback(() => {
 		if (playbackSyncSuppressionTimerRef.current !== null) {
@@ -5489,6 +5755,7 @@ export function Player({
 								const playing = getSafePlayerPaused(playerEl) === false;
 								supRef.current?.seekedHandler(playing);
 								supPlayingRef.current = Boolean(supRef.current && playing);
+								updateMediaSessionState();
 							}}
 							onSeeking={() => {
 								supRef.current?.seekingHandler();
@@ -5500,6 +5767,7 @@ export function Player({
 									send({ paused: true, type: SyncTypes.PauseSync });
 								}
 								setCurrentlyWatching((value) => (value ? { ...value, paused: true } : null));
+								updateMediaSessionState();
 							}}
 							onPlay={() => {
 								supRef.current?.playHandler();
@@ -5511,6 +5779,7 @@ export function Player({
 									send({ paused: false, type: SyncTypes.PauseSync });
 								}
 								setCurrentlyWatching((value) => (value ? { ...value, paused: false } : null));
+								updateMediaSessionState();
 							}}
 							onVolumeChange={({ muted, volume }: { muted: boolean; volume: number }) => {
 								if (!volumeInitializedRef.current || volumeRestoringRef.current) {
