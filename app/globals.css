@@ -452,7 +452,7 @@ html::-webkit-scrollbar-thumb:hover,
 
 @media (max-width: 850px) {
 	.player-chat-control .chat-pc .chat-input-wrap {
-		margin: 0 0.6rem;
+		margin: 0 0.7rem;
 		width: 18rem;
 	}
 }
