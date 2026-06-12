@@ -212,14 +212,20 @@ const STORYBOARD_SPRITE_PREWARM_TIMEOUT_MS = 250;
 const STORYBOARD_MAX_DEVICE_PIXEL_RATIO = 2;
 const MEDIA_SESSION_SEEK_SECONDS = 10;
 
+type SparkleMediaSessionAction = MediaSessionAction | 'enterpictureinpicture';
+type AutoPictureInPictureVideoElement = HTMLVideoElement & {
+	autoPictureInPicture?: boolean;
+};
+
 const mediaSessionActions = [
 	'play',
 	'pause',
 	'seekbackward',
 	'seekforward',
 	'seekto',
-	'stop'
-] as const;
+	'stop',
+	'enterpictureinpicture'
+] as const satisfies readonly SparkleMediaSessionAction[];
 
 type StoryboardThumbnail = {
 	url: URL;
@@ -2871,6 +2877,28 @@ function getSafePlayerCanPlay(player: MediaPlayerInstance | null) {
 	}
 }
 
+function getSafePlayerCanPictureInPicture(player: MediaPlayerInstance | null) {
+	if (!player) {
+		return false;
+	}
+	try {
+		return player.state.canPictureInPicture === true;
+	} catch {
+		return false;
+	}
+}
+
+function getSafePlayerPictureInPicture(player: MediaPlayerInstance | null) {
+	if (!player) {
+		return false;
+	}
+	try {
+		return player.state.pictureInPicture === true;
+	} catch {
+		return false;
+	}
+}
+
 function getSafePlayerDuration(player: MediaPlayerInstance | null) {
 	if (!player) {
 		return null;
@@ -2895,6 +2923,30 @@ function getSafePlayerPlaybackRate(player: MediaPlayerInstance | null) {
 	}
 }
 
+function setSafePlayerAutoPictureInPicture(player: MediaPlayerInstance | null, enabled: boolean) {
+	const videoElement = getPlayerVideoElement(player) as AutoPictureInPictureVideoElement | null;
+	if (!videoElement || !('autoPictureInPicture' in videoElement)) {
+		return false;
+	}
+
+	try {
+		videoElement.autoPictureInPicture = enabled;
+		return videoElement.autoPictureInPicture === enabled;
+	} catch {
+		return false;
+	}
+}
+
+function updateAutoPictureInPicturePreference(
+	player: MediaPlayerInstance | null,
+	playing = getSafePlayerPaused(player) === false
+) {
+	return setSafePlayerAutoPictureInPicture(
+		player,
+		playing && getSafePlayerCanPictureInPicture(player)
+	);
+}
+
 function setSafePlayerCurrentTime(player: MediaPlayerInstance | null, time: number) {
 	if (!player || !Number.isFinite(time)) {
 		return false;
@@ -2917,11 +2969,11 @@ function getSparkleMediaSession() {
 
 function setSparkleMediaSessionActionHandler(
 	mediaSession: MediaSession,
-	action: MediaSessionAction,
+	action: SparkleMediaSessionAction,
 	handler: MediaSessionActionHandler | null
 ) {
 	try {
-		mediaSession.setActionHandler(action, handler);
+		mediaSession.setActionHandler(action as MediaSessionAction, handler);
 	} catch {
 		// Browsers can expose Media Session while omitting individual actions.
 	}
@@ -3064,6 +3116,9 @@ export function Player({
 	const volumeInitializedRef = useRef(false);
 	const volumeRestoringRef = useRef(false);
 	const volumeCanPlayRestoredRef = useRef(false);
+	const autoPictureInPictureRequestIdRef = useRef(0);
+	const autoPictureInPicturePendingRef = useRef(false);
+	const shouldExitAutoPictureInPictureRef = useRef(false);
 	const playbackSyncSuppressionTimerRef = useRef<number | null>(null);
 	const onRoomMediaChangedRef = useLatestRef(onRoomMediaChanged);
 	const [mounted, setMounted] = useState(false);
@@ -4665,6 +4720,22 @@ export function Player({
 			seekToTime(currentTime + offset);
 		};
 
+		const enterPictureInPicture = () => {
+			const player = playerElementRef.current;
+			if (
+				!player ||
+				getSafePlayerPaused(player) !== false ||
+				!getSafePlayerCanPictureInPicture(player) ||
+				getSafePlayerPictureInPicture(player)
+			) {
+				return;
+			}
+
+			Promise.resolve(player.enterPictureInPicture())
+				.then(updateMediaSessionState)
+				.catch(() => undefined);
+		};
+
 		setSparkleMediaSessionActionHandler(mediaSession, 'play', play);
 		setSparkleMediaSessionActionHandler(mediaSession, 'pause', pause);
 		setSparkleMediaSessionActionHandler(mediaSession, 'seekbackward', (details) => {
@@ -4682,6 +4753,11 @@ export function Player({
 			pause();
 			seekToTime(0);
 		});
+		setSparkleMediaSessionActionHandler(
+			mediaSession,
+			'enterpictureinpicture',
+			enterPictureInPicture
+		);
 
 		updateMediaSessionState();
 		const positionTimer = window.setInterval(updateMediaSessionState, 10_000);
@@ -5374,20 +5450,104 @@ export function Player({
 		if (!playerEl) {
 			return;
 		}
+		updateAutoPictureInPicturePreference(playerEl);
+
+		return () => {
+			setSafePlayerAutoPictureInPicture(playerEl, false);
+		};
+	}, [playerCanPlay, playerEl]);
+
+	useEffect(() => {
+		if (!playerEl) {
+			return;
+		}
 		const player = playerEl;
 
-		const visibilityChange = () => {
+		const enterAutoPictureInPicture = async (trigger?: Event) => {
+			if (getSafePlayerPaused(player) !== false || getSafePlayerPictureInPicture(player)) {
+				return;
+			}
+
+			shouldExitAutoPictureInPictureRef.current = true;
+			updateAutoPictureInPicturePreference(player, true);
+
+			if (autoPictureInPicturePendingRef.current || !getSafePlayerCanPictureInPicture(player)) {
+				return;
+			}
+
+			const requestId = ++autoPictureInPictureRequestIdRef.current;
+			autoPictureInPicturePendingRef.current = true;
+			try {
+				await player.enterPictureInPicture(trigger);
+				if (
+					autoPictureInPictureRequestIdRef.current !== requestId &&
+					!document.hidden &&
+					getSafePlayerPictureInPicture(player)
+				) {
+					await player.exitPictureInPicture(trigger);
+				}
+			} catch {
+				// Auto PiP is browser/permission dependent; playback should continue normally.
+			} finally {
+				if (autoPictureInPictureRequestIdRef.current === requestId) {
+					autoPictureInPicturePendingRef.current = false;
+				}
+			}
+		};
+
+		const exitAutoPictureInPicture = async (trigger?: Event) => {
+			autoPictureInPictureRequestIdRef.current += 1;
+			autoPictureInPicturePendingRef.current = false;
+			const shouldExit = shouldExitAutoPictureInPictureRef.current;
+			shouldExitAutoPictureInPictureRef.current = false;
+
+			try {
+				if (shouldExit && getSafePlayerPictureInPicture(player)) {
+					await player.exitPictureInPicture(trigger);
+				}
+			} catch {
+				// Returning to the app should never be blocked by PiP cleanup.
+			} finally {
+				updateAutoPictureInPicturePreference(player);
+			}
+		};
+
+		const handleForeground = (event?: Event) => {
+			void exitAutoPictureInPicture(event);
+		};
+
+		const handleBackground = (event?: Event) => {
+			void enterAutoPictureInPicture(event);
+		};
+
+		const visibilityChange = (event: Event) => {
 			const paused = getSafePlayerPaused(player);
 			if (document.hidden) {
 				send({ state: 'bg', type: SyncTypes.StateSync, paused: paused ?? true });
 				inBgRef.current = true;
+				handleBackground(event);
 			} else {
+				handleForeground(event);
 				void refreshRoomMedia();
 				send({ state: 'fg', type: SyncTypes.StateSync, paused: paused ?? true });
 				inBgRef.current = false;
 			}
 		};
 		document.addEventListener('visibilitychange', visibilityChange);
+		const pageHide = (event: PageTransitionEvent) => {
+			handleBackground(event);
+		};
+		window.addEventListener('pagehide', pageHide);
+		const pageShow = (event: PageTransitionEvent) => {
+			handleForeground(event);
+		};
+		window.addEventListener('pageshow', pageShow);
+		const windowFocus = (event: FocusEvent) => {
+			if (!document.hidden) {
+				handleForeground(event);
+			}
+		};
+		window.addEventListener('focus', windowFocus);
 		const mouseMove = () => {
 			if (chatFocusedSecsRef.current !== 0) {
 				chatFocusedSecsRef.current = 0;
@@ -5488,6 +5648,9 @@ export function Player({
 		return () => {
 			window.clearInterval(interval);
 			document.removeEventListener('visibilitychange', visibilityChange);
+			window.removeEventListener('pagehide', pageHide);
+			window.removeEventListener('pageshow', pageShow);
+			window.removeEventListener('focus', windowFocus);
 			document.removeEventListener('mousemove', mouseMove);
 			player.el?.removeEventListener('mouseleave', mouseLeave);
 		};
@@ -5839,6 +6002,7 @@ export function Player({
 							onPause={() => {
 								supRef.current?.pauseHandler();
 								supPlayingRef.current = false;
+								updateAutoPictureInPicturePreference(playerEl, false);
 								if (shouldSendPlaybackSync()) {
 									send({ paused: true, type: SyncTypes.PauseSync });
 								}
@@ -5854,6 +6018,7 @@ export function Player({
 								if (shouldSendPlaybackSync() && interactedRef.current) {
 									send({ paused: false, type: SyncTypes.PauseSync });
 								}
+								updateAutoPictureInPicturePreference(playerEl, true);
 								setCurrentlyWatching((value) => (value ? { ...value, paused: false } : null));
 								updateMediaSessionState();
 							}}
