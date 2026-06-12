@@ -266,8 +266,13 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 				return;
 			}
 
+			if (room.mediaId && room.mediaId !== routeMediaId) {
+				router.replace(buildMediaPath(effectiveRoomId, room.mediaId, redirectSuffix));
+				return;
+			}
+
 			let mediaUpdated = room.mediaUpdated;
-			if (room.mediaId !== routeMediaId) {
+			if (!room.mediaId) {
 				const updated = await updateRoomRecord(
 					config.backendBaseUrl,
 					effectiveRoomId,
