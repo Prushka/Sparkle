@@ -10,16 +10,21 @@ import {
 	useState
 } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { IconCheck, IconChevronRight, IconChevronDown } from '@tabler/icons-react';
+import { IconCheck, IconChevronRight, IconChevronDown, IconRefresh } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
 import * as Popover from '@/components/ui/popover';
 import * as Command from '@/components/ui/command';
+import * as Tooltip from '@/components/ui/tooltip';
 import { TitlePoster } from '@/components/player/TitlePoster';
 import { getTitleComponentsByJobs, type Job, type LibraryJob } from '@/lib/player/t';
 import { fetchJobs } from '@/lib/player/data';
+import { cn } from '@/lib/utils';
 
 export type MediaSelectionHandle = {
-	updateList: (_untilId?: string | null, _onSuccess?: (_jobs: LibraryJob[]) => void) => void;
+	updateList: (
+		_untilId?: string | null,
+		_onSuccess?: (_jobs: LibraryJob[]) => void
+	) => Promise<LibraryJob[]>;
 };
 
 function areJobListsEquivalent(a: LibraryJob[], b: LibraryJob[]) {
@@ -52,6 +57,7 @@ export const MediaSelection = forwardRef<
 	const [titleSelectionOpen, setTitleSelectionOpen] = useState(false);
 	const [seSelectionOpen, setSeSelectionOpen] = useState(false);
 	const openEpisodeSelectionAfterTitleCloseRef = useRef(false);
+	const [refreshing, setRefreshing] = useState(false);
 	const [selectedTitleId, setSelectedTitleId] = useState<string | undefined>(
 		data.job?.Title?.titleId
 	);
@@ -118,9 +124,9 @@ export const MediaSelection = forwardRef<
 			const currentJobs = jobsRef.current;
 			if (untilId !== null && currentJobs.find((candidate) => candidate.Id === untilId)) {
 				onSuccess(currentJobs);
-				return;
+				return Promise.resolve(currentJobs);
 			}
-			fetchJobs(backendBaseUrl, true)
+			return fetchJobs(backendBaseUrl, true)
 				.then((nextJobs) => {
 					jobsLoadedRef.current = true;
 					setJobs((current) => {
@@ -129,13 +135,22 @@ export const MediaSelection = forwardRef<
 						return next;
 					});
 					onSuccess(nextJobs);
+					return nextJobs;
 				})
-				.catch((error) => console.warn('Unable to refresh media list', error));
+				.catch((error) => {
+					console.warn('Unable to refresh media list', error);
+					return currentJobs;
+				});
 		},
 		[backendBaseUrl]
 	);
 
 	useImperativeHandle(ref, () => ({ updateList }), [updateList]);
+
+	const refreshList = useCallback(() => {
+		setRefreshing(true);
+		updateList().finally(() => setRefreshing(false));
+	}, [updateList]);
 
 	useEffect(() => {
 		const timer = window.setInterval(() => {
@@ -154,60 +169,83 @@ export const MediaSelection = forwardRef<
 	}, [seSelectionOpen, titleSelectionOpen, updateList]);
 
 	return (
-		<div className="md:grid md:grid-cols-[minmax(0,1fr)_min-content_minmax(0,1fr)] max-md:flex max-md:flex-col items-center justify-center gap-2 w-full">
-			<Popover.Root open={titleSelectionOpen} onOpenChange={setTitleSelectionOpen}>
-				<Popover.Trigger asChild>
-					<Button
-						variant="outline"
-						role="combobox"
-						aria-expanded={titleSelectionOpen}
-						className={`max-md:w-full justify-between font-semibold ${!selectedHasEpisodes ? 'col-span-3' : ''}`}
-					>
-						<span className="max-w-[calc(100%-2rem)] overflow-hidden text-ellipsis">
-							{selected?.title || 'Select media'}
-						</span>
-						<IconChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-					</Button>
-				</Popover.Trigger>
-				<Popover.Content align="start" className="w-auto p-0">
-					<Command.Root>
-						<Command.Input placeholder="Search title..." className="h-9" />
-						<Command.Empty>No title found.</Command.Empty>
-						<Command.Group className="max-h-[37vh] overflow-y-auto">
-							{Object.values(titles).map((title) => (
-								<Command.Item
-									key={title.titleId}
-									className={`p-1 ${selectedTitleId === title.titleId ? 'font-bold' : ''}`}
-									value={title.title}
-									onSelect={() => {
-										setSelectedTitleId(title.titleId);
-										setSelectedSe(undefined);
-										if (!title.episodes?.length) {
-											setTitleSelectionOpen(false);
-											bounceTo(title.id);
-										} else {
-											openEpisodeSelectionAfterTitleCloseRef.current = true;
-											setTitleSelectionOpen(false);
-										}
-									}}
-								>
-									<TitlePoster
-										title={title.rep ? title.rep : title.episodes ? title.episodes[0] : title}
-										staticBaseUrl={staticBaseUrl}
-										isNew={newTitleIds.has(title.titleId)}
-									/>
-									<span className="mr-4">{title.title}</span>
-									<IconCheck
-										size={18}
-										stroke={2}
-										className={`ml-auto right-0 ${selectedTitleId === title.titleId ? '' : 'text-transparent'}`}
-									/>
-								</Command.Item>
-							))}
-						</Command.Group>
-					</Command.Root>
-				</Popover.Content>
-			</Popover.Root>
+		<div className="flex w-full flex-col items-center justify-center gap-2 md:flex-row">
+			<div className="flex w-full min-w-0 items-center gap-2 md:flex-1">
+				<Popover.Root open={titleSelectionOpen} onOpenChange={setTitleSelectionOpen}>
+					<Popover.Trigger asChild>
+						<Button
+							variant="outline"
+							role="combobox"
+							aria-expanded={titleSelectionOpen}
+							className="min-w-0 flex-1 justify-between font-semibold"
+						>
+							<span className="max-w-[calc(100%-2rem)] overflow-hidden text-ellipsis">
+								{selected?.title || 'Select media'}
+							</span>
+							<IconChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+						</Button>
+					</Popover.Trigger>
+					<Popover.Content align="start" className="w-auto p-0">
+						<Command.Root>
+							<Command.Input placeholder="Search title..." className="h-9" />
+							<Command.Empty>No title found.</Command.Empty>
+							<Command.Group className="max-h-[37vh] overflow-y-auto">
+								{Object.values(titles).map((title) => (
+									<Command.Item
+										key={title.titleId}
+										className={`p-1 ${selectedTitleId === title.titleId ? 'font-bold' : ''}`}
+										value={title.title}
+										onSelect={() => {
+											setSelectedTitleId(title.titleId);
+											setSelectedSe(undefined);
+											if (!title.episodes?.length) {
+												setTitleSelectionOpen(false);
+												bounceTo(title.id);
+											} else {
+												openEpisodeSelectionAfterTitleCloseRef.current = true;
+												setTitleSelectionOpen(false);
+											}
+										}}
+									>
+										<TitlePoster
+											title={title.rep ? title.rep : title.episodes ? title.episodes[0] : title}
+											staticBaseUrl={staticBaseUrl}
+											isNew={newTitleIds.has(title.titleId)}
+										/>
+										<span className="mr-4">{title.title}</span>
+										<IconCheck
+											size={18}
+											stroke={2}
+											className={`ml-auto right-0 ${selectedTitleId === title.titleId ? '' : 'text-transparent'}`}
+										/>
+									</Command.Item>
+								))}
+							</Command.Group>
+						</Command.Root>
+					</Popover.Content>
+				</Popover.Root>
+
+				<Tooltip.Provider delayDuration={0}>
+					<Tooltip.Root>
+						<Tooltip.Trigger asChild>
+							<Button
+								type="button"
+								variant="outline"
+								size="icon"
+								aria-label="Refresh media list"
+								disabled={refreshing}
+								onClick={refreshList}
+								className="shrink-0"
+							>
+								<IconRefresh className={cn(refreshing && 'animate-spin')} size={18} stroke={2} />
+							</Button>
+						</Tooltip.Trigger>
+						<Tooltip.Content>
+							<p>{refreshing ? 'Refreshing media list' : 'Refresh media list'}</p>
+						</Tooltip.Content>
+					</Tooltip.Root>
+				</Tooltip.Provider>
+			</div>
 
 			{selectedHasEpisodes ? (
 				<>
@@ -219,7 +257,7 @@ export const MediaSelection = forwardRef<
 								variant="outline"
 								role="combobox"
 								aria-expanded={seSelectionOpen}
-								className={`max-md:w-full justify-between font-semibold ${!selectedSe ? 'font-bold text-red-600' : ''}`}
+								className={`min-w-0 justify-between font-semibold max-md:w-full md:flex-1 ${!selectedSe ? 'font-bold text-red-600' : ''}`}
 							>
 								<span className="max-w-[calc(100%-2rem)] overflow-hidden text-ellipsis">
 									{selectedEpisode ? `${selectedSe} - ${selectedEpisode.title}` : 'Select episode'}

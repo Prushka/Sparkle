@@ -3108,10 +3108,13 @@ export function Player({
 	const [exited, setExited] = useState(false);
 	const [moveToast, setMoveToast] = useState<MoveToastState | null>(null);
 	const [name, setName] = useState('');
+	const [profileNameDraft, setProfileNameDraft] = useState('');
 	const [profileId, setProfileId] = useState('');
 	const [playerId, setPlayerId] = useState('');
 	const [controlsChatPickerOpen, setControlsChatPickerOpen] = useState(false);
 	const lastSavedNameRef = useRef('');
+	const nameInitializedRef = useRef(false);
+	const profileSettingsOpenRef = useRef(false);
 	const [initialVolume] = useState(() =>
 		normalizePlayerVolume(setGetLsNumber(PLAYER_VOLUME_STORAGE_KEY, DEFAULT_PLAYER_VOLUME))
 	);
@@ -3663,11 +3666,17 @@ export function Player({
 				setName(nextName);
 				return;
 			}
-			if (name) {
+			if (nameInitializedRef.current) {
 				return;
 			}
+			nameInitializedRef.current = true;
 			const stored = window.localStorage.getItem('name');
 			const generatedName = window.localStorage.getItem(GENERATED_NAME_STORAGE_KEY);
+			if (stored === '') {
+				lastSavedNameRef.current = stored;
+				setName(stored);
+				return;
+			}
 			if (
 				stored &&
 				!stored.startsWith('Anon-') &&
@@ -3684,7 +3693,7 @@ export function Player({
 			setName(nextGeneratedName);
 		}, 0);
 		return () => window.clearTimeout(timer);
-	}, [discordUser, name]);
+	}, [discordUser]);
 
 	useEffect(() => {
 		if (discordUser || typeof window === 'undefined' || !name) {
@@ -3816,7 +3825,7 @@ export function Player({
 	);
 
 	const sendProfile = useCallback(() => {
-		if (displayName === '' || !profileId || socketRef.current?.readyState !== WebSocket.OPEN) {
+		if (!profileId || socketRef.current?.readyState !== WebSocket.OPEN) {
 			return false;
 		}
 		send({
@@ -5695,7 +5704,7 @@ export function Player({
 		}
 	}
 
-	function handleNameBlur() {
+	function saveProfileName(nextDraftName: string) {
 		if (discordUser) {
 			send({
 				type: SyncTypes.ProfileSync,
@@ -5705,15 +5714,8 @@ export function Player({
 			});
 			return;
 		}
-		const nextName = name.trim();
-		if (!nextName) {
-			setName(lastSavedNameRef.current);
-			addSystemMessage('Name cannot be empty');
-			return;
-		}
-		if (nextName !== name) {
-			setName(nextName);
-		}
+		const nextName = nextDraftName.trim();
+		setName(nextName);
 		send({
 			type: SyncTypes.ProfileSync,
 			name: nextName,
@@ -5723,7 +5725,21 @@ export function Player({
 		if (nextName !== lastSavedNameRef.current) {
 			lastSavedNameRef.current = nextName;
 			window.localStorage.removeItem(GENERATED_NAME_STORAGE_KEY);
-			addSystemMessage(`Name updated: ${nextName}`);
+			addSystemMessage(nextName ? `Name updated: ${nextName}` : 'Name cleared');
+		}
+	}
+
+	function handleProfileSettingsOpenChange(open: boolean) {
+		const wasOpen = profileSettingsOpenRef.current;
+		profileSettingsOpenRef.current = open;
+		if (open) {
+			if (!wasOpen) {
+				setProfileNameDraft(displayName);
+			}
+			return;
+		}
+		if (wasOpen) {
+			saveProfileName(profileNameDraft);
 		}
 	}
 
@@ -6280,14 +6296,7 @@ export function Player({
 							);
 						}
 						return (
-							<Dialog.Root
-								key={player.id}
-								onOpenChange={(open) => {
-									if (!open) {
-										handleNameBlur();
-									}
-								}}
-							>
+							<Dialog.Root key={player.id} onOpenChange={handleProfileSettingsOpenChange}>
 								<Dialog.Trigger asChild>{playerBadge}</Dialog.Trigger>
 								<Dialog.Content className="max-w-sm gap-4">
 									<Dialog.Title className="text-lg font-bold">Profile Settings</Dialog.Title>
@@ -6300,7 +6309,7 @@ export function Player({
 												id={profileId || playerProfileId}
 												className="h-14 w-14"
 												discordUser={discordUser}
-												name={displayName}
+												name={discordUser ? displayName : profileNameDraft}
 												staticBaseUrl={staticBaseUrl}
 											/>
 											<input
@@ -6316,9 +6325,8 @@ export function Player({
 											</label>
 											<Input
 												disabled={Boolean(discordUser)}
-												onBlur={handleNameBlur}
-												value={displayName}
-												onChange={(event) => setName(event.target.value)}
+												value={discordUser ? displayName : profileNameDraft}
+												onChange={(event) => setProfileNameDraft(event.target.value)}
 												type="text"
 												className="h-10 min-w-0 focus-visible:ring-transparent"
 												placeholder="Name"

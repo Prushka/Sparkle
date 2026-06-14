@@ -11,6 +11,7 @@ import {
 	IconMovieOff,
 	IconPhoto,
 	IconPlayerPlay,
+	IconRefresh,
 	IconSearch,
 	IconSortDescending,
 	IconStack2,
@@ -19,6 +20,7 @@ import {
 } from '@tabler/icons-react';
 import {
 	useEffect,
+	useCallback,
 	useMemo,
 	useRef,
 	useState,
@@ -120,45 +122,60 @@ export function LibraryHome({
 	const sentinelRef = useRef<HTMLDivElement | null>(null);
 	const [jobs, setJobs] = useState<LibraryJob[]>([]);
 	const [loading, setLoading] = useState(true);
+	const [refreshing, setRefreshing] = useState(false);
 	const [error, setError] = useState('');
 	const [query, setQuery] = useState('');
 	const [kind, setKind] = useState<LibraryKind>('all');
 	const [sort, setSort] = useState<SortMode>('recent-desc');
 	const [renderLimit, setRenderLimit] = useState(INITIAL_LIBRARY_ITEMS);
+	const loadRequestRef = useRef(0);
+
+	const loadJobs = useCallback(
+		(force = false) => {
+			if (!backendBaseUrl) {
+				return;
+			}
+
+			const requestId = loadRequestRef.current + 1;
+			loadRequestRef.current = requestId;
+			if (!force) {
+				setLoading(true);
+			}
+			setRefreshing(force);
+			setError('');
+			fetchJobs(backendBaseUrl, force)
+				.then((nextJobs) => {
+					if (loadRequestRef.current === requestId) {
+						setJobs(nextJobs);
+					}
+				})
+				.catch((caught) => {
+					if (loadRequestRef.current === requestId) {
+						setError(caught instanceof Error ? caught.message : 'Unable to load media library');
+					}
+				})
+				.finally(() => {
+					if (loadRequestRef.current === requestId) {
+						setLoading(false);
+						setRefreshing(false);
+					}
+				});
+		},
+		[backendBaseUrl]
+	);
 
 	useEffect(() => {
-		if (!backendBaseUrl) {
-			return;
-		}
-
 		let disposed = false;
-		Promise.resolve()
-			.then(() => {
-				if (!disposed) {
-					setLoading(true);
-					setError('');
-				}
-				return fetchJobs(backendBaseUrl);
-			})
-			.then((nextJobs) => {
-				if (!disposed) {
-					setJobs(nextJobs);
-				}
-			})
-			.catch((caught) => {
-				if (!disposed) {
-					setError(caught instanceof Error ? caught.message : 'Unable to load media library');
-				}
-			})
-			.finally(() => {
-				if (!disposed) {
-					setLoading(false);
-				}
-			});
+		Promise.resolve().then(() => {
+			if (!disposed) {
+				loadJobs();
+			}
+		});
 		return () => {
 			disposed = true;
+			loadRequestRef.current += 1;
 		};
-	}, [backendBaseUrl]);
+	}, [loadJobs]);
 
 	const filtered = useMemo(
 		() => buildLibraryEntries(jobs, { query, kind, sort }),
@@ -215,6 +232,10 @@ export function LibraryHome({
 		setSort('recent-desc');
 	}
 
+	function refreshLibrary() {
+		loadJobs(true);
+	}
+
 	return (
 		<main className="min-h-screen w-full bg-[linear-gradient(180deg,#08090d_0%,#111017_42%,#08090d_100%)] text-zinc-50">
 			<div className="mx-auto flex w-full max-w-[1760px] flex-col gap-6 px-4 py-5 sm:px-6 md:px-8 lg:px-10">
@@ -246,7 +267,7 @@ export function LibraryHome({
 				</header>
 
 				<section className="sticky top-0 z-20 rounded-lg border border-white/10 bg-[#0d0f14]/90 p-3 shadow-2xl shadow-black/20 backdrop-blur-xl">
-					<div className="grid gap-3 min-[960px]:grid-cols-[minmax(15rem,1fr)_16rem_12rem]">
+					<div className="grid gap-3 min-[960px]:grid-cols-[minmax(15rem,1fr)_16rem_12rem_auto]">
 						<label className="relative order-2 block min-w-0 min-[960px]:order-none">
 							<IconSearch
 								className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500"
@@ -296,6 +317,20 @@ export function LibraryHome({
 								setSort(value);
 							}}
 						/>
+
+						<Button
+							type="button"
+							variant="outline"
+							disabled={!backendBaseUrl || refreshing}
+							onClick={refreshLibrary}
+							className="order-4 h-11 gap-2 rounded-lg border-white/10 bg-white/[0.06] px-3 text-zinc-100 shadow-none hover:bg-white/10 hover:text-white min-[960px]:order-none"
+						>
+							<IconRefresh
+								className={cn('size-4 shrink-0 text-[#8de8ce]', refreshing && 'animate-spin')}
+								stroke={2.2}
+							/>
+							<span>{refreshing ? 'Refreshing' : 'Refresh'}</span>
+						</Button>
 					</div>
 					{hasFilters ? (
 						<div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
@@ -828,12 +863,8 @@ function limitLibraryEntries(entries: LibraryEntry[], limit: number) {
 			continue;
 		}
 
-		const episodes = entry.episodes.slice(0, remaining);
-		if (!episodes.length) {
-			break;
-		}
-		result.push(buildShowEntry(entry.titleId, entry.title, episodes));
-		remaining -= episodes.length;
+		result.push(entry);
+		remaining -= entry.episodes.length;
 	}
 
 	return result;
