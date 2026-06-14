@@ -7,6 +7,7 @@ import {
 	IconChevronDown,
 	IconClock,
 	IconDeviceTv,
+	IconLoader2,
 	IconMovie,
 	IconMovieOff,
 	IconPhoto,
@@ -267,7 +268,7 @@ export function LibraryHome({
 				</header>
 
 				<section className="sticky top-0 z-20 rounded-lg border border-white/10 bg-[#0d0f14]/90 p-3 shadow-2xl shadow-black/20 backdrop-blur-xl">
-					<div className="grid gap-3 min-[960px]:grid-cols-[minmax(15rem,1fr)_16rem_12rem_auto]">
+					<div className="grid gap-3 min-[960px]:grid-cols-[minmax(15rem,1fr)_16rem_12rem_8.5rem]">
 						<label className="relative order-2 block min-w-0 min-[960px]:order-none">
 							<IconSearch
 								className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500"
@@ -323,13 +324,17 @@ export function LibraryHome({
 							variant="outline"
 							disabled={!backendBaseUrl || refreshing}
 							onClick={refreshLibrary}
-							className="order-4 h-11 gap-2 rounded-lg border-white/10 bg-white/[0.06] px-3 text-zinc-100 shadow-none hover:bg-white/10 hover:text-white min-[960px]:order-none"
+							aria-busy={refreshing}
+							className="order-4 h-11 w-full gap-2 rounded-lg border-white/10 bg-white/[0.06] px-3 text-zinc-100 shadow-none hover:bg-white/10 hover:text-white min-[960px]:order-none"
 						>
-							<IconRefresh
-								className={cn('size-4 shrink-0 text-[#8de8ce]', refreshing && 'animate-spin')}
-								stroke={2.2}
-							/>
-							<span>{refreshing ? 'Refreshing' : 'Refresh'}</span>
+							{refreshing ? (
+								<IconLoader2 className="size-4 shrink-0 animate-spin text-[#8de8ce]" stroke={2.2} />
+							) : (
+								<IconRefresh className="size-4 shrink-0 text-[#8de8ce]" stroke={2.2} />
+							)}
+							<span className="inline-block min-w-[4.75rem] text-left">
+								{refreshing ? 'Refreshing' : 'Refresh'}
+							</span>
 						</Button>
 					</div>
 					{hasFilters ? (

@@ -2493,13 +2493,12 @@ function VoiceToggleButton({
 		<Tooltip.Provider delayDuration={0}>
 			<Tooltip.Root>
 				<Tooltip.Trigger asChild>
-					<motion.button
+					<button
 						type="button"
 						aria-label={label}
 						aria-pressed={active}
 						disabled={disabled}
 						onClick={onClick}
-						whileTap={{ scale: disabled ? 1 : 0.94 }}
 						style={{ width: 40, height: 40, minWidth: 40, maxWidth: 40 }}
 						className={`inline-flex flex-none cursor-pointer items-center justify-center rounded-xl border p-0 text-sm transition-colors disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 ${
 							active
@@ -2507,19 +2506,8 @@ function VoiceToggleButton({
 								: 'border-input bg-background hover:bg-accent hover:text-accent-foreground'
 						}`}
 					>
-						<AnimatePresence mode="wait" initial={false}>
-							<motion.span
-								key={label}
-								initial={{ opacity: 0, rotate: -8, scale: 0.82 }}
-								animate={{ opacity: 1, rotate: 0, scale: 1 }}
-								exit={{ opacity: 0, rotate: 8, scale: 0.82 }}
-								transition={{ duration: 0.16, ease: 'easeOut' }}
-								className="flex h-5 w-5 items-center justify-center"
-							>
-								{children}
-							</motion.span>
-						</AnimatePresence>
-					</motion.button>
+						<span className="flex h-5 w-5 items-center justify-center">{children}</span>
+					</button>
 				</Tooltip.Trigger>
 				<Tooltip.Content>
 					<p>{label}</p>
@@ -2535,13 +2523,7 @@ function VoiceControls({ voice }: { voice: VoiceChatController }) {
 	const disabled = voice.status === 'joining' || !voice.desiredJoined;
 
 	return (
-		<motion.div
-			layout
-			initial={{ opacity: 0, y: 4 }}
-			animate={{ opacity: 1, y: 0 }}
-			transition={{ duration: 0.22, ease: 'easeOut' }}
-			className="flex items-center gap-1 rounded-xl border bg-muted/35 p-1 shadow-sm"
-		>
+		<div className="flex items-center gap-1 rounded-xl border bg-muted/35 p-1 shadow-sm">
 			<VoiceToggleButton
 				active={!isMuted}
 				disabled={disabled}
@@ -2568,7 +2550,7 @@ function VoiceControls({ voice }: { voice: VoiceChatController }) {
 					<IconHeadphones size={18} stroke={2} />
 				)}
 			</VoiceToggleButton>
-		</motion.div>
+		</div>
 	);
 }
 

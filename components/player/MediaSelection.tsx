@@ -10,7 +10,13 @@ import {
 	useState
 } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { IconCheck, IconChevronRight, IconChevronDown, IconRefresh } from '@tabler/icons-react';
+import {
+	IconCheck,
+	IconChevronRight,
+	IconChevronDown,
+	IconLoader2,
+	IconRefresh
+} from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
 import * as Popover from '@/components/ui/popover';
 import * as Command from '@/components/ui/command';
@@ -18,7 +24,6 @@ import * as Tooltip from '@/components/ui/tooltip';
 import { TitlePoster } from '@/components/player/TitlePoster';
 import { getTitleComponentsByJobs, type Job, type LibraryJob } from '@/lib/player/t';
 import { fetchJobs } from '@/lib/player/data';
-import { cn } from '@/lib/utils';
 
 export type MediaSelectionHandle = {
 	updateList: (
@@ -233,11 +238,16 @@ export const MediaSelection = forwardRef<
 								variant="outline"
 								size="icon"
 								aria-label="Refresh media list"
+								aria-busy={refreshing}
 								disabled={refreshing}
 								onClick={refreshList}
 								className="shrink-0"
 							>
-								<IconRefresh className={cn(refreshing && 'animate-spin')} size={18} stroke={2} />
+								{refreshing ? (
+									<IconLoader2 className="animate-spin" size={18} stroke={2} />
+								) : (
+									<IconRefresh size={18} stroke={2} />
+								)}
 							</Button>
 						</Tooltip.Trigger>
 						<Tooltip.Content>
