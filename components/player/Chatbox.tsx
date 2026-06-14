@@ -35,14 +35,7 @@ import { EmojiPicker } from '@/components/player/EmojiPicker';
 import { EmojiText } from '@/components/player/EmojiText';
 import { SoundEffectPicker } from '@/components/player/SoundEffectPicker';
 import { useFullscreenPortalContainer } from '@/components/ui/fullscreen-portal';
-import {
-	findActiveEmojiToken,
-	getChatEmojiAsset,
-	getEmojiIdsFromText,
-	getEmojiRefsFromText,
-	searchChatEmojis,
-	type ChatEmojiRef
-} from '@/lib/player/emoji';
+import type { ChatEmojiRef } from '@/lib/player/emoji';
 import { BroadcastTypes, getRealName, SyncTypes, type Chat, type Player } from '@/lib/player/t';
 import type { SoundEffect } from '@/lib/player/sound-effects';
 import { useAppState } from '@/lib/app-state';
@@ -98,6 +91,61 @@ declare module 'slate' {
 
 const chatInputMaxLength = 250;
 const emojiTokenRegex = /:([a-z0-9][a-z0-9_+-]{1,39}):/gi;
+const activeEmojiTokenRegex = /(^|\s):([a-z0-9_+-]{0,40})(:?)/gi;
+
+function getEmojiIdsFromText(text: string): string[] {
+	const ids = new Set<string>();
+	for (const match of text.matchAll(emojiTokenRegex)) {
+		ids.add(match[1].toLowerCase());
+	}
+	return [...ids];
+}
+
+function getEmojiRefById(id: string, emojiRefs: ChatEmojiRef[] = []) {
+	const normalized = id.toLowerCase();
+	return emojiRefs.find((emoji) => emoji.id.toLowerCase() === normalized);
+}
+
+function getEmojiRefsFromKnownRefs(text: string, emojiRefs: ChatEmojiRef[]): ChatEmojiRef[] {
+	const ids = new Set(getEmojiIdsFromText(text));
+	const seen = new Set<string>();
+	const refs: ChatEmojiRef[] = [];
+	for (const emoji of emojiRefs) {
+		const id = emoji.id.toLowerCase();
+		if (!ids.has(id) || seen.has(id)) {
+			continue;
+		}
+		seen.add(id);
+		refs.push({
+			id,
+			label: emoji.label,
+			src: emoji.src,
+			source: emoji.source,
+			animated: emoji.animated,
+			kind: emoji.kind,
+			previewSrc: emoji.previewSrc
+		});
+	}
+	return refs;
+}
+
+async function getResolvedEmojiPayload(text: string, emojiRefs: ChatEmojiRef[]) {
+	const ids = getEmojiIdsFromText(text);
+	if (ids.length === 0) {
+		return { emojiIds: [], emojiRefs: [] };
+	}
+
+	const knownRefs = getEmojiRefsFromKnownRefs(text, emojiRefs);
+	if (knownRefs.length === ids.length) {
+		return { emojiIds: ids, emojiRefs: knownRefs };
+	}
+
+	const emojiModule = await import('@/lib/player/emoji');
+	return {
+		emojiIds: emojiModule.getEmojiIdsFromText(text),
+		emojiRefs: emojiModule.getEmojiRefsFromText(text, emojiRefs)
+	};
+}
 
 function createEmptyChatValue(): Descendant[] {
 	return [{ type: 'paragraph', children: [{ text: '' }] }];
@@ -206,18 +254,31 @@ function getActiveEmojiToken(editor: ChatEditor): ActiveEmojiToken | null {
 		return null;
 	}
 
-	const token = findActiveEmojiToken(node.text, selection.anchor.offset);
-	if (!token) {
-		return null;
+	const cursor = Math.min(Math.max(selection.anchor.offset, 0), node.text.length);
+	for (const match of node.text.matchAll(activeEmojiTokenRegex)) {
+		const prefix = match[1] ?? '';
+		const query = match[2] ?? '';
+		const hasClosingColon = match[3] === ':';
+		const tokenStart = (match.index ?? 0) + prefix.length;
+		const tokenEnd = tokenStart + query.length + (hasClosingColon ? 2 : 1);
+		const cursorInsideToken = hasClosingColon
+			? cursor > tokenStart && cursor < tokenEnd
+			: cursor > tokenStart && cursor <= tokenEnd;
+
+		if (!cursorInsideToken) {
+			continue;
+		}
+
+		return {
+			query: query.toLowerCase(),
+			range: {
+				anchor: { path, offset: tokenStart },
+				focus: { path, offset: tokenEnd }
+			}
+		};
 	}
 
-	return {
-		query: token.query,
-		range: {
-			anchor: { path, offset: token.from },
-			focus: { path, offset: token.to }
-		}
-	};
+	return null;
 }
 
 function replaceCompletedEmojiTokens(editor: ChatEditor, refs: ChatEmojiRef[]) {
@@ -229,7 +290,7 @@ function replaceCompletedEmojiTokens(editor: ChatEditor, refs: ChatEmojiRef[]) {
 		for (const match of matches) {
 			const [token, id] = match;
 			const index = match.index ?? 0;
-			const emoji = getChatEmojiAsset(id, refs);
+			const emoji = getEmojiRefById(id, refs);
 			if (!emoji) {
 				continue;
 			}
@@ -325,6 +386,7 @@ export function Chatbox({
 	const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
 	const [soundPickerOpen, setSoundPickerOpen] = useState(false);
 	const [activeEmojiToken, setActiveEmojiToken] = useState<ActiveEmojiToken | null>(null);
+	const [emojiSuggestions, setEmojiSuggestions] = useState<ChatEmojiRef[]>([]);
 	const [suggestionIndex, setSuggestionIndex] = useState(0);
 	const [suggestionsDismissedFor, setSuggestionsDismissedFor] = useState<string | null>(null);
 	const [emojiRefs, setEmojiRefs] = useState<ChatEmojiRef[]>([]);
@@ -334,11 +396,8 @@ export function Chatbox({
 
 	const chatHidden = chatLayout === 'hide';
 	const connected = playersCount > 0;
-	const emojiSuggestions = useMemo(
-		() => (activeEmojiToken ? searchChatEmojis(activeEmojiToken.query, 6) : []),
-		[activeEmojiToken]
-	);
 	const showEmojiSuggestions =
+		Boolean(activeEmojiToken) &&
 		(chatFocused || inputFocused) &&
 		emojiSuggestions.length > 0 &&
 		(!activeEmojiToken || suggestionsDismissedFor !== activeEmojiToken.query);
@@ -383,6 +442,23 @@ export function Chatbox({
 	useEffect(() => {
 		onPickerOpenChange?.(pickerOpen);
 	}, [onPickerOpenChange, pickerOpen]);
+
+	useEffect(() => {
+		if (!activeEmojiToken) {
+			return;
+		}
+
+		let cancelled = false;
+		void import('@/lib/player/emoji').then((emojiModule) => {
+			if (!cancelled) {
+				setEmojiSuggestions(emojiModule.searchChatEmojis(activeEmojiToken.query, 6));
+			}
+		});
+
+		return () => {
+			cancelled = true;
+		};
+	}, [activeEmojiToken]);
 
 	useEffect(() => {
 		if (!showEmojiSuggestions) {
@@ -462,10 +538,11 @@ export function Chatbox({
 			setEmojiRefs([]);
 			return;
 		}
+		const emojiPayload = await getResolvedEmojiPayload(chat, emojiRefs);
 		send({
 			chat,
-			emojis: getEmojiIdsFromText(chat),
-			emojiRefs: getEmojiRefsFromText(chat, emojiRefs),
+			emojis: emojiPayload.emojiIds,
+			emojiRefs: emojiPayload.emojiRefs,
 			type: SyncTypes.ChatSync
 		});
 		clearEditor(editor);

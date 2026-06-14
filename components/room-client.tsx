@@ -1,9 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { LibraryHome } from '@/components/library-home';
-import { Player } from '@/components/player/Player';
 import {
 	createRoomRecord,
 	fetchMediaData,
@@ -110,6 +110,16 @@ type LoadState =
 	| { status: 'library'; config: RuntimeConfig; roomId: string }
 	| { status: 'player'; data: ServerData }
 	| { status: 'error'; message: string };
+
+type PlayerProps = {
+	data: ServerData;
+	onRoomMediaChanged?: (mediaId: string, mediaUpdated?: number) => void | Promise<void>;
+};
+
+const Player = dynamic<PlayerProps>(
+	() => import('@/components/player/Player').then((module) => module.Player),
+	{ loading: LoadingView, ssr: false }
+);
 
 function useLatestRef<T>(value: T) {
 	const ref = useRef(value);

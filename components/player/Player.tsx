@@ -12,6 +12,7 @@ import {
 	useState
 } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { AnimatePresence, motion } from 'motion/react';
 import {
 	MediaPlayer,
@@ -64,7 +65,6 @@ import {
 import { useAppState } from '@/lib/app-state';
 import { useTheme } from '@/lib/theme';
 import { createNotificationAudioUrl } from '@/lib/player/notification-audio';
-import { getSoundEffect } from '@/lib/player/sound-effects';
 import {
 	CHESS_NOTIFICATION_SOUND_IDS,
 	type ChessNotificationSoundId
@@ -129,9 +129,7 @@ import { MediaSelection, type MediaSelectionHandle } from '@/components/player/M
 import { MoveToast } from '@/components/player/MoveToast';
 import { Chats } from '@/components/player/Chats';
 import { useVoiceChat } from '@/components/player/useVoiceChat';
-import { YouTubeFloatingTab } from '@/components/player/YouTubeFloatingTab';
-import { ChessFloatingTab } from '@/components/player/ChessFloatingTab';
-import { CottageGame, CottageGamePlaceholder } from '@/components/player/CottageGame';
+import { CottageGamePlaceholder } from '@/components/player/CottageGamePlaceholder';
 import { RoomNavigationInput } from '@/components/room-navigation-input';
 import { fetchJobs, joinBackendPath, updateRoomRecord } from '@/lib/player/data';
 import type { ParsedCaptionsResult, VTTCue as MediaCaptionCue } from 'media-captions';
@@ -149,6 +147,46 @@ type MoveToastState = {
 	firedBy?: RoomPlayer;
 	job: LibraryJob | undefined;
 };
+
+type YouTubeFloatingTabProps = {
+	roomId: string;
+	initialIndex?: number;
+	state: YouTubeTabSyncState;
+	onStateChange: (patch: Partial<YouTubeTabSyncState>) => void;
+};
+
+type ChessFloatingTabProps = {
+	roomId: string;
+	initialIndex?: number;
+	state: ChessTabSyncState;
+	currentPlayer: ChessPlayerSyncState | null;
+	onStateChange: (patch: Partial<ChessTabSyncState>) => void;
+	onNotification: (soundId: ChessNotificationSoundId, chess?: ChessSoundEffectContext) => void;
+};
+
+type CottageGameProps = {
+	backendBaseUrl: string;
+	roomId: string;
+	socketConnected: boolean;
+	currentPlayer: { id: string; name: string; profileId?: string } | null;
+	roomPlayers: RoomPlayer[];
+};
+
+const YouTubeFloatingTab = dynamic<YouTubeFloatingTabProps>(
+	() =>
+		import('@/components/player/YouTubeFloatingTab').then((module) => module.YouTubeFloatingTab),
+	{ ssr: false }
+);
+
+const ChessFloatingTab = dynamic<ChessFloatingTabProps>(
+	() => import('@/components/player/ChessFloatingTab').then((module) => module.ChessFloatingTab),
+	{ ssr: false }
+);
+
+const CottageGame = dynamic<CottageGameProps>(
+	() => import('@/components/player/CottageGame').then((module) => module.CottageGame),
+	{ loading: CottageGamePlaceholder, ssr: false }
+);
 
 type LocalSystemMessage = Chat & {
 	isSystem: true;
@@ -3644,35 +3682,43 @@ export function Player({
 		}, 1800);
 	}, []);
 
-	const playSoundEffect = useCallback((id: string | undefined, playerId: string | undefined) => {
-		const effect = getSoundEffect(id);
-		if (!effect) {
-			return;
-		}
-
-		const audioKey = playerId || '__unknown__';
-		const previous = soundEffectAudioByPlayerRef.current[audioKey];
-		if (previous) {
-			previous.pause();
-			previous.currentTime = 0;
-		}
-
-		const audio = new Audio(effect.src);
-		audio.preload = 'auto';
-		audio.volume = 0.72;
-		soundEffectAudioByPlayerRef.current[audioKey] = audio;
-		audio.onended = () => {
-			if (soundEffectAudioByPlayerRef.current[audioKey] === audio) {
-				delete soundEffectAudioByPlayerRef.current[audioKey];
+	const playSoundEffect = useCallback(
+		async (id: string | undefined, playerId: string | undefined) => {
+			if (!id) {
+				return;
 			}
-		};
-		audio.play().catch((error) => {
-			console.warn('Unable to play sound effect', error);
-			if (soundEffectAudioByPlayerRef.current[audioKey] === audio) {
-				delete soundEffectAudioByPlayerRef.current[audioKey];
+
+			const { getSoundEffect } = await import('@/lib/player/sound-effects');
+			const effect = getSoundEffect(id);
+			if (!effect) {
+				return;
 			}
-		});
-	}, []);
+
+			const audioKey = playerId || '__unknown__';
+			const previous = soundEffectAudioByPlayerRef.current[audioKey];
+			if (previous) {
+				previous.pause();
+				previous.currentTime = 0;
+			}
+
+			const audio = new Audio(effect.src);
+			audio.preload = 'auto';
+			audio.volume = 0.72;
+			soundEffectAudioByPlayerRef.current[audioKey] = audio;
+			audio.onended = () => {
+				if (soundEffectAudioByPlayerRef.current[audioKey] === audio) {
+					delete soundEffectAudioByPlayerRef.current[audioKey];
+				}
+			};
+			audio.play().catch((error) => {
+				console.warn('Unable to play sound effect', error);
+				if (soundEffectAudioByPlayerRef.current[audioKey] === audio) {
+					delete soundEffectAudioByPlayerRef.current[audioKey];
+				}
+			});
+		},
+		[]
+	);
 	const playSoundEffectRef = useLatestRef(playSoundEffect);
 	const pulseSoundEffectBadgeRef = useLatestRef(pulseSoundEffectBadge);
 	const clearMergedSubtitleTrack = useCallback(

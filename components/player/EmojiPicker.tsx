@@ -7,13 +7,7 @@ import { IconMoodSmile, IconSearch } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
 import * as Popover from '@/components/ui/popover';
 import * as Tooltip from '@/components/ui/tooltip';
-import {
-	chatEmojis,
-	emojiCategories,
-	searchChatEmojis,
-	type ChatEmojiRef,
-	type ChatEmojiCategory
-} from '@/lib/player/emoji';
+import type { ChatEmojiRef, ChatEmojiCategory } from '@/lib/player/emoji';
 
 type Props = {
 	disabled?: boolean;
@@ -62,6 +56,7 @@ export function EmojiPicker({
 	const [scrollTop, setScrollTop] = useState(0);
 	const [viewportHeight, setViewportHeight] = useState(emojiPanelHeight);
 	const [viewportWidth, setViewportWidth] = useState(480);
+	const [emojiSections, setEmojiSections] = useState<EmojiSection[]>([]);
 	const scrollRef = useRef<HTMLDivElement | null>(null);
 
 	useEffect(() => {
@@ -80,24 +75,40 @@ export function EmojiPicker({
 		return () => observer.disconnect();
 	}, [open]);
 
-	const emojiSections = useMemo<EmojiSection[]>(() => {
-		const normalizedQuery = query.trim();
-		const searchedEmoji = normalizedQuery ? searchChatEmojis(normalizedQuery, 160) : chatEmojis;
-		const sections: EmojiSection[] = [];
-
-		for (const category of emojiCategories) {
-			const items = searchedEmoji.filter((emoji) => emoji.category === category.id);
-			if (items.length) {
-				sections.push({
-					id: category.id,
-					label: category.label,
-					items
-				});
-			}
+	useEffect(() => {
+		if (!open) {
+			return;
 		}
 
-		return sections;
-	}, [query]);
+		let cancelled = false;
+		void import('@/lib/player/emoji').then((emojiModule) => {
+			if (cancelled) {
+				return;
+			}
+			const normalizedQuery = query.trim();
+			const searchedEmoji = normalizedQuery
+				? emojiModule.searchChatEmojis(normalizedQuery, 160)
+				: emojiModule.chatEmojis;
+			const sections: EmojiSection[] = [];
+
+			for (const category of emojiModule.emojiCategories) {
+				const items = searchedEmoji.filter((emoji) => emoji.category === category.id);
+				if (items.length) {
+					sections.push({
+						id: category.id,
+						label: category.label,
+						items
+					});
+				}
+			}
+
+			setEmojiSections(sections);
+		});
+
+		return () => {
+			cancelled = true;
+		};
+	}, [open, query]);
 
 	const columns = viewportWidth >= 420 ? 10 : 8;
 	const tileSize = Math.max(
@@ -148,7 +159,7 @@ export function EmojiPicker({
 		}));
 	}, [scrollTop, sectionLayouts, viewportHeight]);
 
-	const showEmptyState = emojiSections.every((section) => section.items.length === 0);
+	const showEmptyState = open && emojiSections.every((section) => section.items.length === 0);
 
 	function selectEmoji(emoji: ChatEmojiRef) {
 		onSelect(emoji);

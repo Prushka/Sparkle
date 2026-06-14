@@ -1,17 +1,12 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { IconMusic, IconSearch } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
 import * as Popover from '@/components/ui/popover';
 import * as Tooltip from '@/components/ui/tooltip';
-import {
-	searchSoundEffects,
-	soundEffectCategories,
-	soundEffects,
-	type SoundEffect
-} from '@/lib/player/sound-effects';
+import type { SoundEffect, SoundEffectCategory } from '@/lib/player/sound-effects';
 
 type Props = {
 	disabled?: boolean;
@@ -30,21 +25,40 @@ export function SoundEffectPicker({
 }: Props) {
 	const [open, setOpen] = useState(false);
 	const [query, setQuery] = useState('');
+	const [soundSections, setSoundSections] = useState<
+		Array<{ id: SoundEffectCategory; label: string; items: SoundEffect[] }>
+	>([]);
 
-	const soundSections = useMemo(() => {
-		const normalizedQuery = query.trim();
-		const searchedEffects = normalizedQuery
-			? searchSoundEffects(normalizedQuery, 64)
-			: soundEffects;
-		return soundEffectCategories
-			.map((category) => ({
-				...category,
-				items: searchedEffects.filter((effect) => effect.category === category.id)
-			}))
-			.filter((section) => section.items.length > 0);
-	}, [query]);
+	useEffect(() => {
+		if (!open) {
+			return;
+		}
 
-	const showEmptyState = soundSections.length === 0;
+		let cancelled = false;
+		void import('@/lib/player/sound-effects').then((soundModule) => {
+			if (cancelled) {
+				return;
+			}
+			const normalizedQuery = query.trim();
+			const searchedEffects = normalizedQuery
+				? soundModule.searchSoundEffects(normalizedQuery, 64)
+				: soundModule.soundEffects;
+			setSoundSections(
+				soundModule.soundEffectCategories
+					.map((category) => ({
+						...category,
+						items: searchedEffects.filter((effect) => effect.category === category.id)
+					}))
+					.filter((section) => section.items.length > 0)
+			);
+		});
+
+		return () => {
+			cancelled = true;
+		};
+	}, [open, query]);
+
+	const showEmptyState = open && soundSections.length === 0;
 	const trigger = (
 		<Popover.Trigger asChild>
 			<Button
