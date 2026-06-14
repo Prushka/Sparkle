@@ -211,8 +211,18 @@ const STORYBOARD_MAX_DEVICE_PIXEL_RATIO = 2;
 const MEDIA_SESSION_SEEK_SECONDS = 10;
 
 type SparkleMediaSessionAction = MediaSessionAction | 'enterpictureinpicture';
-type AutoPictureInPictureVideoElement = HTMLVideoElement & {
+type SparkleWebKitPresentationMode = 'inline' | 'picture-in-picture' | 'fullscreen';
+type SparklePictureInPictureDocument = Document & {
+	pictureInPictureElement?: Element | null;
+	pictureInPictureEnabled?: boolean;
+	exitPictureInPicture?: () => Promise<void>;
+};
+type SparklePictureInPictureVideoElement = HTMLVideoElement & {
 	autoPictureInPicture?: boolean;
+	requestPictureInPicture?: () => Promise<PictureInPictureWindow>;
+	webkitPresentationMode?: SparkleWebKitPresentationMode;
+	webkitSupportsPresentationMode?: (mode: SparkleWebKitPresentationMode) => boolean;
+	webkitSetPresentationMode?: (mode: SparkleWebKitPresentationMode) => void | Promise<void>;
 };
 
 const mediaSessionActions = [
@@ -1670,6 +1680,211 @@ function getPlayerVideoElement(player: MediaPlayerInstance | null) {
 	}
 }
 
+function getPictureInPictureDocument() {
+	if (typeof document === 'undefined') {
+		return null;
+	}
+	return document as SparklePictureInPictureDocument;
+}
+
+function getPageVideoElements(preferredVideo?: SparklePictureInPictureVideoElement | null) {
+	const videos: SparklePictureInPictureVideoElement[] = [];
+	if (preferredVideo) {
+		videos.push(preferredVideo);
+	}
+	if (typeof document === 'undefined') {
+		return videos;
+	}
+	try {
+		for (const video of document.querySelectorAll('video')) {
+			if (video !== preferredVideo) {
+				videos.push(video as SparklePictureInPictureVideoElement);
+			}
+		}
+	} catch {
+		// The document can be unavailable during page teardown.
+	}
+	return videos;
+}
+
+function canUseStandardPictureInPicture(video: SparklePictureInPictureVideoElement | null) {
+	const pipDocument = getPictureInPictureDocument();
+	return Boolean(
+		video &&
+		pipDocument?.pictureInPictureEnabled &&
+		!video.disablePictureInPicture &&
+		typeof video.requestPictureInPicture === 'function'
+	);
+}
+
+function canUseWebKitPictureInPicture(video: SparklePictureInPictureVideoElement | null) {
+	if (
+		!video ||
+		typeof video.webkitSetPresentationMode !== 'function' ||
+		typeof video.webkitSupportsPresentationMode !== 'function'
+	) {
+		return false;
+	}
+	try {
+		return video.webkitSupportsPresentationMode('picture-in-picture');
+	} catch {
+		return false;
+	}
+}
+
+function canUseNativePictureInPicture(video: SparklePictureInPictureVideoElement | null) {
+	return canUseStandardPictureInPicture(video) || canUseWebKitPictureInPicture(video);
+}
+
+function prepareVideoElementForBackgroundPlayback(
+	video: SparklePictureInPictureVideoElement | null
+) {
+	if (!video) {
+		return;
+	}
+	try {
+		video.playsInline = true;
+		video.setAttribute('playsinline', '');
+		video.setAttribute('webkit-playsinline', '');
+	} catch {
+		// The media element may be detached during a source switch.
+	}
+	try {
+		video.disablePictureInPicture = false;
+	} catch {
+		// Some browsers expose this as read-only.
+	}
+}
+
+function isNativePictureInPictureActive(video: SparklePictureInPictureVideoElement | null) {
+	if (!video) {
+		return false;
+	}
+	const pipDocument = getPictureInPictureDocument();
+	return (
+		pipDocument?.pictureInPictureElement === video ||
+		video.webkitPresentationMode === 'picture-in-picture'
+	);
+}
+
+async function enterNativePictureInPicture(player: MediaPlayerInstance | null) {
+	const video = getPlayerVideoElement(player) as SparklePictureInPictureVideoElement | null;
+	if (!video) {
+		return false;
+	}
+	prepareVideoElementForBackgroundPlayback(video);
+	if (isNativePictureInPictureActive(video)) {
+		return true;
+	}
+	if (canUseStandardPictureInPicture(video)) {
+		await video.requestPictureInPicture?.();
+		return isNativePictureInPictureActive(video);
+	}
+	if (canUseWebKitPictureInPicture(video)) {
+		await video.webkitSetPresentationMode?.('picture-in-picture');
+		return true;
+	}
+	return false;
+}
+
+async function exitNativePictureInPicture(player: MediaPlayerInstance | null) {
+	const video = getPlayerVideoElement(player) as SparklePictureInPictureVideoElement | null;
+	const pipDocument = getPictureInPictureDocument();
+	let exited = false;
+
+	if (
+		pipDocument?.pictureInPictureElement &&
+		typeof pipDocument.exitPictureInPicture === 'function'
+	) {
+		try {
+			await pipDocument.exitPictureInPicture();
+			exited = true;
+		} catch {
+			// Safari/Chrome can reject during tab teardown; WebKit cleanup below may still apply.
+		}
+	}
+
+	for (const candidate of getPageVideoElements(video)) {
+		if (
+			candidate.webkitPresentationMode === 'picture-in-picture' &&
+			typeof candidate.webkitSetPresentationMode === 'function'
+		) {
+			try {
+				await candidate.webkitSetPresentationMode('inline');
+				exited = true;
+			} catch {
+				// Do not let native PiP cleanup block foreground restoration.
+			}
+		}
+	}
+
+	return exited;
+}
+
+async function enterPlayerPictureInPicture(player: MediaPlayerInstance | null, trigger?: Event) {
+	if (!player || getSafePlayerPaused(player) !== false) {
+		return false;
+	}
+	if (getSafePlayerPictureInPicture(player)) {
+		return true;
+	}
+
+	try {
+		await player.enterPictureInPicture(trigger);
+		if (getSafePlayerPictureInPicture(player)) {
+			return true;
+		}
+	} catch {
+		// Vidstack may not have caught up to native/WebKit PiP support yet.
+	}
+
+	try {
+		return await enterNativePictureInPicture(player);
+	} catch {
+		return false;
+	}
+}
+
+async function exitPlayerPictureInPicture(player: MediaPlayerInstance | null, trigger?: Event) {
+	if (!player) {
+		return false;
+	}
+
+	const nativeExited = await exitNativePictureInPicture(player);
+	if (getSafePlayerPictureInPicture(player)) {
+		try {
+			await player.exitPictureInPicture(trigger);
+			return true;
+		} catch {
+			return nativeExited;
+		}
+	}
+	return nativeExited;
+}
+
+function isPictureInPictureControlEvent(event: Event, root: HTMLElement | null | undefined) {
+	if (typeof Element === 'undefined' || !(event.target instanceof Element)) {
+		return false;
+	}
+	const pipControl = event.target.closest(
+		'.vds-pip-button, [data-media-tooltip="pip"], media-pip-button'
+	);
+	return Boolean(pipControl && (!root || root.contains(pipControl)));
+}
+
+function isProbablyIOSWebKit() {
+	if (typeof navigator === 'undefined') {
+		return false;
+	}
+	const platform = navigator.platform || '';
+	const userAgent = navigator.userAgent || '';
+	return (
+		/iP(ad|hone|od)/.test(platform) ||
+		(platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
+		/iP(ad|hone|od)/.test(userAgent)
+	);
+}
+
 function findSubtitleTrack(
 	tracks: SubtitleTrackInfo[],
 	track:
@@ -2841,6 +3056,10 @@ function getSafePlayerCanPlay(player: MediaPlayerInstance | null) {
 }
 
 function getSafePlayerCanPictureInPicture(player: MediaPlayerInstance | null) {
+	const videoElement = getPlayerVideoElement(player) as SparklePictureInPictureVideoElement | null;
+	if (canUseNativePictureInPicture(videoElement)) {
+		return true;
+	}
 	if (!player) {
 		return false;
 	}
@@ -2852,6 +3071,10 @@ function getSafePlayerCanPictureInPicture(player: MediaPlayerInstance | null) {
 }
 
 function getSafePlayerPictureInPicture(player: MediaPlayerInstance | null) {
+	const videoElement = getPlayerVideoElement(player) as SparklePictureInPictureVideoElement | null;
+	if (isNativePictureInPictureActive(videoElement)) {
+		return true;
+	}
 	if (!player) {
 		return false;
 	}
@@ -2887,7 +3110,8 @@ function getSafePlayerPlaybackRate(player: MediaPlayerInstance | null) {
 }
 
 function setSafePlayerAutoPictureInPicture(player: MediaPlayerInstance | null, enabled: boolean) {
-	const videoElement = getPlayerVideoElement(player) as AutoPictureInPictureVideoElement | null;
+	const videoElement = getPlayerVideoElement(player) as SparklePictureInPictureVideoElement | null;
+	prepareVideoElementForBackgroundPlayback(videoElement);
 	if (!videoElement || !('autoPictureInPicture' in videoElement)) {
 		return false;
 	}
@@ -3893,6 +4117,9 @@ export function Player({
 			}
 			const videoElement = getPlayerVideoElement(playerEl);
 			if (videoElement) {
+				prepareVideoElementForBackgroundPlayback(
+					videoElement as SparklePictureInPictureVideoElement
+				);
 				mediaProviderEl.load(videoElement);
 			}
 			const needsRetry =
@@ -4695,13 +4922,12 @@ export function Player({
 			if (
 				!player ||
 				getSafePlayerPaused(player) !== false ||
-				!getSafePlayerCanPictureInPicture(player) ||
 				getSafePlayerPictureInPicture(player)
 			) {
 				return;
 			}
 
-			Promise.resolve(player.enterPictureInPicture())
+			Promise.resolve(enterPlayerPictureInPicture(player))
 				.then(updateMediaSessionState)
 				.catch(() => undefined);
 		};
@@ -5448,13 +5674,13 @@ export function Player({
 			const requestId = ++autoPictureInPictureRequestIdRef.current;
 			autoPictureInPicturePendingRef.current = true;
 			try {
-				await player.enterPictureInPicture(trigger);
+				await enterPlayerPictureInPicture(player, trigger);
 				if (
 					autoPictureInPictureRequestIdRef.current !== requestId &&
 					!document.hidden &&
 					getSafePlayerPictureInPicture(player)
 				) {
-					await player.exitPictureInPicture(trigger);
+					await exitPlayerPictureInPicture(player, trigger);
 				}
 			} catch {
 				// Auto PiP is browser/permission dependent; playback should continue normally.
@@ -5465,15 +5691,15 @@ export function Player({
 			}
 		};
 
-		const exitAutoPictureInPicture = async (trigger?: Event) => {
+		const exitAutoPictureInPicture = async (trigger?: Event, force = false) => {
 			autoPictureInPictureRequestIdRef.current += 1;
 			autoPictureInPicturePendingRef.current = false;
-			const shouldExit = shouldExitAutoPictureInPictureRef.current;
+			const shouldExit = force || shouldExitAutoPictureInPictureRef.current;
 			shouldExitAutoPictureInPictureRef.current = false;
 
 			try {
 				if (shouldExit && getSafePlayerPictureInPicture(player)) {
-					await player.exitPictureInPicture(trigger);
+					await exitPlayerPictureInPicture(player, trigger);
 				}
 			} catch {
 				// Returning to the app should never be blocked by PiP cleanup.
@@ -5483,10 +5709,12 @@ export function Player({
 		};
 
 		const handleForeground = (event?: Event) => {
+			inBgRef.current = false;
 			void exitAutoPictureInPicture(event);
 		};
 
 		const handleBackground = (event?: Event) => {
+			inBgRef.current = true;
 			void enterAutoPictureInPicture(event);
 		};
 
@@ -5518,6 +5746,32 @@ export function Player({
 			}
 		};
 		window.addEventListener('focus', windowFocus);
+		const windowBlur = (event: FocusEvent) => {
+			if (!document.hidden && isProbablyIOSWebKit()) {
+				handleBackground(event);
+			}
+		};
+		window.addEventListener('blur', windowBlur);
+		const pictureInPictureControlActivation = (event: Event) => {
+			if (
+				!isPictureInPictureControlEvent(event, player.el) ||
+				!getSafePlayerPictureInPicture(player)
+			) {
+				return;
+			}
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			void exitAutoPictureInPicture(event, true);
+		};
+		const pictureInPictureControlKeyDown = (event: KeyboardEvent) => {
+			if (event.key !== 'Enter' && event.key !== ' ') {
+				return;
+			}
+			pictureInPictureControlActivation(event);
+		};
+		player.el?.addEventListener('pointerup', pictureInPictureControlActivation, true);
+		player.el?.addEventListener('click', pictureInPictureControlActivation, true);
+		player.el?.addEventListener('keydown', pictureInPictureControlKeyDown, true);
 		const mouseMove = () => {
 			if (chatFocusedSecsRef.current !== 0) {
 				chatFocusedSecsRef.current = 0;
@@ -5621,6 +5875,10 @@ export function Player({
 			window.removeEventListener('pagehide', pageHide);
 			window.removeEventListener('pageshow', pageShow);
 			window.removeEventListener('focus', windowFocus);
+			window.removeEventListener('blur', windowBlur);
+			player.el?.removeEventListener('pointerup', pictureInPictureControlActivation, true);
+			player.el?.removeEventListener('click', pictureInPictureControlActivation, true);
+			player.el?.removeEventListener('keydown', pictureInPictureControlKeyDown, true);
 			document.removeEventListener('mousemove', mouseMove);
 			player.el?.removeEventListener('mouseleave', mouseLeave);
 		};
