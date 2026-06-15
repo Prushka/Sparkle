@@ -5393,10 +5393,22 @@ export function Player({
 						}
 						break;
 					case SyncTypes.ExitSync:
+						clearReconnectTimer();
 						setExited(true);
 						exitedRef.current = true;
 						setInteracted(false);
-						setPageReloadCounter((value) => value + 1);
+						setSocketConnected(false);
+						awaitingInitialPlaybackSyncRef.current = false;
+						socketRef.current = null;
+						socketUrlRef.current = null;
+						socket.onopen = null;
+						socket.onmessage = null;
+						socket.onerror = null;
+						socket.onclose = null;
+						if (socket.readyState !== WebSocket.CLOSED) {
+							socket.close();
+						}
+						window.location.reload();
 						break;
 				}
 			};
@@ -5409,15 +5421,26 @@ export function Player({
 				socket.close();
 			};
 
-			socket.onclose = () => {
+			socket.onclose = (event) => {
 				if (socketRef.current !== socket) {
 					return;
 				}
 				console.log(`Socket closed, ${room}`);
+				const intentionallyDisconnected =
+					event.code === 1000 && event.reason === 'replaced by a newer connection';
 				setSocketConnected(false);
 				awaitingInitialPlaybackSyncRef.current = false;
 				socketRef.current = null;
 				socketUrlRef.current = null;
+				if (intentionallyDisconnected) {
+					clearReconnectTimer();
+					exitedRef.current = true;
+					interactedRef.current = false;
+					setExited(true);
+					setInteracted(false);
+					window.location.reload();
+					return;
+				}
 				if (!exitedRef.current && interactedRef.current) {
 					clearReconnectTimer();
 					const reconnectDelayMs = Math.min(
@@ -5532,6 +5555,20 @@ export function Player({
 			socketConnected,
 			startWatchRoomConnection
 		]
+	);
+
+	const disconnectRoomPlayer = useCallback(
+		(targetId: string) => {
+			if (!targetId || targetId === playerId) {
+				return;
+			}
+			send({
+				type: SyncTypes.ExitSync,
+				targetId
+			});
+			addSystemMessage('Disconnect request sent.');
+		},
+		[addSystemMessage, playerId, send]
 	);
 
 	useEffect(() => {
@@ -6049,6 +6086,10 @@ export function Player({
 		startWatchRoomConnection();
 	}
 
+	function handleDisconnectRoomPlayer(target: RoomPlayer) {
+		disconnectRoomPlayer(target.id);
+	}
+
 	const resetChatFocusTimer = useCallback(() => {
 		chatFocusedSecsRef.current = 0;
 		setChatFocusedSecs(0);
@@ -6427,7 +6468,7 @@ export function Player({
 								aria-label={
 									isCurrentUser
 										? 'Open profile settings'
-										: `Adjust ${player.name} microphone volume`
+										: `Open user actions for ${player.name}`
 								}
 								className={`group relative flex h-auto gap-2 overflow-visible rounded-full rounded-l-full rounded-r-full border-2 py-0 pl-0 pr-4 transition-[background-color,border-color,box-shadow] duration-200 ${
 									isSpeaking
@@ -6497,9 +6538,6 @@ export function Player({
 							</Button>
 						);
 						if (!isCurrentUser) {
-							if (!voiceSupported) {
-								return <div key={player.id}>{playerBadge}</div>;
-							}
 							return (
 								<Dialog.Root key={player.id}>
 									<Dialog.Trigger asChild>{playerBadge}</Dialog.Trigger>
@@ -6519,63 +6557,82 @@ export function Player({
 													{player.name}
 												</Dialog.Title>
 												<Dialog.Description className="text-sm text-muted-foreground">
-													Microphone volume
+													{voiceSupported ? 'Microphone volume' : 'Room user'}
 												</Dialog.Description>
 											</div>
 										</div>
-										<div className="rounded-lg border border-border/70 bg-muted/30 p-4">
-											<div className="mb-4 flex items-center justify-between gap-3">
-												<label
-													htmlFor={`remote-mic-volume-${player.id}`}
-													className="text-sm font-bold"
-												>
-													Microphone gain
-												</label>
-												<div className="flex h-10 items-center rounded-md border border-input bg-background shadow-sm focus-within:ring-1 focus-within:ring-ring">
-													<Input
-														aria-label="Volume percent"
-														type="number"
-														min={0}
-														max={MAX_REMOTE_MIC_VOLUME_PERCENT}
-														step={5}
-														value={remoteMicVolumePercent}
-														className="h-9 w-20 border-0 px-2 text-right text-lg font-extrabold tabular-nums shadow-none focus-visible:ring-0"
-														onChange={(event) =>
-															setRemoteMicVolume(player.id, Number(event.currentTarget.value) / 100)
-														}
-													/>
-													<span className="pr-3 text-sm font-extrabold text-muted-foreground">
-														%
-													</span>
+										{voiceSupported ? (
+											<div className="rounded-lg border border-border/70 bg-muted/30 p-4">
+												<div className="mb-4 flex items-center justify-between gap-3">
+													<label
+														htmlFor={`remote-mic-volume-${player.id}`}
+														className="text-sm font-bold"
+													>
+														Microphone gain
+													</label>
+													<div className="flex h-10 items-center rounded-md border border-input bg-background shadow-sm focus-within:ring-1 focus-within:ring-ring">
+														<Input
+															aria-label="Volume percent"
+															type="number"
+															min={0}
+															max={MAX_REMOTE_MIC_VOLUME_PERCENT}
+															step={5}
+															value={remoteMicVolumePercent}
+															className="h-9 w-20 border-0 px-2 text-right text-lg font-extrabold tabular-nums shadow-none focus-visible:ring-0"
+															onChange={(event) =>
+																setRemoteMicVolume(
+																	player.id,
+																	Number(event.currentTarget.value) / 100
+																)
+															}
+														/>
+														<span className="pr-3 text-sm font-extrabold text-muted-foreground">
+															%
+														</span>
+													</div>
+												</div>
+												<Slider
+													id={`remote-mic-volume-${player.id}`}
+													aria-label="Volume"
+													min={0}
+													max={MAX_REMOTE_MIC_VOLUME_PERCENT}
+													step={5}
+													value={[remoteMicVolumePercent]}
+													onValueChange={([value]) =>
+														setRemoteMicVolume(
+															player.id,
+															(value ?? remoteMicVolumePercent) / 100
+														)
+													}
+												/>
+												<div className="mt-3 flex items-center justify-between text-xs font-bold text-muted-foreground">
+													<span>Muted</span>
+													<span>Normal</span>
+													<span>Boost</span>
 												</div>
 											</div>
-											<Slider
-												id={`remote-mic-volume-${player.id}`}
-												aria-label="Volume"
-												min={0}
-												max={MAX_REMOTE_MIC_VOLUME_PERCENT}
-												step={5}
-												value={[remoteMicVolumePercent]}
-												onValueChange={([value]) =>
-													setRemoteMicVolume(player.id, (value ?? remoteMicVolumePercent) / 100)
-												}
-											/>
-											<div className="mt-3 flex items-center justify-between text-xs font-bold text-muted-foreground">
-												<span>Muted</span>
-												<span>Normal</span>
-												<span>Boost</span>
-											</div>
-										</div>
-										<div className="flex justify-end">
+										) : null}
+										<div className="flex flex-wrap items-center justify-between gap-2">
 											<Button
-												variant="outline"
-												className="gap-2"
-												disabled={remoteMicVolume === DEFAULT_REMOTE_MIC_VOLUME}
-												onClick={() => setRemoteMicVolume(player.id, DEFAULT_REMOTE_MIC_VOLUME)}
+												variant="destructive"
+												className="min-h-9"
+												onClick={() => handleDisconnectRoomPlayer(player)}
 											>
-												<IconRefresh data-icon="inline-start" stroke={2} />
-												Reset
+												Disconnect user
 											</Button>
+											{voiceSupported ? (
+												<Button
+													variant="outline"
+													className="gap-2"
+													disabled={remoteMicVolume === DEFAULT_REMOTE_MIC_VOLUME}
+													onClick={() =>
+														setRemoteMicVolume(player.id, DEFAULT_REMOTE_MIC_VOLUME)
+													}
+												>
+													<IconRefresh data-icon="inline-start" stroke={2} />
+													Reset
+												</Button>
+											) : null}
 										</div>
 									</Dialog.Content>
 								</Dialog.Root>

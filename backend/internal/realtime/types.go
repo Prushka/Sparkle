@@ -215,6 +215,7 @@ type ChatEmojiRef struct {
 type ClientPayload struct {
 	Type        string         `json:"type"`
 	Time        *float64       `json:"time,omitempty"`
+	TargetID    string         `json:"targetId,omitempty"`
 	Name        string         `json:"name,omitempty"`
 	ProfileId   string         `json:"profileId,omitempty"`
 	DiscordUser *DiscordUser   `json:"discordUser,omitempty"`

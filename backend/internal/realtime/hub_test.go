@@ -722,6 +722,36 @@ func TestMoveToBroadcastCanClearRoomMedia(t *testing.T) {
 	}
 }
 
+func TestExitSyncKicksTargetPlayer(t *testing.T) {
+	room := newRoom("room", "")
+	sender := testPlayer("sender", "Sender", 1)
+	target := testPlayer("target", "Target", 1)
+	room.players[sender.state.Id] = sender
+	room.players[target.state.Id] = target
+
+	room.handlePayload(sender, ClientPayload{Type: ExitSync, TargetID: "target"})
+
+	payload := readQueuedPayload(t, target)
+	if payload.Type != ExitSync {
+		t.Fatalf("kick payload type = %q, want %q", payload.Type, ExitSync)
+	}
+	if len(sender.send) != 0 {
+		t.Fatal("kick request should not send exit payload to sender")
+	}
+}
+
+func TestExitSyncDoesNotKickSelf(t *testing.T) {
+	room := newRoom("room", "")
+	sender := testPlayer("sender", "Sender", 1)
+	room.players[sender.state.Id] = sender
+
+	room.handlePayload(sender, ClientPayload{Type: ExitSync, TargetID: "sender"})
+
+	if len(sender.send) != 0 {
+		t.Fatal("self kick should not send exit payload")
+	}
+}
+
 func TestUpdateMediaIDNotifiesMediaSubscribers(t *testing.T) {
 	room := newRoom("room", "")
 	subscriber := testPlayer(MediaSubscriberPrefix+"subscriber", "", 4)

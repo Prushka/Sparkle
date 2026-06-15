@@ -692,10 +692,33 @@ func (r *Room) handlePayload(current *Player, payload ClientPayload) {
 			id = current.state.Id
 		}
 		r.broadcastPFP(id, now.UnixMilli())
+	case ExitSync:
+		r.kickPlayer(current, payload.TargetID)
 	case NewPlayer:
 		r.newPlayer(current)
 	default:
 		log.Printf("[%s] ignored unknown sync type %q", current.state.Id, payload.Type)
+	}
+}
+
+func (r *Room) kickPlayer(sender *Player, targetID string) {
+	targetID = strings.TrimSpace(targetID)
+	if targetID == "" || targetID == sender.state.Id || !safeID.MatchString(targetID) {
+		return
+	}
+
+	var target *Player
+	r.mu.Lock()
+	if sender.isMediaSubscriber() || r.players[sender.state.Id] != sender {
+		r.mu.Unlock()
+		return
+	}
+	sender.state.LastSeen = time.Now().Unix()
+	target = r.players[targetID]
+	r.mu.Unlock()
+
+	if target != nil {
+		target.kick()
 	}
 }
 

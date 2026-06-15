@@ -309,6 +309,7 @@ export enum BroadcastTypes {
 export interface SendPayload {
 	type: string;
 	time?: number;
+	targetId?: string;
 	paused?: boolean;
 	firedBy?: Player;
 	chat?: Chat;

@@ -80,6 +80,9 @@ func (p *Player) closeSend() {
 
 func (p *Player) kick() {
 	p.sendJSON(SendPayload{Type: ExitSync, Timestamp: time.Now().UnixMilli()})
+	if p.conn == nil {
+		return
+	}
 	_ = p.conn.WriteControl(
 		websocket.CloseMessage,
 		websocket.FormatCloseMessage(websocket.CloseNormalClosure, "replaced by a newer connection"),
