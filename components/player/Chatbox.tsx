@@ -809,7 +809,9 @@ export function Chatbox({
 											.slice()
 											.reverse()
 											.map((message, index) => {
-												const player = historicalPlayers[message.uid] ?? message.author;
+												const player = message.isSystem
+													? undefined
+													: (historicalPlayers[message.uid] ?? message.author);
 												const playerName = getRealName(player);
 												const timestamp = new Date(message.timestamp);
 												return (
@@ -821,17 +823,19 @@ export function Chatbox({
 																: 'border-border/70 bg-card/70'
 														}`}
 													>
-														<Pfp
-															id={player?.profileId || message.uid}
-															className="mt-0.5 h-9 w-9 shrink-0"
-															discordUser={player?.discordUser}
-															name={playerName}
-															staticBaseUrl={staticBaseUrl}
-														/>
+														{message.isSystem ? null : (
+															<Pfp
+																id={player?.profileId || message.uid}
+																className="mt-0.5 h-9 w-9 shrink-0"
+																discordUser={player?.discordUser}
+																name={playerName}
+																staticBaseUrl={staticBaseUrl}
+															/>
+														)}
 														<div className="min-w-0 flex-1">
 															<div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
 																<span className="min-w-0 max-w-full truncate font-extrabold">
-																	{playerName}
+																	{message.isSystem ? 'System' : playerName}
 																</span>
 																<time
 																	dateTime={timestamp.toISOString()}

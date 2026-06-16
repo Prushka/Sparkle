@@ -403,6 +403,7 @@ func (h *Hub) addPlayerToRoom(id string, player *Player) *Room {
 	}
 
 	var old *Player
+	isNewPresence := false
 	room.mu.Lock()
 	if player.isMediaSubscriber() {
 		if existing := room.mediaSubscribers[player.state.Id]; existing != nil {
@@ -412,8 +413,12 @@ func (h *Hub) addPlayerToRoom(id string, player *Player) *Room {
 	} else {
 		if existing := room.players[player.state.Id]; existing != nil {
 			old = existing
+		} else {
+			isNewPresence = true
 		}
 		room.players[player.state.Id] = player
+		player.joined = false
+		player.joinMessagePending = isNewPresence
 		room.lastPlayersSignature = ""
 		room.lastPlayerStatusSignature = ""
 		room.lastStatusSent = time.Time{}
@@ -460,7 +465,10 @@ func (h *Hub) syncPlayerStates(now time.Time) {
 
 func (h *Hub) readPump(room *Room, player *Player) {
 	defer func() {
-		room.remove(player)
+		removed, announced := room.remove(player)
+		if announced {
+			room.systemChat(displayNameFromSnapshot(removed)+" left", time.Now().UnixMilli(), removed.Time, nil)
+		}
 		player.closeSend()
 		log.Printf("[%s] disconnected from room %s", player.state.Id, room.id)
 	}()
@@ -546,7 +554,7 @@ func (h *Hub) writeProfileImage(id string, content []byte) error {
 	return os.Rename(tmpName, filepath.Join(dir, id+".png"))
 }
 
-func (r *Room) remove(player *Player) {
+func (r *Room) remove(player *Player) (PlayerSnapshot, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -557,12 +565,14 @@ func (r *Room) remove(player *Player) {
 				r.idleSince = time.Now()
 			}
 		}
-		return
+		return PlayerSnapshot{}, false
 	}
 
 	if current := r.players[player.state.Id]; current != player {
-		return
+		return PlayerSnapshot{}, false
 	}
+	removed := player.state
+	announceLeave := player.joined && !player.suppressLeaveMessage
 	delete(r.players, player.state.Id)
 	if len(r.players) == 0 {
 		r.state = defaultVideoState()
@@ -575,6 +585,7 @@ func (r *Room) remove(player *Player) {
 		r.lastPlayerStatusSignature = ""
 		r.lastStatusSent = time.Time{}
 	}
+	return removed, announceLeave
 }
 
 func (r *Room) updateMediaID(mediaID string, firedBy *PlayerSnapshot) roomResponse {
@@ -708,6 +719,7 @@ func (r *Room) kickPlayer(sender *Player, targetID string) {
 	}
 
 	var target *Player
+	var targetSnapshot PlayerSnapshot
 	r.mu.Lock()
 	if sender.isMediaSubscriber() || r.players[sender.state.Id] != sender {
 		r.mu.Unlock()
@@ -715,9 +727,19 @@ func (r *Room) kickPlayer(sender *Player, targetID string) {
 	}
 	sender.state.LastSeen = time.Now().Unix()
 	target = r.players[targetID]
+	if target != nil {
+		targetSnapshot = target.state
+		target.suppressLeaveMessage = true
+	}
 	r.mu.Unlock()
 
 	if target != nil {
+		r.systemChat(
+			displayNameFromSnapshot(targetSnapshot)+" was disconnected by "+displayNameFromSnapshot(sender.state),
+			time.Now().UnixMilli(),
+			targetSnapshot.Time,
+			nil,
+		)
 		target.kick()
 	}
 }
@@ -1686,6 +1708,45 @@ func (r *Room) chat(sender *Player, message string, emojiRefs []ChatEmojiRef) {
 	sendPayloadToPlayers(targets, payload)
 }
 
+func (r *Room) systemChat(message string, timestamp int64, mediaSec float64, targets []*Player) {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return
+	}
+	if timestamp == 0 {
+		timestamp = time.Now().UnixMilli()
+	}
+	messageRunes := []rune(message)
+	if len(messageRunes) > maxChatLength {
+		message = string(messageRunes[:maxChatLength])
+	}
+
+	var sendTargets []*Player
+	chat := Chat{
+		Message:       message,
+		Uid:           "system",
+		Timestamp:     timestamp,
+		MediaSec:      mediaSec,
+		IsStateUpdate: true,
+		IsSystem:      true,
+	}
+
+	r.mu.Lock()
+	r.chats = append(r.chats, chat)
+	if len(r.chats) > maxChatMessages {
+		r.chats = append([]Chat(nil), r.chats[len(r.chats)-maxChatMessages:]...)
+	}
+	if targets == nil {
+		sendTargets = r.playersLocked()
+	} else {
+		sendTargets = append([]*Player(nil), targets...)
+	}
+	r.mu.Unlock()
+
+	payload := SendPayload{Type: ChatSync, Chat: &chat, Timestamp: time.Now().UnixMilli()}
+	sendPayloadToPlayers(sendTargets, payload)
+}
+
 func extractEmojiIDs(message string) []string {
 	matches := emojiTokenPattern.FindAllStringSubmatch(message, -1)
 	if len(matches) == 0 {
@@ -1718,6 +1779,28 @@ func chatAuthorFromSnapshot(snapshot PlayerSnapshot) ChatAuthor {
 		ProfileId:   snapshot.ProfileId,
 		DiscordUser: snapshot.DiscordUser,
 	}
+}
+
+func displayNameFromSnapshot(snapshot PlayerSnapshot) string {
+	if snapshot.DiscordUser != nil {
+		if name := strings.TrimSpace(optionalString(snapshot.DiscordUser.GlobalName)); name != "" {
+			return name
+		}
+		if name := strings.TrimSpace(snapshot.DiscordUser.Username); name != "" {
+			return name
+		}
+	}
+	if name := strings.TrimSpace(snapshot.Name); name != "" {
+		return name
+	}
+	return "Unknown"
+}
+
+func optionalString(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 func sanitizeEmojiRefs(message string, refs []ChatEmojiRef) []ChatEmojiRef {
@@ -1893,6 +1976,8 @@ func (r *Room) newPlayer(sender *Player) {
 	var chess ChessState
 	var cottage CottageState
 	var chats []Chat
+	var joinMessage string
+	var joinTimestamp int64
 
 	r.mu.Lock()
 	if r.players[sender.state.Id] != sender {
@@ -1912,6 +1997,12 @@ func (r *Room) newPlayer(sender *Player) {
 	chess = r.chess
 	cottage = cloneCottageState(r.cottage)
 	chats = append([]Chat(nil), r.chats...)
+	if sender.joinMessagePending {
+		sender.joined = true
+		sender.joinMessagePending = false
+		joinTimestamp = time.Now().UnixMilli()
+		joinMessage = displayNameFromSnapshot(sender.state) + " joined"
+	}
 	r.mu.Unlock()
 
 	sender.sendJSON(SendPayload{Type: TimeSync, Time: &roomTime, Timestamp: time.Now().UnixMilli()})
@@ -1923,6 +2014,9 @@ func (r *Room) newPlayer(sender *Player) {
 	}
 	if len(chats) > 0 {
 		sender.sendJSON(SendPayload{Type: ChatSync, Chats: chats, Timestamp: time.Now().UnixMilli()})
+	}
+	if joinMessage != "" {
+		r.systemChat(joinMessage, joinTimestamp, roomTime, nil)
 	}
 }
 

@@ -78,7 +78,6 @@ import {
 	formatMbps,
 	formatPair,
 	formatSeconds,
-	getLeftAndJoined,
 	getName,
 	getSubtitleTypeRank,
 	getSupportedCodecs,
@@ -3819,11 +3818,7 @@ export function Player({
 								? 'Seeked to ' + formatSeconds(control.time)
 								: control.type === SyncTypes.BroadcastSync
 									? `Moving to [${control.moveToText}] in ${moveSeconds} Seconds`
-									: control.type === SyncTypes.PlayerLeft
-										? 'Left'
-										: control.type === SyncTypes.PlayerJoined
-											? 'Joined'
-											: '',
+									: '',
 					timestamp: control.timestamp,
 					mediaSec: getSafePlayerCurrentTime(playerEl) ?? 0,
 					isStateUpdate: true,
@@ -5287,24 +5282,6 @@ export function Player({
 						}
 						reconnectAttemptRef.current = 0;
 						roomPlayersCountRef.current = players.length;
-						if (roomPlayersRef.current.length > 0) {
-							const { left, joined } = getLeftAndJoined(roomPlayersRef.current, players, playerId);
-							const playerEvents = [
-								...left.map((player) => ({
-									...state,
-									type: SyncTypes.PlayerLeft,
-									firedBy: player
-								})),
-								...joined.map((player) => ({
-									...state,
-									type: SyncTypes.PlayerJoined,
-									firedBy: player
-								}))
-							];
-							if (playerEvents.length > 0) {
-								setControlsToDisplay((controls) => appendControlMessages(controls, playerEvents));
-							}
-						}
 						roomPlayersRef.current = players;
 						setRoomPlayers((current) =>
 							areRoomPlayersEqual(current, players) ? current : players
@@ -5469,7 +5446,6 @@ export function Player({
 			send,
 			setCurrentlyWatching,
 			setInteracted,
-			setPageReloadCounter,
 			updatePfp,
 			applyRemotePlaybackSyncRef,
 			handleVoiceBroadcastRef,
@@ -6466,9 +6442,7 @@ export function Player({
 							<Button
 								variant="outline"
 								aria-label={
-									isCurrentUser
-										? 'Open profile settings'
-										: `Open user actions for ${player.name}`
+									isCurrentUser ? 'Open profile settings' : `Open user actions for ${player.name}`
 								}
 								className={`group relative flex h-auto gap-2 overflow-visible rounded-full rounded-l-full rounded-r-full border-2 py-0 pl-0 pr-4 transition-[background-color,border-color,box-shadow] duration-200 ${
 									isSpeaking
@@ -6599,10 +6573,7 @@ export function Player({
 													step={5}
 													value={[remoteMicVolumePercent]}
 													onValueChange={([value]) =>
-														setRemoteMicVolume(
-															player.id,
-															(value ?? remoteMicVolumePercent) / 100
-														)
+														setRemoteMicVolume(player.id, (value ?? remoteMicVolumePercent) / 100)
 													}
 												/>
 												<div className="mt-3 flex items-center justify-between text-xs font-bold text-muted-foreground">
@@ -6625,9 +6596,7 @@ export function Player({
 													variant="outline"
 													className="gap-2"
 													disabled={remoteMicVolume === DEFAULT_REMOTE_MIC_VOLUME}
-													onClick={() =>
-														setRemoteMicVolume(player.id, DEFAULT_REMOTE_MIC_VOLUME)
-													}
+													onClick={() => setRemoteMicVolume(player.id, DEFAULT_REMOTE_MIC_VOLUME)}
 												>
 													<IconRefresh data-icon="inline-start" stroke={2} />
 													Reset

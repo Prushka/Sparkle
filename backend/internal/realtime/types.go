@@ -185,13 +185,15 @@ type PlayerStatus struct {
 }
 
 type Chat struct {
-	Message   string         `json:"message"`
-	Emojis    []string       `json:"emojis,omitempty"`
-	EmojiRefs []ChatEmojiRef `json:"emojiRefs,omitempty"`
-	Author    *ChatAuthor    `json:"author,omitempty"`
-	Timestamp int64          `json:"timestamp"`
-	MediaSec  float64        `json:"mediaSec"`
-	Uid       string         `json:"uid"`
+	Message       string         `json:"message"`
+	Emojis        []string       `json:"emojis,omitempty"`
+	EmojiRefs     []ChatEmojiRef `json:"emojiRefs,omitempty"`
+	Author        *ChatAuthor    `json:"author,omitempty"`
+	Timestamp     int64          `json:"timestamp"`
+	MediaSec      float64        `json:"mediaSec"`
+	Uid           string         `json:"uid"`
+	IsStateUpdate bool           `json:"isStateUpdate,omitempty"`
+	IsSystem      bool           `json:"isSystem,omitempty"`
 }
 
 type ChatAuthor struct {

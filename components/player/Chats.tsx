@@ -21,7 +21,9 @@ export function Chats({
 			className={`${controlsShowing ? '!mt-10' : ''} chat-history ml-auto flex flex-col gap-0.5 items-end`}
 		>
 			{messagesToDisplay.map((message, index) => {
-				const player = historicalPlayers[message.uid] ?? message.author;
+				const player = message.isSystem
+					? undefined
+					: (historicalPlayers[message.uid] ?? message.author);
 				const playerName = getRealName(player);
 				return (
 					<div

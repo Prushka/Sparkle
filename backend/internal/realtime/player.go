@@ -21,7 +21,10 @@ type Player struct {
 	conn *websocket.Conn
 	send chan []byte
 
-	state PlayerSnapshot
+	state                PlayerSnapshot
+	joined               bool
+	joinMessagePending   bool
+	suppressLeaveMessage bool
 
 	sendMu sync.Mutex
 	closed bool

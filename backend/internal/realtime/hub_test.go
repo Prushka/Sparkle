@@ -724,12 +724,31 @@ func TestMoveToBroadcastCanClearRoomMedia(t *testing.T) {
 
 func TestExitSyncKicksTargetPlayer(t *testing.T) {
 	room := newRoom("room", "")
-	sender := testPlayer("sender", "Sender", 1)
-	target := testPlayer("target", "Target", 1)
+	sender := testPlayer("sender", "Sender", 2)
+	target := testPlayer("target", "Target", 2)
 	room.players[sender.state.Id] = sender
 	room.players[target.state.Id] = target
 
 	room.handlePayload(sender, ClientPayload{Type: ExitSync, TargetID: "target"})
+
+	chatPayload := readQueuedPayload(t, sender)
+	if chatPayload.Type != ChatSync || chatPayload.Chat == nil || !chatPayload.Chat.IsSystem {
+		t.Fatalf("sender system chat payload = %#v, want system chat", chatPayload)
+	}
+	if chatPayload.Chat.Message != "Target was disconnected by Sender" {
+		t.Fatalf("sender system chat message = %#v", chatPayload.Chat.Message)
+	}
+	if chatPayload.Chat.Uid != "system" || !chatPayload.Chat.IsStateUpdate {
+		t.Fatalf("sender system chat flags = %#v", chatPayload.Chat)
+	}
+
+	targetChatPayload := readQueuedPayload(t, target)
+	if targetChatPayload.Type != ChatSync || targetChatPayload.Chat == nil || !targetChatPayload.Chat.IsSystem {
+		t.Fatalf("target system chat payload = %#v, want system chat", targetChatPayload)
+	}
+	if targetChatPayload.Chat.Message != "Target was disconnected by Sender" {
+		t.Fatalf("target system chat message = %#v", targetChatPayload.Chat.Message)
+	}
 
 	payload := readQueuedPayload(t, target)
 	if payload.Type != ExitSync {
@@ -749,6 +768,33 @@ func TestExitSyncDoesNotKickSelf(t *testing.T) {
 
 	if len(sender.send) != 0 {
 		t.Fatal("self kick should not send exit payload")
+	}
+}
+
+func TestNewPlayerBroadcastsJoinSystemMessage(t *testing.T) {
+	room := newRoom("room", "")
+	joining := testPlayer("joining", "Joining", 5)
+	room.players[joining.state.Id] = joining
+	joining.joinMessagePending = true
+
+	room.newPlayer(joining)
+
+	_ = readQueuedPayload(t, joining)
+	_ = readQueuedPayload(t, joining)
+	_ = readQueuedPayload(t, joining)
+	_ = readQueuedPayload(t, joining)
+	joinPayload := readQueuedPayload(t, joining)
+	if joinPayload.Type != ChatSync || joinPayload.Chat == nil || !joinPayload.Chat.IsSystem {
+		t.Fatalf("join system payload = %#v", joinPayload)
+	}
+	if joinPayload.Chat.Message != "Joining joined" {
+		t.Fatalf("join system message = %#v", joinPayload.Chat.Message)
+	}
+	if joinPayload.Chat.Uid != "system" {
+		t.Fatalf("join system uid = %#v", joinPayload.Chat.Uid)
+	}
+	if len(room.chats) != 1 || !room.chats[0].IsSystem || room.chats[0].Message != "Joining joined" {
+		t.Fatalf("join system chat history = %#v", room.chats)
 	}
 }
 
