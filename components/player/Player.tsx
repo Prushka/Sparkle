@@ -208,7 +208,7 @@ type SelectedSubtitleTrack = Pick<SubtitleTrackInfo, 'format' | 'label' | 'langu
 };
 
 type StackableSubtitleTrackFormat = Extract<SubtitleTrackFormat, 'ass' | 'vtt'>;
-type StoredSubtitleLayerLanguages = Partial<Record<StackableSubtitleTrackFormat, string[]>>;
+type StoredSubtitleLayerSelections = Partial<Record<StackableSubtitleTrackFormat, string[]>>;
 
 const PLAYER_VOLUME_STORAGE_KEY = 'volume';
 const DEFAULT_PLAYER_VOLUME = 1;
@@ -1101,15 +1101,35 @@ function pickPriorityAudioStream(streams: Stream[]) {
 }
 
 function getSubtitleLanguage(stream: Stream) {
-	return languageSrcMap[stream.Language] || stream.Language;
+	const rawLanguage = stream.Language || '';
+	const title = stream.Title || '';
+	if (rawLanguage === 'chi' || rawLanguage === 'zho' || /^zh(?:-|$)/i.test(rawLanguage)) {
+		if (/traditional|繁體|繁体|正體|正体|tc|cht/i.test(title)) {
+			return 'zh-TW';
+		}
+		if (/simplified|简体|簡體|sc|chs/i.test(title)) {
+			return 'zh-CN';
+		}
+	}
+	return languageSrcMap[rawLanguage] || rawLanguage;
 }
 
 function getSubtitleLanguageBase(language: string) {
 	return language.split('-')[0]?.toLowerCase() || language.toLowerCase();
 }
 
+function isChineseSubtitleLanguage(language: string) {
+	return getSubtitleLanguageBase(language) === 'zh';
+}
+
 function isSameSubtitleLanguage(a: string, b: string) {
-	return a === b || getSubtitleLanguageBase(a) === getSubtitleLanguageBase(b);
+	if (a === b) {
+		return true;
+	}
+	if (isChineseSubtitleLanguage(a) || isChineseSubtitleLanguage(b)) {
+		return false;
+	}
+	return getSubtitleLanguageBase(a) === getSubtitleLanguageBase(b);
 }
 
 function readStoredSubtitleLanguage() {
@@ -1146,7 +1166,35 @@ function areStringArraysEqual(a: string[], b: string[]) {
 	return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
-function readStoredSubtitleLayerLanguageMap(): StoredSubtitleLayerLanguages {
+function getSubtitleLayerSelectionKey(
+	track: Pick<SubtitleTrackInfo, 'label' | 'language' | 'src'>
+) {
+	return [track.language || '', track.label || '', track.src.split('/').pop() || track.src].join(
+		'\t'
+	);
+}
+
+function isStoredSubtitleLayerSelectionMatch(
+	track: SubtitleTrackInfo,
+	storedSelection: string,
+	usedSrcs: string[]
+) {
+	if (usedSrcs.includes(track.src)) {
+		return false;
+	}
+	if (getSubtitleLayerSelectionKey(track) === storedSelection) {
+		return true;
+	}
+	const [storedLanguage, storedLabel] = storedSelection.split('\t');
+	if (storedLabel && storedLanguage === track.language && storedLabel === track.label) {
+		return true;
+	}
+	return (
+		storedSelection === track.language || isSameSubtitleLanguage(track.language, storedSelection)
+	);
+}
+
+function readStoredSubtitleLayerSelectionMap(): StoredSubtitleLayerSelections {
 	if (typeof window === 'undefined') {
 		return {};
 	}
@@ -1155,22 +1203,22 @@ function readStoredSubtitleLayerLanguageMap(): StoredSubtitleLayerLanguages {
 		if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
 			return {};
 		}
-		const languages: StoredSubtitleLayerLanguages = {};
+		const selections: StoredSubtitleLayerSelections = {};
 		for (const format of ['ass', 'vtt'] as const) {
-			const storedLanguages = (parsed as Record<string, unknown>)[format];
-			if (!Array.isArray(storedLanguages)) {
+			const storedSelections = (parsed as Record<string, unknown>)[format];
+			if (!Array.isArray(storedSelections)) {
 				continue;
 			}
-			const normalizedLanguages = dedupeStrings(
-				storedLanguages.filter(
-					(language): language is string => typeof language === 'string' && language.length > 0
+			const normalizedSelections = dedupeStrings(
+				storedSelections.filter(
+					(selection): selection is string => typeof selection === 'string' && selection.length > 0
 				)
 			);
-			if (normalizedLanguages.length > 0) {
-				languages[format] = normalizedLanguages;
+			if (normalizedSelections.length > 0) {
+				selections[format] = normalizedSelections;
 			}
 		}
-		return languages;
+		return selections;
 	} catch {
 		return {};
 	}
@@ -1190,29 +1238,29 @@ function readLegacyStoredSubtitleLayerSrcs() {
 	}
 }
 
-function readStoredSubtitleLayerLanguages(format: StackableSubtitleTrackFormat) {
-	return readStoredSubtitleLayerLanguageMap()[format] ?? [];
+function readStoredSubtitleLayerSelections(format: StackableSubtitleTrackFormat) {
+	return readStoredSubtitleLayerSelectionMap()[format] ?? [];
 }
 
-function saveStoredSubtitleLayerLanguages(
+function saveStoredSubtitleLayerSelections(
 	format: StackableSubtitleTrackFormat,
-	languages: string[]
+	tracks: SubtitleTrackInfo[]
 ) {
 	if (typeof window === 'undefined') {
 		return;
 	}
-	const storedLanguages = readStoredSubtitleLayerLanguageMap();
-	const normalizedLanguages = dedupeStrings(languages);
-	if (normalizedLanguages.length > 0) {
-		storedLanguages[format] = normalizedLanguages;
+	const storedSelections = readStoredSubtitleLayerSelectionMap();
+	const normalizedSelections = dedupeStrings(tracks.map(getSubtitleLayerSelectionKey));
+	if (normalizedSelections.length > 0) {
+		storedSelections[format] = normalizedSelections;
 	} else {
-		delete storedLanguages[format];
+		delete storedSelections[format];
 	}
-	if (!storedLanguages.ass && !storedLanguages.vtt) {
+	if (!storedSelections.ass && !storedSelections.vtt) {
 		window.localStorage.removeItem(SUBTITLE_LAYERS_STORAGE_KEY);
 		return;
 	}
-	window.localStorage.setItem(SUBTITLE_LAYERS_STORAGE_KEY, JSON.stringify(storedLanguages));
+	window.localStorage.setItem(SUBTITLE_LAYERS_STORAGE_KEY, JSON.stringify(storedSelections));
 }
 
 function getMergedSubtitleFontScale(count: number) {
@@ -1252,10 +1300,10 @@ function sanitizeSubtitleLayerSelection(
 	return nextSrcs;
 }
 
-function getSubtitleLayerLanguages(srcs: string[], tracks: SubtitleTrackInfo[]) {
-	return dedupeStrings(
-		srcs.map((src) => tracks.find((track) => track.src === src)?.language ?? '').filter(Boolean)
-	);
+function getSubtitleLayerTracks(srcs: string[], tracks: SubtitleTrackInfo[]) {
+	return srcs
+		.map((src) => tracks.find((track) => track.src === src) ?? null)
+		.filter((track): track is SubtitleTrackInfo => Boolean(track));
 }
 
 function getStoredSubtitleLayerSrcs(
@@ -1268,28 +1316,26 @@ function getStoredSubtitleLayerSrcs(
 	const companionTracks = getStackableSubtitleTracks(tracks, primaryTrack).filter(
 		(track) => track.src !== primaryTrack.src
 	);
-	const storedLanguages = readStoredSubtitleLayerLanguages(primaryTrack.format);
+	const storedSelections = readStoredSubtitleLayerSelections(primaryTrack.format);
 	const restoredSrcs: string[] = [];
-	for (const language of storedLanguages) {
-		const matchingTrack = companionTracks.find(
-			(track) =>
-				!restoredSrcs.includes(track.src) &&
-				(track.language === language || isSameSubtitleLanguage(track.language, language))
+	for (const selection of storedSelections) {
+		const matchingTrack = companionTracks.find((track) =>
+			isStoredSubtitleLayerSelectionMatch(track, selection, restoredSrcs)
 		);
 		if (matchingTrack) {
 			restoredSrcs.push(matchingTrack.src);
 		}
 	}
-	if (restoredSrcs.length > 0 || storedLanguages.length > 0) {
+	if (restoredSrcs.length > 0 || storedSelections.length > 0) {
 		return restoredSrcs;
 	}
 
 	const legacySrcs = readLegacyStoredSubtitleLayerSrcs();
 	const migratedSrcs = sanitizeSubtitleLayerSelection(legacySrcs, tracks, primaryTrack);
 	if (migratedSrcs.length > 0) {
-		saveStoredSubtitleLayerLanguages(
+		saveStoredSubtitleLayerSelections(
 			primaryTrack.format,
-			getSubtitleLayerLanguages(migratedSrcs, tracks)
+			getSubtitleLayerTracks(migratedSrcs, tracks)
 		);
 	}
 	return migratedSrcs;
@@ -1497,6 +1543,14 @@ async function parseSubtitleDocument(
 	return { content, cues, track };
 }
 
+async function fetchSubtitleText(track: SubtitleTrackInfo, signal: AbortSignal) {
+	const response = await fetch(track.src, { signal });
+	if (!response.ok) {
+		throw new Error(`Failed to load ${track.label}: ${response.status}`);
+	}
+	return response.text();
+}
+
 function getMergedSubtitleSignature(tracks: SubtitleTrackInfo[]) {
 	return tracks.map((track) => track.src).join('\n');
 }
@@ -1586,49 +1640,321 @@ function formatAssTimestamp(seconds: number) {
 	)}.${String(centiseconds).padStart(2, '0')}`;
 }
 
-function scaleAssStyleFontSizes(header: string, scale: number) {
-	let styleColumns: string[] | null = null;
-	return header
-		.split(/\r?\n/)
-		.map((line) => {
-			if (/^Format:/i.test(line)) {
-				styleColumns = line
-					.slice(line.indexOf(':') + 1)
-					.split(',')
-					.map((value) => value.trim().toLowerCase());
-				return line;
+function parseAssTimestamp(value: string) {
+	const match = value.trim().match(/^(\d+):(\d{1,2}):(\d{1,2})(?:[.](\d{1,3}))?$/);
+	if (!match) {
+		return Number.POSITIVE_INFINITY;
+	}
+	const hours = Number.parseInt(match[1], 10);
+	const minutes = Number.parseInt(match[2], 10);
+	const seconds = Number.parseInt(match[3], 10);
+	const fractionText = match[4] ?? '';
+	const fraction = fractionText ? Number.parseInt(fractionText.padEnd(3, '0'), 10) / 1000 : 0;
+	return hours * 3600 + minutes * 60 + seconds + fraction;
+}
+
+function normalizeAssColumnName(value: string) {
+	return value.trim().toLowerCase();
+}
+
+function splitAssValues(value: string, count: number) {
+	const values: string[] = [];
+	let cursor = 0;
+	for (let index = 0; index < value.length && values.length < count - 1; index++) {
+		if (value[index] !== ',') {
+			continue;
+		}
+		values.push(value.slice(cursor, index).trim());
+		cursor = index + 1;
+	}
+	values.push(value.slice(cursor).trim());
+	while (values.length < count) {
+		values.push('');
+	}
+	return values;
+}
+
+function assValue(
+	values: Record<string, string>,
+	column: string,
+	defaults: Record<string, string>
+) {
+	const key = normalizeAssColumnName(column);
+	return values[key] ?? defaults[key] ?? '';
+}
+
+function assNumber(value: string) {
+	const parsed = Number.parseFloat(value);
+	return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatAssNumber(value: number) {
+	return String(Math.round(value * 100) / 100).replace(/[.]0+$/, '');
+}
+
+function scaleAssNumericValue(value: string, scale: number, minimum = 0) {
+	const parsed = assNumber(value);
+	if (parsed === null) {
+		return value;
+	}
+	return formatAssNumber(Math.max(minimum, parsed * scale));
+}
+
+function scaleAssMarginValue(value: string, scale: number, offset = 0) {
+	const parsed = assNumber(value);
+	if (parsed === null) {
+		return value;
+	}
+	const next = Math.max(0, Math.round(parsed * scale + offset));
+	return String(next);
+}
+
+function parseAssDocument(
+	content: string,
+	track: SubtitleTrackInfo,
+	fallbackContent = EMPTY_ASS_TRACK
+): AssParsedDocument {
+	const lines = (content || fallbackContent).replace(/\r\n?/g, '\n').split('\n');
+	const structuralIndex = lines.findIndex((line) =>
+		/^\[(?:v4\+?\s+styles|events)\]\s*$/i.test(line)
+	);
+	const header = (structuralIndex >= 0 ? lines.slice(0, structuralIndex) : lines)
+		.join('\n')
+		.trimEnd();
+	let section = '';
+	let styleColumns = ASS_STYLE_COLUMNS.map(String);
+	let eventColumns = ASS_EVENT_COLUMNS.map(String);
+	let playResX: number | null = null;
+	let playResY: number | null = null;
+	const styles: AssParsedStyle[] = [];
+	const events: AssParsedEvent[] = [];
+
+	for (const line of lines) {
+		const playResXMatch = line.match(/^PlayResX:\s*(\d+(?:\.\d+)?)/i);
+		if (playResXMatch) {
+			playResX = Number.parseFloat(playResXMatch[1]);
+		}
+		const playResYMatch = line.match(/^PlayResY:\s*(\d+(?:\.\d+)?)/i);
+		if (playResYMatch) {
+			playResY = Number.parseFloat(playResYMatch[1]);
+		}
+		const sectionMatch = line.match(/^\[(.*)\]\s*$/);
+		if (sectionMatch) {
+			section = sectionMatch[1].trim().toLowerCase();
+			continue;
+		}
+		const separatorIndex = line.indexOf(':');
+		if (separatorIndex === -1) {
+			continue;
+		}
+		const key = line.slice(0, separatorIndex).trim().toLowerCase();
+		const rawValue = line.slice(separatorIndex + 1).trim();
+		if (section === 'v4+ styles' || section === 'v4 styles') {
+			if (key === 'format') {
+				styleColumns = rawValue.split(',').map((value) => value.trim());
+				continue;
 			}
-			if (!/^Style:/i.test(line) || !styleColumns) {
-				return line;
+			if (key !== 'style') {
+				continue;
 			}
-			const fontSizeIndex = styleColumns.indexOf('fontsize');
-			if (fontSizeIndex === -1) {
-				return line;
+			const rawValues = splitAssValues(rawValue, styleColumns.length);
+			const values: Record<string, string> = {};
+			for (let index = 0; index < styleColumns.length; index++) {
+				values[normalizeAssColumnName(styleColumns[index])] = rawValues[index] ?? '';
 			}
-			const values = line
-				.slice(line.indexOf(':') + 1)
-				.split(',')
-				.map((value) => value.trim());
-			const fontSize = Number.parseFloat(values[fontSizeIndex] ?? '');
-			if (!Number.isFinite(fontSize)) {
-				return line;
+			styles.push({ values });
+			continue;
+		}
+		if (section === 'events') {
+			if (key === 'format') {
+				eventColumns = rawValue.split(',').map((value) => value.trim());
+				continue;
 			}
-			values[fontSizeIndex] = String(Math.max(12, Math.round(fontSize * scale)));
-			return `Style: ${values.join(',')}`;
-		})
+			if (key !== 'dialogue') {
+				continue;
+			}
+			const rawValues = splitAssValues(rawValue, eventColumns.length);
+			const values: Record<string, string> = {};
+			for (let index = 0; index < eventColumns.length; index++) {
+				values[normalizeAssColumnName(eventColumns[index])] = rawValues[index] ?? '';
+			}
+			events.push({
+				endTime: parseAssTimestamp(assValue(values, 'End', ASS_EVENT_DEFAULTS)),
+				startTime: parseAssTimestamp(assValue(values, 'Start', ASS_EVENT_DEFAULTS)),
+				values
+			});
+		}
+	}
+
+	return {
+		content,
+		eventColumns,
+		events,
+		header: header.trimEnd(),
+		playResX: Number.isFinite(playResX) ? playResX : null,
+		playResY: Number.isFinite(playResY) ? playResY : null,
+		styleColumns,
+		styles,
+		track
+	};
+}
+
+function getAssStyleName(style: AssParsedStyle) {
+	return assValue(style.values, 'Name', ASS_STYLE_DEFAULTS);
+}
+
+function getAssStyleFontName(style: AssParsedStyle | undefined) {
+	const fontName = style ? assValue(style.values, 'Fontname', ASS_STYLE_DEFAULTS).trim() : '';
+	return fontName || ASS_STYLE_DEFAULTS.fontname;
+}
+
+function findAssStyle(document: AssParsedDocument, styleName: string) {
+	const normalizedStyleName = styleName.trim().toLowerCase();
+	return (
+		document.styles.find(
+			(style) => getAssStyleName(style).trim().toLowerCase() === normalizedStyleName
+		) ?? null
+	);
+}
+
+function getAssDefaultStyle(document: AssParsedDocument) {
+	return (
+		findAssStyle(document, 'Default') ??
+		document.styles[0] ??
+		parseAssDocument('', document.track).styles[0]
+	);
+}
+
+function getAssStyleFontMap(document: AssParsedDocument) {
+	const fontMap = new Map<string, string>();
+	for (const style of document.styles) {
+		fontMap.set(getAssStyleName(style).trim().toLowerCase(), getAssStyleFontName(style));
+	}
+	return fontMap;
+}
+
+function createMergedAssDefaultStyle(document: AssParsedDocument, densityScale: number) {
+	const style = getAssDefaultStyle(document);
+	const values: Record<string, string> = {};
+	for (const column of ASS_STYLE_COLUMNS) {
+		values[normalizeAssColumnName(column)] = assValue(style.values, column, ASS_STYLE_DEFAULTS);
+	}
+	values.name = 'Default';
+	values.fontsize = scaleAssNumericValue(values.fontsize, densityScale, 12);
+	values.alignment = '2';
+	values.marginl = scaleAssMarginValue(values.marginl, 1);
+	values.marginr = scaleAssMarginValue(values.marginr, 1);
+	values.marginv = scaleAssMarginValue(values.marginv, 1);
+	return values;
+}
+
+function serializeAssStyle(values: Record<string, string>) {
+	return `Style: ${ASS_STYLE_COLUMNS.map((column) =>
+		assValue(values, column, ASS_STYLE_DEFAULTS)
+	).join(',')}`;
+}
+
+function sanitizeAssFontName(fontName: string) {
+	return fontName.replace(/[\\{}]/g, '').trim();
+}
+
+function formatAssFontOverride(fontName: string) {
+	const sanitizedFontName = sanitizeAssFontName(fontName);
+	return sanitizedFontName ? `{\\fn${sanitizedFontName}}` : '';
+}
+
+function getAssOverrideFontName(
+	overrideText: string,
+	currentFontName: string,
+	defaultFontName: string,
+	styleFonts: Map<string, string>
+) {
+	let nextFontName = currentFontName;
+	const fontTagPattern = /\\(r|fn)([^\\}]*)/gi;
+	let match: RegExpExecArray | null;
+	while ((match = fontTagPattern.exec(overrideText))) {
+		const tagName = match[1].toLowerCase();
+		const tagValue = match[2].trim();
+		if (tagName === 'r') {
+			nextFontName = tagValue
+				? (styleFonts.get(tagValue.toLowerCase()) ?? defaultFontName)
+				: defaultFontName;
+			continue;
+		}
+		if (tagValue) {
+			nextFontName = tagValue;
+		}
+	}
+	return nextFontName;
+}
+
+function sanitizeMergedAssEventText(
+	text: string,
+	defaultFontName: string,
+	styleFonts: Map<string, string>
+) {
+	let output = '';
+	let cursor = 0;
+	let currentFontName = defaultFontName;
+	let emittedFontName = '';
+	const emitFontOverride = () => {
+		if (currentFontName && currentFontName !== emittedFontName) {
+			output += formatAssFontOverride(currentFontName);
+			emittedFontName = currentFontName;
+		}
+	};
+
+	emitFontOverride();
+	while (cursor < text.length) {
+		if (text[cursor] !== '{') {
+			output += text[cursor++];
+			continue;
+		}
+		const endIndex = text.indexOf('}', cursor + 1);
+		if (endIndex === -1) {
+			cursor++;
+			continue;
+		}
+		currentFontName = getAssOverrideFontName(
+			text.slice(cursor + 1, endIndex),
+			currentFontName,
+			defaultFontName,
+			styleFonts
+		);
+		emitFontOverride();
+		cursor = endIndex + 1;
+	}
+
+	return output
+		.replace(/\\[nN]/g, '\n')
+		.replace(/\\h/g, ' ')
+		.replace(/\r\n?/g, '\n')
+		.split('\n')
+		.map((line) => line.trim())
+		.filter((line) => line && !/^(?:\{\\fn[^}]+\})+$/.test(line))
 		.join('\n');
 }
 
-function getAssHeader(primaryContent: string, scale: number) {
-	const eventsIndex = primaryContent.search(/^\[Events\]\s*$/im);
-	const rawHeader = eventsIndex >= 0 ? primaryContent.slice(0, eventsIndex) : EMPTY_ASS_TRACK;
-	const header = scaleAssStyleFontSizes(rawHeader.trimEnd(), scale);
-	return `${header}\n\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n`;
+function createFontAwareMergedAssCue(event: AssParsedEvent, document: AssParsedDocument) {
+	const startTime = event.startTime;
+	const endTime = event.endTime;
+	const eventStyle = assValue(event.values, 'Style', ASS_EVENT_DEFAULTS);
+	const eventStyleFontName = getAssStyleFontName(
+		findAssStyle(document, eventStyle) ?? getAssDefaultStyle(document)
+	);
+	const text = sanitizeMergedAssEventText(
+		assValue(event.values, 'Text', ASS_EVENT_DEFAULTS),
+		eventStyleFontName,
+		getAssStyleFontMap(document)
+	);
+	if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime || !text) {
+		return null;
+	}
+	return { endTime, startTime, text };
 }
 
-function sanitizeAssCueText(text: string) {
+function serializeAssMergedCueText(text: string) {
 	return text
-		.replace(/<[^>]*>/g, '')
 		.replace(/\r\n?/g, '\n')
 		.split('\n')
 		.map((line) => line.trim())
@@ -1636,17 +1962,45 @@ function sanitizeAssCueText(text: string) {
 		.join('\\N');
 }
 
-function serializeMergedAss(cues: MergedSubtitleCue[], primaryContent: string, layerCount: number) {
-	const header = getAssHeader(primaryContent, getMergedSubtitleFontScale(layerCount));
+function serializeMergedAss(documents: AssParsedDocument[]) {
+	if (documents.length === 0) {
+		return '';
+	}
+	const primaryDocument = documents[0];
+	const densityScale = getMergedSubtitleFontScale(documents.length);
+	const defaultStyle = createMergedAssDefaultStyle(primaryDocument, densityScale);
+	const parsedDocuments: ParsedSubtitleDocument[] = [];
+
+	for (const document of documents) {
+		parsedDocuments.push({
+			content: document.content,
+			cues: document.events
+				.map((event) => createFontAwareMergedAssCue(event, document))
+				.filter((cue): cue is SubtitleMergeCue => Boolean(cue)),
+			track: document.track
+		});
+	}
+
+	const cues = mergeSubtitleCues(parsedDocuments);
 	const events = cues
 		.map(
 			(cue) =>
 				`Dialogue: 0,${formatAssTimestamp(cue.startTime)},${formatAssTimestamp(
 					cue.endTime
-				)},Default,,0,0,0,,${sanitizeAssCueText(cue.text)}`
+				)},Default,,0,0,0,,${serializeAssMergedCueText(cue.text)}`
 		)
 		.join('\n');
-	return `${header}${events}\n`;
+
+	return `${primaryDocument.header.trimEnd()}
+
+[V4+ Styles]
+Format: ${ASS_STYLE_COLUMNS.join(', ')}
+${serializeAssStyle(defaultStyle)}
+
+[Events]
+Format: ${ASS_EVENT_COLUMNS.join(', ')}
+${events}
+`;
 }
 
 async function buildMergedSubtitleContent(
@@ -1656,14 +2010,18 @@ async function buildMergedSubtitleContent(
 	if (tracks.length === 0) {
 		return '';
 	}
+	if (tracks[0].format === 'ass') {
+		const documents = await Promise.all(
+			tracks.map(async (track) => parseAssDocument(await fetchSubtitleText(track, signal), track))
+		);
+		return serializeMergedAss(documents);
+	}
 	const parser = await loadCaptionsParserModule();
 	const documents = await Promise.all(
 		tracks.map((track) => parseSubtitleDocument(parser, track, signal))
 	);
 	const cues = mergeSubtitleCues(documents);
-	return tracks[0].format === 'ass'
-		? serializeMergedAss(cues, documents[0].content, tracks.length)
-		: serializeMergedVtt(cues);
+	return serializeMergedVtt(cues);
 }
 
 function getPublicAssetUrl(src: string) {
@@ -2562,7 +2920,18 @@ function SubtitleLayerCheckbox({
 	label: string;
 	onChange: (checked: boolean) => void;
 }) {
-	const initializedRef = useRef(false);
+	const readyForTriggerlessChangesRef = useRef(false);
+
+	useEffect(() => {
+		readyForTriggerlessChangesRef.current = false;
+		const timer = window.setTimeout(() => {
+			readyForTriggerlessChangesRef.current = true;
+		}, 0);
+		return () => {
+			window.clearTimeout(timer);
+			readyForTriggerlessChangesRef.current = false;
+		};
+	}, []);
 
 	return (
 		<DefaultMenuItem label={label}>
@@ -2570,14 +2939,9 @@ function SubtitleLayerCheckbox({
 				label={label}
 				checked={checked}
 				onChange={(nextChecked, trigger) => {
-					if (nextChecked === checked) {
+					if (nextChecked === checked || (!trigger && !readyForTriggerlessChangesRef.current)) {
 						return;
 					}
-					if (!initializedRef.current && !trigger) {
-						initializedRef.current = true;
-						return;
-					}
-					initializedRef.current = true;
 					onChange(nextChecked);
 				}}
 			/>
@@ -2690,6 +3054,28 @@ type CaptionsParserModule = {
 	parseText: (text: string, options?: { type?: 'ass' | 'vtt' }) => Promise<ParsedCaptionsResult>;
 };
 
+type AssParsedDocument = {
+	content: string;
+	eventColumns: string[];
+	events: AssParsedEvent[];
+	header: string;
+	playResX: number | null;
+	playResY: number | null;
+	styleColumns: string[];
+	styles: AssParsedStyle[];
+	track: SubtitleTrackInfo;
+};
+
+type AssParsedStyle = {
+	values: Record<string, string>;
+};
+
+type AssParsedEvent = {
+	endTime: number;
+	startTime: number;
+	values: Record<string, string>;
+};
+
 type MergedSubtitleTrackState = {
 	format: Extract<SubtitleTrackFormat, 'ass' | 'vtt'>;
 	objectUrl: string;
@@ -2699,6 +3085,80 @@ type MergedSubtitleTrackState = {
 };
 
 const JASSUB_SCRIPT_URL = '/scripts/jassub.es.js';
+const ASS_STYLE_COLUMNS = [
+	'Name',
+	'Fontname',
+	'Fontsize',
+	'PrimaryColour',
+	'SecondaryColour',
+	'OutlineColour',
+	'BackColour',
+	'Bold',
+	'Italic',
+	'Underline',
+	'StrikeOut',
+	'ScaleX',
+	'ScaleY',
+	'Spacing',
+	'Angle',
+	'BorderStyle',
+	'Outline',
+	'Shadow',
+	'Alignment',
+	'MarginL',
+	'MarginR',
+	'MarginV',
+	'Encoding'
+] as const;
+const ASS_EVENT_COLUMNS = [
+	'Layer',
+	'Start',
+	'End',
+	'Style',
+	'Name',
+	'MarginL',
+	'MarginR',
+	'MarginV',
+	'Effect',
+	'Text'
+] as const;
+const ASS_STYLE_DEFAULTS: Record<string, string> = {
+	name: 'Default',
+	fontname: 'Arial',
+	fontsize: '20',
+	primarycolour: '&H00FFFFFF',
+	secondarycolour: '&H000000FF',
+	outlinecolour: '&H00000000',
+	backcolour: '&H00000000',
+	bold: '0',
+	italic: '0',
+	underline: '0',
+	strikeout: '0',
+	scalex: '100',
+	scaley: '100',
+	spacing: '0',
+	angle: '0',
+	borderstyle: '1',
+	outline: '2',
+	shadow: '2',
+	alignment: '2',
+	marginl: '10',
+	marginr: '10',
+	marginv: '10',
+	encoding: '1'
+};
+const ASS_EVENT_DEFAULTS: Record<string, string> = {
+	layer: '0',
+	start: '0:00:00.00',
+	end: '0:00:00.00',
+	style: 'Default',
+	name: '',
+	marginl: '0',
+	marginr: '0',
+	marginv: '0',
+	effect: '',
+	text: ''
+};
 const EMPTY_ASS_TRACK = `[Script Info]
 ScriptType: v4.00+
 
@@ -3734,6 +4194,12 @@ export function Player({
 		[]
 	);
 	const updateSelectedSubtitleTrack = useCallback((track: SelectedSubtitleTrack | null) => {
+		const currentTrack = selectedSubtitleTrackRef.current;
+		const sameTrack =
+			currentTrack?.src === track?.src &&
+			currentTrack?.label === track?.label &&
+			currentTrack?.language === track?.language &&
+			currentTrack?.format === track?.format;
 		selectedSubtitleTrackRef.current = track;
 		setSelectedSubtitleTrackState((current) =>
 			current?.src === track?.src &&
@@ -3743,6 +4209,9 @@ export function Player({
 				? current
 				: track
 		);
+		if (sameTrack) {
+			return;
+		}
 		if (!track) {
 			setExtraSubtitleLayerSrcs((current) => (current.length === 0 ? current : []));
 			return;
@@ -3766,9 +4235,9 @@ export function Player({
 				selectedTrack
 			);
 			if (selectedTrack && isStackableSubtitleFormat(selectedTrack.format)) {
-				saveStoredSubtitleLayerLanguages(
+				saveStoredSubtitleLayerSelections(
 					selectedTrack.format,
-					getSubtitleLayerLanguages(next, subtitleTracksRef.current)
+					getSubtitleLayerTracks(next, subtitleTracksRef.current)
 				);
 			}
 			return areStringArraysEqual(next, current) ? current : next;
@@ -3781,8 +4250,16 @@ export function Player({
 			return;
 		}
 		setExtraSubtitleLayerSrcs((current) => {
+			const currentSanitized = sanitizeSubtitleLayerSelection(
+				current,
+				subtitleTracksRef.current,
+				selectedTrack
+			);
+			if (areStringArraysEqual(currentSanitized, current)) {
+				return current;
+			}
 			const next = getStoredSubtitleLayerSrcs(subtitleTracksRef.current, selectedTrack);
-			return areStringArraysEqual(next, current) ? current : next;
+			return areStringArraysEqual(next, currentSanitized) ? currentSanitized : next;
 		});
 	}, [subtitleTracks]);
 
