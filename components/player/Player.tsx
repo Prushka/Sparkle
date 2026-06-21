@@ -51,6 +51,7 @@ import {
 	IconChess,
 	IconHeadphones,
 	IconHeadphonesOff,
+	IconKeyboard,
 	IconMicrophone,
 	IconMicrophoneOff,
 	IconMoon,
@@ -111,6 +112,16 @@ import {
 	type ChessTabPhase,
 	type ChessTabSyncState,
 	type ChessSyncState,
+	type WordleBoardSyncState,
+	type WordleMode,
+	type WordlePhase,
+	type WordlePlayerSyncState,
+	type WordleResultSyncState,
+	type WordleRowSyncState,
+	type WordleSettingsSyncState,
+	type WordleTabSyncState,
+	type WordleSyncState,
+	type WordleTileStatus,
 	type YouTubeTabSyncState,
 	type YouTubeSyncState
 } from '@/lib/player/t';
@@ -163,6 +174,14 @@ type ChessFloatingTabProps = {
 	onNotification: (soundId: ChessNotificationSoundId, chess?: ChessSoundEffectContext) => void;
 };
 
+type WordleFloatingTabProps = {
+	roomId: string;
+	initialIndex?: number;
+	state: WordleTabSyncState;
+	currentPlayer: WordlePlayerSyncState | null;
+	onStateChange: (patch: Partial<WordleTabSyncState>) => void;
+};
+
 type CottageGameProps = {
 	backendBaseUrl: string;
 	roomId: string;
@@ -179,6 +198,11 @@ const YouTubeFloatingTab = dynamic<YouTubeFloatingTabProps>(
 
 const ChessFloatingTab = dynamic<ChessFloatingTabProps>(
 	() => import('@/components/player/ChessFloatingTab').then((module) => module.ChessFloatingTab),
+	{ ssr: false }
+);
+
+const WordleFloatingTab = dynamic<WordleFloatingTabProps>(
+	() => import('@/components/player/WordleFloatingTab').then((module) => module.WordleFloatingTab),
 	{ ssr: false }
 );
 
@@ -585,6 +609,18 @@ const CHESS_SQUARE_PATTERN = /^[a-h][1-8]$/;
 const MAX_YOUTUBE_TABS = 12;
 const MAX_CHESS_TABS = 64;
 const MAX_CHESS_MOVES = 600;
+const WORDLE_WORD_LENGTH = 5;
+const DEFAULT_WORDLE_TURNS = 5;
+const MAX_WORDLE_TURNS = 10;
+const MAX_WORDLE_TABS = 64;
+const DEFAULT_WORDLE_SETTINGS: WordleSettingsSyncState = {
+	mode: 'competitive',
+	turns: DEFAULT_WORDLE_TURNS
+};
+const DEFAULT_WORDLE_SYNC_STATE: WordleSyncState = {
+	tabs: [],
+	updatedAt: 0
+};
 const CONTROL_MESSAGE_TTL_MS = 8000;
 const MAX_CONTROL_MESSAGES = 40;
 
@@ -1001,6 +1037,262 @@ function saveStoredChessSyncState(storageKey: string, state: ChessSyncState) {
 
 function isMeaningfulChessState(state: ChessSyncState) {
 	return state.tabs.some((tab) => tab.open || tab.phase !== 'setup' || tab.moves.length > 0);
+}
+
+function createDefaultWordleRows(turns: number): WordleRowSyncState[] {
+	return Array.from({ length: turns }, () => ({
+		statuses: Array.from({ length: WORDLE_WORD_LENGTH }, () => 'empty' as WordleTileStatus),
+		typed: 0,
+		submitted: false
+	}));
+}
+
+function createDefaultWordleTab(
+	id: string,
+	player: WordlePlayerSyncState | null = null
+): WordleTabSyncState {
+	return {
+		id,
+		open: true,
+		phase: 'setup',
+		settings: DEFAULT_WORDLE_SETTINGS,
+		players: player ? [player] : [],
+		boards: [],
+		activeBoardId: '',
+		turnPlayerId: '',
+		startedAt: 0,
+		result: null,
+		updatedAt: 0
+	};
+}
+
+function normalizeWordlePlayer(
+	player: Partial<WordlePlayerSyncState> | null | undefined
+): WordlePlayerSyncState | null {
+	if (!player || typeof player.id !== 'string' || !CHESS_TAB_ID_PATTERN.test(player.id)) {
+		return null;
+	}
+	const name =
+		typeof player.name === 'string' && player.name.trim() ? player.name.trim() : 'Player';
+	const profileId =
+		typeof player.profileId === 'string' && CHESS_TAB_ID_PATTERN.test(player.profileId)
+			? player.profileId
+			: undefined;
+	return {
+		id: player.id,
+		name: name.slice(0, 80),
+		...(profileId ? { profileId } : {})
+	};
+}
+
+function normalizeWordleSettings(
+	settings: Partial<WordleSettingsSyncState> | null | undefined
+): WordleSettingsSyncState {
+	const mode: WordleMode = settings?.mode === 'coop' ? 'coop' : 'competitive';
+	const turns =
+		typeof settings?.turns === 'number' && Number.isFinite(settings.turns)
+			? Math.max(1, Math.min(MAX_WORDLE_TURNS, Math.round(settings.turns)))
+			: DEFAULT_WORDLE_TURNS;
+	return { mode, turns };
+}
+
+function normalizeWordleTileStatus(
+	status: unknown,
+	submitted: boolean,
+	typed: boolean
+): WordleTileStatus {
+	if (submitted) {
+		return status === 'correct' || status === 'present' || status === 'absent' ? status : 'absent';
+	}
+	return typed ? 'typed' : 'empty';
+}
+
+function normalizeWordleRows(
+	rows: Partial<WordleRowSyncState>[] | null | undefined,
+	turns: number
+): WordleRowSyncState[] {
+	const defaults = createDefaultWordleRows(turns);
+	return defaults.map((defaultRow, rowIndex) => {
+		const row = rows?.[rowIndex];
+		if (!row) {
+			return defaultRow;
+		}
+		const submitted = row.submitted === true;
+		const typed = submitted
+			? WORDLE_WORD_LENGTH
+			: typeof row.typed === 'number' && Number.isFinite(row.typed)
+				? Math.max(0, Math.min(WORDLE_WORD_LENGTH, Math.round(row.typed)))
+				: 0;
+		const playerId =
+			typeof row.playerId === 'string' && CHESS_TAB_ID_PATTERN.test(row.playerId)
+				? row.playerId
+				: undefined;
+		return {
+			statuses: Array.from({ length: WORDLE_WORD_LENGTH }, (_, index) =>
+				normalizeWordleTileStatus(row.statuses?.[index], submitted, index < typed)
+			),
+			typed,
+			submitted,
+			...(playerId ? { playerId } : {})
+		};
+	});
+}
+
+function normalizeWordleBoard(
+	board: Partial<WordleBoardSyncState> | null | undefined,
+	turns: number
+): WordleBoardSyncState | null {
+	if (!board || typeof board.id !== 'string' || !CHESS_TAB_ID_PATTERN.test(board.id)) {
+		return null;
+	}
+	const playerId =
+		typeof board.playerId === 'string' && CHESS_TAB_ID_PATTERN.test(board.playerId)
+			? board.playerId
+			: undefined;
+	const currentRow =
+		typeof board.currentRow === 'number' && Number.isFinite(board.currentRow)
+			? Math.max(0, Math.min(turns, Math.round(board.currentRow)))
+			: 0;
+	const finishedAt =
+		typeof board.finishedAt === 'number' && Number.isFinite(board.finishedAt)
+			? Math.max(0, board.finishedAt)
+			: 0;
+	return {
+		id: board.id,
+		...(playerId ? { playerId } : {}),
+		rows: normalizeWordleRows(board.rows, turns),
+		currentRow,
+		solved: board.solved === true,
+		finished: board.finished === true || board.solved === true || currentRow >= turns,
+		finishedAt
+	};
+}
+
+function normalizeWordleResult(
+	result: Partial<WordleResultSyncState> | null | undefined
+): WordleResultSyncState | null {
+	if (!result) {
+		return null;
+	}
+	const winnerIds = Array.isArray(result.winnerIds)
+		? result.winnerIds.filter(
+				(id): id is string => typeof id === 'string' && CHESS_TAB_ID_PATTERN.test(id)
+			)
+		: [];
+	const message = typeof result.message === 'string' ? result.message.slice(0, 160) : '';
+	return { winnerIds, message };
+}
+
+function normalizeWordleTabSyncState(
+	state: Partial<WordleTabSyncState> | null | undefined,
+	fallbackId = randomString(10)
+): WordleTabSyncState | null {
+	const id =
+		typeof state?.id === 'string' && CHESS_TAB_ID_PATTERN.test(state.id) ? state.id : fallbackId;
+	if (!CHESS_TAB_ID_PATTERN.test(id)) {
+		return null;
+	}
+	const settings = normalizeWordleSettings(state?.settings);
+	const phase: WordlePhase =
+		state?.phase === 'playing' || state?.phase === 'ended' ? state.phase : 'setup';
+	const players = Array.isArray(state?.players)
+		? state.players
+				.map((player) => normalizeWordlePlayer(player))
+				.filter((player): player is WordlePlayerSyncState => Boolean(player))
+		: [];
+	const seenPlayers = new Set<string>();
+	const uniquePlayers = players.filter((player) => {
+		if (seenPlayers.has(player.id)) {
+			return false;
+		}
+		seenPlayers.add(player.id);
+		return true;
+	});
+	const boards =
+		phase === 'setup'
+			? []
+			: Array.isArray(state?.boards)
+				? state.boards
+						.map((board) => normalizeWordleBoard(board, settings.turns))
+						.filter((board): board is WordleBoardSyncState => Boolean(board))
+				: [];
+	const activeBoardId =
+		typeof state?.activeBoardId === 'string' && CHESS_TAB_ID_PATTERN.test(state.activeBoardId)
+			? state.activeBoardId
+			: boards[0]?.id || '';
+	const turnPlayerId =
+		typeof state?.turnPlayerId === 'string' &&
+		CHESS_TAB_ID_PATTERN.test(state.turnPlayerId) &&
+		uniquePlayers.some((player) => player.id === state.turnPlayerId)
+			? state.turnPlayerId
+			: settings.mode === 'coop'
+				? uniquePlayers[0]?.id || ''
+				: '';
+	return {
+		id,
+		open: Boolean(state?.open),
+		phase,
+		settings,
+		players: uniquePlayers,
+		boards,
+		activeBoardId,
+		turnPlayerId,
+		startedAt:
+			typeof state?.startedAt === 'number' && Number.isFinite(state.startedAt)
+				? Math.max(0, state.startedAt)
+				: 0,
+		result: phase === 'ended' ? normalizeWordleResult(state?.result) : null,
+		updatedAt:
+			typeof state?.updatedAt === 'number' && Number.isFinite(state.updatedAt) ? state.updatedAt : 0
+	};
+}
+
+function normalizeWordleSyncState(state: Partial<WordleSyncState> | null | undefined) {
+	const rawTabs = Array.isArray(state?.tabs) ? state.tabs : [];
+	const tabs: WordleTabSyncState[] = [];
+	const seen = new Set<string>();
+	for (const rawTab of rawTabs) {
+		if (tabs.length >= MAX_WORDLE_TABS) {
+			break;
+		}
+		const tab = normalizeWordleTabSyncState(rawTab);
+		if (!tab || seen.has(tab.id)) {
+			continue;
+		}
+		seen.add(tab.id);
+		tabs.push(tab);
+	}
+	return {
+		tabs,
+		updatedAt:
+			typeof state?.updatedAt === 'number' && Number.isFinite(state.updatedAt) ? state.updatedAt : 0
+	};
+}
+
+function readStoredWordleSyncState(storageKey: string): WordleSyncState {
+	if (typeof window === 'undefined') {
+		return DEFAULT_WORDLE_SYNC_STATE;
+	}
+	try {
+		const stored = window.localStorage.getItem(storageKey);
+		if (!stored) {
+			return DEFAULT_WORDLE_SYNC_STATE;
+		}
+		return normalizeWordleSyncState(JSON.parse(stored) as Partial<WordleSyncState>);
+	} catch {
+		return DEFAULT_WORDLE_SYNC_STATE;
+	}
+}
+
+function saveStoredWordleSyncState(storageKey: string, state: WordleSyncState) {
+	if (typeof window === 'undefined' || !storageKey) {
+		return;
+	}
+	window.localStorage.setItem(storageKey, JSON.stringify(state));
+}
+
+function isMeaningfulWordleState(state: WordleSyncState) {
+	return state.tabs.some((tab) => tab.open || tab.phase !== 'setup' || tab.boards.length > 0);
 }
 
 function normalizePlayerVolume(volume: number): number {
@@ -3745,11 +4037,15 @@ export function Player({
 	const pendingYouTubeStateRef = useRef<YouTubeSyncState | null>(null);
 	const chessSocketRef = useRef<WebSocket | null>(null);
 	const pendingChessStateRef = useRef<ChessSyncState | null>(null);
+	const wordleSocketRef = useRef<WebSocket | null>(null);
+	const pendingWordleStateRef = useRef<WordleSyncState | null>(null);
 	const pendingMediaSwitchRef = useRef<string | null>(null);
 	const youtubeStateRef = useRef<YouTubeSyncState>(DEFAULT_YOUTUBE_SYNC_STATE);
 	const youtubeStateStorageKeyRef = useRef('');
 	const chessStateRef = useRef<ChessSyncState>(DEFAULT_CHESS_SYNC_STATE);
 	const chessStateStorageKeyRef = useRef('');
+	const wordleStateRef = useRef<WordleSyncState>(DEFAULT_WORDLE_SYNC_STATE);
+	const wordleStateStorageKeyRef = useRef('');
 	const connectRef = useRef<((_forceInteracted?: boolean) => void) | null>(null);
 	const roomMediaCheckRef = useRef<Promise<boolean> | null>(null);
 	const profileSyncedRef = useRef(false);
@@ -3889,6 +4185,10 @@ export function Player({
 	const chessSyncRoom = `chess:${chessRoomId}`;
 	const chessStateStorageKey = `sparkle:chess-sync-state:${chessRoomId}`;
 	const [chessState, setChessState] = useState<ChessSyncState>(DEFAULT_CHESS_SYNC_STATE);
+	const wordleRoomId = room;
+	const wordleSyncRoom = `wordle:${wordleRoomId}`;
+	const wordleStateStorageKey = `sparkle:wordle-sync-state:${wordleRoomId}`;
+	const [wordleState, setWordleState] = useState<WordleSyncState>(DEFAULT_WORDLE_SYNC_STATE);
 
 	useLayoutEffect(() => {
 		currentRoomRef.current = room;
@@ -3913,6 +4213,7 @@ export function Player({
 		};
 	}, [displayName, playerId, profileId]);
 	const currentCottagePlayer = currentChessPlayer;
+	const currentWordlePlayer = currentChessPlayer;
 	const videoSrc = useMemo<VideoSource | null>(() => {
 		const encodedCodecs = job.EncodedCodecs || [];
 		const autoCodec =
@@ -5031,6 +5332,208 @@ export function Player({
 		playerId,
 		sendChessSnapshot,
 		socketConnected
+	]);
+
+	const applyWordleState = useCallback((nextState: WordleSyncState) => {
+		const normalized = normalizeWordleSyncState(nextState);
+		wordleStateRef.current = normalized;
+		setWordleState(normalized);
+		saveStoredWordleSyncState(wordleStateStorageKeyRef.current, normalized);
+	}, []);
+
+	const sendWordleSnapshot = useCallback((nextState: WordleSyncState, queue = true) => {
+		const socket = wordleSocketRef.current;
+		if (queue) {
+			pendingWordleStateRef.current = nextState;
+		}
+		if (socket?.readyState !== WebSocket.OPEN) {
+			return;
+		}
+		socket.send(
+			JSON.stringify({
+				type: SyncTypes.WordleSync,
+				wordle: nextState
+			})
+		);
+		if (pendingWordleStateRef.current === nextState) {
+			pendingWordleStateRef.current = null;
+		}
+	}, []);
+
+	const updateWordleState = useCallback(
+		(tabId: string, patch: Partial<WordleTabSyncState>) => {
+			const timestamp = Date.now();
+			const current = wordleStateRef.current;
+			const existingTab =
+				current.tabs.find((tab) => tab.id === tabId) ??
+				createDefaultWordleTab(tabId, currentWordlePlayer);
+			const nextTab = normalizeWordleTabSyncState(
+				{
+					...existingTab,
+					...patch,
+					id: tabId,
+					updatedAt: timestamp
+				},
+				tabId
+			);
+			if (!nextTab) {
+				return;
+			}
+			const nextTabs =
+				patch.open === false
+					? [...current.tabs.filter((tab) => tab.id !== tabId), { ...nextTab, open: false }]
+					: [...current.tabs.filter((tab) => tab.id !== tabId), nextTab];
+			const nextState = normalizeWordleSyncState({
+				tabs: nextTabs.slice(-MAX_WORDLE_TABS),
+				updatedAt: timestamp
+			});
+			applyWordleState({
+				...nextState,
+				tabs: nextState.tabs.filter((tab) => tab.open)
+			});
+			sendWordleSnapshot(nextState);
+		},
+		[applyWordleState, currentWordlePlayer, sendWordleSnapshot]
+	);
+
+	const openNewWordleTab = useCallback(() => {
+		if (!socketConnected || !currentWordlePlayer) {
+			return;
+		}
+		const id = randomString(10);
+		updateWordleState(id, createDefaultWordleTab(id, currentWordlePlayer));
+	}, [currentWordlePlayer, socketConnected, updateWordleState]);
+
+	useEffect(() => {
+		wordleStateStorageKeyRef.current = wordleStateStorageKey;
+		const stored = readStoredWordleSyncState(wordleStateStorageKey);
+		const timer = window.setTimeout(() => {
+			applyWordleState(stored);
+			pendingWordleStateRef.current = null;
+		}, 0);
+		return () => window.clearTimeout(timer);
+	}, [applyWordleState, wordleStateStorageKey]);
+
+	useEffect(() => {
+		if (!playerId || !socketConnected) {
+			return;
+		}
+
+		let reconnectTimer: number | null = null;
+		let reconnectAttempt = 0;
+		let disposed = false;
+		const playerWordleId = `${playerId}-wordle`;
+		const socketUrl = getBackendWebSocketUrl(
+			backendBaseUrl,
+			`/sync/${encodeURIComponent(wordleSyncRoom)}/${encodeURIComponent(playerWordleId)}`
+		);
+
+		const clearReconnectTimer = () => {
+			if (reconnectTimer !== null) {
+				window.clearTimeout(reconnectTimer);
+				reconnectTimer = null;
+			}
+		};
+
+		const connectWordleSocket = () => {
+			if (disposed) {
+				return;
+			}
+			const existingSocket = wordleSocketRef.current;
+			if (
+				existingSocket &&
+				(existingSocket.readyState === WebSocket.CONNECTING ||
+					existingSocket.readyState === WebSocket.OPEN)
+			) {
+				return;
+			}
+			clearReconnectTimer();
+			const socket = new WebSocket(socketUrl);
+			wordleSocketRef.current = socket;
+
+			socket.onopen = () => {
+				if (wordleSocketRef.current !== socket) {
+					socket.close();
+					return;
+				}
+				reconnectAttempt = 0;
+				const pendingState = pendingWordleStateRef.current;
+				if (pendingState) {
+					socket.send(JSON.stringify({ type: SyncTypes.WordleSync, wordle: pendingState }));
+					pendingWordleStateRef.current = null;
+				}
+				socket.send(JSON.stringify({ type: SyncTypes.NewPlayer }));
+			};
+
+			socket.onmessage = (event: MessageEvent) => {
+				if (wordleSocketRef.current !== socket) {
+					return;
+				}
+				const payload: SendPayload = JSON.parse(event.data);
+				if (payload.type !== SyncTypes.WordleSync || !payload.wordle) {
+					return;
+				}
+				const incoming = normalizeWordleSyncState(payload.wordle);
+				const current = wordleStateRef.current;
+				if (incoming.updatedAt === 0 && isMeaningfulWordleState(current)) {
+					sendWordleSnapshot(current, false);
+					return;
+				}
+				if (incoming.updatedAt < current.updatedAt) {
+					return;
+				}
+				applyWordleState(incoming);
+			};
+
+			socket.onerror = () => {
+				if (wordleSocketRef.current === socket) {
+					socket.close();
+				}
+			};
+
+			socket.onclose = () => {
+				if (wordleSocketRef.current !== socket) {
+					return;
+				}
+				wordleSocketRef.current = null;
+				if (disposed) {
+					return;
+				}
+				const delay = Math.min(30000, 1000 * 2 ** Math.min(reconnectAttempt, 5));
+				reconnectAttempt += 1;
+				reconnectTimer = window.setTimeout(() => {
+					reconnectTimer = null;
+					connectWordleSocket();
+				}, delay);
+			};
+		};
+
+		connectWordleSocket();
+
+		return () => {
+			disposed = true;
+			clearReconnectTimer();
+			const socket = wordleSocketRef.current;
+			if (socket) {
+				socket.onopen = null;
+				socket.onmessage = null;
+				socket.onerror = null;
+				socket.onclose = null;
+				if (socket.readyState !== WebSocket.CLOSED) {
+					socket.close();
+				}
+			}
+			if (wordleSocketRef.current === socket) {
+				wordleSocketRef.current = null;
+			}
+		};
+	}, [
+		applyWordleState,
+		backendBaseUrl,
+		playerId,
+		sendWordleSnapshot,
+		socketConnected,
+		wordleSyncRoom
 	]);
 
 	const voice = useVoiceChat({
@@ -6533,7 +7036,7 @@ export function Player({
 	}
 
 	function handleJoinWatchRoom() {
-		if (socketCommunicating || !playerCanPlayRef.current) {
+		if (socketCommunicating || !playerElementRef.current) {
 			return;
 		}
 		startWatchRoomConnection();
@@ -6799,7 +7302,7 @@ export function Player({
 								socketCommunicating={socketCommunicating}
 								interacted={interacted}
 								exited={exited}
-								disabled={!playerCanPlay}
+								disabled={!playerEl}
 								className="border-white/35 !bg-white/10 px-5 py-5 !text-white shadow-xl shadow-black/20 backdrop-blur-md hover:!bg-white/15 hover:!text-white"
 								onClick={handleJoinWatchRoom}
 							/>
@@ -7173,6 +7676,25 @@ export function Player({
 										</Tooltip.Content>
 									</Tooltip.Root>
 								</Tooltip.Provider>
+								<Tooltip.Provider delayDuration={0}>
+									<Tooltip.Root>
+										<Tooltip.Trigger asChild>
+											<Button
+												type="button"
+												variant="outline"
+												className="h-auto min-h-9 gap-2 px-3 py-2"
+												disabled={!socketConnected || !currentWordlePlayer}
+												onClick={openNewWordleTab}
+											>
+												<IconKeyboard size={18} stroke={2} />
+												<span>Wordle</span>
+											</Button>
+										</Tooltip.Trigger>
+										<Tooltip.Content>
+											<p>Open synced Wordle game</p>
+										</Tooltip.Content>
+									</Tooltip.Root>
+								</Tooltip.Provider>
 							</div>
 						</div>
 					</CardHeader>
@@ -7214,6 +7736,21 @@ export function Player({
 								currentPlayer={currentChessPlayer}
 								onStateChange={(patch) => updateChessState(tab.id, patch)}
 								onNotification={sendChessNotification}
+							/>
+						))
+				: null}
+
+			{socketConnected
+				? wordleState.tabs
+						.filter((tab) => tab.open)
+						.map((tab, index) => (
+							<WordleFloatingTab
+								key={tab.id}
+								roomId={wordleRoomId}
+								initialIndex={index}
+								state={tab}
+								currentPlayer={currentWordlePlayer}
+								onStateChange={(patch) => updateWordleState(tab.id, patch)}
 							/>
 						))
 				: null}

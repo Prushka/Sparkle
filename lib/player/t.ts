@@ -195,6 +195,62 @@ export interface ChessSyncState {
 	updatedAt: number;
 }
 
+export type WordleMode = 'competitive' | 'coop';
+export type WordlePhase = 'setup' | 'playing' | 'ended';
+export type WordleTileStatus = 'empty' | 'typed' | 'absent' | 'present' | 'correct';
+
+export interface WordlePlayerSyncState {
+	id: string;
+	name: string;
+	profileId?: string;
+}
+
+export interface WordleSettingsSyncState {
+	mode: WordleMode;
+	turns: number;
+}
+
+export interface WordleRowSyncState {
+	statuses: WordleTileStatus[];
+	typed: number;
+	submitted: boolean;
+	playerId?: string;
+}
+
+export interface WordleBoardSyncState {
+	id: string;
+	playerId?: string;
+	rows: WordleRowSyncState[];
+	currentRow: number;
+	solved: boolean;
+	finished: boolean;
+	finishedAt: number;
+}
+
+export interface WordleResultSyncState {
+	winnerIds: string[];
+	message: string;
+}
+
+export interface WordleTabSyncState {
+	id: string;
+	open: boolean;
+	phase: WordlePhase;
+	settings: WordleSettingsSyncState;
+	players: WordlePlayerSyncState[];
+	boards: WordleBoardSyncState[];
+	activeBoardId: string;
+	turnPlayerId: string;
+	startedAt: number;
+	result: WordleResultSyncState | null;
+	updatedAt: number;
+}
+
+export interface WordleSyncState {
+	tabs: WordleTabSyncState[];
+	updatedAt: number;
+}
+
 export type CottagePlayerAction = 'idle' | 'walking' | 'sitting' | 'sleeping' | 'interacting';
 export type CottagePlayerFacing = 'up' | 'down' | 'left' | 'right';
 
@@ -291,6 +347,7 @@ export enum SyncTypes {
 	BroadcastSync = 'broadcast',
 	YouTubeSync = 'youtube',
 	ChessSync = 'chess',
+	WordleSync = 'wordle',
 	CottageSync = 'cottage',
 	AudioSwitch = 'audio',
 	CodecSwitch = 'codec',
@@ -325,6 +382,7 @@ export interface SendPayload {
 	moveToText?: string;
 	youtube?: YouTubeSyncState;
 	chess?: ChessSyncState;
+	wordle?: WordleSyncState;
 	cottage?: CottageSyncState;
 }
 

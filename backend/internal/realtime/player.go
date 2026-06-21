@@ -66,6 +66,9 @@ func (p *Player) sendRaw(payload []byte) bool {
 		return true
 	default:
 		log.Printf("closing slow websocket client %q", p.state.Id)
+		if p.conn == nil {
+			return false
+		}
 		_ = p.conn.Close()
 		return false
 	}

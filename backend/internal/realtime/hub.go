@@ -75,6 +75,7 @@ type Room struct {
 	state                     VideoState
 	youtube                   YouTubeState
 	chess                     ChessState
+	wordle                    WordleState
 	cottage                   CottageState
 	mu                        sync.RWMutex
 }
@@ -327,6 +328,7 @@ func newRoom(id string, mediaID string) *Room {
 		state:            defaultVideoState(),
 		youtube:          defaultYouTubeState(),
 		chess:            defaultChessState(),
+		wordle:           defaultWordleState(),
 		cottage:          defaultCottageState(),
 	}
 	if mediaID != "" {
@@ -578,6 +580,7 @@ func (r *Room) remove(player *Player) (PlayerSnapshot, bool) {
 		r.state = defaultVideoState()
 		r.youtube = defaultYouTubeState()
 		r.chess = defaultChessState()
+		r.wordle = defaultWordleState()
 		r.cottage = defaultCottageState()
 		r.lastSeek = time.Time{}
 		r.idleSince = time.Now()
@@ -624,6 +627,7 @@ func (r *Room) applyMediaIDLocked(mediaID string, timestamp int64) {
 	r.state = defaultVideoState()
 	r.youtube = defaultYouTubeState()
 	r.chess = defaultChessState()
+	r.wordle = defaultWordleState()
 	r.cottage = defaultCottageState()
 	r.lastSeek = time.Time{}
 	r.lastPlayersSignature = ""
@@ -689,6 +693,8 @@ func (r *Room) handlePayload(current *Player, payload ClientPayload) {
 		r.syncYouTube(current, payload.YouTube)
 	case ChessSync:
 		r.syncChess(current, payload.Chess)
+	case WordleSync:
+		r.syncWordle(current, payload.Wordle)
 	case CottageSync:
 		r.syncCottage(current, payload.Cottage)
 	case ChatSync:
@@ -1399,6 +1405,451 @@ func sanitizeChessDrawOffer(offer *ChessDrawOfferState) *ChessDrawOfferState {
 	return &ChessDrawOfferState{OfferedBy: *offeredBy, OfferedAt: offeredAt}
 }
 
+func (r *Room) syncWordle(sender *Player, incoming *WordleState) {
+	now := time.Now()
+	timestamp := now.UnixMilli()
+	state, ok := sanitizeWordleState(incoming, timestamp)
+	if !ok {
+		return
+	}
+
+	var firedBy PlayerSnapshot
+	var targets []*Player
+	var shouldBroadcast bool
+
+	r.mu.Lock()
+	if r.players[sender.state.Id] != sender {
+		r.mu.Unlock()
+		return
+	}
+	sender.state.LastSeen = now.Unix()
+	next, changed := mergeWordleState(r.wordle, state, wordleSenderPlayerID(sender), timestamp)
+	if changed {
+		r.wordle = next
+		firedBy = sender.state
+		targets = r.playersLocked()
+		shouldBroadcast = true
+	}
+	r.mu.Unlock()
+
+	if !shouldBroadcast {
+		return
+	}
+	payload := SendPayload{Type: WordleSync, Wordle: &next, FiredBy: &firedBy, Timestamp: timestamp}
+	sendPayloadToPlayers(targets, payload)
+}
+
+func wordleSenderPlayerID(sender *Player) string {
+	id := strings.TrimSpace(sender.state.Id)
+	return strings.TrimSuffix(id, "-wordle")
+}
+
+func mergeWordleState(previous WordleState, incoming WordleState, senderID string, timestamp int64) (WordleState, bool) {
+	next := WordleState{Tabs: make([]WordleTabState, 0, len(previous.Tabs)+len(incoming.Tabs)), UpdatedAt: previous.UpdatedAt}
+	incomingByID := make(map[string]WordleTabState, len(incoming.Tabs))
+	for _, tab := range incoming.Tabs {
+		incomingByID[tab.ID] = tab
+	}
+
+	seen := make(map[string]bool, len(incoming.Tabs))
+	changed := false
+	for _, previousTab := range previous.Tabs {
+		incomingTab, ok := incomingByID[previousTab.ID]
+		if !ok {
+			next.Tabs = append(next.Tabs, previousTab)
+			continue
+		}
+		seen[previousTab.ID] = true
+
+		authorized := wordleTabUpdateAuthorized(previousTab, incomingTab, senderID)
+		if !authorized {
+			next.Tabs = append(next.Tabs, previousTab)
+			continue
+		}
+		if !incomingTab.Open {
+			changed = true
+			continue
+		}
+		incomingTab.UpdatedAt = timestamp
+		if !reflect.DeepEqual(previousTab, incomingTab) {
+			changed = true
+		}
+		next.Tabs = append(next.Tabs, incomingTab)
+	}
+
+	for _, incomingTab := range incoming.Tabs {
+		if seen[incomingTab.ID] || !incomingTab.Open {
+			continue
+		}
+		if !wordleTabHasPlayer(incomingTab, senderID) {
+			continue
+		}
+		incomingTab.UpdatedAt = timestamp
+		next.Tabs = append(next.Tabs, incomingTab)
+		changed = true
+	}
+
+	if len(next.Tabs) > maxWordleTabs {
+		next.Tabs = next.Tabs[len(next.Tabs)-maxWordleTabs:]
+	}
+	if changed {
+		next.UpdatedAt = timestamp
+	}
+	if !changed && previous.UpdatedAt != next.UpdatedAt {
+		next.UpdatedAt = previous.UpdatedAt
+	}
+	return next, changed
+}
+
+func wordleTabUpdateAuthorized(previous WordleTabState, next WordleTabState, senderID string) bool {
+	if senderID == "" {
+		return false
+	}
+	wasParticipant := wordleTabHasPlayer(previous, senderID)
+	if !next.Open {
+		return wasParticipant
+	}
+	if wasParticipant {
+		return true
+	}
+	return wordleJoinOnly(previous, next, senderID)
+}
+
+func wordleJoinOnly(previous WordleTabState, next WordleTabState, senderID string) bool {
+	if !wordleTabHasPlayer(next, senderID) {
+		return false
+	}
+	if previous.Open != next.Open ||
+		previous.Phase != next.Phase ||
+		previous.ActiveBoardID != next.ActiveBoardID ||
+		previous.TurnPlayerID != next.TurnPlayerID ||
+		previous.StartedAt != next.StartedAt ||
+		!reflect.DeepEqual(previous.Settings, next.Settings) ||
+		!reflect.DeepEqual(previous.Result, next.Result) {
+		return false
+	}
+	if !wordlePlayersAddOnlySender(previous.Players, next.Players, senderID) {
+		return false
+	}
+	return wordleBoardsJoinOnly(previous.Boards, next.Boards, senderID)
+}
+
+func wordlePlayersAddOnlySender(previous []WordlePlayerState, next []WordlePlayerState, senderID string) bool {
+	if len(next) != len(previous)+1 {
+		return false
+	}
+	previousByID := make(map[string]WordlePlayerState, len(previous))
+	for _, player := range previous {
+		previousByID[player.ID] = player
+	}
+	foundSender := false
+	for _, player := range next {
+		if player.ID == senderID {
+			if foundSender {
+				return false
+			}
+			foundSender = true
+			continue
+		}
+		previousPlayer, ok := previousByID[player.ID]
+		if !ok || !reflect.DeepEqual(previousPlayer, player) {
+			return false
+		}
+	}
+	return foundSender
+}
+
+func wordleBoardsJoinOnly(previous []WordleBoardState, next []WordleBoardState, senderID string) bool {
+	previousByID := make(map[string]WordleBoardState, len(previous))
+	for _, board := range previous {
+		previousByID[board.ID] = board
+	}
+	seenPrevious := make(map[string]bool, len(previous))
+	usedSenderBoard := false
+	for _, board := range next {
+		previousBoard, ok := previousByID[board.ID]
+		if ok {
+			if !reflect.DeepEqual(previousBoard, board) {
+				return false
+			}
+			seenPrevious[board.ID] = true
+			continue
+		}
+		if board.PlayerID != senderID || usedSenderBoard {
+			return false
+		}
+		usedSenderBoard = true
+	}
+	return len(seenPrevious) == len(previous)
+}
+
+func wordleTabHasPlayer(tab WordleTabState, playerID string) bool {
+	for _, player := range tab.Players {
+		if player.ID == playerID {
+			return true
+		}
+	}
+	return false
+}
+
+func sanitizeWordleState(incoming *WordleState, timestamp int64) (WordleState, bool) {
+	if incoming == nil {
+		return WordleState{}, false
+	}
+
+	state := defaultWordleState()
+	seen := make(map[string]bool, len(incoming.Tabs))
+	for _, rawTab := range incoming.Tabs {
+		if len(state.Tabs) >= maxWordleTabs {
+			break
+		}
+		tab, ok := sanitizeWordleTab(rawTab, timestamp)
+		if !ok || seen[tab.ID] {
+			continue
+		}
+		seen[tab.ID] = true
+		state.Tabs = append(state.Tabs, tab)
+	}
+	if len(incoming.Tabs) > 0 && len(state.Tabs) == 0 {
+		return WordleState{}, false
+	}
+	state.UpdatedAt = timestamp
+	return state, true
+}
+
+func sanitizeWordleTab(rawTab WordleTabState, timestamp int64) (WordleTabState, bool) {
+	id := strings.TrimSpace(rawTab.ID)
+	if !safeID.MatchString(id) {
+		return WordleTabState{}, false
+	}
+	settings := sanitizeWordleSettings(rawTab.Settings)
+	phase := sanitizeWordlePhase(rawTab.Phase)
+	tab := WordleTabState{
+		ID:        id,
+		Open:      rawTab.Open,
+		Phase:     phase,
+		Settings:  settings,
+		Players:   sanitizeWordlePlayers(rawTab.Players),
+		StartedAt: rawTab.StartedAt,
+		Result:    sanitizeWordleResult(rawTab.Result),
+		UpdatedAt: timestamp,
+	}
+	if rawTab.UpdatedAt > 0 {
+		tab.UpdatedAt = rawTab.UpdatedAt
+	}
+	if tab.StartedAt < 0 {
+		tab.StartedAt = 0
+	}
+
+	if phase == "setup" {
+		tab.Result = nil
+		return tab, true
+	}
+
+	tab.Boards = sanitizeWordleBoards(rawTab.Boards, settings.Turns, timestamp)
+	activeBoardID := strings.TrimSpace(rawTab.ActiveBoardID)
+	if safeID.MatchString(activeBoardID) {
+		tab.ActiveBoardID = activeBoardID
+	}
+	if tab.ActiveBoardID == "" && len(tab.Boards) > 0 {
+		tab.ActiveBoardID = tab.Boards[0].ID
+	}
+	turnPlayerID := strings.TrimSpace(rawTab.TurnPlayerID)
+	if safeID.MatchString(turnPlayerID) && wordlePlayersContain(tab.Players, turnPlayerID) {
+		tab.TurnPlayerID = turnPlayerID
+	}
+	if tab.TurnPlayerID == "" && settings.Mode == "coop" && len(tab.Players) > 0 {
+		tab.TurnPlayerID = tab.Players[0].ID
+	}
+	if phase == "playing" {
+		tab.Result = nil
+	}
+	return tab, true
+}
+
+func sanitizeWordlePhase(value string) string {
+	switch strings.TrimSpace(value) {
+	case "playing", "ended":
+		return strings.TrimSpace(value)
+	default:
+		return "setup"
+	}
+}
+
+func sanitizeWordleSettings(settings WordleSettingsState) WordleSettingsState {
+	mode := strings.TrimSpace(settings.Mode)
+	if mode != "coop" {
+		mode = "competitive"
+	}
+	turns := settings.Turns
+	if turns <= 0 {
+		turns = 5
+	}
+	if turns > maxWordleTurns {
+		turns = maxWordleTurns
+	}
+	return WordleSettingsState{Mode: mode, Turns: turns}
+}
+
+func sanitizeWordlePlayers(players []WordlePlayerState) []WordlePlayerState {
+	if len(players) == 0 {
+		return nil
+	}
+	sanitized := make([]WordlePlayerState, 0, len(players))
+	seen := make(map[string]bool, len(players))
+	for _, player := range players {
+		id := strings.TrimSpace(player.ID)
+		if !safeID.MatchString(id) || seen[id] {
+			continue
+		}
+		seen[id] = true
+		name := trimRunes(strings.TrimSpace(player.Name), 80)
+		if name == "" {
+			name = "Player"
+		}
+		profileID := strings.TrimSpace(player.ProfileID)
+		if profileID != "" && !safeID.MatchString(profileID) {
+			profileID = ""
+		}
+		sanitized = append(sanitized, WordlePlayerState{ID: id, Name: name, ProfileID: profileID})
+	}
+	return sanitized
+}
+
+func sanitizeWordleBoards(boards []WordleBoardState, turns int, timestamp int64) []WordleBoardState {
+	if len(boards) == 0 {
+		return nil
+	}
+	sanitized := make([]WordleBoardState, 0, len(boards))
+	seen := make(map[string]bool, len(boards))
+	for _, raw := range boards {
+		id := strings.TrimSpace(raw.ID)
+		if !safeID.MatchString(id) || seen[id] {
+			continue
+		}
+		seen[id] = true
+		playerID := strings.TrimSpace(raw.PlayerID)
+		if playerID != "" && !safeID.MatchString(playerID) {
+			playerID = ""
+		}
+		currentRow := raw.CurrentRow
+		if currentRow < 0 {
+			currentRow = 0
+		}
+		if currentRow > turns {
+			currentRow = turns
+		}
+		finishedAt := raw.FinishedAt
+		if finishedAt < 0 {
+			finishedAt = 0
+		}
+		finished := raw.Finished || raw.Solved || currentRow >= turns
+		if finished && finishedAt == 0 {
+			finishedAt = timestamp
+		}
+		sanitized = append(sanitized, WordleBoardState{
+			ID:         id,
+			PlayerID:   playerID,
+			Rows:       sanitizeWordleRows(raw.Rows, turns),
+			CurrentRow: currentRow,
+			Solved:     raw.Solved,
+			Finished:   finished,
+			FinishedAt: finishedAt,
+		})
+	}
+	return sanitized
+}
+
+func sanitizeWordleRows(rows []WordleRowState, turns int) []WordleRowState {
+	sanitized := make([]WordleRowState, turns)
+	for i := range sanitized {
+		if i >= len(rows) {
+			sanitized[i] = defaultWordleRow()
+			continue
+		}
+		raw := rows[i]
+		typed := raw.Typed
+		if typed < 0 {
+			typed = 0
+		}
+		if typed > 5 {
+			typed = 5
+		}
+		submitted := raw.Submitted
+		if submitted {
+			typed = 5
+		}
+		playerID := strings.TrimSpace(raw.PlayerID)
+		if playerID != "" && !safeID.MatchString(playerID) {
+			playerID = ""
+		}
+		statuses := make([]string, 5)
+		for index := range statuses {
+			rawStatus := ""
+			if index < len(raw.Statuses) {
+				rawStatus = raw.Statuses[index]
+			}
+			statuses[index] = sanitizeWordleTileStatus(rawStatus, submitted, index < typed)
+		}
+		sanitized[i] = WordleRowState{
+			Statuses:  statuses,
+			Typed:     typed,
+			Submitted: submitted,
+			PlayerID:  playerID,
+		}
+	}
+	return sanitized
+}
+
+func defaultWordleRow() WordleRowState {
+	return WordleRowState{
+		Statuses: []string{"empty", "empty", "empty", "empty", "empty"},
+	}
+}
+
+func sanitizeWordleTileStatus(value string, submitted bool, typed bool) string {
+	value = strings.TrimSpace(value)
+	if submitted {
+		switch value {
+		case "absent", "present", "correct":
+			return value
+		default:
+			return "absent"
+		}
+	}
+	if typed {
+		return "typed"
+	}
+	return "empty"
+}
+
+func sanitizeWordleResult(result *WordleResultState) *WordleResultState {
+	if result == nil {
+		return nil
+	}
+	winners := make([]string, 0, len(result.WinnerIDs))
+	seen := make(map[string]bool, len(result.WinnerIDs))
+	for _, rawID := range result.WinnerIDs {
+		id := strings.TrimSpace(rawID)
+		if !safeID.MatchString(id) || seen[id] {
+			continue
+		}
+		seen[id] = true
+		winners = append(winners, id)
+	}
+	message := trimRunes(strings.TrimSpace(result.Message), 160)
+	return &WordleResultState{WinnerIDs: winners, Message: message}
+}
+
+func wordlePlayersContain(players []WordlePlayerState, playerID string) bool {
+	for _, player := range players {
+		if player.ID == playerID {
+			return true
+		}
+	}
+	return false
+}
+
 func (r *Room) syncCottage(sender *Player, incoming *CottageState) {
 	now := time.Now()
 	timestamp := now.UnixMilli()
@@ -1974,6 +2425,7 @@ func (r *Room) newPlayer(sender *Player) {
 	var roomPaused bool
 	var youtube YouTubeState
 	var chess ChessState
+	var wordle WordleState
 	var cottage CottageState
 	var chats []Chat
 	var joinMessage string
@@ -1995,6 +2447,7 @@ func (r *Room) newPlayer(sender *Player) {
 	sender.state.Paused = roomPaused
 	youtube = r.youtube
 	chess = r.chess
+	wordle = r.wordle
 	cottage = cloneCottageState(r.cottage)
 	chats = append([]Chat(nil), r.chats...)
 	if sender.joinMessagePending {
@@ -2009,6 +2462,7 @@ func (r *Room) newPlayer(sender *Player) {
 	sender.sendJSON(SendPayload{Type: PauseSync, Paused: &roomPaused, Timestamp: time.Now().UnixMilli()})
 	sender.sendJSON(SendPayload{Type: YouTubeSync, YouTube: &youtube, Timestamp: time.Now().UnixMilli()})
 	sender.sendJSON(SendPayload{Type: ChessSync, Chess: &chess, Timestamp: time.Now().UnixMilli()})
+	sender.sendJSON(SendPayload{Type: WordleSync, Wordle: &wordle, Timestamp: time.Now().UnixMilli()})
 	if len(cottage.Players) > 0 {
 		sender.sendJSON(SendPayload{Type: CottageSync, Cottage: &cottage, Timestamp: time.Now().UnixMilli()})
 	}

@@ -306,6 +306,163 @@ func TestSanitizeChessSettingsDefaultsInvalidPieceSet(t *testing.T) {
 	}
 }
 
+func TestSanitizeWordleState(t *testing.T) {
+	got, ok := sanitizeWordleState(&WordleState{
+		Tabs: []WordleTabState{{
+			ID:    "wordle_1",
+			Open:  true,
+			Phase: "playing",
+			Settings: WordleSettingsState{
+				Mode:  "coop",
+				Turns: 5,
+			},
+			Players: []WordlePlayerState{
+				{ID: "alice", Name: "Alice"},
+				{ID: "bob", Name: "Bob"},
+			},
+			Boards: []WordleBoardState{{
+				ID: "board_1",
+				Rows: []WordleRowState{{
+					Statuses:  []string{"correct", "present", "absent", "typed", "empty"},
+					Typed:     5,
+					Submitted: true,
+				}},
+				CurrentRow: 1,
+			}},
+			ActiveBoardID: "board_1",
+			TurnPlayerID:  "bob",
+		}},
+	}, 1234)
+	if !ok {
+		t.Fatal("sanitizeWordleState() rejected valid state")
+	}
+	if len(got.Tabs) != 1 {
+		t.Fatalf("sanitizeWordleState() tab count = %d", len(got.Tabs))
+	}
+	tab := got.Tabs[0]
+	if !tab.Open || tab.Phase != "playing" || tab.Settings.Mode != "coop" || tab.Settings.Turns != 5 {
+		t.Fatalf("sanitizeWordleState() tab = %#v", tab)
+	}
+	if len(tab.Players) != 2 || tab.TurnPlayerID != "bob" || tab.ActiveBoardID != "board_1" {
+		t.Fatalf("sanitizeWordleState() players/turn = %#v", tab)
+	}
+	if len(tab.Boards) != 1 || len(tab.Boards[0].Rows) != 5 {
+		t.Fatalf("sanitizeWordleState() boards = %#v", tab.Boards)
+	}
+	row := tab.Boards[0].Rows[0]
+	if row.Statuses[0] != "correct" || row.Statuses[1] != "present" || row.Statuses[3] != "absent" {
+		t.Fatalf("sanitizeWordleState() row statuses = %#v", row.Statuses)
+	}
+	if tab.UpdatedAt != 1234 || got.UpdatedAt != 1234 {
+		t.Fatalf("sanitizeWordleState() timestamps = %#v", got)
+	}
+}
+
+func TestSanitizeWordleStateDoesNotSerializeGuessLetters(t *testing.T) {
+	got, ok := sanitizeWordleState(&WordleState{
+		Tabs: []WordleTabState{{
+			ID:       "wordle_1",
+			Open:     true,
+			Phase:    "playing",
+			Settings: WordleSettingsState{Mode: "competitive", Turns: 5},
+			Players:  []WordlePlayerState{{ID: "alice", Name: "Alice"}},
+			Boards: []WordleBoardState{{
+				ID:       "board_1",
+				PlayerID: "alice",
+				Rows: []WordleRowState{{
+					Statuses:  []string{"correct", "present", "absent", "absent", "correct"},
+					Typed:     5,
+					Submitted: true,
+					PlayerID:  "alice",
+				}},
+				CurrentRow: 1,
+			}},
+		}},
+	}, 1234)
+	if !ok {
+		t.Fatal("sanitizeWordleState() rejected valid state")
+	}
+	encoded, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("marshal wordle state: %v", err)
+	}
+	for _, forbidden := range []string{"CRANE", "crane", "guess", "letters", "answerIndex"} {
+		if strings.Contains(string(encoded), forbidden) {
+			t.Fatalf("wordle state leaked %q in JSON: %s", forbidden, encoded)
+		}
+	}
+}
+
+func TestSyncWordleRejectsNonParticipantSettingsChange(t *testing.T) {
+	room := newRoom("wordle:room", "")
+	sender := testPlayer("mallory-wordle", "Mallory", 4)
+	room.players[sender.state.Id] = sender
+	room.wordle = WordleState{
+		Tabs: []WordleTabState{{
+			ID:       "wordle_1",
+			Open:     true,
+			Phase:    "setup",
+			Settings: WordleSettingsState{Mode: "competitive", Turns: 5},
+			Players:  []WordlePlayerState{{ID: "alice", Name: "Alice"}},
+		}},
+		UpdatedAt: 100,
+	}
+
+	room.syncWordle(sender, &WordleState{
+		Tabs: []WordleTabState{{
+			ID:       "wordle_1",
+			Open:     true,
+			Phase:    "setup",
+			Settings: WordleSettingsState{Mode: "coop", Turns: 9},
+			Players:  []WordlePlayerState{{ID: "alice", Name: "Alice"}},
+		}},
+	})
+
+	if room.wordle.Tabs[0].Settings.Mode != "competitive" || room.wordle.Tabs[0].Settings.Turns != 5 {
+		t.Fatalf("unauthorized wordle update applied = %#v", room.wordle.Tabs[0].Settings)
+	}
+	assertNoQueuedPayload(t, sender)
+}
+
+func TestSyncWordleAllowsJoinOnlyForNonParticipant(t *testing.T) {
+	room := newRoom("wordle:room", "")
+	sender := testPlayer("bob-wordle", "Bob", 4)
+	receiver := testPlayer("alice-wordle", "Alice", 4)
+	room.players[sender.state.Id] = sender
+	room.players[receiver.state.Id] = receiver
+	room.wordle = WordleState{
+		Tabs: []WordleTabState{{
+			ID:       "wordle_1",
+			Open:     true,
+			Phase:    "setup",
+			Settings: WordleSettingsState{Mode: "competitive", Turns: 5},
+			Players:  []WordlePlayerState{{ID: "alice", Name: "Alice"}},
+		}},
+		UpdatedAt: 100,
+	}
+
+	room.syncWordle(sender, &WordleState{
+		Tabs: []WordleTabState{{
+			ID:       "wordle_1",
+			Open:     true,
+			Phase:    "setup",
+			Settings: WordleSettingsState{Mode: "competitive", Turns: 5},
+			Players: []WordlePlayerState{
+				{ID: "alice", Name: "Alice"},
+				{ID: "bob", Name: "Bob"},
+			},
+		}},
+	})
+
+	if len(room.wordle.Tabs[0].Players) != 2 {
+		t.Fatalf("join-only wordle update not applied = %#v", room.wordle.Tabs[0].Players)
+	}
+	payload := readQueuedPayload(t, receiver)
+	if payload.Type != WordleSync || payload.Wordle == nil || len(payload.Wordle.Tabs[0].Players) != 2 {
+		t.Fatalf("wordle payload = %#v", payload)
+	}
+}
+
 func TestSanitizeCottageState(t *testing.T) {
 	targetX := 250.0
 	targetY := 999.0
@@ -453,7 +610,7 @@ func TestNewSoloPlayerStartsPlayback(t *testing.T) {
 		youtube: defaultYouTubeState(),
 	}
 	player := &Player{
-		send: make(chan []byte, 4),
+		send: make(chan []byte, 8),
 		state: PlayerSnapshot{
 			VideoState:  defaultVideoState(),
 			PlayerState: PlayerState{Id: "joining"},
@@ -489,14 +646,14 @@ func TestNewPlayerAdoptsExistingRoomPause(t *testing.T) {
 		youtube: defaultYouTubeState(),
 	}
 	existing := &Player{
-		send: make(chan []byte, 4),
+		send: make(chan []byte, 8),
 		state: PlayerSnapshot{
 			VideoState:  VideoState{Time: 42, Paused: true},
 			PlayerState: PlayerState{Id: "existing"},
 		},
 	}
 	joining := &Player{
-		send: make(chan []byte, 4),
+		send: make(chan []byte, 8),
 		state: PlayerSnapshot{
 			VideoState:  defaultVideoState(),
 			PlayerState: PlayerState{Id: "joining"},
@@ -773,12 +930,13 @@ func TestExitSyncDoesNotKickSelf(t *testing.T) {
 
 func TestNewPlayerBroadcastsJoinSystemMessage(t *testing.T) {
 	room := newRoom("room", "")
-	joining := testPlayer("joining", "Joining", 5)
+	joining := testPlayer("joining", "Joining", 8)
 	room.players[joining.state.Id] = joining
 	joining.joinMessagePending = true
 
 	room.newPlayer(joining)
 
+	_ = readQueuedPayload(t, joining)
 	_ = readQueuedPayload(t, joining)
 	_ = readQueuedPayload(t, joining)
 	_ = readQueuedPayload(t, joining)
@@ -826,11 +984,12 @@ func TestNewPlayerReceivesFullChatHistory(t *testing.T) {
 			Uid:       "existing",
 		}},
 	}
-	joining := testPlayer("joining", "Joining", 5)
+	joining := testPlayer("joining", "Joining", 8)
 	room.players[joining.state.Id] = joining
 
 	room.newPlayer(joining)
 
+	_ = readQueuedPayload(t, joining)
 	_ = readQueuedPayload(t, joining)
 	_ = readQueuedPayload(t, joining)
 	_ = readQueuedPayload(t, joining)

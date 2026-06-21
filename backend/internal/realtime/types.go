@@ -15,6 +15,7 @@ const (
 	SoundEffectSync   = "soundEffect"
 	YouTubeSync       = "youtube"
 	ChessSync         = "chess"
+	WordleSync        = "wordle"
 	CottageSync       = "cottage"
 	ExitSync          = "exit"
 	CodecSwitch       = "codec"
@@ -37,6 +38,8 @@ const (
 	maxYouTubeTabs    = 12
 	maxChessTabs      = 64
 	maxChessMoves     = 600
+	maxWordleTabs     = 64
+	maxWordleTurns    = 10
 	maxCottagePlayers = 80
 )
 
@@ -140,6 +143,58 @@ type ChessState struct {
 	UpdatedAt int64           `json:"updatedAt"`
 }
 
+type WordlePlayerState struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	ProfileID string `json:"profileId,omitempty"`
+}
+
+type WordleSettingsState struct {
+	Mode  string `json:"mode"`
+	Turns int    `json:"turns"`
+}
+
+type WordleRowState struct {
+	Statuses  []string `json:"statuses"`
+	Typed     int      `json:"typed"`
+	Submitted bool     `json:"submitted"`
+	PlayerID  string   `json:"playerId,omitempty"`
+}
+
+type WordleBoardState struct {
+	ID         string           `json:"id"`
+	PlayerID   string           `json:"playerId,omitempty"`
+	Rows       []WordleRowState `json:"rows,omitempty"`
+	CurrentRow int              `json:"currentRow"`
+	Solved     bool             `json:"solved"`
+	Finished   bool             `json:"finished"`
+	FinishedAt int64            `json:"finishedAt"`
+}
+
+type WordleResultState struct {
+	WinnerIDs []string `json:"winnerIds,omitempty"`
+	Message   string   `json:"message"`
+}
+
+type WordleTabState struct {
+	ID            string              `json:"id"`
+	Open          bool                `json:"open"`
+	Phase         string              `json:"phase"`
+	Settings      WordleSettingsState `json:"settings"`
+	Players       []WordlePlayerState `json:"players,omitempty"`
+	Boards        []WordleBoardState  `json:"boards,omitempty"`
+	ActiveBoardID string              `json:"activeBoardId"`
+	TurnPlayerID  string              `json:"turnPlayerId"`
+	StartedAt     int64               `json:"startedAt"`
+	Result        *WordleResultState  `json:"result"`
+	UpdatedAt     int64               `json:"updatedAt"`
+}
+
+type WordleState struct {
+	Tabs      []WordleTabState `json:"tabs,omitempty"`
+	UpdatedAt int64            `json:"updatedAt"`
+}
+
 type CottagePlayerState struct {
 	ID            string   `json:"id"`
 	Name          string   `json:"name"`
@@ -232,6 +287,7 @@ type ClientPayload struct {
 	Subtitle    string         `json:"subtitle,omitempty"`
 	YouTube     *YouTubeState  `json:"youtube,omitempty"`
 	Chess       *ChessState    `json:"chess,omitempty"`
+	Wordle      *WordleState   `json:"wordle,omitempty"`
 	Cottage     *CottageState  `json:"cottage,omitempty"`
 }
 
@@ -249,6 +305,7 @@ type SendPayload struct {
 	Broadcast      map[string]any   `json:"broadcast,omitempty"`
 	YouTube        *YouTubeState    `json:"youtube,omitempty"`
 	Chess          *ChessState      `json:"chess,omitempty"`
+	Wordle         *WordleState     `json:"wordle,omitempty"`
 	Cottage        *CottageState    `json:"cottage,omitempty"`
 }
 
@@ -262,6 +319,10 @@ func defaultYouTubeState() YouTubeState {
 
 func defaultChessState() ChessState {
 	return ChessState{}
+}
+
+func defaultWordleState() WordleState {
+	return WordleState{}
 }
 
 func defaultCottageState() CottageState {
