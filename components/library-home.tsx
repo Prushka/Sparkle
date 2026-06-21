@@ -8,6 +8,7 @@ import {
 	IconClock,
 	IconDeviceTv,
 	IconLoader2,
+	IconMoon,
 	IconMovie,
 	IconMovieOff,
 	IconPhoto,
@@ -16,6 +17,7 @@ import {
 	IconSearch,
 	IconSortDescending,
 	IconStack2,
+	IconSun,
 	IconVideo,
 	IconX
 } from '@tabler/icons-react';
@@ -32,10 +34,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import * as DropdownMenu from '@/components/ui/dropdown-menu';
+import * as Tooltip from '@/components/ui/tooltip';
 import { RoomNavigationInput } from '@/components/room-navigation-input';
 import { cn } from '@/lib/utils';
 import { type LibraryJob, type TitleEpisode } from '@/lib/player/t';
 import { fetchJobs } from '@/lib/player/data';
+import { useTheme } from '@/lib/theme';
 
 type LibraryKind = 'all' | 'movies' | 'shows';
 type SortMode =
@@ -130,6 +134,9 @@ export function LibraryHome({
 	const [sort, setSort] = useState<SortMode>('recent-desc');
 	const [renderLimit, setRenderLimit] = useState(INITIAL_LIBRARY_ITEMS);
 	const loadRequestRef = useRef(0);
+	const { theme, setTheme } = useTheme();
+	const nextTheme = theme === 'dark' ? 'light' : 'dark';
+	const themeLabel = `Switch to ${nextTheme} theme`;
 
 	const loadJobs = useCallback(
 		(force = false) => {
@@ -258,12 +265,36 @@ export function LibraryHome({
 								</HeaderStat>
 							</div>
 						</div>
-						<RoomNavigationInput
-							inputId="library-room-navigation-input"
-							className="w-full border-border/70 bg-background/70 shadow-sm min-[960px]:w-[min(32rem,42vw)]"
-							inputClassName="text-foreground placeholder:text-muted-foreground"
-							buttonClassName="border-border/70 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-						/>
+						<div className="flex w-full min-w-0 items-center gap-2 min-[960px]:w-[min(35rem,46vw)]">
+							<RoomNavigationInput
+								inputId="library-room-navigation-input"
+								className="min-w-0 flex-1 border-border/70 bg-background/70 shadow-sm"
+								inputClassName="text-foreground placeholder:text-muted-foreground"
+								buttonClassName="border-border/70 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+							/>
+							<Tooltip.Provider delayDuration={0}>
+								<Tooltip.Root>
+									<Tooltip.Trigger asChild>
+										<Button
+											type="button"
+											variant="outline"
+											aria-label={themeLabel}
+											className="h-10 w-10 shrink-0 p-0"
+											onClick={() => setTheme(nextTheme)}
+										>
+											{theme === 'dark' ? (
+												<IconMoon size={18} stroke={2} />
+											) : (
+												<IconSun size={18} stroke={2} />
+											)}
+										</Button>
+									</Tooltip.Trigger>
+									<Tooltip.Content>
+										<p>{themeLabel}</p>
+									</Tooltip.Content>
+								</Tooltip.Root>
+							</Tooltip.Provider>
+						</div>
 					</div>
 				</header>
 
