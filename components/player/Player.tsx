@@ -3021,6 +3021,154 @@ function isNativePictureInPictureActive(video: SparklePictureInPictureVideoEleme
 	);
 }
 
+function isPlayerPictureInPictureStateActive(player: MediaPlayerInstance | null) {
+	if (!player) {
+		return false;
+	}
+	try {
+		return player.state.pictureInPicture === true;
+	} catch {
+		return false;
+	}
+}
+
+function dispatchMissingPictureInPictureLeave(video: SparklePictureInPictureVideoElement | null) {
+	if (!video) {
+		return false;
+	}
+	let dispatched = false;
+	try {
+		video.dispatchEvent(new Event('leavepictureinpicture'));
+		dispatched = true;
+	} catch {
+		// Synthetic cleanup should not block native PiP teardown.
+	}
+	try {
+		video.dispatchEvent(new Event('webkitpresentationmodechanged'));
+		dispatched = true;
+	} catch {
+		// WebKit-only event may not exist on the current browser.
+	}
+	return dispatched;
+}
+
+function syncStalePlayerPictureInPictureState(player: MediaPlayerInstance | null) {
+	const video = getPlayerVideoElement(player) as SparklePictureInPictureVideoElement | null;
+	if (
+		!video ||
+		isNativePictureInPictureActive(video) ||
+		!isPlayerPictureInPictureStateActive(player)
+	) {
+		return false;
+	}
+	return dispatchMissingPictureInPictureLeave(video);
+}
+
+function waitForNextFrame() {
+	return new Promise<void>((resolve) => {
+		if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+			setTimeout(resolve, 0);
+			return;
+		}
+		window.requestAnimationFrame(() => resolve());
+	});
+}
+
+function waitForTimeout(ms: number) {
+	return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+}
+
+function waitForVideoFrame(video: HTMLVideoElement, timeoutMs = 250) {
+	return new Promise<void>((resolve) => {
+		let settled = false;
+		const done = () => {
+			if (settled) {
+				return;
+			}
+			settled = true;
+			window.clearTimeout(timeout);
+			resolve();
+		};
+		const timeout = window.setTimeout(done, timeoutMs);
+		if (typeof video.requestVideoFrameCallback !== 'function') {
+			return;
+		}
+		try {
+			video.requestVideoFrameCallback(() => done());
+		} catch {
+			done();
+		}
+	});
+}
+
+async function restoreVideoAfterPictureInPicture(
+	player: MediaPlayerInstance | null,
+	mediaProvider: MediaProviderInstance | null
+) {
+	const video = getPlayerVideoElement(player) as SparklePictureInPictureVideoElement | null;
+	if (!video || typeof document === 'undefined' || !document.contains(video)) {
+		return;
+	}
+
+	prepareVideoElementForBackgroundPlayback(video);
+
+	try {
+		mediaProvider?.load(video);
+	} catch {
+		// Provider can already be attached; repaint nudges below still apply.
+	}
+
+	const wasPaused = video.paused;
+	const time = Number.isFinite(video.currentTime) ? video.currentTime : null;
+	const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : null;
+	const previousTransform = video.style.transform;
+	const previousWillChange = video.style.willChange;
+
+	try {
+		video.style.willChange = 'transform';
+		video.style.transform = previousTransform
+			? `${previousTransform} translateZ(0)`
+			: 'translateZ(0)';
+		void video.offsetHeight;
+	} catch {
+		// Style repaint is opportunistic.
+	}
+
+	await waitForNextFrame();
+
+	if (time !== null && duration !== null && video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+		const maxTime = Math.max(0, duration - 0.05);
+		const repaintTime =
+			time < maxTime ? Math.min(maxTime, time + 0.001) : Math.max(0, time - 0.001);
+		if (Math.abs(repaintTime - time) > 0) {
+			try {
+				video.currentTime = repaintTime;
+				await waitForNextFrame();
+				video.currentTime = time;
+			} catch {
+				// Some browsers reject seeks while restoring a detached PiP surface.
+			}
+		}
+	}
+
+	if (!wasPaused) {
+		try {
+			await video.play();
+		} catch {
+			// Playback might already be running or blocked; do not disturb room sync.
+		}
+	}
+
+	await waitForVideoFrame(video);
+
+	try {
+		video.style.transform = previousTransform;
+		video.style.willChange = previousWillChange;
+	} catch {
+		// Ignore style restore failures during teardown.
+	}
+}
+
 async function enterNativePictureInPicture(player: MediaPlayerInstance | null) {
 	const video = getPlayerVideoElement(player) as SparklePictureInPictureVideoElement | null;
 	if (!video) {
@@ -3105,15 +3253,18 @@ async function exitPlayerPictureInPicture(player: MediaPlayerInstance | null, tr
 	}
 
 	const nativeExited = await exitNativePictureInPicture(player);
+	let staleStateSynced = syncStalePlayerPictureInPictureState(player);
 	if (getSafePlayerPictureInPicture(player)) {
 		try {
 			await player.exitPictureInPicture(trigger);
+			staleStateSynced = syncStalePlayerPictureInPictureState(player) || staleStateSynced;
 			return true;
 		} catch {
-			return nativeExited;
+			staleStateSynced = syncStalePlayerPictureInPictureState(player) || staleStateSynced;
+			return nativeExited || staleStateSynced;
 		}
 	}
-	return nativeExited;
+	return nativeExited || staleStateSynced;
 }
 
 function isPictureInPictureControlEvent(event: Event, root: HTMLElement | null | undefined) {
@@ -7424,7 +7575,12 @@ export function Player({
 			}
 
 			shouldExitAutoPictureInPictureRef.current = true;
-			updateAutoPictureInPicturePreference(player, true);
+			if (updateAutoPictureInPicturePreference(player, true)) {
+				await waitForTimeout(250);
+				if (document.hidden && getSafePlayerPictureInPicture(player)) {
+					return;
+				}
+			}
 
 			if (autoPictureInPicturePendingRef.current || !getSafePlayerCanPictureInPicture(player)) {
 				return;
@@ -7455,14 +7611,20 @@ export function Player({
 			autoPictureInPicturePendingRef.current = false;
 			const shouldExit = force || shouldExitAutoPictureInPictureRef.current;
 			shouldExitAutoPictureInPictureRef.current = false;
+			setSafePlayerAutoPictureInPicture(player, false);
 
 			try {
-				if (shouldExit && getSafePlayerPictureInPicture(player)) {
+				if (shouldExit) {
 					await exitPlayerPictureInPicture(player, trigger);
+				} else {
+					syncStalePlayerPictureInPictureState(player);
 				}
 			} catch {
 				// Returning to the app should never be blocked by PiP cleanup.
 			} finally {
+				if (shouldExit && !document.hidden) {
+					await restoreVideoAfterPictureInPicture(player, mediaProviderEl);
+				}
 				updateAutoPictureInPicturePreference(player);
 			}
 		};
@@ -7644,6 +7806,7 @@ export function Player({
 	}, [
 		applyRemotePlaybackSync,
 		chatFocused,
+		mediaProviderEl,
 		playerEl,
 		refreshRoomMedia,
 		send,
