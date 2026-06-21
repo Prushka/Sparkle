@@ -1,6 +1,7 @@
 'use client';
 
 import {
+	type CSSProperties,
 	type KeyboardEvent,
 	type PointerEvent as ReactPointerEvent,
 	useCallback,
@@ -62,7 +63,7 @@ const MIN_WIDTH = 304;
 const MIN_HEIGHT = 430;
 const COLLAPSED_HEIGHT = 44;
 const VIEWPORT_MARGIN = 8;
-const DEFAULT_TURNS = 5;
+const DEFAULT_TURNS = 6;
 const MAX_TURNS = 10;
 const KEY_ROWS = [
 	['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
@@ -74,6 +75,10 @@ let wordleTabZIndexCounter = 160;
 
 type FloatingZIndexWindow = Window & {
 	__sparkleFloatingTabZIndex?: number;
+};
+
+type WordleTileStyle = CSSProperties & {
+	'--wordle-delay'?: string;
 };
 
 function nextFloatingTabZIndex() {
@@ -349,8 +354,8 @@ function buildCompetitiveResult(
 
 function tileClass(status: WordleTileStatus, mini: boolean) {
 	const base = mini
-		? 'flex aspect-square items-center justify-center border text-[0px]'
-		: 'flex aspect-square items-center justify-center border-2 text-[2rem] font-black uppercase leading-none';
+		? 'wordle-tile flex aspect-square items-center justify-center border text-[0px] transition-colors duration-200'
+		: 'wordle-tile flex aspect-square items-center justify-center border-2 text-[2rem] font-black uppercase leading-none transition-[background-color,border-color,color,transform] duration-200';
 	switch (status) {
 		case 'correct':
 			return `${base} border-[#6aaa64] bg-[#6aaa64] text-white`;
@@ -359,10 +364,39 @@ function tileClass(status: WordleTileStatus, mini: boolean) {
 		case 'absent':
 			return `${base} border-[#787c7e] bg-[#787c7e] text-white`;
 		case 'typed':
-			return `${base} border-foreground bg-background text-foreground`;
+			return `${base} border-muted-foreground/55 bg-background text-foreground shadow-[inset_0_0_0_1px_hsl(var(--muted-foreground)/0.12)]`;
 		default:
 			return `${base} border-muted-foreground/35 bg-background text-foreground`;
 	}
+}
+
+function tileAnimationClass(
+	status: WordleTileStatus,
+	letter: string,
+	submitted: boolean,
+	mini: boolean
+) {
+	if (mini) {
+		return '';
+	}
+	if (submitted && status !== 'empty' && status !== 'typed') {
+		return 'wordle-tile-flip';
+	}
+	if (letter && status === 'typed') {
+		return 'wordle-tile-pop';
+	}
+	return '';
+}
+
+function tileAnimationStyle(
+	submitted: boolean,
+	mini: boolean,
+	cellIndex: number
+): WordleTileStyle | undefined {
+	if (mini || !submitted) {
+		return undefined;
+	}
+	return { '--wordle-delay': `${cellIndex * 85}ms` };
 }
 
 function keyClass(status: WordleTileStatus | undefined, wide = false) {
@@ -829,14 +863,11 @@ export function WordleFloatingTab({
 	}
 
 	function joinGame() {
-		if (!currentPlayer) {
+		if (!currentPlayer || state.phase !== 'setup') {
 			return;
 		}
 		const players = addOrReplacePlayer(state.players, currentPlayer);
 		const patch: Partial<WordleTabSyncState> = { players };
-		if (state.phase === 'playing' && state.settings.mode === 'competitive' && !myBoard) {
-			patch.boards = [...state.boards, createBoard(turns, currentPlayer.id)];
-		}
 		if (state.settings.mode === 'coop' && !state.turnPlayerId) {
 			patch.turnPlayerId = players[0]?.id ?? '';
 		}
@@ -844,7 +875,7 @@ export function WordleFloatingTab({
 	}
 
 	function leaveGame() {
-		if (!currentPlayer || !isParticipant) {
+		if (!currentPlayer || !isParticipant || state.phase !== 'setup') {
 			return;
 		}
 		const players = state.players.filter((player) => player.id !== currentPlayer.id);
@@ -999,10 +1030,12 @@ export function WordleFloatingTab({
 							{Array.from({ length: WORD_LENGTH }, (_, cellIndex) => {
 								const status = row.statuses[cellIndex] ?? 'empty';
 								const letter = letters[cellIndex] ?? '';
+								const animationClass = tileAnimationClass(status, letter, row.submitted, mini);
 								return (
 									<div
 										key={cellIndex}
-										className={tileClass(status, mini)}
+										className={`${tileClass(status, mini)} ${animationClass}`}
+										style={tileAnimationStyle(row.submitted, mini, cellIndex)}
 										aria-label={letter ? `Letter ${cellIndex + 1}` : `Cell ${cellIndex + 1}`}
 									>
 										{mini ? null : letter}
@@ -1117,9 +1150,33 @@ export function WordleFloatingTab({
 					{state.phase === 'setup' ? (
 						<div className="mx-auto grid min-h-full w-full max-w-2xl content-start gap-3">
 							<div className="rounded-md border bg-background p-3">
-								<div className="mb-2 flex items-center gap-2 text-xs font-bold text-muted-foreground">
-									<IconUsers size={15} stroke={2} />
-									Players
+								<div className="mb-2 flex items-center justify-between gap-2">
+									<div className="flex items-center gap-2 text-xs font-bold text-muted-foreground">
+										<IconUsers size={15} stroke={2} />
+										Players
+									</div>
+									{isParticipant ? (
+										<Button
+											type="button"
+											variant="outline"
+											className="h-8 gap-2 px-3 text-xs"
+											onClick={leaveGame}
+										>
+											<IconUserMinus size={15} stroke={2} />
+											Leave
+										</Button>
+									) : (
+										<Button
+											type="button"
+											variant="outline"
+											className="h-8 gap-2 px-3 text-xs"
+											disabled={!currentPlayer}
+											onClick={joinGame}
+										>
+											<IconUserPlus size={15} stroke={2} />
+											Join
+										</Button>
+									)}
 								</div>
 								<div className="flex flex-wrap gap-2">
 									{state.players.length > 0 ? (
@@ -1193,29 +1250,7 @@ export function WordleFloatingTab({
 								</div>
 							</div>
 
-							<div className="grid gap-2 sm:grid-cols-2">
-								{isParticipant ? (
-									<Button
-										type="button"
-										variant="outline"
-										className="h-10 gap-2"
-										onClick={leaveGame}
-									>
-										<IconUserMinus size={17} stroke={2} />
-										Leave
-									</Button>
-								) : (
-									<Button
-										type="button"
-										variant="outline"
-										className="h-10 gap-2"
-										disabled={!currentPlayer}
-										onClick={joinGame}
-									>
-										<IconUserPlus size={17} stroke={2} />
-										Join
-									</Button>
-								)}
+							<div className="grid gap-2">
 								<Button
 									type="button"
 									className="h-10 gap-2"
@@ -1258,7 +1293,7 @@ export function WordleFloatingTab({
 											</div>
 										) : (
 											<div className="flex min-h-full items-center justify-center text-sm font-semibold text-muted-foreground">
-												Join to play this round
+												Round in progress
 											</div>
 										)
 									) : (
@@ -1302,45 +1337,39 @@ export function WordleFloatingTab({
 
 							<div className="flex min-h-0 flex-col gap-3">
 								<div className="grid gap-2 rounded-md border bg-background p-3">
+									<div className="flex items-center gap-2 text-xs font-bold text-muted-foreground">
+										<IconUsers size={15} stroke={2} />
+										Players
+									</div>
 									<div className="flex flex-wrap gap-2">
-										{isParticipant ? (
-											<Button
-												type="button"
-												variant="outline"
-												className="h-9 flex-1 gap-2"
-												onClick={leaveGame}
+										{state.players.map((player) => (
+											<span
+												key={player.id}
+												className={`rounded-md border px-2 py-1 text-xs font-bold ${
+													isSameWordlePlayer(player, currentPlayer)
+														? 'border-primary bg-primary/10 text-primary'
+														: 'bg-muted/35'
+												}`}
 											>
-												<IconUserMinus size={17} stroke={2} />
-												Leave
-											</Button>
-										) : (
-											<Button
-												type="button"
-												variant="outline"
-												className="h-9 flex-1 gap-2"
-												disabled={!currentPlayer}
-												onClick={joinGame}
-											>
-												<IconUserPlus size={17} stroke={2} />
-												Join
-											</Button>
-										)}
-										<Button
-											type="button"
-											variant="outline"
-											className="h-9 flex-1 gap-2"
-											disabled={!isParticipant}
-											onClick={newGame}
-										>
-											<IconRefresh size={17} stroke={2} />
-											New
-										</Button>
+												{playerLabel(player)}
+											</span>
+										))}
 									</div>
 									<div className="text-xs font-bold text-muted-foreground">
 										{state.settings.mode === 'coop'
 											? `${playerLabel(activePlayer)} turn`
 											: state.result?.message || `${state.players.length} players`}
 									</div>
+									<Button
+										type="button"
+										variant="outline"
+										className="h-9 gap-2"
+										disabled={!isParticipant}
+										onClick={newGame}
+									>
+										<IconRefresh size={17} stroke={2} />
+										New
+									</Button>
 								</div>
 
 								{state.settings.mode === 'competitive' ? (

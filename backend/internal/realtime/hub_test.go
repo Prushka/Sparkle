@@ -664,6 +664,107 @@ func TestSyncWordleAllowsJoinOnlyForNonParticipant(t *testing.T) {
 	}
 }
 
+func TestSyncWordleRejectsJoinDuringRound(t *testing.T) {
+	room := newRoom("wordle:room", "")
+	sender := testPlayer("bob-wordle", "Bob", 4)
+	aliceID := "alice-wordle"
+	room.players[sender.state.Id] = sender
+	room.wordle = WordleState{
+		Tabs: []WordleTabState{{
+			ID:       "wordle_1",
+			Open:     true,
+			Phase:    "playing",
+			Settings: WordleSettingsState{Mode: "competitive", Turns: 6},
+			Players:  []WordlePlayerState{{ID: aliceID, Name: "Alice"}},
+			Boards: []WordleBoardState{{
+				ID:       "board_1",
+				PlayerID: aliceID,
+				Rows:     []WordleRowState{defaultWordleRow(), defaultWordleRow(), defaultWordleRow(), defaultWordleRow(), defaultWordleRow(), defaultWordleRow()},
+			}},
+			StartedAt: 12345,
+		}},
+		UpdatedAt: 100,
+	}
+
+	room.syncWordle(sender, &WordleState{
+		Tabs: []WordleTabState{{
+			ID:       "wordle_1",
+			Open:     true,
+			Phase:    "playing",
+			Settings: WordleSettingsState{Mode: "competitive", Turns: 6},
+			Players: []WordlePlayerState{
+				{ID: aliceID, Name: "Alice"},
+				{ID: sender.state.Id, Name: "Bob"},
+			},
+			Boards: []WordleBoardState{{
+				ID:       "board_1",
+				PlayerID: aliceID,
+				Rows:     []WordleRowState{defaultWordleRow(), defaultWordleRow(), defaultWordleRow(), defaultWordleRow(), defaultWordleRow(), defaultWordleRow()},
+			}},
+			StartedAt: 12345,
+		}},
+	})
+
+	if len(room.wordle.Tabs[0].Players) != 1 {
+		t.Fatalf("mid-round join applied = %#v", room.wordle.Tabs[0].Players)
+	}
+	assertNoQueuedPayload(t, sender)
+}
+
+func TestSyncWordleRejectsLeaveDuringRound(t *testing.T) {
+	room := newRoom("wordle:room", "")
+	sender := testPlayer("alice-wordle", "Alice", 4)
+	bobID := "bob-wordle"
+	room.players[sender.state.Id] = sender
+	room.wordle = WordleState{
+		Tabs: []WordleTabState{{
+			ID:       "wordle_1",
+			Open:     true,
+			Phase:    "playing",
+			Settings: WordleSettingsState{Mode: "competitive", Turns: 6},
+			Players: []WordlePlayerState{
+				{ID: sender.state.Id, Name: "Alice"},
+				{ID: bobID, Name: "Bob"},
+			},
+			Boards: []WordleBoardState{{
+				ID:       "board_1",
+				PlayerID: sender.state.Id,
+				Rows:     []WordleRowState{defaultWordleRow(), defaultWordleRow(), defaultWordleRow(), defaultWordleRow(), defaultWordleRow(), defaultWordleRow()},
+			}},
+			StartedAt: 12345,
+		}},
+		UpdatedAt: 100,
+	}
+
+	room.syncWordle(sender, &WordleState{
+		Tabs: []WordleTabState{{
+			ID:       "wordle_1",
+			Open:     true,
+			Phase:    "playing",
+			Settings: WordleSettingsState{Mode: "competitive", Turns: 6},
+			Players:  []WordlePlayerState{{ID: bobID, Name: "Bob"}},
+			Boards: []WordleBoardState{{
+				ID:       "board_2",
+				PlayerID: bobID,
+				Rows:     []WordleRowState{defaultWordleRow(), defaultWordleRow(), defaultWordleRow(), defaultWordleRow(), defaultWordleRow(), defaultWordleRow()},
+			}},
+			StartedAt: 12345,
+		}},
+	})
+
+	if len(room.wordle.Tabs[0].Players) != 2 {
+		t.Fatalf("mid-round leave applied = %#v", room.wordle.Tabs[0].Players)
+	}
+	assertNoQueuedPayload(t, sender)
+}
+
+func TestSanitizeWordleSettingsDefaultsToSixTurns(t *testing.T) {
+	got := sanitizeWordleSettings(WordleSettingsState{})
+	if got.Turns != 6 {
+		t.Fatalf("default wordle turns = %d, want 6", got.Turns)
+	}
+}
+
 func TestSanitizeCottageState(t *testing.T) {
 	targetX := 250.0
 	targetY := 999.0

@@ -1720,12 +1720,18 @@ func wordleTabUpdateAuthorized(previous WordleTabState, next WordleTabState, sen
 		return wasParticipant
 	}
 	if wasParticipant {
+		if previous.Phase == "playing" && !reflect.DeepEqual(previous.Players, next.Players) {
+			return false
+		}
 		return true
 	}
 	return wordleJoinOnly(previous, next, senderID)
 }
 
 func wordleJoinOnly(previous WordleTabState, next WordleTabState, senderID string) bool {
+	if previous.Phase != "setup" {
+		return false
+	}
 	if !wordleTabHasPlayer(next, senderID) {
 		return false
 	}
@@ -1901,7 +1907,7 @@ func sanitizeWordleSettings(settings WordleSettingsState) WordleSettingsState {
 	}
 	turns := settings.Turns
 	if turns <= 0 {
-		turns = 5
+		turns = 6
 	}
 	if turns > maxWordleTurns {
 		turns = maxWordleTurns
