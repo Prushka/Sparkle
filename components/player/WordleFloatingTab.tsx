@@ -1106,7 +1106,7 @@ export function WordleFloatingTab({
 			ref={panelRef}
 			data-wordle-tab={state.id}
 			tabIndex={0}
-			className={`fixed flex min-w-0 overflow-hidden rounded-lg border border-border bg-background shadow-2xl outline-none ${
+			className={`fixed flex min-w-0 overflow-hidden rounded-lg border border-border bg-background/70 shadow-2xl outline-none ${
 				panelCollapsed ? 'min-h-11' : 'min-h-0'
 			}`}
 			onFocusCapture={bringToFront}
@@ -1122,7 +1122,7 @@ export function WordleFloatingTab({
 		>
 			<div className="flex min-h-0 w-full flex-col">
 				<div
-					className="flex h-11 shrink-0 cursor-move touch-none select-none items-center gap-2 border-b bg-muted/65 px-2"
+					className="flex h-11 shrink-0 cursor-move touch-none select-none items-center gap-2 border-b bg-muted/45 px-2"
 					onPointerDown={handleDragStart}
 				>
 					<IconGripVertical className="shrink-0 text-muted-foreground" size={18} stroke={2} />
@@ -1163,13 +1163,13 @@ export function WordleFloatingTab({
 				</div>
 
 				<div
-					className="min-h-0 flex-1 overflow-auto bg-muted/20 p-3"
+					className="min-h-0 flex-1 overflow-auto bg-muted/10 p-3"
 					aria-hidden={panelCollapsed}
 					onMouseDown={focusPanel}
 				>
 					{state.phase === 'setup' ? (
 						<div className="mx-auto grid min-h-full w-full max-w-2xl content-start gap-3">
-							<div className="rounded-md border bg-background p-3">
+							<div className="rounded-md border bg-background/80 p-3">
 								<div className="mb-2 flex items-center justify-between gap-2">
 									<div className="flex items-center gap-2 text-xs font-bold text-muted-foreground">
 										<IconUsers size={15} stroke={2} />
@@ -1220,7 +1220,7 @@ export function WordleFloatingTab({
 								</div>
 							</div>
 
-							<div className="grid gap-3 rounded-md border bg-background p-3">
+							<div className="grid gap-3 rounded-md border bg-background/80 p-3">
 								<div className="grid gap-2">
 									<div className="text-xs font-bold text-muted-foreground">Mode</div>
 									<div className="grid grid-cols-2 gap-2">
@@ -1234,7 +1234,7 @@ export function WordleFloatingTab({
 												className={`rounded-md border px-3 py-2 text-sm font-bold capitalize transition-colors ${
 													state.settings.mode === mode
 														? 'border-primary bg-primary/10 text-primary'
-														: 'bg-background hover:bg-accent'
+														: 'bg-background/80 hover:bg-accent/80'
 												} disabled:opacity-50`}
 											>
 												{mode === 'coop' ? 'Coop' : 'Competitive'}
@@ -1295,7 +1295,7 @@ export function WordleFloatingTab({
 									compactLayout ? 'grid gap-3' : 'grid min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-3'
 								}
 							>
-								<div className="min-h-0 overflow-auto rounded-md border bg-background p-3">
+								<div className="min-h-0 overflow-auto rounded-md border bg-background/80 p-3">
 									{state.settings.mode === 'competitive' ? (
 										myBoard ? (
 											<div className="grid min-h-full content-center gap-3">
@@ -1356,7 +1356,7 @@ export function WordleFloatingTab({
 							</div>
 
 							<div className="flex min-h-0 flex-col gap-3">
-								<div className="grid gap-2 rounded-md border bg-background p-3">
+								<div className="grid gap-2 rounded-md border bg-background/80 p-3">
 									<div className="flex items-center gap-2 text-xs font-bold text-muted-foreground">
 										<IconUsers size={15} stroke={2} />
 										Players
@@ -1393,7 +1393,7 @@ export function WordleFloatingTab({
 								</div>
 
 								{state.settings.mode === 'competitive' ? (
-									<div className="min-h-0 overflow-auto rounded-md border bg-background p-3">
+									<div className="min-h-0 overflow-auto rounded-md border bg-background/80 p-3">
 										<div className="mb-2 text-xs font-bold text-muted-foreground">Other Boards</div>
 										<div className="grid gap-3">
 											{state.boards

@@ -1473,7 +1473,7 @@ export function ChessFloatingTab({
 			ref={panelRef}
 			data-chess-tab={state.id}
 			data-collapsed={panelCollapsed ? 'true' : 'false'}
-			className={`fixed flex min-w-0 overflow-hidden rounded-lg border border-border bg-background shadow-2xl ${
+			className={`fixed flex min-w-0 overflow-hidden rounded-lg border border-border bg-background/70 shadow-2xl ${
 				panelCollapsed ? 'min-h-11' : 'min-h-0'
 			}`}
 			onFocusCapture={bringToFront}
@@ -1488,7 +1488,7 @@ export function ChessFloatingTab({
 		>
 			<div className="flex min-h-0 w-full flex-col">
 				<div
-					className="flex h-11 shrink-0 cursor-move touch-none select-none items-center gap-2 border-b bg-muted/65 px-2"
+					className="flex h-11 shrink-0 cursor-move touch-none select-none items-center gap-2 border-b bg-muted/45 px-2"
 					onPointerDown={handleDragStart}
 					onPointerMove={handleDragMove}
 					onPointerUp={handleDragEnd}
@@ -1533,7 +1533,7 @@ export function ChessFloatingTab({
 				</div>
 
 				<div
-					className={`min-h-0 flex-1 bg-muted/20 p-3 ${
+					className={`min-h-0 flex-1 bg-muted/10 p-3 ${
 						state.phase === 'setup' || compactLayout ? 'overflow-auto' : 'overflow-hidden'
 					}`}
 					aria-hidden={panelCollapsed}
@@ -1557,7 +1557,7 @@ export function ChessFloatingTab({
 							>
 								<div className="grid shrink-0 grid-cols-2 gap-2">
 									<div
-										className={`rounded-md border bg-background px-3 py-2 ${
+										className={`rounded-md border bg-background/80 px-3 py-2 ${
 											activeColor === 'b' && state.phase === 'playing' ? 'border-primary' : ''
 										}`}
 									>
@@ -1568,7 +1568,7 @@ export function ChessFloatingTab({
 										</div>
 									</div>
 									<div
-										className={`rounded-md border bg-background px-3 py-2 ${
+										className={`rounded-md border bg-background/80 px-3 py-2 ${
 											activeColor === 'w' && state.phase === 'playing' ? 'border-primary' : ''
 										}`}
 									>
@@ -1690,7 +1690,7 @@ export function ChessFloatingTab({
 									</div>
 								</div>
 
-								<div className="shrink-0 rounded-md border bg-background px-3 py-2 text-sm font-semibold">
+								<div className="shrink-0 rounded-md border bg-background/80 px-3 py-2 text-sm font-semibold">
 									{currentStatus}
 								</div>
 							</div>
@@ -1707,7 +1707,7 @@ export function ChessFloatingTab({
 						>
 							{state.phase === 'setup' ? (
 								<div className="flex flex-col gap-3">
-									<div className="rounded-md border bg-background p-4">
+									<div className="rounded-md border bg-background/80 p-4">
 										<div className="flex items-center justify-between gap-3">
 											<div className="min-w-0">
 												<div className="text-base font-bold">Game Setup</div>
@@ -1753,7 +1753,7 @@ export function ChessFloatingTab({
 										</Button>
 									</div>
 
-									<div className="grid gap-4 rounded-md border bg-background p-3">
+									<div className="grid gap-4 rounded-md border bg-background/80 p-3">
 										<BoardThemePicker
 											value={state.settings.boardTheme}
 											onChange={(boardTheme) => updateSettings({ boardTheme })}
@@ -1814,7 +1814,7 @@ export function ChessFloatingTab({
 											: 'flex min-h-0 flex-1 flex-col gap-3'
 									}
 								>
-									<div className="rounded-md border bg-background p-3">
+									<div className="rounded-md border bg-background/80 p-3">
 										<div className="mb-2 flex items-center justify-between gap-2">
 											<div className="text-xs font-bold text-muted-foreground">Current Pieces</div>
 											<PieceSetPreview pieceSet={state.settings.pieceSet} />
@@ -1884,7 +1884,7 @@ export function ChessFloatingTab({
 										)}
 									</div>
 
-									<div className="grid gap-3 rounded-md border bg-background p-3">
+									<div className="grid gap-3 rounded-md border bg-background/80 p-3">
 										<div className="grid gap-1">
 											<div className="text-xs font-bold text-muted-foreground">Last Move</div>
 											<div className="text-sm font-bold">

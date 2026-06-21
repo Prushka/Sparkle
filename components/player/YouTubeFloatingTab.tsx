@@ -926,7 +926,7 @@ export function YouTubeFloatingTab({
 			ref={panelRef}
 			data-youtube-tab={state.id}
 			data-collapsed={collapsed ? 'true' : 'false'}
-			className={`fixed flex min-w-0 overflow-hidden rounded-lg border border-border bg-background shadow-2xl ${
+			className={`fixed flex min-w-0 overflow-hidden rounded-lg border border-border bg-background/70 shadow-2xl ${
 				collapsed ? 'min-h-11' : 'min-h-0'
 			}`}
 			onFocusCapture={bringToFront}
@@ -941,7 +941,7 @@ export function YouTubeFloatingTab({
 		>
 			<div className="flex min-h-0 w-full flex-col">
 				<div
-					className="flex h-11 shrink-0 cursor-move touch-none select-none items-center gap-2 border-b bg-muted/65 px-2"
+					className="flex h-11 shrink-0 cursor-move touch-none select-none items-center gap-2 border-b bg-muted/45 px-2"
 					onPointerDown={handleDragStart}
 					onPointerMove={handleDragMove}
 					onPointerUp={handleDragEnd}
@@ -954,7 +954,7 @@ export function YouTubeFloatingTab({
 							value={urlInput}
 							onPointerDown={(event) => event.stopPropagation()}
 							onChange={(event) => setUrlInput(event.target.value)}
-							className="h-8 min-w-0 bg-background/95 text-sm"
+							className="h-8 min-w-0 bg-background/80 text-sm"
 							placeholder="YouTube URL"
 							aria-label="YouTube URL"
 						/>
@@ -1003,7 +1003,7 @@ export function YouTubeFloatingTab({
 					</div>
 				) : null}
 				<div
-					className={`relative min-h-0 flex-1 bg-black ${collapsed ? 'hidden' : ''}`}
+					className={`relative min-h-0 flex-1 bg-black/55 ${collapsed ? 'hidden' : ''}`}
 					aria-hidden={collapsed}
 				>
 					{state.videoId ? (
@@ -1024,7 +1024,7 @@ export function YouTubeFloatingTab({
 							<>
 								<div key={playerMountKey} id={playerElementId} className="h-full w-full" />
 								{playerError ? (
-									<div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/85 px-6 text-center text-sm font-semibold text-white/70">
+									<div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black/70 px-6 text-center text-sm font-semibold text-white/70">
 										<p>{playerError}</p>
 										<Button asChild size="sm" variant="secondary">
 											<a
