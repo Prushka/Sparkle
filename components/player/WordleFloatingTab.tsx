@@ -666,6 +666,20 @@ export function WordleFloatingTab({
 		panelRef.current?.focus({ preventScroll: true });
 	}
 
+	function isEditableTarget(target: EventTarget | null) {
+		return (
+			target instanceof HTMLElement &&
+			Boolean(target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]'))
+		);
+	}
+
+	function handlePanelPointerDownCapture(event: ReactPointerEvent<HTMLDivElement>) {
+		bringToFront();
+		if (event.button === 0 && !isEditableTarget(event.target)) {
+			focusPanel();
+		}
+	}
+
 	function handleDragStart(event: ReactPointerEvent<HTMLDivElement>) {
 		if (event.button !== 0) {
 			return;
@@ -896,8 +910,14 @@ export function WordleFloatingTab({
 		if (event.metaKey || event.ctrlKey || event.altKey) {
 			return;
 		}
+		if (isEditableTarget(event.target)) {
+			return;
+		}
 		const key = event.key.length === 1 ? event.key.toUpperCase() : event.key.toUpperCase();
 		if (key === 'ENTER' || key === 'BACKSPACE' || /^[A-Z]$/.test(key)) {
+			if (key === 'ENTER' && event.target instanceof HTMLButtonElement) {
+				return;
+			}
 			event.preventDefault();
 			handleKeyInput(key);
 		}
@@ -1157,7 +1177,7 @@ export function WordleFloatingTab({
 				translucent ? 'bg-background/55' : 'bg-background'
 			} shadow-2xl outline-none ${panelCollapsed ? 'min-h-11' : 'min-h-0'}`}
 			onFocusCapture={bringToFront}
-			onPointerDownCapture={bringToFront}
+			onPointerDownCapture={handlePanelPointerDownCapture}
 			onKeyDown={handleKeyDown}
 			style={{
 				left: layout.x,
@@ -1216,7 +1236,6 @@ export function WordleFloatingTab({
 						translucent ? 'bg-muted/5' : 'bg-muted/20'
 					} p-3`}
 					aria-hidden={panelCollapsed}
-					onMouseDown={focusPanel}
 				>
 					{state.phase === 'setup' ? (
 						<div className="mx-auto grid min-h-full w-full max-w-2xl content-start gap-3">
