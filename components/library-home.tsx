@@ -238,15 +238,15 @@ export function LibraryHome({
 	}
 
 	return (
-		<main className="min-h-screen w-full bg-[linear-gradient(180deg,#08090d_0%,#111017_42%,#08090d_100%)] text-zinc-50">
+		<main className="min-h-screen w-full bg-background text-foreground">
 			<div className="mx-auto flex w-full max-w-[1760px] flex-col gap-6 px-4 py-5 sm:px-6 md:px-8 lg:px-10">
 				<header className="pt-2">
 					<div className="flex min-w-0 flex-col gap-4 min-[960px]:flex-row min-[960px]:items-end min-[960px]:justify-between">
 						<div className="flex min-w-0 flex-col gap-2 min-[960px]:flex-row min-[960px]:items-baseline min-[960px]:gap-4">
-							<h1 className="truncate text-4xl font-black tracking-normal text-white sm:text-5xl min-[960px]:shrink-0">
+							<h1 className="truncate text-4xl font-black tracking-normal text-foreground sm:text-5xl min-[960px]:shrink-0">
 								Library
 							</h1>
-							<div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-400">
+							<div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
 								<HeaderStat icon={IconDeviceTv}>
 									{numberFormatter.format(stats.shows)} shows
 								</HeaderStat>
@@ -260,18 +260,18 @@ export function LibraryHome({
 						</div>
 						<RoomNavigationInput
 							inputId="library-room-navigation-input"
-							className="w-full border-white/10 bg-white/[0.06] shadow-2xl shadow-black/20 min-[960px]:w-[min(32rem,42vw)]"
-							inputClassName="text-white placeholder:text-zinc-500"
-							buttonClassName="border-white/10 text-zinc-400 hover:bg-white/10 hover:text-white"
+							className="w-full border-border/70 bg-background/70 shadow-sm min-[960px]:w-[min(32rem,42vw)]"
+							inputClassName="text-foreground placeholder:text-muted-foreground"
+							buttonClassName="border-border/70 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 						/>
 					</div>
 				</header>
 
-				<section className="sticky top-0 z-20 rounded-lg border border-white/10 bg-[#0d0f14]/90 p-3 shadow-2xl shadow-black/20 backdrop-blur-xl">
+				<section className="sticky top-0 z-20 rounded-lg border border-border bg-card/90 p-3 shadow-sm backdrop-blur-xl supports-[backdrop-filter]:bg-card/80">
 					<div className="grid gap-3 min-[960px]:grid-cols-[minmax(15rem,1fr)_16rem_12rem_8.5rem]">
 						<label className="relative order-2 block min-w-0 min-[960px]:order-none">
 							<IconSearch
-								className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-500"
+								className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
 								stroke={2.3}
 							/>
 							<Input
@@ -281,11 +281,11 @@ export function LibraryHome({
 									setQuery(event.target.value);
 								}}
 								placeholder="Search title, episode, file"
-								className="h-11 rounded-lg border-white/10 bg-white/[0.06] pl-9 text-base text-white shadow-none placeholder:text-zinc-500 focus-visible:ring-[#8de8ce]"
+								className="h-11 rounded-lg border-input bg-background/70 pl-9 text-base text-foreground shadow-none placeholder:text-muted-foreground focus-visible:ring-ring"
 							/>
 						</label>
 
-						<div className="order-1 flex w-fit max-w-full min-w-0 justify-self-center overflow-x-auto rounded-lg border border-white/10 bg-black/20 p-1 min-[960px]:order-none min-[960px]:justify-self-start">
+						<div className="order-1 flex w-fit max-w-full min-w-0 justify-self-center overflow-x-auto rounded-lg border border-border bg-muted/60 p-1 min-[960px]:order-none min-[960px]:justify-self-start">
 							{kindOptions.map((option) => (
 								<button
 									key={option.value}
@@ -296,10 +296,10 @@ export function LibraryHome({
 										setKind(option.value);
 									}}
 									className={cn(
-										'flex h-9 min-w-20 shrink-0 items-center justify-center rounded-md px-3 text-sm font-semibold text-zinc-400 outline-none transition focus-visible:ring-2 focus-visible:ring-[#8de8ce]',
+										'flex h-9 min-w-20 shrink-0 items-center justify-center rounded-md px-3 text-sm font-semibold text-muted-foreground outline-none transition focus-visible:ring-2 focus-visible:ring-ring',
 										kind === option.value
-											? 'bg-white text-zinc-950 shadow-sm'
-											: 'hover:bg-white/10 hover:text-white'
+											? 'bg-primary text-primary-foreground shadow-sm'
+											: 'hover:bg-accent hover:text-accent-foreground'
 									)}
 								>
 									{option.label}
@@ -325,12 +325,12 @@ export function LibraryHome({
 							disabled={!backendBaseUrl || refreshing}
 							onClick={refreshLibrary}
 							aria-busy={refreshing}
-							className="order-4 h-11 w-full gap-2 rounded-lg border-white/10 bg-white/[0.06] px-3 text-zinc-100 shadow-none hover:bg-white/10 hover:text-white min-[960px]:order-none"
+							className="order-4 h-11 w-full gap-2 rounded-lg border-input bg-background/70 px-3 text-foreground shadow-none hover:bg-accent hover:text-accent-foreground min-[960px]:order-none"
 						>
 							{refreshing ? (
-								<IconLoader2 className="size-4 shrink-0 animate-spin text-[#8de8ce]" stroke={2.2} />
+								<IconLoader2 className="size-4 shrink-0 animate-spin text-primary" stroke={2.2} />
 							) : (
-								<IconRefresh className="size-4 shrink-0 text-[#8de8ce]" stroke={2.2} />
+								<IconRefresh className="size-4 shrink-0 text-primary" stroke={2.2} />
 							)}
 							<span className="inline-block min-w-[4.75rem] text-left">
 								{refreshing ? 'Refreshing' : 'Refresh'}
@@ -338,15 +338,15 @@ export function LibraryHome({
 						</Button>
 					</div>
 					{hasFilters ? (
-						<div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-zinc-400">
-							<span className="rounded-full bg-white/[0.06] px-2.5 py-1">
+						<div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+							<span className="rounded-full bg-muted px-2.5 py-1">
 								{numberFormatter.format(visibleItems)} match{visibleItems === 1 ? '' : 'es'}
 							</span>
 							<Button
 								variant="ghost"
 								size="sm"
 								onClick={clearFilters}
-								className="h-7 gap-1.5 rounded-md px-2 text-xs text-zinc-300 hover:bg-white/10 hover:text-white"
+								className="h-7 gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
 							>
 								<IconX size={14} stroke={2.4} />
 								Clear
@@ -357,15 +357,15 @@ export function LibraryHome({
 
 				<section className="space-y-10 pb-12">
 					{displayLoading ? (
-						<div className="flex min-h-[38vh] items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] p-8 text-sm text-zinc-400">
+						<div className="flex min-h-[38vh] items-center justify-center rounded-lg border border-border bg-card p-8 text-sm text-muted-foreground">
 							Loading library...
 						</div>
 					) : null}
 
 					{displayError ? (
-						<div className="flex min-h-[38vh] flex-col items-center justify-center rounded-lg border border-dashed border-white/15 bg-white/[0.03] p-8 text-center">
-							<h2 className="text-lg font-semibold text-white">Library unavailable</h2>
-							<p className="mt-2 max-w-md text-sm text-zinc-400">{displayError}</p>
+						<div className="flex min-h-[38vh] flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card p-8 text-center">
+							<h2 className="text-lg font-semibold text-foreground">Library unavailable</h2>
+							<p className="mt-2 max-w-md text-sm text-muted-foreground">{displayError}</p>
 						</div>
 					) : null}
 
@@ -397,27 +397,26 @@ export function LibraryHome({
 					))}
 
 					{hasMoreItems ? (
-						<div ref={sentinelRef} className="flex justify-center py-4 text-xs text-zinc-500">
+						<div
+							ref={sentinelRef}
+							className="flex justify-center py-4 text-xs text-muted-foreground"
+						>
 							Showing {numberFormatter.format(renderedItems)} of{' '}
 							{numberFormatter.format(matchingItems)}
 						</div>
 					) : null}
 
 					{!displayLoading && !displayError && !movies.length && !shows.length ? (
-						<div className="flex min-h-[38vh] flex-col items-center justify-center rounded-lg border border-dashed border-white/15 bg-white/[0.03] p-8 text-center">
-							<div className="mb-4 flex size-12 items-center justify-center rounded-lg bg-white/[0.06] text-zinc-400">
+						<div className="flex min-h-[38vh] flex-col items-center justify-center rounded-lg border border-dashed border-border bg-card p-8 text-center">
+							<div className="mb-4 flex size-12 items-center justify-center rounded-lg bg-muted text-muted-foreground">
 								<IconMovieOff size={26} stroke={1.8} />
 							</div>
-							<h2 className="text-lg font-semibold text-white">No matches</h2>
-							<p className="mt-2 max-w-md text-sm text-zinc-400">
+							<h2 className="text-lg font-semibold text-foreground">No matches</h2>
+							<p className="mt-2 max-w-md text-sm text-muted-foreground">
 								Try a different search, media type, or sort option.
 							</p>
 							{hasFilters ? (
-								<Button
-									variant="secondary"
-									onClick={clearFilters}
-									className="mt-5 rounded-md bg-white text-zinc-950 hover:bg-zinc-200"
-								>
+								<Button variant="secondary" onClick={clearFilters} className="mt-5 rounded-md">
 									Clear filters
 								</Button>
 							) : null}
@@ -463,10 +462,10 @@ function ShowSection({
 				aria-expanded={!showCollapsed}
 				aria-controls={showBodyId}
 				onClick={() => setShowCollapsed((collapsed) => !collapsed)}
-				className="group flex w-full flex-col gap-2.5 border-b border-white/10 pb-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-[#8de8ce]"
+				className="group flex w-full flex-col gap-2.5 border-b border-border pb-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
 			>
 				<div className="flex min-w-0 items-start gap-2.5">
-					<span className="mt-5 flex size-6 shrink-0 items-center justify-center rounded-md border border-white/10 bg-white/[0.035] text-zinc-400 transition group-hover:bg-white/[0.07]">
+					<span className="mt-5 flex size-6 shrink-0 items-center justify-center rounded-md border border-border bg-muted/45 text-muted-foreground transition group-hover:bg-accent group-hover:text-accent-foreground">
 						<IconChevronDown
 							className={cn('size-3.5 transition-transform', showCollapsed && '-rotate-90')}
 							stroke={2.2}
@@ -479,18 +478,18 @@ function ShowSection({
 						className="hidden aspect-[2/3] w-12 rounded-md md:block"
 					/>
 					<div className="min-w-0">
-						<div className="mb-1 flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold text-[#8de8ce]">
+						<div className="mb-1 flex flex-wrap items-center gap-2 text-[0.7rem] font-semibold text-primary">
 							<IconDeviceTv className="size-3.5" stroke={2.2} />
 							Show
-							<span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-xs text-zinc-300">
+							<span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
 								{numberFormatter.format(show.seasons.length)} season
 								{show.seasons.length === 1 ? '' : 's'}
 							</span>
 						</div>
-						<h2 className="line-clamp-2 text-lg font-black tracking-normal text-white md:text-xl">
+						<h2 className="line-clamp-2 text-lg font-black tracking-normal text-foreground md:text-xl">
 							{show.title}
 						</h2>
-						<div className="mt-1.5 flex flex-wrap gap-2 text-xs text-zinc-400">
+						<div className="mt-1.5 flex flex-wrap gap-2 text-xs text-muted-foreground">
 							<InfoChip icon={IconVideo}>
 								{numberFormatter.format(show.episodes.length)} episode
 								{show.episodes.length === 1 ? '' : 's'}
@@ -515,22 +514,22 @@ function ShowSection({
 								aria-expanded={!collapsed}
 								aria-controls={episodeGridId}
 								onClick={() => toggleSeason(seasonKey)}
-								className="flex w-fit max-w-full items-center gap-2 rounded-md border border-white/10 bg-white/[0.035] px-2 py-1 text-left outline-none transition hover:bg-white/[0.07] focus-visible:ring-2 focus-visible:ring-[#8de8ce]"
+								className="flex w-fit max-w-full items-center gap-2 rounded-md border border-border bg-card px-2 py-1 text-left outline-none transition hover:bg-accent hover:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
 							>
 								<IconChevronDown
 									className={cn(
-										'size-3.5 shrink-0 text-zinc-400 transition-transform',
+										'size-3.5 shrink-0 text-muted-foreground transition-transform',
 										collapsed && '-rotate-90'
 									)}
 									stroke={2.2}
 								/>
 								<div className="flex min-w-0 items-center gap-1.5">
-									<IconStack2 className="size-3.5 shrink-0 text-[#ffcf67]" stroke={2.2} />
-									<h3 className="truncate text-sm font-extrabold text-white">
+									<IconStack2 className="size-3.5 shrink-0 text-primary" stroke={2.2} />
+									<h3 className="truncate text-sm font-extrabold text-foreground">
 										Season {season.number || 1}
 									</h3>
 								</div>
-								<span className="shrink-0 rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[0.68rem] font-semibold text-zinc-300">
+								<span className="shrink-0 rounded-full border border-border bg-muted px-2 py-0.5 text-[0.68rem] font-semibold text-muted-foreground">
 									{numberFormatter.format(season.episodes.length)} episode
 									{season.episodes.length === 1 ? '' : 's'}
 								</span>
@@ -581,9 +580,9 @@ function PosterCard({
 			<Link
 				href={href}
 				prefetch={false}
-				className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8de8ce]"
+				className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 			>
-				<div className="relative overflow-hidden rounded-lg border border-white/10 bg-white/[0.04] shadow-2xl shadow-black/25 transition duration-200 group-hover:-translate-y-1 group-hover:border-white/25 group-hover:shadow-[#ec275f]/15">
+				<div className="relative overflow-hidden rounded-lg border border-border bg-card shadow-sm transition duration-200 group-hover:-translate-y-1 group-hover:border-primary/35">
 					<PosterArt
 						job={job}
 						staticBaseUrl={staticBaseUrl}
@@ -591,7 +590,7 @@ function PosterCard({
 						className={posterClassName}
 					/>
 					<div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 bg-gradient-to-t from-black/80 via-black/35 to-transparent p-3 opacity-0 transition group-hover:opacity-100">
-						<span className="flex size-9 items-center justify-center rounded-full bg-white text-zinc-950 shadow-lg">
+						<span className="flex size-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg">
 							<IconPlayerPlay size={18} stroke={2.6} />
 						</span>
 						<CodecPill job={job} />
@@ -599,10 +598,10 @@ function PosterCard({
 					{isFresh ? <FreshBadge /> : null}
 				</div>
 				<div className="mt-3 min-w-0">
-					<h3 className="line-clamp-2 min-h-[2.5rem] text-sm font-extrabold leading-5 text-white">
+					<h3 className="line-clamp-2 min-h-[2.5rem] text-sm font-extrabold leading-5 text-foreground">
 						{title}
 					</h3>
-					<p className="mt-1 truncate text-xs text-zinc-500">{meta}</p>
+					<p className="mt-1 truncate text-xs text-muted-foreground">{meta}</p>
 				</div>
 			</Link>
 		</article>
@@ -623,11 +622,11 @@ function EpisodeCard({
 	isFresh: boolean;
 }) {
 	return (
-		<article className="group min-w-0 rounded-md border border-white/10 bg-white/[0.04] p-1.5 transition duration-200 hover:-translate-y-0.5 hover:border-white/25 hover:bg-white/[0.07]">
+		<article className="group min-w-0 rounded-md border border-border bg-card p-1.5 transition duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:bg-accent">
 			<Link
 				href={href}
 				prefetch={false}
-				className="block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8de8ce]"
+				className="block rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 			>
 				<div className="relative overflow-hidden rounded-md">
 					<PosterArt
@@ -640,16 +639,16 @@ function EpisodeCard({
 					<span className="absolute left-1.5 top-1.5 rounded-md bg-black/65 px-1.5 py-0.5 text-[0.68rem] font-black text-white ring-1 ring-white/10">
 						{episode.se}
 					</span>
-					<span className="absolute bottom-1.5 right-1.5 flex size-7 items-center justify-center rounded-full bg-white text-zinc-950 opacity-0 shadow-lg transition group-hover:opacity-100">
+					<span className="absolute bottom-1.5 right-1.5 flex size-7 items-center justify-center rounded-full bg-primary text-primary-foreground opacity-0 shadow-lg transition group-hover:opacity-100">
 						<IconPlayerPlay size={15} stroke={2.6} />
 					</span>
 					{isFresh ? <FreshBadge /> : null}
 				</div>
 				<div className="min-w-0 px-0.5 pb-0.5 pt-2">
-					<h4 className="line-clamp-2 min-h-8 text-[0.8125rem] font-extrabold leading-4 text-white">
+					<h4 className="line-clamp-2 min-h-8 text-[0.8125rem] font-extrabold leading-4 text-card-foreground">
 						{episode.title}
 					</h4>
-					<div className="mt-1.5 flex min-w-0 items-center justify-between gap-2 text-[0.7rem] text-zinc-500">
+					<div className="mt-1.5 flex min-w-0 items-center justify-between gap-2 text-[0.7rem] text-muted-foreground">
 						<span className="truncate">{formatDuration(job.Duration)}</span>
 						<CodecPill job={job} compact />
 					</div>
@@ -677,13 +676,13 @@ function PosterArt({
 	return (
 		<div
 			className={cn(
-				'relative flex overflow-hidden bg-[linear-gradient(135deg,var(--poster-color),#111827_72%)]',
+				'relative flex overflow-hidden bg-[linear-gradient(135deg,var(--poster-color),hsl(var(--muted))_72%)]',
 				className
 			)}
 			style={fallbackStyle}
 		>
 			{failed ? (
-				<div className="flex h-full w-full items-center justify-center text-white/55">
+				<div className="flex h-full w-full items-center justify-center text-muted-foreground">
 					<IconPhoto size={30} stroke={1.8} />
 				</div>
 			) : (
@@ -724,28 +723,28 @@ function MenuFilter<T extends string>({
 				<Button
 					variant="outline"
 					className={cn(
-						'h-11 w-full justify-between gap-3 rounded-lg border-white/10 bg-white/[0.06] px-3 text-zinc-100 shadow-none hover:bg-white/10 hover:text-white',
+						'h-11 w-full justify-between gap-3 rounded-lg border-input bg-background/70 px-3 text-foreground shadow-none hover:bg-accent hover:text-accent-foreground',
 						className
 					)}
 				>
 					<span className="flex min-w-0 items-center gap-2">
-						<Icon className="size-4 shrink-0 text-[#8de8ce]" stroke={2.2} />
+						<Icon className="size-4 shrink-0 text-primary" stroke={2.2} />
 						<span className="truncate">{current}</span>
 					</span>
-					<IconChevronDown className="size-4 shrink-0 text-zinc-500" stroke={2.2} />
+					<IconChevronDown className="size-4 shrink-0 text-muted-foreground" stroke={2.2} />
 				</Button>
 			</DropdownMenu.Trigger>
 			<DropdownMenu.Content
 				align="end"
-				className="min-w-[13rem] border-white/10 bg-[#111318] text-zinc-100 shadow-2xl shadow-black/40"
+				className="min-w-[13rem] border-border bg-popover text-popover-foreground shadow-md"
 			>
-				<DropdownMenu.Label className="text-xs text-zinc-500">{label}</DropdownMenu.Label>
+				<DropdownMenu.Label className="text-xs text-muted-foreground">{label}</DropdownMenu.Label>
 				<DropdownMenu.RadioGroup value={value} onValueChange={(next) => onChange(next as T)}>
 					{options.map((option) => (
 						<DropdownMenu.RadioItem
 							key={option.value}
 							value={option.value}
-							className="rounded-md text-sm focus:bg-white/10 data-[highlighted]:bg-white/10"
+							className="rounded-md text-sm"
 						>
 							{option.label}
 						</DropdownMenu.RadioItem>
@@ -759,7 +758,7 @@ function MenuFilter<T extends string>({
 function HeaderStat({ icon: Icon, children }: { icon?: IconComponent; children: ReactNode }) {
 	return (
 		<span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-			{Icon ? <Icon className="size-3.5 text-[#8de8ce]" stroke={2.2} /> : null}
+			{Icon ? <Icon className="size-3.5 text-primary" stroke={2.2} /> : null}
 			{children}
 		</span>
 	);
@@ -767,8 +766,8 @@ function HeaderStat({ icon: Icon, children }: { icon?: IconComponent; children: 
 
 function InfoChip({ icon: Icon, children }: { icon: IconComponent; children: ReactNode }) {
 	return (
-		<span className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
-			<Icon className="size-3.5 text-zinc-500" stroke={2.2} />
+		<span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/45 px-2.5 py-1">
+			<Icon className="size-3.5 text-muted-foreground" stroke={2.2} />
 			{children}
 		</span>
 	);
@@ -792,7 +791,7 @@ function CodecPill({ job, compact = false }: { job: LibraryJob; compact?: boolea
 
 function FreshBadge() {
 	return (
-		<span className="absolute right-2 top-2 rounded-full bg-[#ec275f] px-2 py-1 text-[0.625rem] font-black uppercase tracking-normal text-white shadow-lg">
+		<span className="absolute right-2 top-2 rounded-full bg-primary px-2 py-1 text-[0.625rem] font-black uppercase tracking-normal text-primary-foreground shadow-lg">
 			New
 		</span>
 	);
@@ -1051,5 +1050,5 @@ function formatDate(seconds: number | undefined) {
 
 function getPosterColor(job: LibraryJob) {
 	const color = job.DominantColors?.find((value) => /^#[0-9a-f]{6}$/i.test(value));
-	return color ?? '#ec275f';
+	return color ?? 'hsl(var(--primary))';
 }
