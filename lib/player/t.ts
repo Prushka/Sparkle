@@ -466,6 +466,12 @@ type CueForgeSubtitleInfo = {
 };
 
 const cueForgeSubtitlePattern = /^cueforge_([a-z0-9-]+?)(?:_annotated)?$/i;
+const subtitleFormatNames: Record<string, string> = {
+	ass: 'Styled',
+	srt: 'Text',
+	sup: 'Image',
+	vtt: 'Web'
+};
 
 function normalizeCueForgeSubtitleCandidate(value: string) {
 	const clean = value.split(/[?#]/)[0].split('/').pop() || value;
@@ -511,6 +517,10 @@ export function getCueForgeSubtitleDisplayName(
 	return `${info.languageName} (${info.annotated ? 'Annotated' : 'Translated'})`;
 }
 
+export function getSubtitleFormatName(format: string) {
+	return subtitleFormatNames[format.toLowerCase()] || format.toUpperCase();
+}
+
 export function audiosExistForCodec(job: Job, codec: string) {
 	return (
 		job.MappedAudio && job.MappedAudio[codec] && Object.entries(job.MappedAudio[codec]).length > 0
@@ -528,19 +538,36 @@ export function formatPair(stream: Stream, includeIndex = false, includeCodec = 
 		return (
 			(includeIndex ? `${stream.Index}-` : '') +
 			lang +
-			(includeCodec ? ` (${extension})` : '') +
+			(includeCodec && extension ? ` (${extension})` : '') +
 			(stream.Title && stream.Title !== lang ? ` - ${stream.Title}` : '')
 		);
 	}
 	return '';
 }
 
+function formatSubtitleBaseName(stream: Stream, includeIndex = false) {
+	const displayName = getCueForgeSubtitleDisplayName(stream);
+	if (!displayName) {
+		const mappedLanguage = languageMap[stream.Language];
+		const lang =
+			mappedLanguage?.split('-')[0] || getCueForgeLanguageName(stream.Language) || stream.Language;
+		return (
+			(includeIndex ? `${stream.Index}-` : '') +
+			lang +
+			(stream.Title && stream.Title !== lang ? ` - ${stream.Title}` : '')
+		);
+	}
+	return displayName;
+}
+
 export function formatSubtitlePair(stream: Stream, includeIndex = false, includeCodec = false) {
-	return getCueForgeSubtitleDisplayName(stream) || formatPair(stream, includeIndex, includeCodec);
+	const label = formatSubtitleBaseName(stream, includeIndex);
+	const formatName = getSubtitleFormatName(getSubtitleStreamType(stream));
+	return includeCodec && formatName ? `${label} (${formatName})` : label;
 }
 
 export function getSubtitleSortName(stream: Stream) {
-	return getCueForgeSubtitleDisplayName(stream) || formatPair(stream, false, false);
+	return formatSubtitleBaseName(stream);
 }
 
 export const languageMap: { [key: string]: string } = {
@@ -985,6 +1012,33 @@ export function getSubtitleTypeRank(stream: Pick<Stream, 'Location'>) {
 	return index === -1 ? subtitlePriority.length : index;
 }
 
+export function compareSubtitleStreams(
+	a: Stream,
+	b: Stream,
+	files: { [key: string]: number } = {}
+) {
+	const aCueForge = getCueForgeSubtitleInfo(a) ? 0 : 1;
+	const bCueForge = getCueForgeSubtitleInfo(b) ? 0 : 1;
+	if (aCueForge !== bCueForge) {
+		return aCueForge - bCueForge;
+	}
+	const nameCompare = getSubtitleSortName(a).localeCompare(getSubtitleSortName(b), undefined, {
+		numeric: true,
+		sensitivity: 'base'
+	});
+	if (nameCompare !== 0) {
+		return nameCompare;
+	}
+	const typeCompare = getSubtitleTypeRank(a) - getSubtitleTypeRank(b);
+	if (typeCompare !== 0) {
+		return typeCompare;
+	}
+	if (a.Language === b.Language) {
+		return (files[b.Location] ?? 0) - (files[a.Location] ?? 0);
+	}
+	return a.Language.localeCompare(b.Language);
+}
+
 export function sortTracks(job: Job) {
 	const streams = job.Streams;
 	const files = job.Files;
@@ -997,13 +1051,7 @@ export function sortTracks(job: Job) {
 	};
 	const compare = (a: Stream, b: Stream) => {
 		if (a.CodecType === 'subtitle' && b.CodecType === 'subtitle') {
-			const nameCompare = getSubtitleSortName(a).localeCompare(getSubtitleSortName(b), undefined, {
-				numeric: true,
-				sensitivity: 'base'
-			});
-			if (nameCompare !== 0) {
-				return nameCompare;
-			}
+			return compareSubtitleStreams(a, b, files);
 		}
 		const typeCompare = getSubtitleTypeRank(a) - getSubtitleTypeRank(b);
 		if (typeCompare !== 0) {

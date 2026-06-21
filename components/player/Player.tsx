@@ -74,6 +74,7 @@ import {
 	BroadcastTypes,
 	codecDisplayMap,
 	codecMap,
+	compareSubtitleStreams,
 	defaultFallback,
 	fallbackFontsMap,
 	formatMbps,
@@ -82,6 +83,7 @@ import {
 	formatSeconds,
 	getCueForgeSubtitleInfo,
 	getName,
+	getSubtitleFormatName,
 	getSubtitleTypeRank,
 	getSupportedCodecs,
 	hideControlsOnChatFocused,
@@ -3286,7 +3288,7 @@ function SubtitleLayersMenuSection({
 
 	const selectedCount =
 		1 + companionTracks.filter((track) => extraSubtitleLayerSrcs.includes(track.src)).length;
-	const formatLabel = selectedTrack.format.toUpperCase();
+	const formatLabel = getSubtitleFormatName(selectedTrack.format);
 	const value = `${selectedCount} ${formatLabel}`;
 
 	return (
@@ -5771,29 +5773,25 @@ export function Player({
 				sortedJob.Streams = sortTracks(sortedJob);
 				const subtitleStreams = sortedJob.Streams.filter(
 					(stream) => stream.CodecType === 'subtitle'
-				);
+				).sort((a, b) => compareSubtitleStreams(a, b, job.Files));
 				const defaultSubtitleStream = pickPrioritySubtitleStream(
 					subtitleStreams,
 					readStoredSubtitleLanguage()
 				);
-				for (const [, stream] of Object.entries(sortedJob.Streams)) {
-					switch (stream.CodecType) {
-						case 'subtitle':
-							const src = `${BASE_STATIC}/${stream.Location}`;
-							const format = getSubtitleFormat(src);
-							const track: SubtitleTrackInfo = {
-								src,
-								label: formatSubtitlePair(stream, true, true),
-								kind: 'subtitles',
-								type: format,
-								language: getSubtitleLanguage(stream),
-								default: stream === defaultSubtitleStream,
-								format
-							};
-							subtitleTracks.push(track);
-							textTracks.add(createSubtitleTextTrack(track));
-							break;
-					}
+				for (const stream of subtitleStreams) {
+					const src = `${BASE_STATIC}/${stream.Location}`;
+					const format = getSubtitleFormat(src);
+					const track: SubtitleTrackInfo = {
+						src,
+						label: formatSubtitlePair(stream, true, true),
+						kind: 'subtitles',
+						type: format,
+						language: getSubtitleLanguage(stream),
+						default: stream === defaultSubtitleStream,
+						format
+					};
+					subtitleTracks.push(track);
+					textTracks.add(createSubtitleTextTrack(track));
 				}
 			}
 			subtitleTracksRef.current = subtitleTracks;
