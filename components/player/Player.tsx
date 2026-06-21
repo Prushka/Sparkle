@@ -222,6 +222,7 @@ type LocalSystemMessage = Chat & {
 type SubtitleTrackFormat = 'ass' | 'srt' | 'sup' | 'vtt';
 
 type SubtitleTrackInfo = {
+	cueForge: boolean;
 	src: string;
 	label: string;
 	kind: 'subtitles';
@@ -1591,6 +1592,9 @@ function getStackableSubtitleTracks(
 }
 
 function compareSubtitleTrackNames(a: SubtitleTrackInfo, b: SubtitleTrackInfo) {
+	if (a.cueForge !== b.cueForge) {
+		return a.cueForge ? -1 : 1;
+	}
 	return (
 		a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }) ||
 		a.language.localeCompare(b.language, undefined, { numeric: true, sensitivity: 'base' }) ||
@@ -1787,23 +1791,59 @@ function findPlayerTextTrackByOriginalSrc(textTracks: any, src: string) {
 	return toArray(textTracks).find((track) => track?.id === src || track?.src === src) ?? null;
 }
 
-function addOriginalSubtitleTextTrack(
+function isManagedSubtitleTextTrack(track: any, tracks: SubtitleTrackInfo[]) {
+	return tracks.some((info) => track?.id === info.src || track?.src === info.src);
+}
+
+function restoreSubtitleTextTrackOrder(
 	textTracks: any,
-	track: SubtitleTrackInfo,
-	mode: TextTrackMode = 'disabled'
+	tracks: SubtitleTrackInfo[],
+	options: {
+		replacement?: { mode: TextTrackMode; primarySrc: string; textTrack: any };
+		restoreMode?: TextTrackMode;
+		restoreSrc?: string;
+	} = {}
 ) {
-	if (!textTracks?.add) {
-		return null;
+	if (!textTracks?.add || !textTracks?.remove || tracks.length === 0) {
+		return;
 	}
-	const existingTrack = findPlayerTextTrackByOriginalSrc(textTracks, track.src);
-	if (existingTrack) {
-		setPlayerTextTrackMode(existingTrack, mode);
-		return existingTrack;
+	const existingTracks = toArray(textTracks);
+	const modeBySrc = new Map<string, TextTrackMode>();
+	const originalTrackBySrc = new Map<string, any>();
+	for (const trackInfo of tracks) {
+		const textTrack = existingTracks.find(
+			(track) => track?.src === trackInfo.src || (!track?.src && track?.id === trackInfo.src)
+		);
+		if (textTrack) {
+			originalTrackBySrc.set(trackInfo.src, textTrack);
+			modeBySrc.set(trackInfo.src, textTrack.mode ?? 'disabled');
+		}
 	}
-	const textTrack = createSubtitleTextTrack(track);
-	textTracks.add(textTrack);
-	setPlayerTextTrackMode(textTrack, mode);
-	return textTrack;
+	const replacement = options.replacement;
+	if (options.restoreSrc && options.restoreMode) {
+		modeBySrc.set(options.restoreSrc, options.restoreMode);
+	}
+	if (replacement) {
+		modeBySrc.set(replacement.primarySrc, replacement.mode);
+	}
+
+	for (const textTrack of existingTracks) {
+		if (
+			isManagedSubtitleTextTrack(textTrack, tracks) ||
+			(replacement && textTrack?.id === replacement.primarySrc)
+		) {
+			removePlayerTextTrack(textTracks, textTrack);
+		}
+	}
+
+	for (const trackInfo of tracks) {
+		const textTrack =
+			replacement && trackInfo.src === replacement.primarySrc
+				? replacement.textTrack
+				: originalTrackBySrc.get(trackInfo.src) || createSubtitleTextTrack(trackInfo);
+		textTracks.add(textTrack);
+		setPlayerTextTrackMode(textTrack, modeBySrc.get(trackInfo.src) ?? 'disabled');
+	}
 }
 
 function removePlayerTextTrack(textTracks: any, track: any) {
@@ -4497,24 +4537,22 @@ export function Player({
 			}
 
 			const textTracks = playerElementRef.current?.textTracks;
-			if (textTracks) {
-				removePlayerTextTrack(textTracks, mergedTrack.track);
-				const lingeringMergedTrack = toArray(textTracks).find(
-					(track) => track?.src === mergedTrack.objectUrl
-				);
-				removePlayerTextTrack(textTracks, lingeringMergedTrack);
-			}
-			URL.revokeObjectURL(mergedTrack.objectUrl);
-
 			if (restoreMode === 'none' || !textTracks) {
+				if (textTracks) {
+					removePlayerTextTrack(textTracks, mergedTrack.track);
+					const lingeringMergedTrack = toArray(textTracks).find(
+						(track) => track?.src === mergedTrack.objectUrl
+					);
+					removePlayerTextTrack(textTracks, lingeringMergedTrack);
+				}
+				URL.revokeObjectURL(mergedTrack.objectUrl);
 				return;
 			}
-			const originalTrack = subtitleTracksRef.current.find(
-				(track) => track.src === mergedTrack.primarySrc
-			);
-			if (originalTrack) {
-				addOriginalSubtitleTextTrack(textTracks, originalTrack, restoreMode);
-			}
+			restoreSubtitleTextTrackOrder(textTracks, subtitleTracksRef.current, {
+				restoreMode,
+				restoreSrc: mergedTrack.primarySrc
+			});
+			URL.revokeObjectURL(mergedTrack.objectUrl);
 		},
 		[]
 	);
@@ -5696,8 +5734,6 @@ export function Player({
 					removePlayerTextTrack(textTracks, previousMergedTrack.track);
 					URL.revokeObjectURL(previousMergedTrack.objectUrl);
 				}
-				const originalPrimaryTrack = findPlayerTextTrackByOriginalSrc(textTracks, primaryTrack.src);
-				removePlayerTextTrack(textTracks, originalPrimaryTrack);
 
 				const mergedTextTrack = createSubtitleTextTrack(primaryTrack, {
 					default: false,
@@ -5705,8 +5741,13 @@ export function Player({
 					src: objectUrl,
 					type: mergeFormat
 				});
-				textTracks.add(mergedTextTrack);
-				setPlayerTextTrackMode(mergedTextTrack, 'showing');
+				restoreSubtitleTextTrackOrder(textTracks, subtitleTracks, {
+					replacement: {
+						mode: 'showing',
+						primarySrc: primaryTrack.src,
+						textTrack: mergedTextTrack
+					}
+				});
 				mergedSubtitleTrackRef.current = {
 					format: mergeFormat,
 					objectUrl,
@@ -5782,6 +5823,7 @@ export function Player({
 					const src = `${BASE_STATIC}/${stream.Location}`;
 					const format = getSubtitleFormat(src);
 					const track: SubtitleTrackInfo = {
+						cueForge: Boolean(getCueForgeSubtitleInfo(stream)),
 						src,
 						label: formatSubtitlePair(stream, true, true),
 						kind: 'subtitles',

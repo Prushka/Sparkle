@@ -514,7 +514,7 @@ export function getCueForgeSubtitleDisplayName(
 	if (!info) {
 		return '';
 	}
-	return `${info.languageName} (${info.annotated ? 'Annotated' : 'Translated'})`;
+	return info.annotated ? `${info.languageName} (Annotated)` : info.languageName;
 }
 
 export function getSubtitleFormatName(format: string) {
