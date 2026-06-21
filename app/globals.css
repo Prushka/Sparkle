@@ -441,7 +441,7 @@ html::-webkit-scrollbar-thumb:hover,
 }
 
 .chat-pc .chat-rich-input [data-slate-placeholder='true'] {
-	color: hsla(0, 0%, 100%, 0.56);
+	color: hsl(240 5% 64.9% / 0.72) !important;
 }
 
 .chat-pc .chat-input-wrap .chat-rich-input {
@@ -585,6 +585,18 @@ html::-webkit-scrollbar-thumb:hover,
 	background: transparent;
 	border: 0;
 	border-radius: 0;
+}
+
+.vds-subtitles-settings-menu .vds-menu-items[data-submenu] {
+	max-height: min(70vh, calc(var(--player-height, 100vh) * 0.7));
+	overflow-anchor: none;
+	overflow-y: auto;
+	overscroll-behavior: contain;
+	scrollbar-width: none;
+}
+
+.vds-subtitles-settings-menu .vds-menu-items[data-submenu]::-webkit-scrollbar {
+	display: none;
 }
 
 .sparkle-subtitle-format-toggle {
