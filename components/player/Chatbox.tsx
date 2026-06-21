@@ -47,7 +47,7 @@ type Props = {
 	onBlur?: () => void;
 	onPickerOpenChange?: (_open: boolean) => void;
 	chatFocused?: boolean;
-	focusByShortcut?: boolean;
+	showPlayerCount?: boolean;
 	controlsShowing?: boolean | null;
 	formId: string;
 	inputId: string;
@@ -366,7 +366,7 @@ export function Chatbox({
 	onBlur = () => {},
 	onPickerOpenChange,
 	chatFocused = false,
-	focusByShortcut = false,
+	showPlayerCount = false,
 	controlsShowing = null,
 	formId,
 	inputId,
@@ -381,7 +381,6 @@ export function Chatbox({
 	const initialValue = useMemo(() => createEmptyChatValue(), []);
 	const [value, setValue] = useState('');
 	const [showSent, setShowSent] = useState(false);
-	const [showShortcut, setShowShortcut] = useState(true);
 	const [inputFocused, setInputFocused] = useState(false);
 	const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
 	const [soundPickerOpen, setSoundPickerOpen] = useState(false);
@@ -402,10 +401,8 @@ export function Chatbox({
 		emojiSuggestions.length > 0 &&
 		(!activeEmojiToken || suggestionsDismissedFor !== activeEmojiToken.query);
 	const chatTxt = useMemo(() => {
-		return chatHidden
-			? 'Chat (hidden)'
-			: `Chat ${controlsShowing === null && showShortcut ? '[Alt S]' : ''}`;
-	}, [chatHidden, controlsShowing, showShortcut]);
+		return chatHidden ? 'Chat (hidden)' : 'Chat';
+	}, [chatHidden]);
 	const placeholder = showSent ? 'Sent!' : chatTxt;
 	const pickerOpen = emojiPickerOpen || soundPickerOpen;
 
@@ -417,27 +414,6 @@ export function Chatbox({
 		(props: RenderElementProps) => <ChatInputElement {...props} />,
 		[]
 	);
-
-	useEffect(() => {
-		if (!focusByShortcut) {
-			return;
-		}
-		const listener = (event: KeyboardEvent) => {
-			if (event.altKey && (event.key === 's' || event.key === 'S')) {
-				event.preventDefault();
-				if ((controlsShowing === false || controlsShowing === null) && connected) {
-					ReactEditor.focus(editor);
-					Transforms.select(editor, Editor.end(editor, []));
-				}
-			}
-		};
-		document.addEventListener('keydown', listener);
-		const timeout = window.setTimeout(() => setShowShortcut(false), 10000);
-		return () => {
-			document.removeEventListener('keydown', listener);
-			window.clearTimeout(timeout);
-		};
-	}, [connected, controlsShowing, editor, focusByShortcut]);
 
 	useEffect(() => {
 		onPickerOpenChange?.(pickerOpen);
@@ -643,7 +619,7 @@ export function Chatbox({
 								placeholder={placeholder}
 								renderElement={renderElement}
 								spellCheck={false}
-								className={`chat-rich-input min-w-0 flex-1 focus-within:ring-transparent ${useButton ? 'h-10 rounded-l-none rounded-r-none px-2' : ''} ${!useButton ? 'pl-[4.75rem]' : ''} ${focusByShortcut ? 'pr-16' : ''} input`}
+								className={`chat-rich-input min-w-0 flex-1 focus-within:ring-transparent ${useButton ? 'h-10 rounded-l-none rounded-r-none px-2' : ''} ${!useButton ? 'pl-[4.75rem]' : ''} ${showPlayerCount ? 'pr-16' : ''} input`}
 								data-button-layout={useButton ? 'true' : 'false'}
 								onDOMBeforeInput={(event) => {
 									if (
@@ -762,7 +738,7 @@ export function Chatbox({
 									fullscreenPortalContainer ?? document.body
 								)
 							: null}
-						{focusByShortcut ? (
+						{showPlayerCount ? (
 							<Shortcut className="pointer-events-none absolute right-3 top-1/2 z-10 flex -translate-y-1/2 items-center justify-center gap-0.5 text-xs font-bold">
 								{playersCount > 0 ? (
 									<>

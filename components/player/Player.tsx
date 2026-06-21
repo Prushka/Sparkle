@@ -8037,7 +8037,7 @@ export function Player({
 				send={send}
 				onCommand={handleChatCommand}
 				chatFocused={chatFocused}
-				focusByShortcut
+				showPlayerCount
 				controlsShowing={null}
 				className="chat-pc"
 				inputId={`chat-pc-input-${suffix}`}
