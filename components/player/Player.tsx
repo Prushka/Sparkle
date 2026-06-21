@@ -222,6 +222,7 @@ type LocalSystemMessage = Chat & {
 type SubtitleTrackFormat = 'ass' | 'srt' | 'sup' | 'vtt';
 
 type SubtitleTrackInfo = {
+	annotated: boolean;
 	cueForge: boolean;
 	src: string;
 	label: string;
@@ -230,14 +231,32 @@ type SubtitleTrackInfo = {
 	language: string;
 	default: boolean;
 	format: SubtitleTrackFormat;
+	style: string;
 };
 
-type SelectedSubtitleTrack = Pick<SubtitleTrackInfo, 'format' | 'label' | 'language' | 'src'> & {
-	mode?: TextTrackMode;
-};
+type SelectedSubtitleTrack = Pick<
+	SubtitleTrackInfo,
+	'annotated' | 'cueForge' | 'format' | 'label' | 'language' | 'src' | 'style'
+> & { mode?: TextTrackMode };
 
 type StackableSubtitleTrackFormat = Extract<SubtitleTrackFormat, 'ass' | 'vtt'>;
-type StoredSubtitleLayerSelections = Partial<Record<StackableSubtitleTrackFormat, string[]>>;
+type StoredSubtitleSelection = {
+	annotated?: boolean;
+	cueForge?: boolean;
+	format?: SubtitleTrackFormat;
+	label?: string;
+	language?: string;
+	src?: string;
+	srcName?: string;
+	style?: string;
+};
+type SubtitleSelectionCandidate = Required<
+	Pick<StoredSubtitleSelection, 'annotated' | 'cueForge' | 'format' | 'language' | 'style'>
+> &
+	Pick<StoredSubtitleSelection, 'label' | 'src' | 'srcName'>;
+type StoredSubtitleLayerSelections = Partial<
+	Record<StackableSubtitleTrackFormat, StoredSubtitleSelection[]>
+>;
 
 const PLAYER_VOLUME_STORAGE_KEY = 'volume';
 const DEFAULT_PLAYER_VOLUME = 1;
@@ -245,6 +264,7 @@ const REMOTE_MIC_VOLUME_STORAGE_KEY = 'remoteMicVolumes';
 const DEFAULT_REMOTE_MIC_VOLUME = 1;
 const MAX_REMOTE_MIC_VOLUME = 5;
 const MAX_REMOTE_MIC_VOLUME_PERCENT = MAX_REMOTE_MIC_VOLUME * 100;
+const SUBTITLE_SELECTION_STORAGE_KEY = 'subtitleSelection';
 const SUBTITLE_LANGUAGE_STORAGE_KEY = 'subtitleLanguage';
 const SUBTITLE_LAYERS_STORAGE_KEY = 'subtitleLayers';
 const ASS_BITMAP_CACHE_LIMIT_MB = 64;
@@ -1522,6 +1542,18 @@ function isSameSubtitleLanguage(a: string, b: string) {
 	return getSubtitleLanguageBase(a) === getSubtitleLanguageBase(b);
 }
 
+function isSubtitleTrackFormat(value: string): value is SubtitleTrackFormat {
+	return value === 'ass' || value === 'srt' || value === 'sup' || value === 'vtt';
+}
+
+function getSubtitleSelectionStyle(format: SubtitleTrackFormat) {
+	return format;
+}
+
+function getSubtitleSrcName(src: string) {
+	return src.split(/[?#]/)[0].split('/').pop() || src;
+}
+
 function readStoredSubtitleLanguage() {
 	if (typeof window === 'undefined') {
 		return null;
@@ -1536,51 +1568,274 @@ function saveStoredSubtitleLanguage(language: string) {
 	window.localStorage.setItem(SUBTITLE_LANGUAGE_STORAGE_KEY, language);
 }
 
+function normalizeStoredSubtitleSelection(value: unknown): StoredSubtitleSelection | null {
+	if (typeof value === 'string') {
+		const storedValue = value.trim();
+		if (!storedValue) {
+			return null;
+		}
+		if (storedValue.includes('\t')) {
+			const [language = '', label = '', srcName = ''] = storedValue.split('\t');
+			const format = isSubtitleTrackFormat(getSubtitleFormat(srcName))
+				? getSubtitleFormat(srcName)
+				: undefined;
+			return normalizeStoredSubtitleSelection({
+				format,
+				label,
+				language,
+				srcName,
+				style: format ? getSubtitleSelectionStyle(format) : undefined
+			});
+		}
+		if (storedValue.includes('/') || /\.[a-z0-9]+$/i.test(storedValue)) {
+			const format = getSubtitleFormat(storedValue);
+			return {
+				format,
+				src: storedValue,
+				srcName: getSubtitleSrcName(storedValue),
+				style: getSubtitleSelectionStyle(format)
+			};
+		}
+		return { language: storedValue };
+	}
+	if (!value || typeof value !== 'object' || Array.isArray(value)) {
+		return null;
+	}
+
+	const record = value as Record<string, unknown>;
+	const selection: StoredSubtitleSelection = {};
+	for (const key of ['label', 'language', 'src', 'srcName', 'style'] as const) {
+		const stringValue = record[key];
+		if (typeof stringValue === 'string' && stringValue.trim()) {
+			selection[key] = stringValue.trim();
+		}
+	}
+	if (typeof record.cueForge === 'boolean') {
+		selection.cueForge = record.cueForge;
+	}
+	if (typeof record.annotated === 'boolean') {
+		selection.annotated = record.annotated;
+	}
+	if (typeof record.format === 'string' && isSubtitleTrackFormat(record.format)) {
+		selection.format = record.format;
+	}
+	if (selection.src && !selection.srcName) {
+		selection.srcName = getSubtitleSrcName(selection.src);
+	}
+	if (selection.format && !selection.style) {
+		selection.style = getSubtitleSelectionStyle(selection.format);
+	}
+	return Object.keys(selection).length > 0 ? selection : null;
+}
+
+function getStoredSubtitleSelection() {
+	if (typeof window === 'undefined') {
+		return null;
+	}
+	const storedSelection = window.localStorage.getItem(SUBTITLE_SELECTION_STORAGE_KEY);
+	if (storedSelection) {
+		try {
+			const selection = normalizeStoredSubtitleSelection(JSON.parse(storedSelection));
+			if (selection) {
+				return selection;
+			}
+		} catch {
+			const selection = normalizeStoredSubtitleSelection(storedSelection);
+			if (selection) {
+				return selection;
+			}
+		}
+	}
+	const legacyLanguage = readStoredSubtitleLanguage();
+	return legacyLanguage ? { language: legacyLanguage } : null;
+}
+
+function getStoredSubtitleSelectionForTrack(
+	track: Pick<
+		SubtitleTrackInfo,
+		'annotated' | 'cueForge' | 'format' | 'label' | 'language' | 'src' | 'style'
+	>
+): StoredSubtitleSelection {
+	return {
+		annotated: track.annotated,
+		cueForge: track.cueForge,
+		format: track.format,
+		label: track.label,
+		language: track.language,
+		src: track.src,
+		srcName: getSubtitleSrcName(track.src),
+		style: track.style || getSubtitleSelectionStyle(track.format)
+	};
+}
+
+function saveStoredSubtitleSelection(track: SelectedSubtitleTrack) {
+	if (typeof window === 'undefined') {
+		return;
+	}
+	window.localStorage.setItem(
+		SUBTITLE_SELECTION_STORAGE_KEY,
+		JSON.stringify(getStoredSubtitleSelectionForTrack(track))
+	);
+	saveStoredSubtitleLanguage(track.language);
+}
+
 function isStackableSubtitleFormat(
 	format: SubtitleTrackFormat
 ): format is StackableSubtitleTrackFormat {
 	return STACKABLE_SUBTITLE_FORMATS.has(format);
 }
 
-function dedupeStrings(values: string[]) {
-	const uniqueValues: string[] = [];
-	for (const value of values) {
-		if (value && !uniqueValues.includes(value)) {
-			uniqueValues.push(value);
-		}
-	}
-	return uniqueValues;
-}
-
 function areStringArraysEqual(a: string[], b: string[]) {
 	return a.length === b.length && a.every((value, index) => value === b[index]);
 }
 
-function getSubtitleLayerSelectionKey(
-	track: Pick<SubtitleTrackInfo, 'label' | 'language' | 'src'>
-) {
-	return [track.language || '', track.label || '', track.src.split('/').pop() || track.src].join(
-		'\t'
-	);
+function getStoredSubtitleSelectionDedupeKey(selection: StoredSubtitleSelection) {
+	return [
+		selection.language || '',
+		selection.cueForge === undefined ? '' : selection.cueForge ? 'cueforge' : 'native',
+		selection.annotated === undefined ? '' : selection.annotated ? 'annotated' : 'plain',
+		selection.format || '',
+		selection.style || '',
+		selection.label || '',
+		selection.srcName || '',
+		selection.src || ''
+	].join('\t');
 }
 
-function isStoredSubtitleLayerSelectionMatch(
-	track: SubtitleTrackInfo,
-	storedSelection: string,
-	usedSrcs: string[]
+function dedupeStoredSubtitleSelections(values: StoredSubtitleSelection[]) {
+	const uniqueSelections: StoredSubtitleSelection[] = [];
+	const seen = new Set<string>();
+	for (const value of values) {
+		const key = getStoredSubtitleSelectionDedupeKey(value);
+		if (key && !seen.has(key)) {
+			seen.add(key);
+			uniqueSelections.push(value);
+		}
+	}
+	return uniqueSelections;
+}
+
+function getSubtitleSelectionCandidateFromStream(stream: Stream): SubtitleSelectionCandidate {
+	const cueForgeSubtitle = getCueForgeSubtitleInfo(stream);
+	const format = getSubtitleFormat(stream.Location);
+	return {
+		annotated: Boolean(cueForgeSubtitle?.annotated),
+		cueForge: Boolean(cueForgeSubtitle),
+		format,
+		label: formatSubtitlePair(stream, true, true),
+		language: getSubtitleLanguage(stream),
+		src: stream.Location,
+		srcName: getSubtitleSrcName(stream.Location),
+		style: getSubtitleSelectionStyle(format)
+	};
+}
+
+function getSubtitleSelectionCandidateFromTrack(
+	track: Pick<
+		SubtitleTrackInfo,
+		'annotated' | 'cueForge' | 'format' | 'label' | 'language' | 'src' | 'style'
+	>
+): SubtitleSelectionCandidate {
+	return {
+		annotated: track.annotated,
+		cueForge: track.cueForge,
+		format: track.format,
+		label: track.label,
+		language: track.language,
+		src: track.src,
+		srcName: getSubtitleSrcName(track.src),
+		style: track.style || getSubtitleSelectionStyle(track.format)
+	};
+}
+
+function getSubtitleSelectionScore(
+	candidate: SubtitleSelectionCandidate,
+	selection: StoredSubtitleSelection
 ) {
-	if (usedSrcs.includes(track.src)) {
-		return false;
+	let score = 0;
+	if (selection.src && candidate.src === selection.src) {
+		score += 1000;
 	}
-	if (getSubtitleLayerSelectionKey(track) === storedSelection) {
-		return true;
+	if (
+		selection.srcName &&
+		(candidate.srcName === selection.srcName ||
+			getSubtitleSrcName(selection.srcName) === candidate.srcName)
+	) {
+		score += 500;
 	}
-	const [storedLanguage, storedLabel] = storedSelection.split('\t');
-	if (storedLabel && storedLanguage === track.language && storedLabel === track.label) {
-		return true;
+	if (selection.src && getSubtitleSrcName(selection.src) === candidate.srcName) {
+		score += 500;
 	}
-	return (
-		storedSelection === track.language || isSameSubtitleLanguage(track.language, storedSelection)
+	if (selection.language) {
+		if (!isSameSubtitleLanguage(candidate.language, selection.language)) {
+			return -1;
+		}
+		score += candidate.language === selection.language ? 200 : 160;
+	}
+	if (typeof selection.cueForge === 'boolean') {
+		if (candidate.cueForge !== selection.cueForge) {
+			return -1;
+		}
+		score += 90;
+	}
+	if (typeof selection.annotated === 'boolean') {
+		if (candidate.annotated !== selection.annotated) {
+			return -1;
+		}
+		score += 80;
+	}
+	if (selection.format) {
+		if (candidate.format !== selection.format) {
+			return -1;
+		}
+		score += 70;
+	}
+	if (selection.style) {
+		if (candidate.style !== selection.style) {
+			return -1;
+		}
+		score += 60;
+	}
+	if (selection.label && candidate.label === selection.label) {
+		score += 40;
+	}
+	return score;
+}
+
+function findSubtitleByStoredSelection<T>(
+	items: T[],
+	selection: StoredSubtitleSelection | null,
+	getCandidate: (item: T) => SubtitleSelectionCandidate,
+	usedSrcs: string[] = []
+) {
+	if (!selection) {
+		return null;
+	}
+	let bestItem: T | null = null;
+	let bestScore = -1;
+	for (const item of items) {
+		const candidate = getCandidate(item);
+		if (candidate.src && usedSrcs.includes(candidate.src)) {
+			continue;
+		}
+		const score = getSubtitleSelectionScore(candidate, selection);
+		if (score > bestScore) {
+			bestItem = item;
+			bestScore = score;
+		}
+	}
+	return bestScore >= 0 ? bestItem : null;
+}
+
+function hasDetailedStoredSubtitleSelection(selection: StoredSubtitleSelection | null) {
+	return Boolean(
+		selection?.annotated !== undefined ||
+		selection?.cueForge !== undefined ||
+		selection?.format ||
+		selection?.label ||
+		selection?.src ||
+		selection?.srcName ||
+		selection?.style
 	);
 }
 
@@ -1599,10 +1854,10 @@ function readStoredSubtitleLayerSelectionMap(): StoredSubtitleLayerSelections {
 			if (!Array.isArray(storedSelections)) {
 				continue;
 			}
-			const normalizedSelections = dedupeStrings(
-				storedSelections.filter(
-					(selection): selection is string => typeof selection === 'string' && selection.length > 0
-				)
+			const normalizedSelections = dedupeStoredSubtitleSelections(
+				storedSelections
+					.map(normalizeStoredSubtitleSelection)
+					.filter((selection): selection is StoredSubtitleSelection => Boolean(selection))
 			);
 			if (normalizedSelections.length > 0) {
 				selections[format] = normalizedSelections;
@@ -1640,7 +1895,9 @@ function saveStoredSubtitleLayerSelections(
 		return;
 	}
 	const storedSelections = readStoredSubtitleLayerSelectionMap();
-	const normalizedSelections = dedupeStrings(tracks.map(getSubtitleLayerSelectionKey));
+	const normalizedSelections = dedupeStoredSubtitleSelections(
+		tracks.map(getStoredSubtitleSelectionForTrack)
+	);
 	if (normalizedSelections.length > 0) {
 		storedSelections[format] = normalizedSelections;
 	} else {
@@ -1720,8 +1977,11 @@ function getStoredSubtitleLayerSrcs(
 	const storedSelections = readStoredSubtitleLayerSelections(primaryTrack.format);
 	const restoredSrcs: string[] = [];
 	for (const selection of storedSelections) {
-		const matchingTrack = companionTracks.find((track) =>
-			isStoredSubtitleLayerSelectionMatch(track, selection, restoredSrcs)
+		const matchingTrack = findSubtitleByStoredSelection(
+			companionTracks,
+			selection,
+			getSubtitleSelectionCandidateFromTrack,
+			restoredSrcs
 		);
 		if (matchingTrack) {
 			restoredSrcs.push(matchingTrack.src);
@@ -1759,13 +2019,26 @@ function getSelectedSubtitleLayerCount(
 	);
 }
 
-function pickPrioritySubtitleStreamByLanguage(streams: Stream[], storedLanguage: string | null) {
-	if (storedLanguage) {
-		const storedMatch = streams.find((stream) =>
-			isSameSubtitleLanguage(getSubtitleLanguage(stream), storedLanguage)
+function pickPrioritySubtitleStreamBySelection(
+	streams: Stream[],
+	storedSelection: StoredSubtitleSelection | null
+) {
+	if (storedSelection) {
+		const storedMatch = findSubtitleByStoredSelection(
+			streams,
+			storedSelection,
+			getSubtitleSelectionCandidateFromStream
 		);
 		if (storedMatch) {
 			return storedMatch;
+		}
+		if (storedSelection.language) {
+			const storedLanguageMatch = streams.find((stream) =>
+				isSameSubtitleLanguage(getSubtitleLanguage(stream), storedSelection.language || '')
+			);
+			if (storedLanguageMatch) {
+				return storedLanguageMatch;
+			}
 		}
 	}
 
@@ -1781,7 +2054,21 @@ function pickPrioritySubtitleStreamByLanguage(streams: Stream[], storedLanguage:
 	return streams[0] ?? null;
 }
 
-function pickPrioritySubtitleStream(streams: Stream[], storedLanguage: string | null) {
+function pickPrioritySubtitleStream(
+	streams: Stream[],
+	storedSelection: StoredSubtitleSelection | null
+) {
+	if (hasDetailedStoredSubtitleSelection(storedSelection)) {
+		const storedMatch = findSubtitleByStoredSelection(
+			streams,
+			storedSelection,
+			getSubtitleSelectionCandidateFromStream
+		);
+		if (storedMatch) {
+			return storedMatch;
+		}
+	}
+
 	const streamsByTypeRank = new Map<number, Stream[]>();
 
 	for (const stream of streams) {
@@ -1795,9 +2082,9 @@ function pickPrioritySubtitleStream(streams: Stream[], storedLanguage: string | 
 	}
 
 	for (const typeRank of [...streamsByTypeRank.keys()].sort((a, b) => a - b)) {
-		const priorityMatch = pickPrioritySubtitleStreamByLanguage(
+		const priorityMatch = pickPrioritySubtitleStreamBySelection(
 			streamsByTypeRank.get(typeRank) ?? [],
-			storedLanguage
+			storedSelection
 		);
 		if (priorityMatch) {
 			return priorityMatch;
@@ -2760,12 +3047,16 @@ function selectedFromVidstackTrack(
 	if (!track?.src) {
 		return null;
 	}
+	const format = getSubtitleFormat(track.src);
 	return {
+		annotated: false,
+		cueForge: false,
 		src: track.src,
 		label: track.label || '',
 		language: track.language || '',
-		format: getSubtitleFormat(track.src),
-		mode: track.mode
+		format,
+		mode: track.mode,
+		style: getSubtitleSelectionStyle(format)
 	};
 }
 
@@ -5895,6 +6186,7 @@ export function Player({
 			updateSelectedSubtitleTrack(null);
 			setSubtitleTracks([]);
 			prevTrackSrcRef.current = '';
+			let defaultSubtitleTextTrack: any = null;
 			if (job.Streams) {
 				const sortedJob = { ...job, Streams: [...job.Streams] };
 				sortedJob.Streams = sortTracks(sortedJob);
@@ -5903,27 +6195,43 @@ export function Player({
 				).sort((a, b) => compareSubtitleStreams(a, b, job.Files));
 				const defaultSubtitleStream = pickPrioritySubtitleStream(
 					subtitleStreams,
-					readStoredSubtitleLanguage()
+					getStoredSubtitleSelection()
 				);
 				for (const stream of subtitleStreams) {
+					const cueForgeSubtitle = getCueForgeSubtitleInfo(stream);
 					const src = `${BASE_STATIC}/${stream.Location}`;
 					const format = getSubtitleFormat(src);
 					const track: SubtitleTrackInfo = {
-						cueForge: Boolean(getCueForgeSubtitleInfo(stream)),
+						annotated: Boolean(cueForgeSubtitle?.annotated),
+						cueForge: Boolean(cueForgeSubtitle),
 						src,
 						label: formatSubtitlePair(stream, true, true),
 						kind: 'subtitles',
 						type: format,
 						language: getSubtitleLanguage(stream),
 						default: stream === defaultSubtitleStream,
-						format
+						format,
+						style: getSubtitleSelectionStyle(format)
 					};
 					subtitleTracks.push(track);
-					textTracks.add(createSubtitleTextTrack(track));
+					const textTrack = createSubtitleTextTrack(track);
+					textTracks.add(textTrack);
+					if (track.default) {
+						defaultSubtitleTextTrack = textTrack;
+					}
 				}
 			}
 			subtitleTracksRef.current = subtitleTracks;
 			setSubtitleTracks(subtitleTracks);
+			const defaultSubtitleTrack = subtitleTracks.find((track) => track.default) ?? null;
+			if (defaultSubtitleTrack) {
+				setPlayerTextTrackMode(
+					defaultSubtitleTextTrack ??
+						findPlayerTextTrackByOriginalSrc(textTracks, defaultSubtitleTrack.src),
+					'showing'
+				);
+				updateSelectedSubtitleTrack({ ...defaultSubtitleTrack, mode: 'showing' });
+			}
 			if (job.Chapters && job.Chapters.length > 0) {
 				const track = new TextTrack({
 					kind: 'chapters',
@@ -6725,8 +7033,8 @@ export function Player({
 			updateSelectedSubtitleTrack(
 				nextTrack && (!nextMode || nextMode === 'showing') ? nextTrack : null
 			);
-			if (options.storeLanguage && selectedSubtitleTrackRef.current?.language) {
-				saveStoredSubtitleLanguage(selectedSubtitleTrackRef.current.language);
+			if (options.storeLanguage && selectedSubtitleTrackRef.current) {
+				saveStoredSubtitleSelection(selectedSubtitleTrackRef.current);
 			}
 		};
 
