@@ -35,6 +35,7 @@ import {
 	type WordleTabSyncState,
 	type WordleTileStatus
 } from '@/lib/player/t';
+import { isValidWordleWord, WORDLE_WORDS } from '@/lib/player/wordleWords';
 import { Button } from '@/components/ui/button';
 
 type WordleTabLayout = {
@@ -67,38 +68,6 @@ const KEY_ROWS = [
 	['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
 	['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
 	['ENTER', 'Z', 'X', 'C', 'V', 'B', 'N', 'M', 'BACKSPACE']
-] as const;
-const ANSWERS = [
-	'CRANE',
-	'SLATE',
-	'BRICK',
-	'PLANT',
-	'GHOST',
-	'WATER',
-	'LIGHT',
-	'FIELD',
-	'PAPER',
-	'MUSIC',
-	'HOUSE',
-	'RIVER',
-	'STONE',
-	'CLOUD',
-	'BREAD',
-	'CHAIR',
-	'FRUIT',
-	'GREEN',
-	'NIGHT',
-	'SMILE',
-	'EARTH',
-	'SHINE',
-	'TRAIN',
-	'PEACH',
-	'BLOOM',
-	'SPARK',
-	'HEART',
-	'ROUTE',
-	'BRAIN',
-	'LASER'
 ] as const;
 
 let wordleTabZIndexCounter = 160;
@@ -230,7 +199,7 @@ function createBoard(turns: number, playerId?: string): WordleBoardSyncState {
 }
 
 function getAnswer(answerIndex: number) {
-	return ANSWERS[Math.abs(answerIndex) % ANSWERS.length];
+	return WORDLE_WORDS[Math.abs(answerIndex) % WORDLE_WORDS.length] ?? 'CRANE';
 }
 
 function hashToAnswerIndex(value: string) {
@@ -238,7 +207,7 @@ function hashToAnswerIndex(value: string) {
 	for (let index = 0; index < value.length; index += 1) {
 		hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
 	}
-	return hash % ANSWERS.length;
+	return hash % WORDLE_WORDS.length;
 }
 
 function isSameWordlePlayer(
@@ -325,6 +294,7 @@ function submitBoardRow(
 		statuses,
 		typed: WORD_LENGTH,
 		submitted: true,
+		guess,
 		...(playerId ? { playerId } : {})
 	};
 	return {
@@ -748,6 +718,9 @@ export function WordleFloatingTab({
 		if (!canType || !activeBoard || !currentPlayer) {
 			return;
 		}
+		if (message) {
+			setMessage('');
+		}
 		setDraft(nextDraft);
 		patchBoard(
 			updateBoardTyped(
@@ -769,6 +742,10 @@ export function WordleFloatingTab({
 		}
 		if (!/^[A-Z]{5}$/.test(draft)) {
 			setMessage('Letters only');
+			return;
+		}
+		if (!isValidWordleWord(draft)) {
+			setMessage('Not in word list');
 			return;
 		}
 

@@ -374,6 +374,7 @@ func TestSanitizeWordleStateDoesNotSerializeGuessLetters(t *testing.T) {
 					Typed:     5,
 					Submitted: true,
 					PlayerID:  "alice",
+					Guess:     "CRANE",
 				}},
 				CurrentRow: 1,
 			}},
@@ -389,6 +390,206 @@ func TestSanitizeWordleStateDoesNotSerializeGuessLetters(t *testing.T) {
 	for _, forbidden := range []string{"CRANE", "crane", "guess", "letters", "answerIndex"} {
 		if strings.Contains(string(encoded), forbidden) {
 			t.Fatalf("wordle state leaked %q in JSON: %s", forbidden, encoded)
+		}
+	}
+}
+
+func TestSyncWordleRejectsInvalidGuess(t *testing.T) {
+	room := newRoom("wordle:room", "")
+	sender := testPlayer("alice-wordle", "Alice", 4)
+	room.players[sender.state.Id] = sender
+	room.wordle = WordleState{
+		Tabs: []WordleTabState{{
+			ID:       "wordle_1",
+			Open:     true,
+			Phase:    "playing",
+			Settings: WordleSettingsState{Mode: "competitive", Turns: 5},
+			Players:  []WordlePlayerState{{ID: "alice", Name: "Alice"}},
+			Boards: []WordleBoardState{{
+				ID:       "board_1",
+				PlayerID: "alice",
+				Rows: []WordleRowState{{
+					Statuses: []string{"typed", "typed", "typed", "typed", "typed"},
+					Typed:    5,
+				}, defaultWordleRow(), defaultWordleRow(), defaultWordleRow(), defaultWordleRow()},
+			}},
+			StartedAt: 12345,
+		}},
+		UpdatedAt: 100,
+	}
+
+	room.syncWordle(sender, &WordleState{
+		Tabs: []WordleTabState{{
+			ID:       "wordle_1",
+			Open:     true,
+			Phase:    "playing",
+			Settings: WordleSettingsState{Mode: "competitive", Turns: 5},
+			Players:  []WordlePlayerState{{ID: "alice", Name: "Alice"}},
+			Boards: []WordleBoardState{{
+				ID:       "board_1",
+				PlayerID: "alice",
+				Rows: []WordleRowState{{
+					Statuses:  []string{"correct", "correct", "correct", "correct", "correct"},
+					Typed:     5,
+					Submitted: true,
+					PlayerID:  "alice",
+					Guess:     "ZZZZZ",
+				}, defaultWordleRow(), defaultWordleRow(), defaultWordleRow(), defaultWordleRow()},
+				CurrentRow: 1,
+				Solved:     true,
+				Finished:   true,
+			}},
+			StartedAt: 12345,
+		}},
+	})
+
+	board := room.wordle.Tabs[0].Boards[0]
+	if board.CurrentRow != 0 || board.Rows[0].Submitted || board.Solved || board.Finished {
+		t.Fatalf("invalid wordle guess was applied = %#v", board)
+	}
+	assertNoQueuedPayload(t, sender)
+}
+
+func TestSyncWordleScoresValidGuessAndStripsGuess(t *testing.T) {
+	room := newRoom("wordle:room", "")
+	sender := testPlayer("alice-wordle", "Alice", 4)
+	receiver := testPlayer("bob-wordle", "Bob", 4)
+	room.players[sender.state.Id] = sender
+	room.players[receiver.state.Id] = receiver
+	tab := WordleTabState{
+		ID:       "wordle_1",
+		Open:     true,
+		Phase:    "playing",
+		Settings: WordleSettingsState{Mode: "competitive", Turns: 5},
+		Players: []WordlePlayerState{
+			{ID: "alice", Name: "Alice"},
+			{ID: "bob", Name: "Bob"},
+		},
+		Boards: []WordleBoardState{{
+			ID:       "board_1",
+			PlayerID: "alice",
+			Rows: []WordleRowState{{
+				Statuses: []string{"typed", "typed", "typed", "typed", "typed"},
+				Typed:    5,
+			}, defaultWordleRow(), defaultWordleRow(), defaultWordleRow(), defaultWordleRow()},
+		}},
+		StartedAt: 12345,
+	}
+	guess := wordleAnswerForBoard(tab, 0)
+	room.wordle = WordleState{Tabs: []WordleTabState{tab}, UpdatedAt: 100}
+	incomingTab := cloneWordleTabForTest(tab)
+	incomingTab.Boards[0].Rows[0] = WordleRowState{
+		Statuses:  []string{"absent", "absent", "absent", "absent", "absent"},
+		Typed:     5,
+		Submitted: true,
+		PlayerID:  "alice",
+		Guess:     guess,
+	}
+	incomingTab.Boards[0].CurrentRow = 1
+
+	room.syncWordle(sender, &WordleState{Tabs: []WordleTabState{incomingTab}})
+
+	board := room.wordle.Tabs[0].Boards[0]
+	if !board.Solved || !board.Finished || board.Rows[0].Guess != "" {
+		t.Fatalf("valid wordle guess was not scored/stripped = %#v", board)
+	}
+	for _, status := range board.Rows[0].Statuses {
+		if status != "correct" {
+			t.Fatalf("valid answer status = %#v", board.Rows[0].Statuses)
+		}
+	}
+	payload := readQueuedPayload(t, receiver)
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal wordle payload: %v", err)
+	}
+	for _, forbidden := range []string{fmt.Sprintf("%q", guess), fmt.Sprintf("%q", strings.ToLower(guess)), "guess"} {
+		if strings.Contains(string(encoded), forbidden) {
+			t.Fatalf("wordle payload leaked %q in JSON: %s", forbidden, encoded)
+		}
+	}
+}
+
+func TestSyncWordleAllowsCoopCurrentTurnSubmission(t *testing.T) {
+	room := newRoom("wordle:room", "")
+	sender := testPlayer("alice-wordle", "Alice", 4)
+	receiver := testPlayer("bob-wordle", "Bob", 4)
+	room.players[sender.state.Id] = sender
+	room.players[receiver.state.Id] = receiver
+	tab := WordleTabState{
+		ID:       "wordle_1",
+		Open:     true,
+		Phase:    "playing",
+		Settings: WordleSettingsState{Mode: "coop", Turns: 1},
+		Players: []WordlePlayerState{
+			{ID: "alice", Name: "Alice"},
+			{ID: "bob", Name: "Bob"},
+		},
+		Boards: []WordleBoardState{{
+			ID: "board_1",
+			Rows: []WordleRowState{{
+				Statuses: []string{"typed", "typed", "typed", "typed", "typed"},
+				Typed:    5,
+				PlayerID: "alice",
+			}},
+		}},
+		ActiveBoardID: "board_1",
+		TurnPlayerID:  "alice",
+		StartedAt:     12345,
+	}
+	guess := "CRANE"
+	if guess == wordleAnswerForBoard(tab, 0) {
+		guess = "SLATE"
+	}
+	room.wordle = WordleState{Tabs: []WordleTabState{tab}, UpdatedAt: 100}
+	incomingTab := cloneWordleTabForTest(tab)
+	incomingTab.Boards[0].Rows[0] = WordleRowState{
+		Statuses:  []string{"absent", "absent", "absent", "absent", "absent"},
+		Typed:     5,
+		Submitted: true,
+		PlayerID:  "alice",
+		Guess:     guess,
+	}
+	incomingTab.Boards[0].CurrentRow = 1
+	incomingTab.Boards[0].Finished = true
+	incomingTab.Boards = append(incomingTab.Boards, WordleBoardState{
+		ID:   "board_2",
+		Rows: []WordleRowState{defaultWordleRow()},
+	})
+	incomingTab.ActiveBoardID = "board_2"
+	incomingTab.TurnPlayerID = "bob"
+
+	room.syncWordle(sender, &WordleState{Tabs: []WordleTabState{incomingTab}})
+
+	stored := room.wordle.Tabs[0]
+	if stored.ActiveBoardID != "board_2" || stored.TurnPlayerID != "bob" || len(stored.Boards) != 2 {
+		t.Fatalf("coop turn did not advance = %#v", stored)
+	}
+	if !stored.Boards[0].Finished || stored.Boards[0].Rows[0].Guess != "" {
+		t.Fatalf("coop submission not applied/stripped = %#v", stored.Boards[0])
+	}
+	payload := readQueuedPayload(t, receiver)
+	if payload.Wordle == nil || payload.Wordle.Tabs[0].ActiveBoardID != "board_2" {
+		t.Fatalf("coop payload = %#v", payload)
+	}
+}
+
+func cloneWordleTabForTest(tab WordleTabState) WordleTabState {
+	tab.Players = append([]WordlePlayerState(nil), tab.Players...)
+	tab.Boards = append([]WordleBoardState(nil), tab.Boards...)
+	for boardIndex := range tab.Boards {
+		tab.Boards[boardIndex].Rows = append([]WordleRowState(nil), tab.Boards[boardIndex].Rows...)
+	}
+	return tab
+}
+
+func TestWordleDictionaryIsComprehensive(t *testing.T) {
+	if len(wordleWords) < 10000 {
+		t.Fatalf("wordle dictionary word count = %d, want comprehensive list", len(wordleWords))
+	}
+	for _, word := range []string{"CRANE", "SLATE", "ADIEU"} {
+		if !isValidWordleGuess(word) {
+			t.Fatalf("wordle dictionary missing common guess %q", word)
 		}
 	}
 }

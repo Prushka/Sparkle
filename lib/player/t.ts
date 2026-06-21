@@ -215,6 +215,7 @@ export interface WordleRowSyncState {
 	typed: number;
 	submitted: boolean;
 	playerId?: string;
+	guess?: string;
 }
 
 export interface WordleBoardSyncState {

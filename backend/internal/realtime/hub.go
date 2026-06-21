@@ -18,6 +18,7 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -35,6 +36,7 @@ var (
 	safeChessSquare     = regexp.MustCompile(`^[a-h][1-8]$`)
 	safeChessFEN        = regexp.MustCompile(`^[pnbrqkPNBRQK1-8/]+ [wb] (?:K?Q?k?q?|-)? (?:[a-h][36]|-) [0-9]{1,3} [0-9]{1,4}$`)
 	safeCottagePlayerID = regexp.MustCompile(`^[A-Za-z0-9_:-]{1,128}$`)
+	safeWordleGuess     = regexp.MustCompile(`^[A-Z]{5}$`)
 )
 
 const (
@@ -1408,7 +1410,7 @@ func sanitizeChessDrawOffer(offer *ChessDrawOfferState) *ChessDrawOfferState {
 func (r *Room) syncWordle(sender *Player, incoming *WordleState) {
 	now := time.Now()
 	timestamp := now.UnixMilli()
-	state, ok := sanitizeWordleState(incoming, timestamp)
+	state, ok := sanitizeIncomingWordleState(incoming, timestamp)
 	if !ok {
 		return
 	}
@@ -1466,6 +1468,11 @@ func mergeWordleState(previous WordleState, incoming WordleState, senderID strin
 			next.Tabs = append(next.Tabs, previousTab)
 			continue
 		}
+		incomingTab, ok = applyWordleSubmissionRules(previousTab, incomingTab, senderID, timestamp)
+		if !ok {
+			next.Tabs = append(next.Tabs, previousTab)
+			continue
+		}
 		if !incomingTab.Open {
 			changed = true
 			continue
@@ -1484,6 +1491,11 @@ func mergeWordleState(previous WordleState, incoming WordleState, senderID strin
 		if !wordleTabHasPlayer(incomingTab, senderID) {
 			continue
 		}
+		var ok bool
+		incomingTab, ok = applyWordleSubmissionRules(WordleTabState{}, incomingTab, senderID, timestamp)
+		if !ok {
+			continue
+		}
 		incomingTab.UpdatedAt = timestamp
 		next.Tabs = append(next.Tabs, incomingTab)
 		changed = true
@@ -1499,6 +1511,204 @@ func mergeWordleState(previous WordleState, incoming WordleState, senderID strin
 		next.UpdatedAt = previous.UpdatedAt
 	}
 	return next, changed
+}
+
+func applyWordleSubmissionRules(previous WordleTabState, incoming WordleTabState, senderID string, timestamp int64) (WordleTabState, bool) {
+	if incoming.Phase == "setup" {
+		return stripWordleGuesses(incoming), true
+	}
+	validationTab := incoming
+	if previous.Phase != "" && previous.Phase != "setup" {
+		validationTab = previous
+		incoming.Settings = previous.Settings
+		incoming.StartedAt = previous.StartedAt
+	}
+	previousBoards := make(map[string]WordleBoardState, len(previous.Boards))
+	for _, board := range previous.Boards {
+		previousBoards[board.ID] = board
+	}
+	for boardIndex, board := range incoming.Boards {
+		previousBoard, hasPrevious := previousBoards[board.ID]
+		nextBoard, ok := applyWordleBoardSubmissionRules(previousBoard, hasPrevious, validationTab, boardIndex, board, senderID, timestamp)
+		if !ok {
+			return incoming, false
+		}
+		incoming.Boards[boardIndex] = nextBoard
+	}
+	return stripWordleGuesses(incoming), true
+}
+
+func applyWordleBoardSubmissionRules(
+	previous WordleBoardState,
+	hasPrevious bool,
+	tab WordleTabState,
+	boardIndex int,
+	board WordleBoardState,
+	senderID string,
+	timestamp int64,
+) (WordleBoardState, bool) {
+	if hasPrevious && previous.Finished {
+		return previous, true
+	}
+	answer := wordleAnswerForBoard(tab, boardIndex)
+	rows := make([]WordleRowState, len(board.Rows))
+	foundOpenRow := false
+	for rowIndex, row := range board.Rows {
+		previousRow := WordleRowState{}
+		hasPreviousRow := hasPrevious && rowIndex < len(previous.Rows)
+		if hasPreviousRow {
+			previousRow = previous.Rows[rowIndex]
+		}
+		if row.Submitted && foundOpenRow {
+			return board, false
+		}
+		if hasPreviousRow && previousRow.Submitted && !row.Submitted {
+			previousRow.Guess = ""
+			rows[rowIndex] = previousRow
+			continue
+		}
+		if row.Submitted {
+			if row.Guess != "" {
+				if !wordleCanSubmitBoard(tab, board, senderID) ||
+					(hasPrevious && rowIndex != previous.CurrentRow) ||
+					!isValidWordleGuess(row.Guess) {
+					return board, false
+				}
+				rows[rowIndex] = WordleRowState{
+					Statuses:  scoreWordleGuess(row.Guess, answer),
+					Typed:     5,
+					Submitted: true,
+					PlayerID:  senderID,
+				}
+				continue
+			}
+			if hasPreviousRow && previousRow.Submitted {
+				previousRow.Guess = ""
+				rows[rowIndex] = previousRow
+				continue
+			}
+			return board, false
+		}
+		row.Guess = ""
+		rows[rowIndex] = row
+		foundOpenRow = true
+	}
+
+	currentRow := 0
+	solved := false
+	for currentRow < len(rows) && rows[currentRow].Submitted {
+		if wordleStatusesSolved(rows[currentRow].Statuses) {
+			solved = true
+			currentRow += 1
+			break
+		}
+		currentRow += 1
+	}
+	if currentRow > tab.Settings.Turns {
+		currentRow = tab.Settings.Turns
+	}
+	finished := solved || currentRow >= tab.Settings.Turns
+	finishedAt := int64(0)
+	if finished {
+		if hasPrevious && previous.FinishedAt > 0 {
+			finishedAt = previous.FinishedAt
+		} else if board.FinishedAt > 0 {
+			finishedAt = board.FinishedAt
+		} else {
+			finishedAt = timestamp
+		}
+	}
+
+	board.Rows = rows
+	board.CurrentRow = currentRow
+	board.Solved = solved
+	board.Finished = finished
+	board.FinishedAt = finishedAt
+	return board, true
+}
+
+func stripWordleGuesses(tab WordleTabState) WordleTabState {
+	for boardIndex := range tab.Boards {
+		for rowIndex := range tab.Boards[boardIndex].Rows {
+			tab.Boards[boardIndex].Rows[rowIndex].Guess = ""
+		}
+	}
+	return tab
+}
+
+func wordleCanSubmitBoard(tab WordleTabState, board WordleBoardState, senderID string) bool {
+	if senderID == "" {
+		return false
+	}
+	if tab.Settings.Mode == "coop" {
+		return tab.TurnPlayerID == senderID && tab.ActiveBoardID == board.ID
+	}
+	return board.PlayerID == senderID
+}
+
+func isValidWordleGuess(guess string) bool {
+	_, ok := wordleWordSet[strings.ToUpper(strings.TrimSpace(guess))]
+	return ok
+}
+
+func wordleAnswerForBoard(tab WordleTabState, boardIndex int) string {
+	seed := "setup"
+	if tab.StartedAt > 0 {
+		seed = strconv.FormatInt(tab.StartedAt, 10)
+	}
+	base := hashToWordleAnswerIndex(tab.ID + ":" + seed)
+	if tab.Settings.Mode == "coop" {
+		base = (base + boardIndex) % len(wordleWords)
+	}
+	return wordleWords[base]
+}
+
+func hashToWordleAnswerIndex(value string) int {
+	if len(wordleWords) == 0 {
+		return 0
+	}
+	var hash uint32
+	for index := 0; index < len(value); index += 1 {
+		hash = hash*31 + uint32(value[index])
+	}
+	return int(hash % uint32(len(wordleWords)))
+}
+
+func scoreWordleGuess(guess string, answer string) []string {
+	guess = strings.ToUpper(strings.TrimSpace(guess))
+	answer = strings.ToUpper(strings.TrimSpace(answer))
+	statuses := []string{"absent", "absent", "absent", "absent", "absent"}
+	remaining := make(map[byte]int, 5)
+	for index := 0; index < 5; index += 1 {
+		if guess[index] == answer[index] {
+			statuses[index] = "correct"
+			continue
+		}
+		remaining[answer[index]] += 1
+	}
+	for index := 0; index < 5; index += 1 {
+		if statuses[index] == "correct" {
+			continue
+		}
+		count := remaining[guess[index]]
+		if count > 0 {
+			statuses[index] = "present"
+			remaining[guess[index]] = count - 1
+		}
+	}
+	return statuses
+}
+
+func wordleStatusesSolved(statuses []string) bool {
+	if len(statuses) < 5 {
+		return false
+	}
+	for index := 0; index < 5; index += 1 {
+		if statuses[index] != "correct" {
+			return false
+		}
+	}
+	return true
 }
 
 func wordleTabUpdateAuthorized(previous WordleTabState, next WordleTabState, senderID string) bool {
@@ -1593,6 +1803,14 @@ func wordleTabHasPlayer(tab WordleTabState, playerID string) bool {
 }
 
 func sanitizeWordleState(incoming *WordleState, timestamp int64) (WordleState, bool) {
+	return sanitizeWordleStateWithGuessOption(incoming, timestamp, false)
+}
+
+func sanitizeIncomingWordleState(incoming *WordleState, timestamp int64) (WordleState, bool) {
+	return sanitizeWordleStateWithGuessOption(incoming, timestamp, true)
+}
+
+func sanitizeWordleStateWithGuessOption(incoming *WordleState, timestamp int64, keepGuesses bool) (WordleState, bool) {
 	if incoming == nil {
 		return WordleState{}, false
 	}
@@ -1603,7 +1821,7 @@ func sanitizeWordleState(incoming *WordleState, timestamp int64) (WordleState, b
 		if len(state.Tabs) >= maxWordleTabs {
 			break
 		}
-		tab, ok := sanitizeWordleTab(rawTab, timestamp)
+		tab, ok := sanitizeWordleTab(rawTab, timestamp, keepGuesses)
 		if !ok || seen[tab.ID] {
 			continue
 		}
@@ -1617,7 +1835,7 @@ func sanitizeWordleState(incoming *WordleState, timestamp int64) (WordleState, b
 	return state, true
 }
 
-func sanitizeWordleTab(rawTab WordleTabState, timestamp int64) (WordleTabState, bool) {
+func sanitizeWordleTab(rawTab WordleTabState, timestamp int64, keepGuesses bool) (WordleTabState, bool) {
 	id := strings.TrimSpace(rawTab.ID)
 	if !safeID.MatchString(id) {
 		return WordleTabState{}, false
@@ -1646,7 +1864,7 @@ func sanitizeWordleTab(rawTab WordleTabState, timestamp int64) (WordleTabState, 
 		return tab, true
 	}
 
-	tab.Boards = sanitizeWordleBoards(rawTab.Boards, settings.Turns, timestamp)
+	tab.Boards = sanitizeWordleBoards(rawTab.Boards, settings.Turns, timestamp, keepGuesses)
 	activeBoardID := strings.TrimSpace(rawTab.ActiveBoardID)
 	if safeID.MatchString(activeBoardID) {
 		tab.ActiveBoardID = activeBoardID
@@ -1716,7 +1934,7 @@ func sanitizeWordlePlayers(players []WordlePlayerState) []WordlePlayerState {
 	return sanitized
 }
 
-func sanitizeWordleBoards(boards []WordleBoardState, turns int, timestamp int64) []WordleBoardState {
+func sanitizeWordleBoards(boards []WordleBoardState, turns int, timestamp int64, keepGuesses bool) []WordleBoardState {
 	if len(boards) == 0 {
 		return nil
 	}
@@ -1750,7 +1968,7 @@ func sanitizeWordleBoards(boards []WordleBoardState, turns int, timestamp int64)
 		sanitized = append(sanitized, WordleBoardState{
 			ID:         id,
 			PlayerID:   playerID,
-			Rows:       sanitizeWordleRows(raw.Rows, turns),
+			Rows:       sanitizeWordleRows(raw.Rows, turns, keepGuesses),
 			CurrentRow: currentRow,
 			Solved:     raw.Solved,
 			Finished:   finished,
@@ -1760,7 +1978,7 @@ func sanitizeWordleBoards(boards []WordleBoardState, turns int, timestamp int64)
 	return sanitized
 }
 
-func sanitizeWordleRows(rows []WordleRowState, turns int) []WordleRowState {
+func sanitizeWordleRows(rows []WordleRowState, turns int, keepGuesses bool) []WordleRowState {
 	sanitized := make([]WordleRowState, turns)
 	for i := range sanitized {
 		if i >= len(rows) {
@@ -1783,6 +2001,10 @@ func sanitizeWordleRows(rows []WordleRowState, turns int) []WordleRowState {
 		if playerID != "" && !safeID.MatchString(playerID) {
 			playerID = ""
 		}
+		guess := ""
+		if keepGuesses && submitted {
+			guess = sanitizeWordleGuess(raw.Guess)
+		}
 		statuses := make([]string, 5)
 		for index := range statuses {
 			rawStatus := ""
@@ -1796,9 +2018,18 @@ func sanitizeWordleRows(rows []WordleRowState, turns int) []WordleRowState {
 			Typed:     typed,
 			Submitted: submitted,
 			PlayerID:  playerID,
+			Guess:     guess,
 		}
 	}
 	return sanitized
+}
+
+func sanitizeWordleGuess(value string) string {
+	value = strings.ToUpper(strings.TrimSpace(value))
+	if safeWordleGuess.MatchString(value) {
+		return value
+	}
+	return ""
 }
 
 func defaultWordleRow() WordleRowState {

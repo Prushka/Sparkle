@@ -7,7 +7,8 @@
 		"start": "next start",
 		"check": "tsc --noEmit",
 		"lint": "prettier --check . && eslint .",
-		"format": "prettier --write ."
+		"format": "prettier --write .",
+		"generate:wordle-dictionary": "node scripts/generate-wordle-dictionary.mjs"
 	},
 	"type": "module",
 	"dependencies": {
@@ -52,6 +53,7 @@
 		"postcss": "^8.5.15",
 		"prettier": "^3.8.3",
 		"tailwindcss": "^4.3.0",
-		"typescript": "^6.0.3"
+		"typescript": "^6.0.3",
+		"word-list": "^4.1.0"
 	}
 }

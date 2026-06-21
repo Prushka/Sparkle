@@ -159,6 +159,7 @@ type WordleRowState struct {
 	Typed     int      `json:"typed"`
 	Submitted bool     `json:"submitted"`
 	PlayerID  string   `json:"playerId,omitempty"`
+	Guess     string   `json:"guess,omitempty"`
 }
 
 type WordleBoardState struct {

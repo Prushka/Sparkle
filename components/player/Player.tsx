@@ -610,6 +610,7 @@ const MAX_YOUTUBE_TABS = 12;
 const MAX_CHESS_TABS = 64;
 const MAX_CHESS_MOVES = 600;
 const WORDLE_WORD_LENGTH = 5;
+const WORDLE_GUESS_PATTERN = /^[A-Z]{5}$/;
 const DEFAULT_WORDLE_TURNS = 5;
 const MAX_WORDLE_TURNS = 10;
 const MAX_WORDLE_TABS = 64;
@@ -1127,13 +1128,18 @@ function normalizeWordleRows(
 			typeof row.playerId === 'string' && CHESS_TAB_ID_PATTERN.test(row.playerId)
 				? row.playerId
 				: undefined;
+		const guess =
+			submitted && typeof row.guess === 'string' && WORDLE_GUESS_PATTERN.test(row.guess)
+				? row.guess
+				: undefined;
 		return {
 			statuses: Array.from({ length: WORDLE_WORD_LENGTH }, (_, index) =>
 				normalizeWordleTileStatus(row.statuses?.[index], submitted, index < typed)
 			),
 			typed,
 			submitted,
-			...(playerId ? { playerId } : {})
+			...(playerId ? { playerId } : {}),
+			...(guess ? { guess } : {})
 		};
 	});
 }
