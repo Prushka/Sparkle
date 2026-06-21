@@ -224,50 +224,25 @@
 	0% {
 		transform: scale(1);
 	}
-	45% {
-		transform: scale(1.14);
+	40% {
+		transform: scale(1.18);
+	}
+	70% {
+		transform: scale(0.98);
 	}
 	100% {
 		transform: scale(1);
 	}
 }
 
-@keyframes wordle-tile-flip {
-	0% {
-		transform: rotateX(0deg) scale(1);
-	}
-	48% {
-		transform: rotateX(90deg) scale(0.98);
-	}
-	52% {
-		transform: rotateX(90deg) scale(0.98);
-	}
-	100% {
-		transform: rotateX(0deg) scale(1);
-	}
-}
-
 .wordle-tile {
 	backface-visibility: hidden;
 	transform-origin: center;
-	transform-style: preserve-3d;
 	will-change: transform;
 }
 
 .wordle-tile-pop {
-	animation: wordle-tile-pop 150ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-
-.wordle-tile-flip {
-	animation: wordle-tile-flip 520ms cubic-bezier(0.35, 0, 0.2, 1) both;
-	animation-delay: var(--wordle-delay, 0ms);
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.wordle-tile-pop,
-	.wordle-tile-flip {
-		animation: none;
-	}
+	animation: wordle-tile-pop 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 :root {

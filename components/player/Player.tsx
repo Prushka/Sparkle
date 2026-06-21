@@ -1306,6 +1306,89 @@ function isMeaningfulWordleState(state: WordleSyncState) {
 	return state.tabs.some((tab) => tab.open || tab.phase !== 'setup' || tab.boards.length > 0);
 }
 
+function isValidMultiplayerPlayerId(id: string | null | undefined): id is string {
+	return typeof id === 'string' && CHESS_TAB_ID_PATTERN.test(id);
+}
+
+function addResumePlayerId(
+	candidates: Set<string>,
+	player: { id: string; profileId?: string } | null | undefined,
+	profileId: string
+) {
+	if (player?.profileId === profileId && isValidMultiplayerPlayerId(player.id)) {
+		candidates.add(player.id);
+	}
+}
+
+function collectChessResumePlayerIds(
+	state: ChessSyncState,
+	profileId: string,
+	candidates: Set<string>
+) {
+	for (const tab of state.tabs) {
+		if (!tab.open) {
+			continue;
+		}
+		addResumePlayerId(candidates, tab.white, profileId);
+		addResumePlayerId(candidates, tab.black, profileId);
+	}
+}
+
+function collectWordleResumePlayerIds(
+	state: WordleSyncState,
+	profileId: string,
+	candidates: Set<string>
+) {
+	for (const tab of state.tabs) {
+		if (!tab.open) {
+			continue;
+		}
+		for (const player of tab.players) {
+			addResumePlayerId(candidates, player, profileId);
+		}
+	}
+}
+
+function findStoredMultiplayerPlayerId(
+	roomId: string,
+	profileId: string,
+	currentPlayerId: string | null
+) {
+	if (typeof window === 'undefined' || !profileId) {
+		return currentPlayerId;
+	}
+	const candidates = new Set<string>();
+	collectChessResumePlayerIds(
+		readStoredChessSyncState(`sparkle:chess-sync-state:${roomId}`),
+		profileId,
+		candidates
+	);
+	collectWordleResumePlayerIds(
+		readStoredWordleSyncState(`sparkle:wordle-sync-state:${roomId}`),
+		profileId,
+		candidates
+	);
+	if (currentPlayerId && candidates.has(currentPlayerId)) {
+		return currentPlayerId;
+	}
+	if (candidates.size === 1) {
+		return [...candidates][0];
+	}
+	return currentPlayerId;
+}
+
+function getSessionPlayerId(roomId: string, profileId: string) {
+	if (typeof window === 'undefined') {
+		return randomString(14);
+	}
+	const storedSessionId = window.sessionStorage.getItem('playerId');
+	const currentPlayerId = isValidMultiplayerPlayerId(storedSessionId) ? storedSessionId : null;
+	const resumedPlayerId = findStoredMultiplayerPlayerId(roomId, profileId, currentPlayerId);
+	const nextPlayerId = resumedPlayerId ?? randomString(14);
+	window.sessionStorage.setItem('playerId', nextPlayerId);
+	return nextPlayerId;
+}
+
 function normalizePlayerVolume(volume: number): number {
 	if (!Number.isFinite(volume)) {
 		return DEFAULT_PLAYER_VOLUME;
@@ -4809,20 +4892,19 @@ export function Player({
 				return;
 			}
 			const storedId = window.localStorage.getItem('id');
+			let nextProfileId = storedId ?? '';
 			if (storedId) {
 				setProfileId(storedId);
 			} else {
-				const nextId = randomString(14);
-				window.localStorage.setItem('id', nextId);
-				setProfileId(nextId);
+				nextProfileId = randomString(14);
+				window.localStorage.setItem('id', nextProfileId);
+				setProfileId(nextProfileId);
 			}
 
-			const sessionPlayerId = randomString(14);
-			window.sessionStorage.setItem('playerId', sessionPlayerId);
-			setPlayerId(sessionPlayerId);
+			setPlayerId(getSessionPlayerId(room, nextProfileId));
 		}, 0);
 		return () => window.clearTimeout(timer);
-	}, [discordUserId]);
+	}, [discordUserId, room]);
 
 	useEffect(() => {
 		if (typeof window === 'undefined') {

@@ -796,10 +796,10 @@ func cloneWordleTabForTest(tab WordleTabState) WordleTabState {
 }
 
 func TestWordleDictionaryIsComprehensive(t *testing.T) {
-	if len(wordleWords) < 10000 {
+	if len(wordleWords) < 12500 {
 		t.Fatalf("wordle dictionary word count = %d, want comprehensive list", len(wordleWords))
 	}
-	for _, word := range []string{"CRANE", "SLATE", "ADIEU"} {
+	for _, word := range []string{"CRANE", "SLATE", "ADIEU", "BOOBS", "EMOJI"} {
 		if !isValidWordleGuess(word) {
 			t.Fatalf("wordle dictionary missing common guess %q", word)
 		}

@@ -1,7 +1,6 @@
 'use client';
 
 import {
-	type CSSProperties,
 	type KeyboardEvent,
 	type PointerEvent as ReactPointerEvent,
 	useCallback,
@@ -75,10 +74,6 @@ let wordleTabZIndexCounter = 160;
 
 type FloatingZIndexWindow = Window & {
 	__sparkleFloatingTabZIndex?: number;
-};
-
-type WordleTileStyle = CSSProperties & {
-	'--wordle-delay'?: string;
 };
 
 function nextFloatingTabZIndex() {
@@ -219,7 +214,13 @@ function isSameWordlePlayer(
 	left: WordlePlayerSyncState | null | undefined,
 	right: WordlePlayerSyncState | null | undefined
 ) {
-	return Boolean(left && right && left.id === right.id);
+	if (!left || !right) {
+		return false;
+	}
+	return (
+		left.id === right.id ||
+		Boolean(left.profileId && right.profileId && left.profileId === right.profileId)
+	);
 }
 
 function playerLabel(player: WordlePlayerSyncState | null | undefined) {
@@ -374,29 +375,16 @@ function tileAnimationClass(
 	status: WordleTileStatus,
 	letter: string,
 	submitted: boolean,
-	mini: boolean
+	mini: boolean,
+	animatePop: boolean
 ) {
 	if (mini) {
 		return '';
 	}
-	if (submitted && status !== 'empty' && status !== 'typed') {
-		return 'wordle-tile-flip';
-	}
-	if (letter && status === 'typed') {
+	if (animatePop && letter && status === 'typed') {
 		return 'wordle-tile-pop';
 	}
 	return '';
-}
-
-function tileAnimationStyle(
-	submitted: boolean,
-	mini: boolean,
-	cellIndex: number
-): WordleTileStyle | undefined {
-	if (mini || !submitted) {
-		return undefined;
-	}
-	return { '--wordle-delay': `${cellIndex * 85}ms` };
 }
 
 function keyClass(status: WordleTileStatus | undefined, wide = false) {
@@ -448,9 +436,6 @@ export function WordleFloatingTab({
 }: WordleFloatingTabProps) {
 	const storageKey = `sparkle:wordle-tab-layout:${roomId}:${state.id}`;
 	const collapsedStorageKey = `sparkle:wordle-tab-collapsed:${roomId}:${state.id}`;
-	const localGuessStorageKey = currentPlayer
-		? `sparkle:wordle-guesses:${roomId}:${state.id}:${currentPlayer.id}`
-		: '';
 	const panelRef = useRef<HTMLDivElement | null>(null);
 	const dragRef = useRef<{
 		pointerId: number;
@@ -468,6 +453,7 @@ export function WordleFloatingTab({
 	} | null>(null);
 	const dragCleanupRef = useRef<(() => void) | null>(null);
 	const resizeCleanupRef = useRef<(() => void) | null>(null);
+	const animationCounterRef = useRef(0);
 	const [layoutReady, setLayoutReady] = useState(false);
 	const [layout, setLayout] = useState<WordleTabLayout>({
 		x: 40,
@@ -480,15 +466,20 @@ export function WordleFloatingTab({
 	const [draft, setDraft] = useState('');
 	const [message, setMessage] = useState('');
 	const [localGuesses, setLocalGuesses] = useState<LocalGuessMap>({});
+	const [popAnimations, setPopAnimations] = useState<Record<string, number>>({});
 
 	const turns = clampTurns(state.settings.turns);
-	const isParticipant = Boolean(
-		currentPlayer && state.players.some((player) => isSameWordlePlayer(player, currentPlayer))
-	);
+	const participantPlayer =
+		currentPlayer && state.players.find((player) => isSameWordlePlayer(player, currentPlayer));
+	const effectivePlayerId = participantPlayer?.id ?? currentPlayer?.id ?? '';
+	const localGuessStorageKey = effectivePlayerId
+		? `sparkle:wordle-guesses:${roomId}:${state.id}:${effectivePlayerId}`
+		: '';
+	const isParticipant = Boolean(participantPlayer);
 	const activePlayer = state.players.find((player) => player.id === state.turnPlayerId) ?? null;
 	const myBoard =
-		currentPlayer && state.settings.mode === 'competitive'
-			? (state.boards.find((board) => board.playerId === currentPlayer.id) ?? null)
+		effectivePlayerId && state.settings.mode === 'competitive'
+			? (state.boards.find((board) => board.playerId === effectivePlayerId) ?? null)
 			: null;
 	const coopActiveBoard =
 		state.settings.mode === 'coop'
@@ -503,7 +494,7 @@ export function WordleFloatingTab({
 		state.phase === 'playing' &&
 		activeBoard &&
 		!activeBoard.finished &&
-		(state.settings.mode === 'competitive' || state.turnPlayerId === currentPlayer.id)
+		(state.settings.mode === 'competitive' || state.turnPlayerId === effectivePlayerId)
 	);
 	const panelCollapsed = collapsed;
 	const compactLayout = !panelCollapsed && layout.width < 560;
@@ -742,6 +733,21 @@ export function WordleFloatingTab({
 		});
 	}
 
+	function nextAnimationToken() {
+		animationCounterRef.current += 1;
+		return animationCounterRef.current;
+	}
+
+	function tileAnimationKey(boardId: string, rowIndex: number, cellIndex: number) {
+		return `${boardId}:${rowIndex}:${cellIndex}`;
+	}
+
+	function triggerPopAnimation(boardId: string, rowIndex: number, cellIndex: number) {
+		const key = tileAnimationKey(boardId, rowIndex, cellIndex);
+		const token = nextAnimationToken();
+		setPopAnimations((current) => ({ ...current, [key]: token }));
+	}
+
 	function patchBoard(board: WordleBoardSyncState) {
 		onStateChange({
 			boards: state.boards.map((candidate) => (candidate.id === board.id ? board : candidate))
@@ -755,13 +761,16 @@ export function WordleFloatingTab({
 		if (message) {
 			setMessage('');
 		}
+		if (nextDraft.length > draft.length) {
+			triggerPopAnimation(activeBoard.id, activeBoard.currentRow, nextDraft.length - 1);
+		}
 		setDraft(nextDraft);
 		patchBoard(
 			updateBoardTyped(
 				activeBoard,
 				turns,
 				nextDraft.length,
-				state.settings.mode === 'coop' ? currentPlayer.id : activeBoard.playerId
+				state.settings.mode === 'coop' ? effectivePlayerId : activeBoard.playerId
 			)
 		);
 	}
@@ -788,7 +797,7 @@ export function WordleFloatingTab({
 			turns,
 			draft,
 			activeAnswerIndex,
-			state.settings.mode === 'coop' ? currentPlayer.id : activeBoard.playerId
+			state.settings.mode === 'coop' ? effectivePlayerId : activeBoard.playerId
 		);
 		setLocalGuess(activeBoard.id, activeBoard.currentRow, draft);
 		setDraft('');
@@ -825,7 +834,7 @@ export function WordleFloatingTab({
 		onStateChange({
 			boards: nextBoards,
 			activeBoardId,
-			turnPlayerId: rotateTurn(state.players, currentPlayer.id),
+			turnPlayerId: rotateTurn(state.players, effectivePlayerId),
 			result: null
 		});
 	}
@@ -859,7 +868,7 @@ export function WordleFloatingTab({
 	}
 
 	function addOrReplacePlayer(players: WordlePlayerSyncState[], player: WordlePlayerSyncState) {
-		return [...players.filter((candidate) => candidate.id !== player.id), player];
+		return [...players.filter((candidate) => !isSameWordlePlayer(candidate, player)), player];
 	}
 
 	function joinGame() {
@@ -878,17 +887,17 @@ export function WordleFloatingTab({
 		if (!currentPlayer || !isParticipant || state.phase !== 'setup') {
 			return;
 		}
-		const players = state.players.filter((player) => player.id !== currentPlayer.id);
+		const players = state.players.filter((player) => !isSameWordlePlayer(player, currentPlayer));
 		const nextBoards =
 			state.settings.mode === 'competitive'
-				? state.boards.filter((board) => board.playerId !== currentPlayer.id)
+				? state.boards.filter((board) => board.playerId !== effectivePlayerId)
 				: state.boards;
 		const patch: Partial<WordleTabSyncState> = {
 			players,
 			boards: nextBoards,
 			turnPlayerId:
-				state.turnPlayerId === currentPlayer.id
-					? rotateTurn(players, currentPlayer.id)
+				state.turnPlayerId === effectivePlayerId
+					? rotateTurn(players, effectivePlayerId)
 					: state.turnPlayerId
 		};
 		if (players.length === 0) {
@@ -979,7 +988,7 @@ export function WordleFloatingTab({
 		) {
 			return draft;
 		}
-		if (row.playerId === currentPlayer.id || board.playerId === currentPlayer.id) {
+		if (row.playerId === effectivePlayerId || board.playerId === effectivePlayerId) {
 			return localGuesses[board.id]?.[rowIndex] ?? '';
 		}
 		return '';
@@ -1025,17 +1034,28 @@ export function WordleFloatingTab({
 					return (
 						<div
 							key={`${board.id}-${rowIndex}`}
-							className={mini ? 'grid grid-cols-5 gap-1' : 'grid grid-cols-5 gap-[5px]'}
+							className={
+								mini
+									? 'wordle-board-row grid grid-cols-5 gap-1'
+									: 'wordle-board-row grid grid-cols-5 gap-[5px]'
+							}
 						>
 							{Array.from({ length: WORD_LENGTH }, (_, cellIndex) => {
 								const status = row.statuses[cellIndex] ?? 'empty';
 								const letter = letters[cellIndex] ?? '';
-								const animationClass = tileAnimationClass(status, letter, row.submitted, mini);
+								const popAnimation =
+									popAnimations[tileAnimationKey(board.id, rowIndex, cellIndex)] ?? 0;
+								const animationClass = tileAnimationClass(
+									status,
+									letter,
+									row.submitted,
+									mini,
+									Boolean(popAnimation)
+								);
 								return (
 									<div
-										key={cellIndex}
+										key={`${cellIndex}-${popAnimation}`}
 										className={`${tileClass(status, mini)} ${animationClass}`}
-										style={tileAnimationStyle(row.submitted, mini, cellIndex)}
 										aria-label={letter ? `Letter ${cellIndex + 1}` : `Cell ${cellIndex + 1}`}
 									>
 										{mini ? null : letter}
@@ -1377,7 +1397,7 @@ export function WordleFloatingTab({
 										<div className="mb-2 text-xs font-bold text-muted-foreground">Other Boards</div>
 										<div className="grid gap-3">
 											{state.boards
-												.filter((board) => board.playerId !== currentPlayer?.id)
+												.filter((board) => board.playerId !== effectivePlayerId)
 												.map((board) => {
 													const player = state.players.find(
 														(candidate) => candidate.id === board.playerId
@@ -1391,7 +1411,7 @@ export function WordleFloatingTab({
 														</div>
 													);
 												})}
-											{state.boards.filter((board) => board.playerId !== currentPlayer?.id)
+											{state.boards.filter((board) => board.playerId !== effectivePlayerId)
 												.length === 0 ? (
 												<div className="text-sm font-semibold text-muted-foreground">
 													No other boards

@@ -46,7 +46,9 @@
 		"@types/node": "^25.9.1",
 		"@types/react": "^19.2.15",
 		"@types/react-dom": "^19.2.3",
+		"an-array-of-english-words": "^2.0.0",
 		"autoprefixer": "^10.5.0",
+		"dictionary-en": "^4.0.0",
 		"eslint": "^9.39.4",
 		"eslint-config-next": "^16.2.6",
 		"eslint-config-prettier": "^10.1.8",
@@ -54,6 +56,7 @@
 		"prettier": "^3.8.3",
 		"tailwindcss": "^4.3.0",
 		"typescript": "^6.0.3",
-		"word-list": "^4.1.0"
+		"word-list": "^4.1.0",
+		"wordlist-english": "^1.2.1"
 	}
 }
