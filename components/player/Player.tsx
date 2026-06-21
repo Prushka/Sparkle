@@ -2165,6 +2165,33 @@ function isManagedSubtitleTextTrack(track: any, tracks: SubtitleTrackInfo[]) {
 	return tracks.some((info) => track?.id === info.src || track?.src === info.src);
 }
 
+function showPlayerSubtitleTextTrack(
+	player: MediaPlayerInstance | null,
+	tracks: SubtitleTrackInfo[],
+	selectedTrack: SelectedSubtitleTrack | null
+) {
+	if (!player || !selectedTrack) {
+		return false;
+	}
+	let textTracks: any = null;
+	try {
+		textTracks = player.textTracks;
+	} catch {
+		return false;
+	}
+	const targetTrack = findPlayerTextTrackByOriginalSrc(textTracks, selectedTrack.src);
+	if (!targetTrack) {
+		return false;
+	}
+	for (const track of toArray(textTracks)) {
+		if (isManagedSubtitleTextTrack(track, tracks)) {
+			setPlayerTextTrackMode(track, track === targetTrack ? 'showing' : 'disabled');
+		}
+	}
+	setPlayerTextTrackMode(targetTrack, 'showing');
+	return true;
+}
+
 function restoreSubtitleTextTrackOrder(
 	textTracks: any,
 	tracks: SubtitleTrackInfo[],
@@ -7026,13 +7053,15 @@ export function Player({
 		const setSelectedSubtitleTrack = (
 			track: any,
 			mode?: TextTrackMode,
-			options: { storeLanguage?: boolean } = {}
+			options: { allowClear?: boolean; storeLanguage?: boolean } = {}
 		) => {
 			const nextTrack = selectedFromVidstackTrack(track, subtitleTracksRef.current);
 			const nextMode = mode ?? track?.mode;
-			updateSelectedSubtitleTrack(
-				nextTrack && (!nextMode || nextMode === 'showing') ? nextTrack : null
-			);
+			if (nextTrack && (!nextMode || nextMode === 'showing')) {
+				updateSelectedSubtitleTrack(nextTrack);
+			} else if (options.allowClear) {
+				updateSelectedSubtitleTrack(null);
+			}
 			if (options.storeLanguage && selectedSubtitleTrackRef.current) {
 				saveStoredSubtitleSelection(selectedSubtitleTrackRef.current);
 			}
@@ -7055,7 +7084,10 @@ export function Player({
 			} catch {
 				requestedTrack = null;
 			}
-			setSelectedSubtitleTrack(requestedTrack, detail.mode, { storeLanguage: true });
+			setSelectedSubtitleTrack(requestedTrack, detail.mode, {
+				allowClear: true,
+				storeLanguage: true
+			});
 		};
 
 		playerEl.addEventListener?.('text-track-change', handleTextTrackChange);
@@ -7079,6 +7111,30 @@ export function Player({
 			}
 		};
 	}, [playerEl, updateSelectedSubtitleTrack]);
+
+	useEffect(() => {
+		if (!playerEl || !selectedSubtitleTrack) {
+			return;
+		}
+		let cancelled = false;
+		const restoreSelectedTrack = async () => {
+			for (let attempt = 0; attempt < 8; attempt++) {
+				if (
+					cancelled ||
+					playerElementRef.current !== playerEl ||
+					selectedSubtitleTrackRef.current?.src !== selectedSubtitleTrack.src
+				) {
+					return;
+				}
+				showPlayerSubtitleTextTrack(playerEl, subtitleTracksRef.current, selectedSubtitleTrack);
+				await new Promise((resolve) => window.setTimeout(resolve, attempt < 2 ? 0 : 100));
+			}
+		};
+		void restoreSelectedTrack();
+		return () => {
+			cancelled = true;
+		};
+	}, [playerEl, selectedSubtitleTrack, subtitleTracks]);
 
 	useEffect(() => {
 		controlsShowingRef.current = controlsShowing;
