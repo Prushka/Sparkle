@@ -64,6 +64,7 @@ type ChessFloatingTabProps = {
 	initialIndex?: number;
 	state: ChessTabSyncState;
 	currentPlayer: ChessPlayerSyncState | null;
+	translucent: boolean;
 	onStateChange: (patch: Partial<ChessTabSyncState>) => void;
 	onNotification: (soundId: ChessNotificationSoundId, chess?: ChessSoundEffectContext) => void;
 };
@@ -116,6 +117,8 @@ const PIECE_ASSET_NAMES: Record<PieceSymbol, string> = {
 type BoardThemeDefinition = {
 	light: string;
 	dark: string;
+	lightTranslucent: string;
+	darkTranslucent: string;
 	border: string;
 	accent: string;
 };
@@ -124,22 +127,57 @@ const BOARD_THEMES: Record<ChessBoardTheme, BoardThemeDefinition> = {
 	green: {
 		light: 'bg-emerald-50',
 		dark: 'bg-emerald-600',
+		lightTranslucent: 'bg-emerald-50/45',
+		darkTranslucent: 'bg-emerald-600/45',
 		border: 'border-emerald-900/20',
 		accent: 'bg-emerald-400/45'
 	},
 	blue: {
 		light: 'bg-sky-50',
 		dark: 'bg-sky-600',
+		lightTranslucent: 'bg-sky-50/45',
+		darkTranslucent: 'bg-sky-600/45',
 		border: 'border-sky-950/20',
 		accent: 'bg-cyan-300/45'
 	},
 	walnut: {
 		light: 'bg-stone-100',
 		dark: 'bg-amber-700',
+		lightTranslucent: 'bg-stone-100/45',
+		darkTranslucent: 'bg-amber-700/45',
 		border: 'border-amber-950/25',
 		accent: 'bg-yellow-300/45'
 	}
 };
+
+const CHESS_TRANSLUCENT_CARD_CLASS = 'rounded-md border bg-background/50';
+const CHESS_SOLID_CARD_CLASS = 'rounded-md border bg-background';
+const CHESS_TRANSLUCENT_BUTTON_SURFACE_CLASS = 'bg-background/35 hover:bg-accent/35';
+const CHESS_TRANSLUCENT_PRIMARY_BUTTON_CLASS = 'bg-primary/65 hover:bg-primary/55';
+const CHESS_TRANSLUCENT_DESTRUCTIVE_BUTTON_CLASS = 'bg-destructive/65 hover:bg-destructive/55';
+
+function chessCardClass(translucent: boolean) {
+	return translucent ? CHESS_TRANSLUCENT_CARD_CLASS : CHESS_SOLID_CARD_CLASS;
+}
+
+function chessButtonSurfaceClass(translucent: boolean) {
+	return translucent ? CHESS_TRANSLUCENT_BUTTON_SURFACE_CLASS : '';
+}
+
+function chessPrimaryButtonClass(translucent: boolean) {
+	return translucent ? CHESS_TRANSLUCENT_PRIMARY_BUTTON_CLASS : '';
+}
+
+function chessDestructiveButtonClass(translucent: boolean) {
+	return translucent ? CHESS_TRANSLUCENT_DESTRUCTIVE_BUTTON_CLASS : '';
+}
+
+function chessBoardSquareClass(theme: BoardThemeDefinition, light: boolean, translucent: boolean) {
+	if (light) {
+		return translucent ? theme.lightTranslucent : theme.light;
+	}
+	return translucent ? theme.darkTranslucent : theme.dark;
+}
 
 let chessTabZIndexCounter = 140;
 
@@ -554,6 +592,7 @@ function SeatButton({
 	player,
 	currentPlayer,
 	disabled,
+	translucent,
 	onJoin,
 	onLeave
 }: {
@@ -561,6 +600,7 @@ function SeatButton({
 	player: ChessPlayerSyncState | null;
 	currentPlayer: ChessPlayerSyncState | null;
 	disabled: boolean;
+	translucent: boolean;
 	onJoin: () => void;
 	onLeave: () => void;
 }) {
@@ -570,7 +610,15 @@ function SeatButton({
 	return (
 		<div
 			className={`grid min-w-0 gap-3 rounded-md border p-3 ${
-				isSelf ? 'border-primary bg-primary/10' : occupied ? 'bg-muted/35' : 'bg-background'
+				isSelf
+					? `border-primary ${translucent ? 'bg-primary/5' : 'bg-primary/10'}`
+					: occupied
+						? translucent
+							? 'bg-muted/20'
+							: 'bg-muted/35'
+						: translucent
+							? 'bg-background/40'
+							: 'bg-background'
 			}`}
 		>
 			<div className="flex min-w-0 items-center justify-between gap-3">
@@ -584,14 +632,21 @@ function SeatButton({
 				</div>
 				<div
 					className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full border ${
-						color === 'w' ? 'bg-white text-slate-950' : 'bg-slate-950 text-white'
+						color === 'w'
+							? `${translucent ? 'bg-white/60' : 'bg-white'} text-slate-950`
+							: `${translucent ? 'bg-slate-950/55' : 'bg-slate-950'} text-white`
 					}`}
 				>
 					<IconChess size={18} stroke={2} />
 				</div>
 			</div>
 			{isSelf ? (
-				<Button type="button" variant="outline" className="h-9 w-full gap-2" onClick={onLeave}>
+				<Button
+					type="button"
+					variant="outline"
+					className={`h-9 w-full gap-2 ${chessButtonSurfaceClass(translucent)}`}
+					onClick={onLeave}
+				>
 					<IconUserMinus size={17} stroke={2} />
 					Leave Seat
 				</Button>
@@ -599,7 +654,9 @@ function SeatButton({
 				<Button
 					type="button"
 					variant={occupied ? 'outline' : 'default'}
-					className="h-9 w-full gap-2"
+					className={`h-9 w-full gap-2 ${
+						occupied ? chessButtonSurfaceClass(translucent) : chessPrimaryButtonClass(translucent)
+					}`}
 					disabled={disabled || occupied}
 					onClick={onJoin}
 				>
@@ -611,7 +668,13 @@ function SeatButton({
 	);
 }
 
-function BoardThemePreview({ theme }: { theme: BoardThemeDefinition }) {
+function BoardThemePreview({
+	theme,
+	translucent
+}: {
+	theme: BoardThemeDefinition;
+	translucent: boolean;
+}) {
 	return (
 		<span
 			className={`grid h-12 w-12 shrink-0 grid-cols-4 overflow-hidden rounded border ${theme.border}`}
@@ -619,7 +682,11 @@ function BoardThemePreview({ theme }: { theme: BoardThemeDefinition }) {
 			{Array.from({ length: 16 }, (_, index) => (
 				<span
 					key={index}
-					className={(Math.floor(index / 4) + index) % 2 === 0 ? theme.light : theme.dark}
+					className={chessBoardSquareClass(
+						theme,
+						(Math.floor(index / 4) + index) % 2 === 0,
+						translucent
+					)}
 				/>
 			))}
 		</span>
@@ -649,9 +716,11 @@ function PieceSetPreview({ pieceSet }: { pieceSet: ChessPieceSet }) {
 
 function BoardThemePicker({
 	value,
+	translucent,
 	onChange
 }: {
 	value: ChessBoardTheme;
+	translucent: boolean;
 	onChange: (value: ChessBoardTheme) => void;
 }) {
 	return (
@@ -666,11 +735,17 @@ function BoardThemePicker({
 							type="button"
 							onClick={() => onChange(option.value)}
 							aria-pressed={selected}
-							className={`grid min-w-0 justify-items-center gap-2 rounded-md border p-2 text-sm font-semibold transition-colors hover:bg-accent ${
-								selected ? 'border-primary bg-primary/10 text-primary' : 'bg-background'
+							className={`grid min-w-0 justify-items-center gap-2 rounded-md border p-2 text-sm font-semibold transition-colors ${
+								translucent ? 'hover:bg-accent/35' : 'hover:bg-accent'
+							} ${
+								selected
+									? `border-primary ${translucent ? 'bg-primary/5' : 'bg-primary/10'} text-primary`
+									: translucent
+										? 'bg-background/35'
+										: 'bg-background'
 							}`}
 						>
-							<BoardThemePreview theme={BOARD_THEMES[option.value]} />
+							<BoardThemePreview theme={BOARD_THEMES[option.value]} translucent={translucent} />
 							<span className="truncate">{option.label}</span>
 						</button>
 					);
@@ -682,9 +757,11 @@ function BoardThemePicker({
 
 function PieceSetPicker({
 	value,
+	translucent,
 	onChange
 }: {
 	value: ChessPieceSet;
+	translucent: boolean;
 	onChange: (value: ChessPieceSet) => void;
 }) {
 	return (
@@ -699,8 +776,14 @@ function PieceSetPicker({
 							type="button"
 							onClick={() => onChange(option.value)}
 							aria-pressed={selected}
-							className={`flex min-w-0 items-center justify-between gap-2 rounded-md border p-2 text-sm font-semibold transition-colors hover:bg-accent ${
-								selected ? 'border-primary bg-primary/10 text-primary' : 'bg-background'
+							className={`flex min-w-0 items-center justify-between gap-2 rounded-md border p-2 text-sm font-semibold transition-colors ${
+								translucent ? 'hover:bg-accent/35' : 'hover:bg-accent'
+							} ${
+								selected
+									? `border-primary ${translucent ? 'bg-primary/5' : 'bg-primary/10'} text-primary`
+									: translucent
+										? 'bg-background/35'
+										: 'bg-background'
 							}`}
 						>
 							<span className="truncate">{option.label}</span>
@@ -713,7 +796,14 @@ function PieceSetPicker({
 	);
 }
 
-function ChessSelect({ label, value, disabled = false, onChange, children }: ChessSelectProps) {
+function ChessSelect({
+	label,
+	value,
+	disabled = false,
+	translucent,
+	onChange,
+	children
+}: ChessSelectProps & { translucent: boolean }) {
 	return (
 		<label className="grid gap-1 text-xs font-bold text-muted-foreground">
 			{label}
@@ -722,7 +812,9 @@ function ChessSelect({ label, value, disabled = false, onChange, children }: Che
 					value={value}
 					disabled={disabled}
 					onChange={onChange}
-					className="h-9 w-full appearance-none rounded-md border bg-background py-0 pl-2 pr-9 text-sm font-semibold text-foreground outline-none disabled:opacity-50"
+					className={`h-9 w-full appearance-none rounded-md border ${
+						translucent ? 'bg-background/35' : 'bg-background'
+					} py-0 pl-2 pr-9 text-sm font-semibold text-foreground outline-none disabled:opacity-50`}
 				>
 					{children}
 				</select>
@@ -741,10 +833,12 @@ function ChessSelect({ label, value, disabled = false, onChange, children }: Che
 function ChessCheckbox({
 	label,
 	checked,
+	translucent,
 	onChange
 }: {
 	label: string;
 	checked: boolean;
+	translucent: boolean;
 	onChange: (checked: boolean) => void;
 }) {
 	return (
@@ -756,7 +850,11 @@ function ChessCheckbox({
 					checked={checked}
 					onChange={(event) => onChange(event.target.checked)}
 					aria-label={label}
-					className="absolute inset-0 m-0 h-5 w-5 appearance-none rounded border border-input bg-background checked:border-primary checked:bg-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+					className={`absolute inset-0 m-0 h-5 w-5 appearance-none rounded border border-input ${
+						translucent
+							? 'bg-background/35 checked:bg-primary/65'
+							: 'bg-background checked:bg-primary'
+					} checked:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring`}
 				/>
 				{checked ? (
 					<IconCheck
@@ -775,6 +873,7 @@ export function ChessFloatingTab({
 	initialIndex = 0,
 	state,
 	currentPlayer,
+	translucent,
 	onStateChange,
 	onNotification
 }: ChessFloatingTabProps) {
@@ -1468,14 +1567,19 @@ export function ChessFloatingTab({
 		return null;
 	}
 
+	const cardClass = chessCardClass(translucent);
+	const buttonSurfaceClass = chessButtonSurfaceClass(translucent);
+	const primaryButtonClass = chessPrimaryButtonClass(translucent);
+	const destructiveButtonClass = chessDestructiveButtonClass(translucent);
+
 	return (
 		<div
 			ref={panelRef}
 			data-chess-tab={state.id}
 			data-collapsed={panelCollapsed ? 'true' : 'false'}
-			className={`fixed flex min-w-0 overflow-hidden rounded-lg border border-border bg-background/70 shadow-2xl ${
-				panelCollapsed ? 'min-h-11' : 'min-h-0'
-			}`}
+			className={`fixed flex min-w-0 overflow-hidden rounded-lg border border-border ${
+				translucent ? 'bg-background/55' : 'bg-background'
+			} shadow-2xl ${panelCollapsed ? 'min-h-11' : 'min-h-0'}`}
 			onFocusCapture={bringToFront}
 			onPointerDownCapture={bringToFront}
 			style={{
@@ -1488,7 +1592,9 @@ export function ChessFloatingTab({
 		>
 			<div className="flex min-h-0 w-full flex-col">
 				<div
-					className="flex h-11 shrink-0 cursor-move touch-none select-none items-center gap-2 border-b bg-muted/45 px-2"
+					className={`flex h-11 shrink-0 cursor-move touch-none select-none items-center gap-2 border-b ${
+						translucent ? 'bg-muted/30' : 'bg-muted/65'
+					} px-2`}
 					onPointerDown={handleDragStart}
 					onPointerMove={handleDragMove}
 					onPointerUp={handleDragEnd}
@@ -1506,7 +1612,7 @@ export function ChessFloatingTab({
 						type="button"
 						variant="ghost"
 						size="icon"
-						className="h-8 w-8 shrink-0"
+						className={`h-8 w-8 shrink-0 ${translucent ? 'hover:bg-accent/35' : ''}`}
 						onPointerDown={(event) => event.stopPropagation()}
 						onClick={toggleCollapsed}
 						aria-label={panelCollapsed ? 'Expand chess tab' : 'Collapse chess tab'}
@@ -1522,7 +1628,7 @@ export function ChessFloatingTab({
 						type="button"
 						variant="ghost"
 						size="icon"
-						className="h-8 w-8 shrink-0"
+						className={`h-8 w-8 shrink-0 ${translucent ? 'hover:bg-accent/35' : ''}`}
 						onPointerDown={(event) => event.stopPropagation()}
 						onClick={requestClose}
 						disabled={!isParticipant || Boolean(closeRequest)}
@@ -1533,7 +1639,7 @@ export function ChessFloatingTab({
 				</div>
 
 				<div
-					className={`min-h-0 flex-1 bg-muted/10 p-3 ${
+					className={`min-h-0 flex-1 ${translucent ? 'bg-muted/5' : 'bg-muted/20'} p-3 ${
 						state.phase === 'setup' || compactLayout ? 'overflow-auto' : 'overflow-hidden'
 					}`}
 					aria-hidden={panelCollapsed}
@@ -1557,7 +1663,7 @@ export function ChessFloatingTab({
 							>
 								<div className="grid shrink-0 grid-cols-2 gap-2">
 									<div
-										className={`rounded-md border bg-background/80 px-3 py-2 ${
+										className={`${cardClass} px-3 py-2 ${
 											activeColor === 'b' && state.phase === 'playing' ? 'border-primary' : ''
 										}`}
 									>
@@ -1568,7 +1674,7 @@ export function ChessFloatingTab({
 										</div>
 									</div>
 									<div
-										className={`rounded-md border bg-background/80 px-3 py-2 ${
+										className={`${cardClass} px-3 py-2 ${
 											activeColor === 'w' && state.phase === 'playing' ? 'border-primary' : ''
 										}`}
 									>
@@ -1624,9 +1730,11 @@ export function ChessFloatingTab({
 												<button
 													key={square}
 													type="button"
-													className={`relative flex aspect-square min-h-0 min-w-0 items-center justify-center ${
-														isLight ? theme.light : theme.dark
-													} ${!isMyTurn || closeRequest ? 'cursor-default' : 'cursor-pointer'}`}
+													className={`relative flex aspect-square min-h-0 min-w-0 items-center justify-center ${chessBoardSquareClass(
+														theme,
+														isLight,
+														translucent
+													)} ${!isMyTurn || closeRequest ? 'cursor-default' : 'cursor-pointer'}`}
 													onClick={() => handleSquareClick(square)}
 													aria-disabled={!isMyTurn || Boolean(closeRequest)}
 													aria-label={square}
@@ -1644,7 +1752,11 @@ export function ChessFloatingTab({
 														<span className="absolute inset-0 bg-rose-500/35 ring-2 ring-inset ring-rose-950/50" />
 													) : null}
 													{lastMoveSquare ? (
-														<span className="absolute left-1 top-1 rounded bg-background/80 px-1 text-[10px] font-black uppercase leading-4 text-foreground shadow-sm">
+														<span
+															className={`absolute left-1 top-1 rounded ${
+																translucent ? 'bg-background/55' : 'bg-background/80'
+															} px-1 text-[10px] font-black uppercase leading-4 text-foreground shadow-sm`}
+														>
 															{lastMoveFrom ? 'from' : 'to'}
 														</span>
 													) : null}
@@ -1690,7 +1802,7 @@ export function ChessFloatingTab({
 									</div>
 								</div>
 
-								<div className="shrink-0 rounded-md border bg-background/80 px-3 py-2 text-sm font-semibold">
+								<div className={`${cardClass} shrink-0 px-3 py-2 text-sm font-semibold`}>
 									{currentStatus}
 								</div>
 							</div>
@@ -1707,7 +1819,7 @@ export function ChessFloatingTab({
 						>
 							{state.phase === 'setup' ? (
 								<div className="flex flex-col gap-3">
-									<div className="rounded-md border bg-background/80 p-4">
+									<div className={`${cardClass} p-4`}>
 										<div className="flex items-center justify-between gap-3">
 											<div className="min-w-0">
 												<div className="text-base font-bold">Game Setup</div>
@@ -1727,6 +1839,7 @@ export function ChessFloatingTab({
 											player={state.white}
 											currentPlayer={currentPlayer}
 											disabled={!currentPlayer}
+											translucent={translucent}
 											onJoin={() => joinSeat('w')}
 											onLeave={leaveSeat}
 										/>
@@ -1735,6 +1848,7 @@ export function ChessFloatingTab({
 											player={state.black}
 											currentPlayer={currentPlayer}
 											disabled={!currentPlayer}
+											translucent={translucent}
 											onJoin={() => joinSeat('b')}
 											onLeave={leaveSeat}
 										/>
@@ -1744,7 +1858,7 @@ export function ChessFloatingTab({
 										<Button
 											type="button"
 											variant="outline"
-											className="h-9 gap-2"
+											className={`h-9 gap-2 ${buttonSurfaceClass}`}
 											onClick={swapSeats}
 											disabled={!isParticipant || (!state.white && !state.black)}
 										>
@@ -1753,15 +1867,21 @@ export function ChessFloatingTab({
 										</Button>
 									</div>
 
-									<div className="grid gap-4 rounded-md border bg-background/80 p-3">
+									<div className={`${cardClass} grid gap-4 p-3`}>
 										<BoardThemePicker
 											value={state.settings.boardTheme}
+											translucent={translucent}
 											onChange={(boardTheme) => updateSettings({ boardTheme })}
 										/>
-										<PieceSetPicker value={state.settings.pieceSet} onChange={updatePieceSet} />
+										<PieceSetPicker
+											value={state.settings.pieceSet}
+											translucent={translucent}
+											onChange={updatePieceSet}
+										/>
 										<ChessCheckbox
 											label="Timed"
 											checked={state.settings.timed}
+											translucent={translucent}
 											onChange={(checked) => updateSettings({ timed: checked })}
 										/>
 										<div className="grid grid-cols-2 gap-2">
@@ -1769,6 +1889,7 @@ export function ChessFloatingTab({
 												label="Minutes"
 												value={state.settings.minutes}
 												disabled={!state.settings.timed}
+												translucent={translucent}
 												onChange={(event) =>
 													updateSettings({ minutes: Number(event.target.value) })
 												}
@@ -1783,6 +1904,7 @@ export function ChessFloatingTab({
 												label="Increment"
 												value={state.settings.incrementSeconds}
 												disabled={!state.settings.timed}
+												translucent={translucent}
 												onChange={(event) =>
 													updateSettings({ incrementSeconds: Number(event.target.value) })
 												}
@@ -1798,7 +1920,7 @@ export function ChessFloatingTab({
 
 									<Button
 										type="button"
-										className="h-10 gap-2"
+										className={`h-10 gap-2 ${primaryButtonClass}`}
 										onClick={startGame}
 										disabled={!canStartGame}
 									>
@@ -1814,7 +1936,7 @@ export function ChessFloatingTab({
 											: 'flex min-h-0 flex-1 flex-col gap-3'
 									}
 								>
-									<div className="rounded-md border bg-background/80 p-3">
+									<div className={`${cardClass} p-3`}>
 										<div className="mb-2 flex items-center justify-between gap-2">
 											<div className="text-xs font-bold text-muted-foreground">Current Pieces</div>
 											<PieceSetPreview pieceSet={state.settings.pieceSet} />
@@ -1822,6 +1944,7 @@ export function ChessFloatingTab({
 										<ChessSelect
 											label="Pieces"
 											value={state.settings.pieceSet}
+											translucent={translucent}
 											onChange={(event) => updatePieceSet(event.target.value as ChessPieceSet)}
 										>
 											{CHESS_PIECE_SET_OPTIONS.map((option) => (
@@ -1837,7 +1960,7 @@ export function ChessFloatingTab({
 												<Button
 													type="button"
 													variant="outline"
-													className="h-9 gap-2"
+													className={`h-9 gap-2 ${buttonSurfaceClass}`}
 													onClick={() => offerOrAnswerDraw(canAnswerDrawOffer)}
 													disabled={!isParticipant || Boolean(drawOffer && !canAnswerDrawOffer)}
 												>
@@ -1852,7 +1975,7 @@ export function ChessFloatingTab({
 													<Button
 														type="button"
 														variant="ghost"
-														className="h-9 gap-2"
+														className={`h-9 gap-2 ${translucent ? 'hover:bg-accent/35' : ''}`}
 														onClick={declineDraw}
 													>
 														<IconCircleX size={17} stroke={2} />
@@ -1862,7 +1985,7 @@ export function ChessFloatingTab({
 												<Button
 													type="button"
 													variant="destructive"
-													className="h-9 gap-2"
+													className={`h-9 gap-2 ${destructiveButtonClass}`}
 													onClick={resign}
 													disabled={!isParticipant}
 												>
@@ -1874,7 +1997,7 @@ export function ChessFloatingTab({
 											<Button
 												type="button"
 												variant="outline"
-												className="h-9 gap-2"
+												className={`h-9 gap-2 ${buttonSurfaceClass}`}
 												onClick={resetGame}
 												disabled={!isParticipant}
 											>
@@ -1884,7 +2007,7 @@ export function ChessFloatingTab({
 										)}
 									</div>
 
-									<div className="grid gap-3 rounded-md border bg-background/80 p-3">
+									<div className={`${cardClass} grid gap-3 p-3`}>
 										<div className="grid gap-1">
 											<div className="text-xs font-bold text-muted-foreground">Last Move</div>
 											<div className="text-sm font-bold">
@@ -1913,8 +2036,16 @@ export function ChessFloatingTab({
 			</div>
 
 			{promotion ? (
-				<div className="absolute inset-0 z-20 flex items-center justify-center bg-background/70 p-4 backdrop-blur-sm">
-					<div className="grid gap-3 rounded-lg border bg-background p-4 shadow-xl">
+				<div
+					className={`absolute inset-0 z-20 flex items-center justify-center ${
+						translucent ? 'bg-background/45' : 'bg-background/70 backdrop-blur-sm'
+					} p-4`}
+				>
+					<div
+						className={`grid gap-3 rounded-lg border ${
+							translucent ? 'bg-background/65' : 'bg-background'
+						} p-4 shadow-xl`}
+					>
 						<div className="text-sm font-bold">Promote pawn</div>
 						<div className="grid grid-cols-4 gap-2">
 							{promotion.options.map((piece) => (
@@ -1922,7 +2053,7 @@ export function ChessFloatingTab({
 									key={piece}
 									type="button"
 									variant="outline"
-									className="h-14 w-14 p-1"
+									className={`h-14 w-14 p-1 ${buttonSurfaceClass}`}
 									onClick={() => {
 										makeMove(promotion.from, promotion.to, piece);
 										setPromotion(null);
@@ -1948,8 +2079,16 @@ export function ChessFloatingTab({
 			) : null}
 
 			{closeRequest ? (
-				<div className="absolute inset-0 z-30 flex items-center justify-center bg-background/75 p-4 backdrop-blur-sm">
-					<div className="grid max-w-sm gap-3 rounded-lg border bg-background p-4 text-center shadow-xl">
+				<div
+					className={`absolute inset-0 z-30 flex items-center justify-center ${
+						translucent ? 'bg-background/45' : 'bg-background/75 backdrop-blur-sm'
+					} p-4`}
+				>
+					<div
+						className={`grid max-w-sm gap-3 rounded-lg border ${
+							translucent ? 'bg-background/65' : 'bg-background'
+						} p-4 text-center shadow-xl`}
+					>
 						<IconCrown className="mx-auto text-muted-foreground" size={28} stroke={2} />
 						<div className="text-base font-bold">Close chess tab?</div>
 						<div className="text-sm font-medium text-muted-foreground">
@@ -1958,11 +2097,20 @@ export function ChessFloatingTab({
 						</div>
 						{closeResponder ? (
 							<div className="grid grid-cols-2 gap-2">
-								<Button type="button" variant="outline" className="gap-2" onClick={cancelClose}>
+								<Button
+									type="button"
+									variant="outline"
+									className={`gap-2 ${buttonSurfaceClass}`}
+									onClick={cancelClose}
+								>
 									<IconCircleX size={17} stroke={2} />
 									Cancel
 								</Button>
-								<Button type="button" className="gap-2" onClick={confirmClose}>
+								<Button
+									type="button"
+									className={`gap-2 ${primaryButtonClass}`}
+									onClick={confirmClose}
+								>
 									<IconCircleCheck size={17} stroke={2} />
 									Confirm
 								</Button>

@@ -50,6 +50,7 @@ type WordleFloatingTabProps = {
 	initialIndex?: number;
 	state: WordleTabSyncState;
 	currentPlayer: WordlePlayerSyncState | null;
+	translucent: boolean;
 	onStateChange: (patch: Partial<WordleTabSyncState>) => void;
 };
 
@@ -64,6 +65,10 @@ const COLLAPSED_HEIGHT = 44;
 const VIEWPORT_MARGIN = 8;
 const DEFAULT_TURNS = 6;
 const MAX_TURNS = 10;
+const WORDLE_TRANSLUCENT_CARD_CLASS = 'rounded-md border bg-background/50';
+const WORDLE_SOLID_CARD_CLASS = 'rounded-md border bg-background';
+const WORDLE_TRANSLUCENT_BUTTON_SURFACE_CLASS = 'bg-background/35 hover:bg-accent/35';
+const WORDLE_TRANSLUCENT_PRIMARY_BUTTON_CLASS = 'bg-primary/65 hover:bg-primary/55';
 const KEY_ROWS = [
 	['Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I', 'O', 'P'],
 	['A', 'S', 'D', 'F', 'G', 'H', 'J', 'K', 'L'],
@@ -353,21 +358,43 @@ function buildCompetitiveResult(
 	};
 }
 
-function tileClass(status: WordleTileStatus, mini: boolean) {
+function wordleCardClass(translucent: boolean) {
+	return translucent ? WORDLE_TRANSLUCENT_CARD_CLASS : WORDLE_SOLID_CARD_CLASS;
+}
+
+function wordleButtonSurfaceClass(translucent: boolean) {
+	return translucent ? WORDLE_TRANSLUCENT_BUTTON_SURFACE_CLASS : '';
+}
+
+function wordlePrimaryButtonClass(translucent: boolean) {
+	return translucent ? WORDLE_TRANSLUCENT_PRIMARY_BUTTON_CLASS : '';
+}
+
+function tileClass(status: WordleTileStatus, mini: boolean, translucent: boolean) {
 	const base = mini
 		? 'wordle-tile flex aspect-square items-center justify-center border text-[0px] transition-colors duration-200'
 		: 'wordle-tile flex aspect-square items-center justify-center border-2 text-[2rem] font-black uppercase leading-none transition-[background-color,border-color,color,transform] duration-200';
 	switch (status) {
 		case 'correct':
-			return `${base} border-[#6aaa64] bg-[#6aaa64] text-white`;
+			return translucent
+				? `${base} border-[#6aaa64]/85 bg-[#6aaa64]/70 text-white`
+				: `${base} border-[#6aaa64] bg-[#6aaa64] text-white`;
 		case 'present':
-			return `${base} border-[#c9b458] bg-[#c9b458] text-white`;
+			return translucent
+				? `${base} border-[#c9b458]/85 bg-[#c9b458]/70 text-white`
+				: `${base} border-[#c9b458] bg-[#c9b458] text-white`;
 		case 'absent':
-			return `${base} border-[#787c7e] bg-[#787c7e] text-white`;
+			return translucent
+				? `${base} border-[#787c7e]/85 bg-[#787c7e]/65 text-white`
+				: `${base} border-[#787c7e] bg-[#787c7e] text-white`;
 		case 'typed':
-			return `${base} border-muted-foreground/55 bg-background text-foreground shadow-[inset_0_0_0_1px_hsl(var(--muted-foreground)/0.12)]`;
+			return translucent
+				? `${base} border-muted-foreground/45 bg-background/40 text-foreground shadow-[inset_0_0_0_1px_hsl(var(--muted-foreground)/0.12)]`
+				: `${base} border-muted-foreground/55 bg-background text-foreground shadow-[inset_0_0_0_1px_hsl(var(--muted-foreground)/0.12)]`;
 		default:
-			return `${base} border-muted-foreground/35 bg-background text-foreground`;
+			return translucent
+				? `${base} border-muted-foreground/25 bg-background/25 text-foreground`
+				: `${base} border-muted-foreground/35 bg-background text-foreground`;
 	}
 }
 
@@ -387,17 +414,25 @@ function tileAnimationClass(
 	return '';
 }
 
-function keyClass(status: WordleTileStatus | undefined, wide = false) {
+function keyClass(status: WordleTileStatus | undefined, translucent: boolean, wide = false) {
 	const base = `flex h-11 min-w-0 ${wide ? 'flex-[2_1_0]' : 'flex-1'} items-center justify-center rounded text-xs font-black uppercase transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50`;
 	switch (status) {
 		case 'correct':
-			return `${base} bg-[#6aaa64] text-white`;
+			return translucent
+				? `${base} bg-[#6aaa64]/70 text-white hover:bg-[#6aaa64]/60`
+				: `${base} bg-[#6aaa64] text-white`;
 		case 'present':
-			return `${base} bg-[#c9b458] text-white`;
+			return translucent
+				? `${base} bg-[#c9b458]/70 text-white hover:bg-[#c9b458]/60`
+				: `${base} bg-[#c9b458] text-white`;
 		case 'absent':
-			return `${base} bg-[#787c7e] text-white`;
+			return translucent
+				? `${base} bg-[#787c7e]/65 text-white hover:bg-[#787c7e]/55`
+				: `${base} bg-[#787c7e] text-white`;
 		default:
-			return `${base} bg-muted text-foreground hover:bg-muted/80`;
+			return translucent
+				? `${base} bg-muted/30 text-foreground hover:bg-muted/20`
+				: `${base} bg-muted text-foreground hover:bg-muted/80`;
 	}
 }
 
@@ -432,6 +467,7 @@ export function WordleFloatingTab({
 	initialIndex = 0,
 	state,
 	currentPlayer,
+	translucent,
 	onStateChange
 }: WordleFloatingTabProps) {
 	const storageKey = `sparkle:wordle-tab-layout:${roomId}:${state.id}`;
@@ -1055,7 +1091,7 @@ export function WordleFloatingTab({
 								return (
 									<div
 										key={`${cellIndex}-${popAnimation}`}
-										className={`${tileClass(status, mini)} ${animationClass}`}
+										className={`${tileClass(status, mini, translucent)} ${animationClass}`}
 										aria-label={letter ? `Letter ${cellIndex + 1}` : `Cell ${cellIndex + 1}`}
 									>
 										{mini ? null : letter}
@@ -1070,15 +1106,26 @@ export function WordleFloatingTab({
 	}
 
 	const keyStatuses = keyboardStatuses();
+	const cardClass = wordleCardClass(translucent);
+	const buttonSurfaceClass = wordleButtonSurfaceClass(translucent);
+	const primaryButtonClass = wordlePrimaryButtonClass(translucent);
 	const keyboard = (
-		<div className="grid w-full gap-1 rounded-md border bg-background p-2">
+		<div
+			className={`grid w-full gap-1 rounded-md border ${
+				translucent ? 'bg-background/35' : 'bg-background'
+			} p-2`}
+		>
 			{KEY_ROWS.map((row) => (
 				<div key={row.join('')} className="mx-auto flex w-full max-w-[500px] justify-center gap-1">
 					{row.map((key) => (
 						<button
 							key={key}
 							type="button"
-							className={keyClass(key.length === 1 ? keyStatuses[key] : undefined, key.length > 1)}
+							className={keyClass(
+								key.length === 1 ? keyStatuses[key] : undefined,
+								translucent,
+								key.length > 1
+							)}
 							disabled={!canType}
 							onClick={() => handleKeyInput(key)}
 							aria-label={key === 'BACKSPACE' ? 'Backspace' : key === 'ENTER' ? 'Enter' : key}
@@ -1106,9 +1153,9 @@ export function WordleFloatingTab({
 			ref={panelRef}
 			data-wordle-tab={state.id}
 			tabIndex={0}
-			className={`fixed flex min-w-0 overflow-hidden rounded-lg border border-border bg-background/70 shadow-2xl outline-none ${
-				panelCollapsed ? 'min-h-11' : 'min-h-0'
-			}`}
+			className={`fixed flex min-w-0 overflow-hidden rounded-lg border border-border ${
+				translucent ? 'bg-background/55' : 'bg-background'
+			} shadow-2xl outline-none ${panelCollapsed ? 'min-h-11' : 'min-h-0'}`}
 			onFocusCapture={bringToFront}
 			onPointerDownCapture={bringToFront}
 			onKeyDown={handleKeyDown}
@@ -1122,7 +1169,9 @@ export function WordleFloatingTab({
 		>
 			<div className="flex min-h-0 w-full flex-col">
 				<div
-					className="flex h-11 shrink-0 cursor-move touch-none select-none items-center gap-2 border-b bg-muted/45 px-2"
+					className={`flex h-11 shrink-0 cursor-move touch-none select-none items-center gap-2 border-b ${
+						translucent ? 'bg-muted/30' : 'bg-muted/65'
+					} px-2`}
 					onPointerDown={handleDragStart}
 				>
 					<IconGripVertical className="shrink-0 text-muted-foreground" size={18} stroke={2} />
@@ -1137,7 +1186,7 @@ export function WordleFloatingTab({
 						type="button"
 						variant="ghost"
 						size="icon"
-						className="h-8 w-8 shrink-0"
+						className={`h-8 w-8 shrink-0 ${translucent ? 'hover:bg-accent/35' : ''}`}
 						onPointerDown={(event) => event.stopPropagation()}
 						onClick={toggleCollapsed}
 						aria-label={panelCollapsed ? 'Expand Wordle tab' : 'Collapse Wordle tab'}
@@ -1152,7 +1201,7 @@ export function WordleFloatingTab({
 						type="button"
 						variant="ghost"
 						size="icon"
-						className="h-8 w-8 shrink-0"
+						className={`h-8 w-8 shrink-0 ${translucent ? 'hover:bg-accent/35' : ''}`}
 						onPointerDown={(event) => event.stopPropagation()}
 						onClick={closeTab}
 						disabled={!isParticipant}
@@ -1163,13 +1212,15 @@ export function WordleFloatingTab({
 				</div>
 
 				<div
-					className="min-h-0 flex-1 overflow-auto bg-muted/10 p-3"
+					className={`min-h-0 flex-1 overflow-auto ${
+						translucent ? 'bg-muted/5' : 'bg-muted/20'
+					} p-3`}
 					aria-hidden={panelCollapsed}
 					onMouseDown={focusPanel}
 				>
 					{state.phase === 'setup' ? (
 						<div className="mx-auto grid min-h-full w-full max-w-2xl content-start gap-3">
-							<div className="rounded-md border bg-background/80 p-3">
+							<div className={`${cardClass} p-3`}>
 								<div className="mb-2 flex items-center justify-between gap-2">
 									<div className="flex items-center gap-2 text-xs font-bold text-muted-foreground">
 										<IconUsers size={15} stroke={2} />
@@ -1179,7 +1230,7 @@ export function WordleFloatingTab({
 										<Button
 											type="button"
 											variant="outline"
-											className="h-8 gap-2 px-3 text-xs"
+											className={`h-8 gap-2 px-3 text-xs ${buttonSurfaceClass}`}
 											onClick={leaveGame}
 										>
 											<IconUserMinus size={15} stroke={2} />
@@ -1189,7 +1240,7 @@ export function WordleFloatingTab({
 										<Button
 											type="button"
 											variant="outline"
-											className="h-8 gap-2 px-3 text-xs"
+											className={`h-8 gap-2 px-3 text-xs ${buttonSurfaceClass}`}
 											disabled={!currentPlayer}
 											onClick={joinGame}
 										>
@@ -1205,8 +1256,10 @@ export function WordleFloatingTab({
 												key={player.id}
 												className={`rounded-md border px-2 py-1 text-xs font-bold ${
 													isSameWordlePlayer(player, currentPlayer)
-														? 'border-primary bg-primary/10 text-primary'
-														: 'bg-muted/35'
+														? `border-primary ${translucent ? 'bg-primary/5' : 'bg-primary/10'} text-primary`
+														: translucent
+															? 'bg-muted/20'
+															: 'bg-muted/35'
 												}`}
 											>
 												{playerLabel(player)}
@@ -1220,7 +1273,7 @@ export function WordleFloatingTab({
 								</div>
 							</div>
 
-							<div className="grid gap-3 rounded-md border bg-background/80 p-3">
+							<div className={`${cardClass} grid gap-3 p-3`}>
 								<div className="grid gap-2">
 									<div className="text-xs font-bold text-muted-foreground">Mode</div>
 									<div className="grid grid-cols-2 gap-2">
@@ -1233,8 +1286,10 @@ export function WordleFloatingTab({
 												onClick={() => updateSettings({ mode })}
 												className={`rounded-md border px-3 py-2 text-sm font-bold capitalize transition-colors ${
 													state.settings.mode === mode
-														? 'border-primary bg-primary/10 text-primary'
-														: 'bg-background/80 hover:bg-accent/80'
+														? `border-primary ${translucent ? 'bg-primary/5' : 'bg-primary/10'} text-primary`
+														: translucent
+															? buttonSurfaceClass
+															: 'bg-background hover:bg-accent'
 												} disabled:opacity-50`}
 											>
 												{mode === 'coop' ? 'Coop' : 'Competitive'}
@@ -1248,19 +1303,23 @@ export function WordleFloatingTab({
 										<Button
 											type="button"
 											variant="outline"
-											className="h-10 px-0 text-lg font-black"
+											className={`h-10 px-0 text-lg font-black ${buttonSurfaceClass}`}
 											disabled={!isParticipant || turns <= 1}
 											onClick={() => updateSettings({ turns: turns - 1 })}
 										>
 											-
 										</Button>
-										<div className="rounded-md border bg-muted/35 px-3 py-2 text-center text-sm font-black">
+										<div
+											className={`rounded-md border ${
+												translucent ? 'bg-muted/20' : 'bg-muted/35'
+											} px-3 py-2 text-center text-sm font-black`}
+										>
 											{turns}
 										</div>
 										<Button
 											type="button"
 											variant="outline"
-											className="h-10 px-0 text-lg font-black"
+											className={`h-10 px-0 text-lg font-black ${buttonSurfaceClass}`}
 											disabled={!isParticipant || turns >= MAX_TURNS}
 											onClick={() => updateSettings({ turns: turns + 1 })}
 										>
@@ -1273,7 +1332,7 @@ export function WordleFloatingTab({
 							<div className="grid gap-2">
 								<Button
 									type="button"
-									className="h-10 gap-2"
+									className={`h-10 gap-2 ${primaryButtonClass}`}
 									disabled={!isParticipant || state.players.length === 0}
 									onClick={startGame}
 								>
@@ -1295,7 +1354,7 @@ export function WordleFloatingTab({
 									compactLayout ? 'grid gap-3' : 'grid min-h-0 grid-rows-[minmax(0,1fr)_auto] gap-3'
 								}
 							>
-								<div className="min-h-0 overflow-auto rounded-md border bg-background/80 p-3">
+								<div className={`${cardClass} min-h-0 overflow-auto p-3`}>
 									{state.settings.mode === 'competitive' ? (
 										myBoard ? (
 											<div className="grid min-h-full content-center gap-3">
@@ -1324,7 +1383,11 @@ export function WordleFloatingTab({
 													<div
 														key={board.id}
 														className={`grid gap-2 rounded-md border p-3 ${
-															active ? 'border-primary bg-primary/5' : 'bg-muted/20'
+															active
+																? 'border-primary bg-primary/5'
+																: translucent
+																	? 'bg-muted/10'
+																	: 'bg-muted/20'
 														}`}
 													>
 														<div className="flex items-center justify-between gap-2 text-xs font-bold text-muted-foreground">
@@ -1356,7 +1419,7 @@ export function WordleFloatingTab({
 							</div>
 
 							<div className="flex min-h-0 flex-col gap-3">
-								<div className="grid gap-2 rounded-md border bg-background/80 p-3">
+								<div className={`${cardClass} grid gap-2 p-3`}>
 									<div className="flex items-center gap-2 text-xs font-bold text-muted-foreground">
 										<IconUsers size={15} stroke={2} />
 										Players
@@ -1367,8 +1430,10 @@ export function WordleFloatingTab({
 												key={player.id}
 												className={`rounded-md border px-2 py-1 text-xs font-bold ${
 													isSameWordlePlayer(player, currentPlayer)
-														? 'border-primary bg-primary/10 text-primary'
-														: 'bg-muted/35'
+														? `border-primary ${translucent ? 'bg-primary/5' : 'bg-primary/10'} text-primary`
+														: translucent
+															? 'bg-muted/20'
+															: 'bg-muted/35'
 												}`}
 											>
 												{playerLabel(player)}
@@ -1383,7 +1448,7 @@ export function WordleFloatingTab({
 									<Button
 										type="button"
 										variant="outline"
-										className="h-9 gap-2"
+										className={`h-9 gap-2 ${buttonSurfaceClass}`}
 										disabled={!isParticipant}
 										onClick={newGame}
 									>
@@ -1393,7 +1458,7 @@ export function WordleFloatingTab({
 								</div>
 
 								{state.settings.mode === 'competitive' ? (
-									<div className="min-h-0 overflow-auto rounded-md border bg-background/80 p-3">
+									<div className={`${cardClass} min-h-0 overflow-auto p-3`}>
 										<div className="mb-2 text-xs font-bold text-muted-foreground">Other Boards</div>
 										<div className="grid gap-3">
 											{state.boards

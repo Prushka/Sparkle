@@ -165,6 +165,7 @@ type YouTubeFloatingTabProps = {
 	roomId: string;
 	initialIndex?: number;
 	state: YouTubeTabSyncState;
+	translucent: boolean;
 	onStateChange: (patch: Partial<YouTubeTabSyncState>) => void;
 };
 
@@ -173,6 +174,7 @@ type ChessFloatingTabProps = {
 	initialIndex?: number;
 	state: ChessTabSyncState;
 	currentPlayer: ChessPlayerSyncState | null;
+	translucent: boolean;
 	onStateChange: (patch: Partial<ChessTabSyncState>) => void;
 	onNotification: (soundId: ChessNotificationSoundId, chess?: ChessSoundEffectContext) => void;
 };
@@ -182,6 +184,7 @@ type WordleFloatingTabProps = {
 	initialIndex?: number;
 	state: WordleTabSyncState;
 	currentPlayer: WordlePlayerSyncState | null;
+	translucent: boolean;
 	onStateChange: (patch: Partial<WordleTabSyncState>) => void;
 };
 
@@ -4899,8 +4902,10 @@ export function Player({
 	);
 	const controlsShowing = useMediaState('controlsVisible', playerElementRef);
 	const playerCanPlay = useMediaState('canPlay', playerElementRef);
+	const playerPaused = useMediaState('paused', playerElementRef);
 	const playerWidth = useMediaState('width', playerElementRef);
 	const playerHeight = useMediaState('height', playerElementRef);
+	const floatingTabsTranslucent = playerPaused === false;
 	const playerSmallLayout = isSmallPlayerLayout(playerWidth, playerHeight);
 	const [playerVolume, setPlayerVolume] = useState(initialVolume);
 	const [playerMuted, setPlayerMuted] = useState(initialVolume === 0);
@@ -8641,6 +8646,7 @@ export function Player({
 								roomId={youtubeRoomId}
 								initialIndex={index}
 								state={tab}
+								translucent={floatingTabsTranslucent}
 								onStateChange={(patch) => updateYouTubeState(tab.id, patch)}
 							/>
 						))
@@ -8656,6 +8662,7 @@ export function Player({
 								initialIndex={index}
 								state={tab}
 								currentPlayer={currentChessPlayer}
+								translucent={floatingTabsTranslucent}
 								onStateChange={(patch) => updateChessState(tab.id, patch)}
 								onNotification={sendChessNotification}
 							/>
@@ -8672,6 +8679,7 @@ export function Player({
 								initialIndex={index}
 								state={tab}
 								currentPlayer={currentWordlePlayer}
+								translucent={floatingTabsTranslucent}
 								onStateChange={(patch) => updateWordleState(tab.id, patch)}
 							/>
 						))
