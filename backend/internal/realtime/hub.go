@@ -1016,14 +1016,15 @@ func trimRunes(value string, maxRunes int) string {
 
 func (r *Room) syncYouTube(sender *Player, incoming *YouTubeState) {
 	now := time.Now()
-	state, ok := sanitizeYouTubeState(incoming, now.UnixMilli())
+	timestamp := now.UnixMilli()
+	state, ok := sanitizeYouTubeState(incoming, timestamp)
 	if !ok {
 		return
 	}
 
 	var firedBy PlayerSnapshot
 	var targets []*Player
-	shouldBroadcast := false
+	var shouldBroadcast bool
 
 	r.mu.Lock()
 	if r.players[sender.state.Id] != sender {
@@ -1031,19 +1032,63 @@ func (r *Room) syncYouTube(sender *Player, incoming *YouTubeState) {
 		return
 	}
 	sender.state.LastSeen = now.Unix()
-	shouldBroadcast = shouldBroadcastYouTubeState(r.youtube, state)
-	r.youtube = state
-	firedBy = sender.state
-	if shouldBroadcast {
+	next, changed := mergeYouTubeState(r.youtube, state, timestamp)
+	if changed {
+		r.youtube = next
+		firedBy = sender.state
 		targets = r.playersLocked()
+		shouldBroadcast = true
 	}
 	r.mu.Unlock()
 
 	if !shouldBroadcast {
 		return
 	}
-	payload := SendPayload{Type: YouTubeSync, YouTube: &state, FiredBy: &firedBy, Timestamp: now.UnixMilli()}
+	payload := SendPayload{Type: YouTubeSync, YouTube: &next, FiredBy: &firedBy, Timestamp: timestamp}
 	sendPayloadToPlayers(targets, payload)
+}
+
+func mergeYouTubeState(previous YouTubeState, incoming YouTubeState, timestamp int64) (YouTubeState, bool) {
+	next := YouTubeState{Tabs: make([]YouTubeTabState, 0, len(previous.Tabs)+len(incoming.Tabs)), UpdatedAt: previous.UpdatedAt}
+	incomingByID := make(map[string]YouTubeTabState, len(incoming.Tabs))
+	for _, tab := range incoming.Tabs {
+		incomingByID[tab.ID] = tab
+	}
+
+	seen := make(map[string]bool, len(incoming.Tabs))
+	for _, previousTab := range previous.Tabs {
+		incomingTab, ok := incomingByID[previousTab.ID]
+		if !ok {
+			next.Tabs = append(next.Tabs, previousTab)
+			continue
+		}
+		seen[previousTab.ID] = true
+		if !incomingTab.Open {
+			continue
+		}
+		incomingTab.UpdatedAt = timestamp
+		next.Tabs = append(next.Tabs, incomingTab)
+	}
+
+	for _, incomingTab := range incoming.Tabs {
+		if seen[incomingTab.ID] || !incomingTab.Open {
+			continue
+		}
+		incomingTab.UpdatedAt = timestamp
+		next.Tabs = append(next.Tabs, incomingTab)
+	}
+
+	if len(next.Tabs) > maxYouTubeTabs {
+		next.Tabs = next.Tabs[len(next.Tabs)-maxYouTubeTabs:]
+	}
+	changed := shouldBroadcastYouTubeState(previous, next)
+	if changed {
+		next.UpdatedAt = timestamp
+	}
+	if !changed && previous.UpdatedAt != next.UpdatedAt {
+		next.UpdatedAt = previous.UpdatedAt
+	}
+	return next, changed
 }
 
 func shouldBroadcastYouTubeState(previous YouTubeState, next YouTubeState) bool {
@@ -1121,14 +1166,15 @@ func sanitizeYouTubeState(incoming *YouTubeState, timestamp int64) (YouTubeState
 
 func (r *Room) syncChess(sender *Player, incoming *ChessState) {
 	now := time.Now()
-	state, ok := sanitizeChessState(incoming, now.UnixMilli())
+	timestamp := now.UnixMilli()
+	state, ok := sanitizeChessState(incoming, timestamp)
 	if !ok {
 		return
 	}
 
 	var firedBy PlayerSnapshot
 	var targets []*Player
-	shouldBroadcast := false
+	var shouldBroadcast bool
 
 	r.mu.Lock()
 	if r.players[sender.state.Id] != sender {
@@ -1136,19 +1182,165 @@ func (r *Room) syncChess(sender *Player, incoming *ChessState) {
 		return
 	}
 	sender.state.LastSeen = now.Unix()
-	shouldBroadcast = !reflect.DeepEqual(r.chess, state)
-	r.chess = state
-	firedBy = sender.state
-	if shouldBroadcast {
+	next, changed := mergeChessState(r.chess, state, chessSenderPlayerID(sender), timestamp)
+	if changed {
+		r.chess = next
+		firedBy = sender.state
 		targets = r.playersLocked()
+		shouldBroadcast = true
 	}
 	r.mu.Unlock()
 
 	if !shouldBroadcast {
 		return
 	}
-	payload := SendPayload{Type: ChessSync, Chess: &state, FiredBy: &firedBy, Timestamp: now.UnixMilli()}
+	payload := SendPayload{Type: ChessSync, Chess: &next, FiredBy: &firedBy, Timestamp: timestamp}
 	sendPayloadToPlayers(targets, payload)
+}
+
+func chessSenderPlayerID(sender *Player) string {
+	id := strings.TrimSpace(sender.state.Id)
+	return strings.TrimSuffix(id, "-chess")
+}
+
+func mergeChessState(previous ChessState, incoming ChessState, senderID string, timestamp int64) (ChessState, bool) {
+	next := ChessState{Tabs: make([]ChessTabState, 0, len(previous.Tabs)+len(incoming.Tabs)), UpdatedAt: previous.UpdatedAt}
+	incomingByID := make(map[string]ChessTabState, len(incoming.Tabs))
+	for _, tab := range incoming.Tabs {
+		incomingByID[tab.ID] = tab
+	}
+
+	seen := make(map[string]bool, len(incoming.Tabs))
+	changed := false
+	for _, previousTab := range previous.Tabs {
+		incomingTab, ok := incomingByID[previousTab.ID]
+		if !ok {
+			next.Tabs = append(next.Tabs, previousTab)
+			continue
+		}
+		seen[previousTab.ID] = true
+		if !chessTabUpdateAuthorized(previousTab, incomingTab, senderID) {
+			next.Tabs = append(next.Tabs, previousTab)
+			continue
+		}
+		if !incomingTab.Open {
+			changed = true
+			continue
+		}
+		incomingTab.UpdatedAt = timestamp
+		if !reflect.DeepEqual(previousTab, incomingTab) {
+			changed = true
+		}
+		next.Tabs = append(next.Tabs, incomingTab)
+	}
+
+	for _, incomingTab := range incoming.Tabs {
+		if seen[incomingTab.ID] || !incomingTab.Open {
+			continue
+		}
+		if !chessTabHasPlayer(incomingTab, senderID) {
+			continue
+		}
+		incomingTab.UpdatedAt = timestamp
+		next.Tabs = append(next.Tabs, incomingTab)
+		changed = true
+	}
+
+	if len(next.Tabs) > maxChessTabs {
+		next.Tabs = next.Tabs[len(next.Tabs)-maxChessTabs:]
+	}
+	if changed {
+		next.UpdatedAt = timestamp
+	}
+	if !changed && previous.UpdatedAt != next.UpdatedAt {
+		next.UpdatedAt = previous.UpdatedAt
+	}
+	return next, changed
+}
+
+func chessTabUpdateAuthorized(previous ChessTabState, next ChessTabState, senderID string) bool {
+	if senderID == "" {
+		return false
+	}
+	wasParticipant := chessTabHasPlayer(previous, senderID)
+	if !next.Open {
+		return wasParticipant
+	}
+	if wasParticipant {
+		if previous.Phase != "setup" && !chessSamePlayers(previous, next) {
+			return false
+		}
+		if previous.Phase != "setup" && !chessSettingsAllowedAfterSetup(previous.Settings, next.Settings) {
+			return false
+		}
+		return true
+	}
+	return chessJoinOnly(previous, next, senderID)
+}
+
+func chessJoinOnly(previous ChessTabState, next ChessTabState, senderID string) bool {
+	if previous.Phase != "setup" {
+		return false
+	}
+	if previous.Open != next.Open ||
+		previous.Phase != next.Phase ||
+		previous.FEN != next.FEN ||
+		!reflect.DeepEqual(previous.Settings, next.Settings) ||
+		!reflect.DeepEqual(previous.Moves, next.Moves) ||
+		!reflect.DeepEqual(previous.Clocks, next.Clocks) ||
+		!reflect.DeepEqual(previous.Result, next.Result) ||
+		!reflect.DeepEqual(previous.CloseRequest, next.CloseRequest) ||
+		!reflect.DeepEqual(previous.DrawOffer, next.DrawOffer) {
+		return false
+	}
+	return chessPlayersAddOnlySender(previous, next, senderID)
+}
+
+func chessPlayersAddOnlySender(previous ChessTabState, next ChessTabState, senderID string) bool {
+	changes := 0
+	if !chessSeatAddOnlySender(previous.White, next.White, senderID, &changes) {
+		return false
+	}
+	if !chessSeatAddOnlySender(previous.Black, next.Black, senderID, &changes) {
+		return false
+	}
+	return changes == 1
+}
+
+func chessSeatAddOnlySender(previous *ChessPlayerState, next *ChessPlayerState, senderID string, changes *int) bool {
+	if previous == nil {
+		if next == nil {
+			return true
+		}
+		if next.ID != senderID {
+			return false
+		}
+		*changes += 1
+		return true
+	}
+	return reflect.DeepEqual(previous, next)
+}
+
+func chessTabHasPlayer(tab ChessTabState, playerID string) bool {
+	return chessPlayerID(tab.White) == playerID || chessPlayerID(tab.Black) == playerID
+}
+
+func chessPlayerID(player *ChessPlayerState) string {
+	if player == nil {
+		return ""
+	}
+	return player.ID
+}
+
+func chessSamePlayers(previous ChessTabState, next ChessTabState) bool {
+	return reflect.DeepEqual(previous.White, next.White) && reflect.DeepEqual(previous.Black, next.Black)
+}
+
+func chessSettingsAllowedAfterSetup(previous ChessSettingsState, next ChessSettingsState) bool {
+	return previous.BoardTheme == next.BoardTheme &&
+		previous.Timed == next.Timed &&
+		previous.Minutes == next.Minutes &&
+		previous.IncrementSeconds == next.IncrementSeconds
 }
 
 func sanitizeChessState(incoming *ChessState, timestamp int64) (ChessState, bool) {

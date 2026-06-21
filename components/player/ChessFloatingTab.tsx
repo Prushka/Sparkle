@@ -1186,7 +1186,7 @@ export function ChessFloatingTab({
 	}
 
 	function updateSettings(patch: Partial<ChessSettingsSyncState>) {
-		if (state.phase !== 'setup') {
+		if (state.phase !== 'setup' || !isParticipant) {
 			return;
 		}
 		onStateChange({
@@ -1198,6 +1198,9 @@ export function ChessFloatingTab({
 	}
 
 	function updatePieceSet(pieceSet: ChessPieceSet) {
+		if (!isParticipant) {
+			return;
+		}
 		if (state.phase === 'setup') {
 			updateSettings({ pieceSet });
 			return;
@@ -1241,7 +1244,7 @@ export function ChessFloatingTab({
 	}
 
 	function swapSeats() {
-		if (state.phase !== 'setup') {
+		if (state.phase !== 'setup' || !isParticipant) {
 			return;
 		}
 		onStateChange({ white: state.black, black: state.white });
@@ -1743,7 +1746,7 @@ export function ChessFloatingTab({
 											variant="outline"
 											className="h-9 gap-2"
 											onClick={swapSeats}
-											disabled={!state.white && !state.black}
+											disabled={!isParticipant || (!state.white && !state.black)}
 										>
 											<IconRefresh size={17} stroke={2} />
 											Swap

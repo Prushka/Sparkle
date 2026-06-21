@@ -248,6 +248,55 @@ func TestSanitizeYouTubeStateRejectsInvalidVideoID(t *testing.T) {
 	}
 }
 
+func TestSyncYouTubePreservesMissingTabsFromStaleSnapshot(t *testing.T) {
+	room := newRoom("youtube:room", "")
+	sender := testPlayer("sender-youtube", "Sender", 4)
+	room.players[sender.state.Id] = sender
+	room.youtube = YouTubeState{
+		Tabs: []YouTubeTabState{
+			{
+				ID:           "tab_1",
+				Open:         true,
+				URL:          "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+				VideoID:      "dQw4w9WgXcQ",
+				Time:         10,
+				Paused:       true,
+				PlaybackRate: 1,
+				UpdatedAt:    100,
+			},
+			{
+				ID:           "tab_2",
+				Open:         true,
+				URL:          "https://www.youtube.com/watch?v=aaaaaaaaaaa",
+				VideoID:      "aaaaaaaaaaa",
+				Time:         20,
+				Paused:       true,
+				PlaybackRate: 1,
+				UpdatedAt:    100,
+			},
+		},
+		UpdatedAt: 100,
+	}
+
+	room.syncYouTube(sender, &YouTubeState{
+		Tabs: []YouTubeTabState{{
+			ID:           "tab_1",
+			Open:         true,
+			VideoID:      "dQw4w9WgXcQ",
+			Time:         30,
+			Paused:       true,
+			PlaybackRate: 1,
+		}},
+	})
+
+	if len(room.youtube.Tabs) != 2 {
+		t.Fatalf("stale youtube snapshot dropped tabs = %#v", room.youtube.Tabs)
+	}
+	if room.youtube.Tabs[1].ID != "tab_2" || room.youtube.Tabs[1].VideoID != "aaaaaaaaaaa" {
+		t.Fatalf("preserved youtube tab = %#v", room.youtube.Tabs[1])
+	}
+}
+
 func TestSanitizeChessState(t *testing.T) {
 	got, ok := sanitizeChessState(&ChessState{
 		Tabs: []ChessTabState{{
@@ -303,6 +352,169 @@ func TestSanitizeChessSettingsDefaultsInvalidPieceSet(t *testing.T) {
 	})
 	if got.PieceSet != "classic" {
 		t.Fatalf("sanitizeChessSettings() piece set = %q, want classic", got.PieceSet)
+	}
+}
+
+func TestSyncChessRejectsNonParticipantSettingsChange(t *testing.T) {
+	room := newRoom("chess:room", "")
+	sender := testPlayer("mallory-chess", "Mallory", 4)
+	room.players[sender.state.Id] = sender
+	room.chess = ChessState{
+		Tabs: []ChessTabState{{
+			ID:       "game_1",
+			Open:     true,
+			Phase:    "setup",
+			Settings: ChessSettingsState{PieceSet: "classic", BoardTheme: "green", Timed: true, Minutes: 10},
+			White:    &ChessPlayerState{ID: "alice", Name: "Alice"},
+			FEN:      "start",
+			Clocks:   ChessClockState{WhiteMs: 600000, BlackMs: 600000},
+		}},
+		UpdatedAt: 100,
+	}
+
+	room.syncChess(sender, &ChessState{
+		Tabs: []ChessTabState{{
+			ID:       "game_1",
+			Open:     true,
+			Phase:    "setup",
+			Settings: ChessSettingsState{PieceSet: "pixel", BoardTheme: "blue", Timed: true, Minutes: 5},
+			White:    &ChessPlayerState{ID: "alice", Name: "Alice"},
+			FEN:      "start",
+			Clocks:   ChessClockState{WhiteMs: 300000, BlackMs: 300000},
+		}},
+	})
+
+	tab := room.chess.Tabs[0]
+	if tab.Settings.PieceSet != "classic" || tab.Settings.BoardTheme != "green" || tab.Settings.Minutes != 10 {
+		t.Fatalf("unauthorized chess settings applied = %#v", tab.Settings)
+	}
+	assertNoQueuedPayload(t, sender)
+}
+
+func TestSyncChessAllowsJoinOnlyForNonParticipant(t *testing.T) {
+	room := newRoom("chess:room", "")
+	sender := testPlayer("bob-chess", "Bob", 4)
+	receiver := testPlayer("alice-chess", "Alice", 4)
+	room.players[sender.state.Id] = sender
+	room.players[receiver.state.Id] = receiver
+	room.chess = ChessState{
+		Tabs: []ChessTabState{{
+			ID:       "game_1",
+			Open:     true,
+			Phase:    "setup",
+			Settings: ChessSettingsState{PieceSet: "classic", BoardTheme: "green", Timed: true, Minutes: 10},
+			White:    &ChessPlayerState{ID: "alice", Name: "Alice"},
+			FEN:      "start",
+			Clocks:   ChessClockState{WhiteMs: 600000, BlackMs: 600000},
+		}},
+		UpdatedAt: 100,
+	}
+
+	room.syncChess(sender, &ChessState{
+		Tabs: []ChessTabState{{
+			ID:       "game_1",
+			Open:     true,
+			Phase:    "setup",
+			Settings: ChessSettingsState{PieceSet: "classic", BoardTheme: "green", Timed: true, Minutes: 10},
+			White:    &ChessPlayerState{ID: "alice", Name: "Alice"},
+			Black:    &ChessPlayerState{ID: "bob", Name: "Bob"},
+			FEN:      "start",
+			Clocks:   ChessClockState{WhiteMs: 600000, BlackMs: 600000},
+		}},
+	})
+
+	if room.chess.Tabs[0].Black == nil || room.chess.Tabs[0].Black.ID != "bob" {
+		t.Fatalf("join-only chess update not applied = %#v", room.chess.Tabs[0])
+	}
+	payload := readQueuedPayload(t, receiver)
+	if payload.Type != ChessSync || payload.Chess == nil || payload.Chess.Tabs[0].Black == nil {
+		t.Fatalf("chess payload = %#v", payload)
+	}
+}
+
+func TestSyncChessRejectsSeatChangeDuringRound(t *testing.T) {
+	room := newRoom("chess:room", "")
+	sender := testPlayer("alice-chess", "Alice", 4)
+	room.players[sender.state.Id] = sender
+	room.chess = ChessState{
+		Tabs: []ChessTabState{{
+			ID:       "game_1",
+			Open:     true,
+			Phase:    "playing",
+			Settings: ChessSettingsState{PieceSet: "classic", BoardTheme: "green", Timed: true, Minutes: 10},
+			White:    &ChessPlayerState{ID: "alice", Name: "Alice"},
+			Black:    &ChessPlayerState{ID: "bob", Name: "Bob"},
+			FEN:      "start",
+			Clocks:   ChessClockState{WhiteMs: 600000, BlackMs: 600000},
+		}},
+		UpdatedAt: 100,
+	}
+
+	room.syncChess(sender, &ChessState{
+		Tabs: []ChessTabState{{
+			ID:       "game_1",
+			Open:     true,
+			Phase:    "playing",
+			Settings: ChessSettingsState{PieceSet: "classic", BoardTheme: "green", Timed: true, Minutes: 10},
+			White:    &ChessPlayerState{ID: "alice", Name: "Alice"},
+			FEN:      "start",
+			Clocks:   ChessClockState{WhiteMs: 600000, BlackMs: 600000},
+		}},
+	})
+
+	if room.chess.Tabs[0].Black == nil || room.chess.Tabs[0].Black.ID != "bob" {
+		t.Fatalf("mid-round chess seat change applied = %#v", room.chess.Tabs[0])
+	}
+	assertNoQueuedPayload(t, sender)
+}
+
+func TestSyncChessPreservesMissingTabsFromStaleSnapshot(t *testing.T) {
+	room := newRoom("chess:room", "")
+	sender := testPlayer("alice-chess", "Alice", 4)
+	room.players[sender.state.Id] = sender
+	room.chess = ChessState{
+		Tabs: []ChessTabState{
+			{
+				ID:        "game_1",
+				Open:      true,
+				Phase:     "setup",
+				Settings:  ChessSettingsState{PieceSet: "classic", BoardTheme: "green", Timed: true, Minutes: 10},
+				White:     &ChessPlayerState{ID: "alice", Name: "Alice"},
+				FEN:       "start",
+				Clocks:    ChessClockState{WhiteMs: 600000, BlackMs: 600000},
+				UpdatedAt: 100,
+			},
+			{
+				ID:        "game_2",
+				Open:      true,
+				Phase:     "setup",
+				Settings:  ChessSettingsState{PieceSet: "pixel", BoardTheme: "blue", Timed: true, Minutes: 5},
+				White:     &ChessPlayerState{ID: "carol", Name: "Carol"},
+				FEN:       "start",
+				Clocks:    ChessClockState{WhiteMs: 300000, BlackMs: 300000},
+				UpdatedAt: 100,
+			},
+		},
+		UpdatedAt: 100,
+	}
+
+	room.syncChess(sender, &ChessState{
+		Tabs: []ChessTabState{{
+			ID:       "game_1",
+			Open:     true,
+			Phase:    "setup",
+			Settings: ChessSettingsState{PieceSet: "pixel-simple", BoardTheme: "green", Timed: true, Minutes: 10},
+			White:    &ChessPlayerState{ID: "alice", Name: "Alice"},
+			FEN:      "start",
+			Clocks:   ChessClockState{WhiteMs: 600000, BlackMs: 600000},
+		}},
+	})
+
+	if len(room.chess.Tabs) != 2 {
+		t.Fatalf("stale chess snapshot dropped tabs = %#v", room.chess.Tabs)
+	}
+	if room.chess.Tabs[1].ID != "game_2" || room.chess.Tabs[1].White.ID != "carol" {
+		t.Fatalf("preserved chess tab = %#v", room.chess.Tabs[1])
 	}
 }
 
