@@ -2876,9 +2876,13 @@ function appendControlMessages(
 		.slice(-MAX_CONTROL_MESSAGES);
 }
 
-function getLatestMessageTimestamp(messages: Chat[]) {
+function isAudibleChatMessage(message: Chat | undefined) {
+	return Boolean(message && !message.isSystem && !message.isStateUpdate);
+}
+
+function getLatestAudibleChatTimestamp(messages: Chat[]) {
 	for (let i = messages.length - 1; i >= 0; i--) {
-		if (!messages[i].isStateUpdate) {
+		if (isAudibleChatMessage(messages[i])) {
 			return messages[i].timestamp;
 		}
 	}
@@ -6384,7 +6388,7 @@ export function Player({
 						setRoomMessages((prev) => {
 							if (state.chat) {
 								const next = appendRoomChatMessage(prev, state.chat);
-								if (next !== prev && inBgRef.current) {
+								if (next !== prev && inBgRef.current && isAudibleChatMessage(state.chat)) {
 									notificationAudioRef.current?.play().catch(() => {});
 								}
 								return next;
@@ -6392,7 +6396,7 @@ export function Player({
 							const chats = state.chats ?? [];
 							if (
 								inBgRef.current &&
-								getLatestMessageTimestamp(prev) !== chats[chats.length - 1]?.timestamp
+								getLatestAudibleChatTimestamp(prev) !== getLatestAudibleChatTimestamp(chats)
 							) {
 								notificationAudioRef.current?.play().catch(() => {});
 							}
