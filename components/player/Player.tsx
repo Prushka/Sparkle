@@ -78,7 +78,9 @@ import {
 	fallbackFontsMap,
 	formatMbps,
 	formatPair,
+	formatSubtitlePair,
 	formatSeconds,
+	getCueForgeSubtitleInfo,
 	getName,
 	getSubtitleTypeRank,
 	getSupportedCodecs,
@@ -1399,6 +1401,10 @@ function pickPriorityAudioStream(streams: Stream[]) {
 }
 
 function getSubtitleLanguage(stream: Stream) {
+	const cueForgeSubtitle = getCueForgeSubtitleInfo(stream);
+	if (cueForgeSubtitle) {
+		return languageSrcMap[cueForgeSubtitle.languageId] || cueForgeSubtitle.languageId;
+	}
 	const rawLanguage = stream.Language || '';
 	const title = stream.Title || '';
 	if (rawLanguage === 'chi' || rawLanguage === 'zho' || /^zh(?:-|$)/i.test(rawLanguage)) {
@@ -1579,6 +1585,14 @@ function getStackableSubtitleTracks(
 	}
 	return tracks.filter(
 		(track) => track.format === primaryTrack.format && isStackableSubtitleFormat(track.format)
+	);
+}
+
+function compareSubtitleTrackNames(a: SubtitleTrackInfo, b: SubtitleTrackInfo) {
+	return (
+		a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }) ||
+		a.language.localeCompare(b.language, undefined, { numeric: true, sensitivity: 'base' }) ||
+		a.src.localeCompare(b.src, undefined, { numeric: true, sensitivity: 'base' })
 	);
 }
 
@@ -3263,7 +3277,9 @@ function SubtitleLayersMenuSection({
 		return null;
 	}
 
-	const companionTracks = stackableTracks.filter((track) => track.src !== selectedTrack.src);
+	const companionTracks = stackableTracks
+		.filter((track) => track.src !== selectedTrack.src)
+		.sort(compareSubtitleTrackNames);
 	if (companionTracks.length === 0) {
 		return null;
 	}
@@ -5767,7 +5783,7 @@ export function Player({
 							const format = getSubtitleFormat(src);
 							const track: SubtitleTrackInfo = {
 								src,
-								label: formatPair(stream, true, true),
+								label: formatSubtitlePair(stream, true, true),
 								kind: 'subtitles',
 								type: format,
 								language: getSubtitleLanguage(stream),
