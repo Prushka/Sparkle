@@ -1751,7 +1751,7 @@ function getSubtitleSelectionCandidateFromStream(stream: Stream): SubtitleSelect
 		annotated: Boolean(cueForgeSubtitle?.annotated),
 		cueForge: Boolean(cueForgeSubtitle),
 		format,
-		label: formatSubtitlePair(stream, true, true),
+		label: formatSubtitlePair(stream, true),
 		language: getSubtitleLanguage(stream),
 		src: stream.Location,
 		srcName: getSubtitleSrcName(stream.Location),
@@ -3983,26 +3983,52 @@ function SubtitlesMenuSection({
 	tracks: SubtitleTrackInfo[];
 }) {
 	const formats = getAvailableSubtitleFormats(tracks);
-	if (formats.length === 0) {
-		return null;
-	}
-
 	const formatOptions: Array<{ label: string; value: SubtitleTrackFormat | 'off' }> = [
 		{ label: 'Off', value: 'off' },
-		...formats.map((format) => ({ label: format.toUpperCase(), value: format }))
+		...formats.map((format) => ({ label: getSubtitleFormatName(format), value: format }))
 	];
 	const formatTracks = getSubtitleTracksByFormat(tracks, activeFormat);
 	const selectedTrackSrcs = new Set([
 		...(selectedTrack ? [selectedTrack.src] : []),
 		...extraSubtitleLayerSrcs
 	]);
+	const formatToggleGroupRef = useRef<HTMLDivElement | null>(null);
+
+	useEffect(() => {
+		const group = formatToggleGroupRef.current;
+		if (!group || typeof window === 'undefined') {
+			return;
+		}
+
+		let secondFrame = 0;
+		const firstFrame = window.requestAnimationFrame(() => {
+			group.dispatchEvent(new Event('vds-menu-resize', { bubbles: true }));
+			secondFrame = window.requestAnimationFrame(() => {
+				group.dispatchEvent(new Event('vds-menu-resize', { bubbles: true }));
+			});
+		});
+
+		return () => {
+			window.cancelAnimationFrame(firstFrame);
+			window.cancelAnimationFrame(secondFrame);
+		};
+	}, [activeFormat, formatTracks.length]);
+
+	if (formats.length === 0) {
+		return null;
+	}
 
 	return (
 		<>
-			<DefaultMenuSection label="Format" value={activeFormat?.toUpperCase() ?? 'Off'}>
+			<DefaultMenuSection
+				label="Format"
+				value={activeFormat ? getSubtitleFormatName(activeFormat) : 'Off'}
+			>
 				<div
 					aria-label="Subtitle format"
 					className="sparkle-subtitle-format-toggle-group"
+					data-subtitle-format-toggle-group="true"
+					ref={formatToggleGroupRef}
 					role="radiogroup"
 				>
 					{formatOptions.map((option) => {
@@ -6608,7 +6634,7 @@ export function Player({
 						annotated: Boolean(cueForgeSubtitle?.annotated),
 						cueForge: Boolean(cueForgeSubtitle),
 						src,
-						label: formatSubtitlePair(stream, true, true),
+						label: formatSubtitlePair(stream, true),
 						kind: 'subtitles',
 						type: format,
 						language: getSubtitleLanguage(stream),
@@ -7978,7 +8004,7 @@ export function Player({
 	};
 	const activeSubtitleFormat = selectedSubtitleTrack?.format ?? null;
 	const subtitlesSettingsSummary = selectedSubtitleTrack
-		? `${selectedSubtitleLayerCount} ${selectedSubtitleTrack.format.toUpperCase()}`
+		? `${selectedSubtitleLayerCount} ${getSubtitleFormatName(selectedSubtitleTrack.format)}`
 		: 'Off';
 	const subtitlesSettingsMenu =
 		subtitleTracks.length > 0 ? (
