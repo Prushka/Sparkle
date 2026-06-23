@@ -56,10 +56,10 @@ type MoveTarget = {
 };
 
 const MAP_WIDTH = 1440;
-const MAP_HEIGHT = 390;
+const MAP_HEIGHT = 560;
 const ROOM_CROP_TOP = 28;
 const ROOM_CROP_BOTTOM = 8;
-const GAME_HEIGHT = 220;
+const GAME_HEIGHT = 260;
 const PLAYER_SPEED = 124;
 const PLAYER_RADIUS = 11;
 const INTERACTION_CLICK_RADIUS = 24;
@@ -69,7 +69,9 @@ const PLAYER_ID_PATTERN = /^[A-Za-z0-9_:-]{1,128}$/;
 const COTTAGE_GAME_SURFACE_CLASS_NAME =
 	'relative mx-auto w-full max-w-[90rem] overflow-hidden bg-[#312820] outline-none focus-visible:outline-none';
 
-const FLOOR_BOUNDS = { minX: 44, maxX: 1396, minY: 116, maxY: 356 };
+const ROOM_BOTTOM_Y = 324;
+const GARDEN_TOP_Y = 318;
+const FLOOR_BOUNDS = { minX: 44, maxX: 1396, minY: 116, maxY: 520 };
 
 // Include front strips and legs so Y-sorted furniture never clips a walking player.
 const COLLIDERS: Rect[] = [
@@ -90,7 +92,11 @@ const COLLIDERS: Rect[] = [
 	{ x: 1140, y: 276, w: 160, h: 14 },
 	{ x: 1134, y: 292, w: 18, h: 12 },
 	{ x: 1286, y: 292, w: 18, h: 12 },
-	{ x: 1328, y: 116, w: 54, h: 92 }
+	{ x: 1328, y: 116, w: 54, h: 92 },
+	{ x: 154, y: 390, w: 220, h: 78 },
+	{ x: 1008, y: 382, w: 220, h: 78 },
+	{ x: 408, y: 382, w: 224, h: 86 },
+	{ x: 1248, y: 424, w: 44, h: 74 }
 ];
 
 const INTERACTIONS: CottageInteraction[] = [
@@ -267,6 +273,51 @@ const INTERACTIONS: CottageInteraction[] = [
 		action: 'interacting',
 		radius: 54,
 		sortY: 216
+	},
+	{
+		id: 'garden-bed',
+		x: 148,
+		y: 384,
+		w: 232,
+		h: 90,
+		anchorX: 264,
+		anchorY: 426,
+		targetX: 264,
+		targetY: 488,
+		facing: 'up',
+		action: 'interacting',
+		radius: 74,
+		sortY: 474
+	},
+	{
+		id: 'garden-pond',
+		x: 402,
+		y: 376,
+		w: 236,
+		h: 98,
+		anchorX: 520,
+		anchorY: 430,
+		targetX: 520,
+		targetY: 492,
+		facing: 'up',
+		action: 'interacting',
+		radius: 76,
+		sortY: 476
+	},
+	{
+		id: 'garden-tree',
+		x: 1216,
+		y: 356,
+		w: 120,
+		h: 152,
+		anchorX: 1270,
+		anchorY: 456,
+		targetX: 1320,
+		targetY: 482,
+		facing: 'left',
+		action: 'interacting',
+		radius: 78,
+		sortY: 512
 	}
 ];
 
@@ -917,6 +968,133 @@ function drawPlant(ctx: CanvasRenderingContext2D) {
 	ctx.fill();
 }
 
+function drawGardenGround(ctx: CanvasRenderingContext2D) {
+	const grassGradient = ctx.createLinearGradient(0, GARDEN_TOP_Y, 0, MAP_HEIGHT - 18);
+	grassGradient.addColorStop(0, '#4f774c');
+	grassGradient.addColorStop(1, '#304f38');
+	fillRoundedRect(
+		ctx,
+		18,
+		GARDEN_TOP_Y,
+		MAP_WIDTH - 36,
+		MAP_HEIGHT - GARDEN_TOP_Y - 10,
+		8,
+		'#36553c'
+	);
+	ctx.fillStyle = grassGradient;
+	ctx.fillRect(28, GARDEN_TOP_Y + 8, MAP_WIDTH - 56, MAP_HEIGHT - GARDEN_TOP_Y - 36);
+
+	ctx.fillStyle = '#88674a';
+	for (let x = 36; x < MAP_WIDTH - 36; x += 34) {
+		if (x > 642 && x < 798) {
+			continue;
+		}
+		fillRoundedRect(ctx, x, GARDEN_TOP_Y + 12, 10, 34, 3, '#8e6c4d');
+	}
+	ctx.fillStyle = '#6b4f3e';
+	ctx.fillRect(38, GARDEN_TOP_Y + 26, 606, 7);
+	ctx.fillRect(796, GARDEN_TOP_Y + 26, MAP_WIDTH - 834, 7);
+
+	ctx.fillStyle = 'rgba(255, 241, 180, 0.12)';
+	for (let y = GARDEN_TOP_Y + 20; y < MAP_HEIGHT - 30; y += 18) {
+		for (let x = 48 + ((y / 18) % 4) * 30; x < MAP_WIDTH - 48; x += 118) {
+			ctx.fillRect(x, y, 2, 8);
+			ctx.fillRect(x + 3, y + 3, 2, 6);
+		}
+	}
+
+	const flowerColors = ['#f4cf63', '#e6877e', '#d9a6d8', '#f3f0c5'];
+	for (let i = 0; i < 32; i += 1) {
+		const x = 70 + ((i * 173) % 1290);
+		const y = GARDEN_TOP_Y + 44 + ((i * 47) % 164);
+		if (x > 410 && x < 640 && y > 370 && y < 500) {
+			continue;
+		}
+		ctx.fillStyle = '#345f38';
+		ctx.fillRect(x, y + 4, 2, 6);
+		ctx.fillStyle = flowerColors[i % flowerColors.length];
+		ctx.fillRect(x - 2, y, 3, 3);
+		ctx.fillRect(x + 2, y + 1, 3, 3);
+	}
+}
+
+function drawGardenPath(ctx: CanvasRenderingContext2D) {
+	const pathGradient = ctx.createLinearGradient(0, ROOM_BOTTOM_Y - 24, 0, MAP_HEIGHT - 30);
+	pathGradient.addColorStop(0, '#ba9367');
+	pathGradient.addColorStop(1, '#80624d');
+	fillRoundedRect(ctx, 660, ROOM_BOTTOM_Y - 24, 120, MAP_HEIGHT - ROOM_BOTTOM_Y - 6, 16, '#8c6a4f');
+	ctx.fillStyle = pathGradient;
+	ctx.fillRect(674, ROOM_BOTTOM_Y - 14, 92, MAP_HEIGHT - ROOM_BOTTOM_Y - 28);
+	ctx.fillStyle = '#d2b37f';
+	for (let y = ROOM_BOTTOM_Y + 6; y < MAP_HEIGHT - 58; y += 36) {
+		fillRoundedRect(ctx, 686 + ((y / 36) % 2) * 16, y, 44, 14, 7, '#d2b37f');
+		fillRoundedRect(ctx, 742 - ((y / 36) % 2) * 16, y + 14, 34, 12, 6, '#ba9367');
+	}
+	fillRoundedRect(ctx, 648, ROOM_BOTTOM_Y - 28, 144, 18, 6, '#6b4a38');
+	ctx.fillStyle = '#e0b87d';
+	ctx.fillRect(674, ROOM_BOTTOM_Y - 20, 92, 5);
+}
+
+function drawGardenBeds(ctx: CanvasRenderingContext2D) {
+	const drawBed = (x: number, y: number) => {
+		fillRoundedRect(ctx, x, y, 220, 78, 10, '#7a4f38');
+		fillRoundedRect(ctx, x + 12, y + 10, 196, 56, 8, '#6b4c2e');
+		ctx.fillStyle = '#365f37';
+		for (let row = 0; row < 3; row += 1) {
+			ctx.fillRect(x + 24, y + 20 + row * 14, 172, 4);
+			for (let i = 0; i < 7; i += 1) {
+				drawEllipse(
+					ctx,
+					x + 38 + i * 24,
+					y + 18 + row * 14,
+					5,
+					8,
+					row === 1 ? '#8ab862' : '#6f9f59'
+				);
+			}
+		}
+		ctx.fillStyle = '#c98755';
+		ctx.fillRect(x + 16, y + 66, 188, 5);
+	};
+	drawBed(154, 390);
+	drawBed(1008, 382);
+}
+
+function drawGardenPond(ctx: CanvasRenderingContext2D, time: number) {
+	drawEllipse(ctx, 520, 424, 112, 48, '#426f78');
+	drawEllipse(ctx, 520, 420, 96, 38, '#5e9cac');
+	ctx.strokeStyle = 'rgba(215, 244, 224, 0.5)';
+	ctx.lineWidth = 3;
+	for (let i = 0; i < 3; i += 1) {
+		ctx.beginPath();
+		ctx.ellipse(486 + i * 36, 414 + Math.sin(time / 400 + i) * 3, 22, 7, 0, 0, Math.PI * 2);
+		ctx.stroke();
+	}
+	drawEllipse(ctx, 438, 398, 18, 8, '#6fa35f');
+	drawEllipse(ctx, 604, 442, 20, 9, '#6fa35f');
+	ctx.fillStyle = '#f3d77a';
+	ctx.fillRect(600, 434, 6, 6);
+}
+
+function drawGardenTree(ctx: CanvasRenderingContext2D) {
+	fillRoundedRect(ctx, 1248, 420, 44, 78, 10, '#76543b');
+	ctx.fillStyle = '#5e3f2f';
+	ctx.fillRect(1264, 432, 8, 56);
+	const leaves = [
+		[1230, 390, 42, 40, '#426d45'],
+		[1274, 372, 54, 48, '#4f7e4f'],
+		[1316, 398, 44, 42, '#3f6845'],
+		[1248, 430, 48, 42, '#5b8b55'],
+		[1296, 430, 50, 42, '#477848']
+	] as const;
+	for (const [x, y, radiusX, radiusY, fill] of leaves) {
+		drawEllipse(ctx, x, y, radiusX, radiusY, fill);
+	}
+	ctx.fillStyle = '#e2b36c';
+	ctx.fillRect(1288, 438, 8, 8);
+	ctx.fillRect(1236, 408, 7, 7);
+}
+
 function drawDecor(ctx: CanvasRenderingContext2D) {
 	fillRoundedRect(ctx, 382, 76, 88, 42, 6, '#785d4c');
 	ctx.fillStyle = '#d7b078';
@@ -937,17 +1115,18 @@ function drawFloorAndWalls(ctx: CanvasRenderingContext2D) {
 	wallGradient.addColorStop(1, '#a5916d');
 	ctx.fillStyle = '#312820';
 	ctx.fillRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
-	fillRoundedRect(ctx, 18, 16, MAP_WIDTH - 36, MAP_HEIGHT - 28, 8, '#5a3e34');
+	drawGardenGround(ctx);
+	fillRoundedRect(ctx, 18, 16, MAP_WIDTH - 36, ROOM_BOTTOM_Y + 10, 8, '#5a3e34');
 	ctx.fillStyle = wallGradient;
 	ctx.fillRect(28, 28, MAP_WIDTH - 56, 94);
 	ctx.fillStyle = '#7b5846';
 	ctx.fillRect(28, 118, MAP_WIDTH - 56, 10);
-	const floorGradient = ctx.createLinearGradient(0, 124, 0, MAP_HEIGHT);
+	const floorGradient = ctx.createLinearGradient(0, 124, 0, ROOM_BOTTOM_Y);
 	floorGradient.addColorStop(0, '#c38d58');
 	floorGradient.addColorStop(1, '#9e6845');
 	ctx.fillStyle = floorGradient;
-	ctx.fillRect(28, 128, MAP_WIDTH - 56, MAP_HEIGHT - 154);
-	for (let y = 132; y < MAP_HEIGHT - 26; y += 18) {
+	ctx.fillRect(28, 128, MAP_WIDTH - 56, ROOM_BOTTOM_Y - 128);
+	for (let y = 132; y < ROOM_BOTTOM_Y; y += 18) {
 		ctx.fillStyle = y % 36 === 0 ? 'rgba(86,51,34,0.22)' : 'rgba(255,239,196,0.12)';
 		ctx.fillRect(30, y, MAP_WIDTH - 60, 2);
 		for (let x = 42 + ((y / 18) % 3) * 40; x < MAP_WIDTH - 40; x += 128) {
@@ -973,6 +1152,7 @@ function drawFloorAndWalls(ctx: CanvasRenderingContext2D) {
 	}
 	drawPixelWindow(ctx, 190, 44);
 	drawPixelWindow(ctx, 1018, 44);
+	drawGardenPath(ctx);
 }
 
 function drawLighting(
@@ -1146,6 +1326,9 @@ function drawScene(
 		{ sortY: 279, draw: () => drawCouchFront(ctx) },
 		{ sortY: 289, draw: () => drawArmchairFront(ctx) },
 		{ sortY: 301, draw: () => drawBedFront(ctx) },
+		{ sortY: 474, draw: () => drawGardenBeds(ctx) },
+		{ sortY: 476, draw: () => drawGardenPond(ctx, time) },
+		{ sortY: 512, draw: () => drawGardenTree(ctx) },
 		...players.map((player) => ({
 			sortY: getInteractionSortY(player),
 			draw: () => drawPlayer(ctx, player, time)
@@ -1249,6 +1432,8 @@ export function CottageGamePlaceholder() {
 			<div className="absolute inset-0 bg-[#312820]" />
 			<div className="absolute inset-x-0 top-0 h-[37%] bg-[linear-gradient(180deg,#69725f_0%,#a28d68_100%)]" />
 			<div className="absolute inset-x-0 bottom-0 h-[66%] bg-[linear-gradient(180deg,#bd8755_0%,#92603f_100%)]" />
+			<div className="absolute inset-x-0 bottom-0 h-[34%] bg-[linear-gradient(180deg,#4f774c_0%,#304f38_100%)]" />
+			<div className="absolute left-1/2 bottom-0 h-[38%] w-[8%] -translate-x-1/2 rounded-t-lg bg-[#8c6a4f]" />
 			<div className="absolute inset-x-0 top-[34%] h-[6px] bg-[#785644]" />
 			<div className="absolute inset-x-0 top-[45%] h-px bg-white/10" />
 			<div className="absolute inset-x-0 top-[56%] h-px bg-black/10" />
@@ -1308,6 +1493,15 @@ export function CottageGamePlaceholder() {
 				<div className="absolute left-[25%] top-[9%] h-[44%] w-[26%] rotate-[-18deg] rounded-full bg-[#486f4c]" />
 				<div className="absolute right-[8%] top-[16%] h-[38%] w-[24%] rotate-[24deg] rounded-full bg-[#77a565]" />
 				<div className="absolute left-[2%] top-[31%] h-[34%] w-[32%] rotate-[-35deg] rounded-full bg-[#486f4c]" />
+			</div>
+			<div className="absolute left-[11%] bottom-[9%] h-[12%] w-[15%] rounded-md bg-[#7a4f38]">
+				<div className="absolute inset-[14%] rounded bg-[#6b4c2e]" />
+			</div>
+			<div className="absolute left-[43%] bottom-[10%] h-[11%] w-[16%] rounded-full bg-[#5e9cac]" />
+			<div className="absolute right-[10%] bottom-[8%] h-[22%] w-[10%]">
+				<div className="absolute bottom-0 left-[40%] h-[42%] w-[22%] rounded bg-[#76543b]" />
+				<div className="absolute left-[5%] top-0 h-[62%] w-[58%] rounded-full bg-[#4f7e4f]" />
+				<div className="absolute right-0 top-[14%] h-[54%] w-[52%] rounded-full bg-[#3f6845]" />
 			</div>
 
 			<div className="absolute inset-0 bg-[radial-gradient(circle_at_51%_28%,rgba(255,188,91,0.28),transparent_22%),radial-gradient(circle_at_16%_62%,rgba(255,225,160,0.14),transparent_22%),linear-gradient(180deg,rgba(255,255,255,0.06),transparent_38%,rgba(30,20,18,0.22))] mix-blend-screen" />

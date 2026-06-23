@@ -49,7 +49,7 @@ const (
 	cottageMinX                     = 44
 	cottageMaxX                     = 1396
 	cottageMinY                     = 116
-	cottageMaxY                     = 316
+	cottageMaxY                     = 520
 )
 
 type Hub struct {
