@@ -267,9 +267,9 @@ const INTERACTIONS: CottageInteraction[] = [
 		h: 104,
 		anchorX: 1324,
 		anchorY: 212,
-		targetX: 1304,
-		targetY: 212,
-		facing: 'right',
+		targetX: 1324,
+		targetY: 232,
+		facing: 'up',
 		action: 'interacting',
 		radius: 54,
 		sortY: 216
@@ -509,10 +509,6 @@ function getInteractionSortY(player: CottagePlayerSyncState) {
 	return player.y;
 }
 
-function isFurniturePoseAction(action: CottagePlayerAction) {
-	return action === 'sitting' || action === 'sleeping';
-}
-
 function findNearestInteraction(player: CottagePlayerSyncState) {
 	let nearest: CottageInteraction | null = null;
 	let nearestDistance = Number.POSITIVE_INFINITY;
@@ -543,8 +539,7 @@ function standPlayer(
 	updatedAt = Date.now()
 ): CottagePlayerSyncState {
 	const interaction = findInteraction(player.interactionId);
-	const exitTarget =
-		interaction && isFurniturePoseAction(player.action) ? getInteractionTarget(interaction) : null;
+	const exitTarget = interaction ? getInteractionTarget(interaction) : null;
 	return {
 		...player,
 		...(exitTarget ? { x: exitTarget.x, y: exitTarget.y } : {}),
