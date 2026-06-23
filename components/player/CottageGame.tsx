@@ -70,6 +70,7 @@ const COTTAGE_GAME_SURFACE_CLASS_NAME =
 
 const FLOOR_BOUNDS = { minX: 44, maxX: 1396, minY: 116, maxY: 316 };
 
+// Include front strips and legs so Y-sorted furniture never clips a walking player.
 const COLLIDERS: Rect[] = [
 	{ x: 50, y: 54, w: 92, h: 68 },
 	{ x: 185, y: 66, w: 122, h: 45 },
@@ -78,9 +79,16 @@ const COLLIDERS: Rect[] = [
 	{ x: 904, y: 76, w: 100, h: 42 },
 	{ x: 1128, y: 62, w: 136, h: 54 },
 	{ x: 178, y: 212, w: 188, h: 48 },
+	{ x: 176, y: 266, w: 196, h: 14 },
 	{ x: 498, y: 204, w: 136, h: 72 },
+	{ x: 518, y: 272, w: 12, h: 16 },
+	{ x: 602, y: 272, w: 12, h: 16 },
 	{ x: 914, y: 218, w: 92, h: 48 },
+	{ x: 908, y: 272, w: 104, h: 10 },
 	{ x: 1126, y: 188, w: 178, h: 80 },
+	{ x: 1140, y: 276, w: 160, h: 14 },
+	{ x: 1134, y: 292, w: 18, h: 12 },
+	{ x: 1286, y: 292, w: 18, h: 12 },
 	{ x: 1328, y: 116, w: 54, h: 92 }
 ];
 
@@ -94,7 +102,7 @@ const INTERACTIONS: CottageInteraction[] = [
 		anchorX: 220,
 		anchorY: 252,
 		targetX: 220,
-		targetY: 284,
+		targetY: 294,
 		facing: 'down',
 		action: 'sitting',
 		radius: 56,
@@ -109,7 +117,7 @@ const INTERACTIONS: CottageInteraction[] = [
 		anchorX: 318,
 		anchorY: 252,
 		targetX: 318,
-		targetY: 284,
+		targetY: 294,
 		facing: 'down',
 		action: 'sitting',
 		radius: 56,
