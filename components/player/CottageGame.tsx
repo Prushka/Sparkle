@@ -26,6 +26,8 @@ type CottageInteraction = {
 	h: number;
 	anchorX: number;
 	anchorY: number;
+	targetX?: number;
+	targetY?: number;
 	facing: CottagePlayerFacing;
 	action: CottagePlayerAction;
 	radius: number;
@@ -56,10 +58,11 @@ type MoveTarget = {
 const MAP_WIDTH = 1440;
 const MAP_HEIGHT = 350;
 const ROOM_CROP_TOP = 28;
-const ROOM_CROP_BOTTOM = 26;
+const ROOM_CROP_BOTTOM = 8;
 const GAME_HEIGHT = 178;
 const PLAYER_SPEED = 124;
 const PLAYER_RADIUS = 11;
+const INTERACTION_CLICK_RADIUS = 24;
 const INTERACTION_ACTION_MS = 2500;
 const PLAYER_ID_PATTERN = /^[A-Za-z0-9_:-]{1,128}$/;
 const COTTAGE_GAME_SURFACE_CLASS_NAME =
@@ -89,11 +92,13 @@ const INTERACTIONS: CottageInteraction[] = [
 		w: 106,
 		h: 72,
 		anchorX: 220,
-		anchorY: 274,
+		anchorY: 252,
+		targetX: 220,
+		targetY: 284,
 		facing: 'down',
 		action: 'sitting',
 		radius: 56,
-		sortY: 278
+		sortY: 284
 	},
 	{
 		id: 'couch-right',
@@ -102,11 +107,13 @@ const INTERACTIONS: CottageInteraction[] = [
 		w: 110,
 		h: 72,
 		anchorX: 318,
-		anchorY: 274,
+		anchorY: 252,
+		targetX: 318,
+		targetY: 284,
 		facing: 'down',
 		action: 'sitting',
 		radius: 56,
-		sortY: 278
+		sortY: 284
 	},
 	{
 		id: 'table-north',
@@ -115,11 +122,13 @@ const INTERACTIONS: CottageInteraction[] = [
 		w: 78,
 		h: 34,
 		anchorX: 566,
-		anchorY: 190,
+		anchorY: 198,
+		targetX: 566,
+		targetY: 178,
 		facing: 'down',
 		action: 'sitting',
 		radius: 54,
-		sortY: 211
+		sortY: 226
 	},
 	{
 		id: 'table-south',
@@ -129,10 +138,12 @@ const INTERACTIONS: CottageInteraction[] = [
 		h: 34,
 		anchorX: 566,
 		anchorY: 292,
+		targetX: 566,
+		targetY: 306,
 		facing: 'up',
 		action: 'sitting',
 		radius: 54,
-		sortY: 305
+		sortY: 310
 	},
 	{
 		id: 'table-west',
@@ -142,10 +153,12 @@ const INTERACTIONS: CottageInteraction[] = [
 		h: 48,
 		anchorX: 488,
 		anchorY: 254,
+		targetX: 450,
+		targetY: 254,
 		facing: 'right',
 		action: 'sitting',
 		radius: 52,
-		sortY: 269
+		sortY: 282
 	},
 	{
 		id: 'table-east',
@@ -155,10 +168,12 @@ const INTERACTIONS: CottageInteraction[] = [
 		h: 48,
 		anchorX: 646,
 		anchorY: 254,
+		targetX: 684,
+		targetY: 254,
 		facing: 'left',
 		action: 'sitting',
 		radius: 52,
-		sortY: 269
+		sortY: 282
 	},
 	{
 		id: 'armchair',
@@ -167,11 +182,13 @@ const INTERACTIONS: CottageInteraction[] = [
 		w: 112,
 		h: 78,
 		anchorX: 960,
-		anchorY: 280,
+		anchorY: 256,
+		targetX: 960,
+		targetY: 296,
 		facing: 'down',
 		action: 'sitting',
 		radius: 58,
-		sortY: 289
+		sortY: 296
 	},
 	{
 		id: 'bed',
@@ -179,12 +196,14 @@ const INTERACTIONS: CottageInteraction[] = [
 		y: 176,
 		w: 206,
 		h: 122,
-		anchorX: 1208,
-		anchorY: 292,
+		anchorX: 1218,
+		anchorY: 262,
+		targetX: 1274,
+		targetY: 304,
 		facing: 'left',
 		action: 'sleeping',
 		radius: 72,
-		sortY: 300
+		sortY: 306
 	},
 	{
 		id: 'fireplace',
@@ -233,12 +252,16 @@ const INTERACTIONS: CottageInteraction[] = [
 		h: 104,
 		anchorX: 1324,
 		anchorY: 212,
+		targetX: 1304,
+		targetY: 212,
 		facing: 'right',
 		action: 'interacting',
 		radius: 54,
 		sortY: 216
 	}
 ];
+
+const INTERACTION_BY_ID = new Map(INTERACTIONS.map((interaction) => [interaction.id, interaction]));
 
 function clamp(value: number, min: number, max: number) {
 	return Math.min(max, Math.max(min, value));
@@ -350,8 +373,7 @@ function normalizeCottagePlayer(
 			? player.profileId
 			: undefined;
 	const interactionId =
-		typeof player.interactionId === 'string' &&
-		INTERACTIONS.some((interaction) => interaction.id === player.interactionId)
+		typeof player.interactionId === 'string' && INTERACTION_BY_ID.has(player.interactionId)
 			? player.interactionId
 			: undefined;
 	return {
@@ -405,19 +427,38 @@ function createDefaultPlayer(player: CottagePlayerIdentity): CottagePlayerSyncSt
 }
 
 function findInteraction(id: string | undefined) {
-	return INTERACTIONS.find((interaction) => interaction.id === id);
+	return id ? INTERACTION_BY_ID.get(id) : undefined;
+}
+
+function getInteractionTarget(interaction: CottageInteraction): MoveTarget {
+	return {
+		x: interaction.targetX ?? interaction.anchorX,
+		y: interaction.targetY ?? interaction.anchorY,
+		interactionId: interaction.id
+	};
+}
+
+function getInteractionSortY(player: CottagePlayerSyncState) {
+	const interaction = findInteraction(player.interactionId);
+	if (
+		interaction &&
+		(player.action === 'sitting' || player.action === 'sleeping' || player.action === 'interacting')
+	) {
+		return interaction.sortY;
+	}
+	return player.y;
+}
+
+function isFurniturePoseAction(action: CottagePlayerAction) {
+	return action === 'sitting' || action === 'sleeping';
 }
 
 function findNearestInteraction(player: CottagePlayerSyncState) {
 	let nearest: CottageInteraction | null = null;
 	let nearestDistance = Number.POSITIVE_INFINITY;
 	for (const interaction of INTERACTIONS) {
-		const candidateDistance = distance(
-			player.x,
-			player.y,
-			interaction.anchorX,
-			interaction.anchorY
-		);
+		const target = getInteractionTarget(interaction);
+		const candidateDistance = distance(player.x, player.y, target.x, target.y);
 		if (candidateDistance <= interaction.radius && candidateDistance < nearestDistance) {
 			nearest = interaction;
 			nearestDistance = candidateDistance;
@@ -431,7 +472,7 @@ function findClickedInteraction(x: number, y: number) {
 		INTERACTIONS.find((interaction) => isPointInRect(x, y, interaction, 4)) ||
 		INTERACTIONS.find(
 			(interaction) =>
-				distance(x, y, interaction.anchorX, interaction.anchorY) <= interaction.radius
+				distance(x, y, interaction.anchorX, interaction.anchorY) <= INTERACTION_CLICK_RADIUS
 		) ||
 		null
 	);
@@ -441,8 +482,12 @@ function standPlayer(
 	player: CottagePlayerSyncState,
 	updatedAt = Date.now()
 ): CottagePlayerSyncState {
+	const interaction = findInteraction(player.interactionId);
+	const exitTarget =
+		interaction && isFurniturePoseAction(player.action) ? getInteractionTarget(interaction) : null;
 	return {
 		...player,
+		...(exitTarget ? { x: exitTarget.x, y: exitTarget.y } : {}),
 		action: 'idle',
 		interactionId: undefined,
 		targetX: undefined,
@@ -511,7 +556,8 @@ function setPlayerMoveTarget(
 	updatedAt = Date.now()
 ): CottagePlayerSyncState {
 	const interaction = findInteraction(target.interactionId);
-	if (distance(player.x, player.y, target.x, target.y) < 5) {
+	const moveTarget = interaction ? getInteractionTarget(interaction) : target;
+	if (distance(player.x, player.y, moveTarget.x, moveTarget.y) < 5) {
 		if (interaction) {
 			return interactPlayer(player, interaction, updatedAt);
 		}
@@ -526,13 +572,11 @@ function setPlayerMoveTarget(
 	}
 	return {
 		...player,
-		targetX: target.x,
-		targetY: target.y,
+		targetX: moveTarget.x,
+		targetY: moveTarget.y,
 		action: 'walking',
-		facing: getFacingFromDelta(target.x - player.x, target.y - player.y, player.facing),
-		...(target.interactionId
-			? { interactionId: target.interactionId }
-			: { interactionId: undefined }),
+		facing: getFacingFromDelta(moveTarget.x - player.x, moveTarget.y - player.y, player.facing),
+		...(interaction ? { interactionId: interaction.id } : { interactionId: undefined }),
 		updatedAt
 	};
 }
@@ -548,7 +592,7 @@ function finishPlayerMoveTarget(
 		y: target.y
 	};
 	const interaction = findInteraction(target.interactionId);
-	if (interaction && distance(target.x, target.y, interaction.anchorX, interaction.anchorY) <= 18) {
+	if (interaction) {
 		return interactPlayer(arrived, interaction, updatedAt);
 	}
 	return {
@@ -680,22 +724,6 @@ function fillRoundedRect(
 	ctx.fill();
 }
 
-function strokeRoundedRect(
-	ctx: CanvasRenderingContext2D,
-	x: number,
-	y: number,
-	w: number,
-	h: number,
-	r: number,
-	stroke: string,
-	width = 1
-) {
-	roundedRect(ctx, x, y, w, h, r);
-	ctx.strokeStyle = stroke;
-	ctx.lineWidth = width;
-	ctx.stroke();
-}
-
 function drawEllipse(
 	ctx: CanvasRenderingContext2D,
 	x: number,
@@ -775,23 +803,35 @@ function drawFireplace(ctx: CanvasRenderingContext2D, time: number) {
 	ctx.fill();
 }
 
-function drawCouch(ctx: CanvasRenderingContext2D) {
+function drawCouchBase(ctx: CanvasRenderingContext2D) {
 	fillRoundedRect(ctx, 176, 210, 196, 62, 13, '#9a586a');
 	fillRoundedRect(ctx, 188, 198, 172, 38, 11, '#b96c78');
 	fillRoundedRect(ctx, 190, 230, 76, 42, 9, '#c57982');
 	fillRoundedRect(ctx, 278, 230, 76, 42, 9, '#c57982');
+}
+
+function drawCouchFront(ctx: CanvasRenderingContext2D) {
+	fillRoundedRect(ctx, 176, 266, 196, 7, 4, '#9a586a');
 	ctx.fillStyle = '#7b3f55';
 	ctx.fillRect(196, 270, 18, 10);
 	ctx.fillRect(334, 270, 18, 10);
-	strokeRoundedRect(ctx, 176, 210, 196, 62, 13, '#6d394c', 3);
+	ctx.strokeStyle = '#6d394c';
+	ctx.lineWidth = 3;
+	ctx.beginPath();
+	ctx.moveTo(184, 270.5);
+	ctx.lineTo(364, 270.5);
+	ctx.stroke();
 }
 
-function drawDiningSet(ctx: CanvasRenderingContext2D) {
+function drawDiningChairs(ctx: CanvasRenderingContext2D) {
 	const chairColor = '#9f6b44';
 	fillRoundedRect(ctx, 526, 176, 80, 35, 7, chairColor);
 	fillRoundedRect(ctx, 526, 276, 80, 35, 7, chairColor);
 	fillRoundedRect(ctx, 462, 220, 43, 50, 7, chairColor);
 	fillRoundedRect(ctx, 628, 220, 43, 50, 7, chairColor);
+}
+
+function drawDiningTable(ctx: CanvasRenderingContext2D) {
 	fillRoundedRect(ctx, 496, 202, 140, 76, 10, '#bf814f');
 	fillRoundedRect(ctx, 511, 214, 110, 52, 7, '#d3945b');
 	ctx.fillStyle = '#8f5c3d';
@@ -808,7 +848,7 @@ function drawDiningSet(ctx: CanvasRenderingContext2D) {
 	ctx.fillRect(566, 249, 6, 10);
 }
 
-function drawBed(ctx: CanvasRenderingContext2D) {
+function drawBedBase(ctx: CanvasRenderingContext2D) {
 	fillRoundedRect(ctx, 1124, 178, 192, 118, 12, '#80583e');
 	fillRoundedRect(ctx, 1140, 190, 160, 92, 8, '#f1d6ad');
 	fillRoundedRect(ctx, 1150, 198, 68, 35, 8, '#fff2d3');
@@ -816,16 +856,32 @@ function drawBed(ctx: CanvasRenderingContext2D) {
 	fillRoundedRect(ctx, 1140, 232, 160, 54, 9, '#7295a5');
 	ctx.fillStyle = '#5e7888';
 	ctx.fillRect(1148, 241, 144, 7);
+}
+
+function drawBedFront(ctx: CanvasRenderingContext2D) {
+	fillRoundedRect(ctx, 1140, 276, 160, 10, 6, '#7295a5');
+	ctx.fillStyle = '#5e7888';
+	ctx.fillRect(1148, 278, 144, 5);
 	ctx.fillStyle = '#5b3d32';
 	ctx.fillRect(1134, 292, 18, 12);
 	ctx.fillRect(1286, 292, 18, 12);
 }
 
-function drawArmchair(ctx: CanvasRenderingContext2D) {
+function drawArmchairBase(ctx: CanvasRenderingContext2D) {
 	fillRoundedRect(ctx, 908, 212, 104, 70, 12, '#7f7960');
 	fillRoundedRect(ctx, 922, 202, 76, 38, 10, '#98906d');
 	fillRoundedRect(ctx, 930, 236, 60, 42, 9, '#aca477');
-	strokeRoundedRect(ctx, 908, 212, 104, 70, 12, '#5f5946', 3);
+}
+
+function drawArmchairFront(ctx: CanvasRenderingContext2D) {
+	fillRoundedRect(ctx, 908, 274, 104, 8, 5, '#7f7960');
+	fillRoundedRect(ctx, 930, 272, 60, 6, 4, '#aca477');
+	ctx.strokeStyle = '#5f5946';
+	ctx.lineWidth = 3;
+	ctx.beginPath();
+	ctx.moveTo(916, 280.5);
+	ctx.lineTo(1004, 280.5);
+	ctx.stroke();
 }
 
 function drawTeaCounter(ctx: CanvasRenderingContext2D) {
@@ -1074,17 +1130,18 @@ function drawScene(
 	drawFireplace(ctx, time);
 	drawTeaCounter(ctx);
 	drawDecor(ctx);
+	drawDiningChairs(ctx);
 
 	const drawItems: { sortY: number; draw: () => void }[] = [
-		{ sortY: 206, draw: () => drawDiningSet(ctx) },
-		{ sortY: 279, draw: () => drawCouch(ctx) },
-		{ sortY: 289, draw: () => drawArmchair(ctx) },
-		{ sortY: 286, draw: () => drawBed(ctx) },
+		{ sortY: 236, draw: () => drawCouchBase(ctx) },
+		{ sortY: 240, draw: () => drawArmchairBase(ctx) },
+		{ sortY: 264, draw: () => drawBedBase(ctx) },
+		{ sortY: 278, draw: () => drawDiningTable(ctx) },
+		{ sortY: 279, draw: () => drawCouchFront(ctx) },
+		{ sortY: 289, draw: () => drawArmchairFront(ctx) },
+		{ sortY: 301, draw: () => drawBedFront(ctx) },
 		...players.map((player) => ({
-			sortY:
-				player.action === 'sleeping'
-					? (findInteraction(player.interactionId)?.sortY ?? player.y)
-					: player.y,
+			sortY: getInteractionSortY(player),
 			draw: () => drawPlayer(ctx, player, time)
 		}))
 	];
@@ -1745,19 +1802,25 @@ export function CottageGame({
 			if (!selfId) {
 				return;
 			}
-			const walkTarget = isWalkable(target.x, target.y)
-				? target
+			const interaction = findInteraction(target.interactionId);
+			const targetPoint = interaction ? getInteractionTarget(interaction) : target;
+			const walkTarget = isWalkable(targetPoint.x, targetPoint.y)
+				? targetPoint
 				: {
-						...target,
-						x: clamp(target.x, FLOOR_BOUNDS.minX, FLOOR_BOUNDS.maxX),
-						y: clamp(target.y, FLOOR_BOUNDS.minY, FLOOR_BOUNDS.maxY)
+						...targetPoint,
+						x: clamp(targetPoint.x, FLOOR_BOUNDS.minX, FLOOR_BOUNDS.maxX),
+						y: clamp(targetPoint.y, FLOOR_BOUNDS.minY, FLOOR_BOUNDS.maxY)
 					};
 			targetRef.current = walkTarget;
 			keyboardDirectionRef.current = '';
 			const self = playersRef.current[selfId];
 			if (self) {
 				const now = Date.now();
-				const next = setPlayerMoveTarget(self, walkTarget, now);
+				const moveStart =
+					self.action === 'sitting' || self.action === 'sleeping' || self.action === 'interacting'
+						? standPlayer(self, now)
+						: self;
+				const next = setPlayerMoveTarget(moveStart, walkTarget, now);
 				if (!getMoveTarget(next)) {
 					targetRef.current = null;
 				}
@@ -1783,11 +1846,7 @@ export function CottageGame({
 			}
 			const interaction = findClickedInteraction(point.x, point.y);
 			if (interaction) {
-				setTarget({
-					x: interaction.anchorX,
-					y: interaction.anchorY,
-					interactionId: interaction.id
-				});
+				setTarget(getInteractionTarget(interaction));
 				return;
 			}
 			if (isWalkable(point.x, point.y)) {
@@ -1830,11 +1889,7 @@ export function CottageGame({
 			}
 			const interaction = findNearestInteraction(self);
 			if (interaction) {
-				setTarget({
-					x: interaction.anchorX,
-					y: interaction.anchorY,
-					interactionId: interaction.id
-				});
+				setTarget(getInteractionTarget(interaction));
 			}
 		},
 		[sendSelfSnapshot, setTarget]

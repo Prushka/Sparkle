@@ -7996,7 +7996,6 @@ export function Player({
 		},
 		[playerEl, resetChatFocusTimer]
 	);
-
 	const showJoinOverlay = !socketConnected;
 	const mediaPlayerClassName = `media-player relative w-full bg-slate-900 ${discord ? 'h-[100dvh]' : 'aspect-video'} ${getSafePlayerPaused(playerEl) === false && chatFocusedSecs > hideControlsOnChatFocused && !controlsChatPickerOpen ? 'chat-controls-hidden' : ''}`;
 	const selectedSubtitleLayerCount = getSelectedSubtitleLayerCount(
@@ -8114,10 +8113,10 @@ export function Player({
 					volume={remoteMicVolumes[id] ?? DEFAULT_REMOTE_MIC_VOLUME}
 				/>
 			))}
-			<div className="relative w-full">
+			<div className="relative z-30 w-full">
 				<div
 					className={`transition-[filter,opacity] duration-300 ${
-						showJoinOverlay ? 'pointer-events-none blur-sm' : 'blur-0'
+						showJoinOverlay ? 'pointer-events-none blur-sm' : 'filter-none'
 					}`}
 				>
 					{mounted && thumbnailVttSrc && playerSrcUrl ? (
