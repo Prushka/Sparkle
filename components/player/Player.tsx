@@ -272,6 +272,18 @@ const SUBTITLE_LANGUAGE_STORAGE_KEY = 'subtitleLanguage';
 const SUBTITLE_LAYERS_STORAGE_KEY = 'subtitleLayers';
 const ASS_BITMAP_CACHE_LIMIT_MB = 64;
 const ASS_GLYPH_CACHE_LIMIT_MB = 16;
+const ASS_DEFAULT_LATIN_FONT = 'Liberation Sans';
+const ASS_DEFAULT_LATIN_FONT_FILE = 'default.woff2';
+const ASS_LATIN_COMPAT_FONT_ALIASES = [
+	ASS_DEFAULT_LATIN_FONT,
+	'Arial',
+	'Arial Unicode MS',
+	'Helvetica',
+	'Tahoma',
+	'Times New Roman',
+	'Trebuchet MS',
+	'Verdana'
+];
 const ROOM_TIME_SYNC_THRESHOLD_SECONDS = 6;
 const AUDIO_LANGUAGE_PRIORITY = ['jpn', 'eng', 'chi'];
 const SUBTITLE_LANGUAGE_PRIORITY = ['en'];
@@ -2686,6 +2698,63 @@ function namespaceAssStyleResetOverrides(text: string, styleNameMap: Map<string,
 	});
 }
 
+function getAssRendererFontName(fontName: string) {
+	const normalizedFontName = fontName.trim().toLowerCase();
+	return ASS_LATIN_COMPAT_FONT_ALIASES.some(
+		(alias) => alias.toLowerCase() === normalizedFontName
+	)
+		? ASS_DEFAULT_LATIN_FONT
+		: fontName;
+}
+
+function normalizeAssRendererOverrideFonts(text: string) {
+	return text.replace(/\\fn([^\\}]*)/gi, (match, fontName: string) => {
+		const rendererFontName = getAssRendererFontName(fontName);
+		return rendererFontName === fontName ? match : `\\fn${rendererFontName}`;
+	});
+}
+
+function normalizeAssRendererFonts(content: string) {
+	let section = '';
+	let styleColumns = ASS_STYLE_COLUMNS.map(String);
+	return content
+		.replace(/\r\n?/g, '\n')
+		.split('\n')
+		.map((line) => {
+			const sectionMatch = line.match(/^\[(.*)\]\s*$/);
+			if (sectionMatch) {
+				section = sectionMatch[1].trim().toLowerCase();
+				return line;
+			}
+			const separatorIndex = line.indexOf(':');
+			if (separatorIndex === -1) {
+				return normalizeAssRendererOverrideFonts(line);
+			}
+			const key = line.slice(0, separatorIndex).trim().toLowerCase();
+			const rawValue = line.slice(separatorIndex + 1).trim();
+			if (section === 'v4+ styles' || section === 'v4 styles') {
+				if (key === 'format') {
+					styleColumns = rawValue.split(',').map((value) => value.trim());
+					return line;
+				}
+				if (key === 'style') {
+					const rawValues = splitAssValues(rawValue, styleColumns.length);
+					const fontNameColumnIndex = styleColumns.findIndex(
+						(column) => normalizeAssColumnName(column) === 'fontname'
+					);
+					if (fontNameColumnIndex >= 0) {
+						rawValues[fontNameColumnIndex] = getAssRendererFontName(
+							rawValues[fontNameColumnIndex] ?? ''
+						);
+					}
+					return `Style: ${rawValues.join(',')}`;
+				}
+			}
+			return normalizeAssRendererOverrideFonts(line);
+		})
+		.join('\n');
+}
+
 function createNamespacedAssStyleValues(style: AssParsedStyle, styleNameMap: Map<string, string>) {
 	const styleName = getAssStyleName(style) || ASS_STYLE_DEFAULTS.name;
 	const values: Record<string, string> = {};
@@ -3999,6 +4068,7 @@ type JASSUBRendererConfig = LibASSConfig & {
 type JASSUBManagedInstance = {
 	addEventListener?: EventTarget['addEventListener'];
 	freeTrack: () => void;
+	setTrack?: (content: string) => void | Promise<void>;
 	setTrackByUrl?: (url: string) => void | Promise<void>;
 	destroy?: () => void | Promise<void>;
 	_computeCanvasSize?: (width?: number, height?: number) => { width: number; height: number };
@@ -4153,6 +4223,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
 let assRendererModulePromise: Promise<{ default: LibASSConstructor }> | null = null;
 let captionsParserModulePromise: Promise<CaptionsParserModule> | null = null;
+
+async function fetchAssRendererTrackContent(src: string, signal?: AbortSignal) {
+	const response = await fetch(src, { signal });
+	if (!response.ok) {
+		throw new Error(`Unable to load ASS subtitle track (${response.status})`);
+	}
+	return normalizeAssRendererFonts(await response.text());
+}
 
 function closeAssRenderImages(payload: JASSUBRenderPayload | null | undefined) {
 	for (const image of payload?.images ?? []) {
@@ -4365,6 +4443,8 @@ class ManagedLibASSTextRenderer implements TextRenderer {
 	private loadRequestId = 0;
 	private loadPromise: Promise<void> | null = null;
 	private track: TextTrack | null = null;
+	private trackAbortController: AbortController | null = null;
+	private trackRequestId = 0;
 	private video: HTMLVideoElement | null = null;
 
 	constructor(
@@ -4405,7 +4485,7 @@ class ManagedLibASSTextRenderer implements TextRenderer {
 			this.ensureInstance();
 			return;
 		}
-		this.instance.setTrackByUrl?.(track.src);
+		this.setInstanceTrack(track.src);
 	}
 
 	detach() {
@@ -4413,26 +4493,40 @@ class ManagedLibASSTextRenderer implements TextRenderer {
 		this.loadPromise = null;
 		this.track = null;
 		this.video = null;
+		this.cancelPendingTrackLoad();
 		this.disposeInstance();
 	}
 
 	private ensureInstance() {
-		if (!this.video || !this.track?.src || this.instance || this.loadPromise) {
+		const track = this.track;
+		const trackSrc = track?.src;
+		if (!this.video || !track || !trackSrc || this.instance || this.loadPromise) {
 			return;
 		}
 
 		const requestId = ++this.loadRequestId;
 		const video = this.video;
+		const trackAbortController = new AbortController();
+		this.trackAbortController = trackAbortController;
 		this.loadPromise = this.loader()
-			.then((module) => {
-				if (this.loadRequestId !== requestId || this.video !== video || !this.track?.src) {
+			.then(async (module) => {
+				const subContent = await fetchAssRendererTrackContent(
+					trackSrc,
+					trackAbortController.signal
+				);
+				if (
+					this.loadRequestId !== requestId ||
+					this.video !== video ||
+					this.track !== track ||
+					!this.track?.src
+				) {
 					return;
 				}
 
 				const instance = new module.default({
 					...this.config,
 					video,
-					subUrl: this.track.src
+					subContent
 				}) as JASSUBManagedInstance;
 				this.instance = instance;
 				instance.addEventListener?.('ready', () => {
@@ -4446,16 +4540,69 @@ class ManagedLibASSTextRenderer implements TextRenderer {
 				});
 			})
 			.catch((error) => {
+				if (trackAbortController.signal.aborted) {
+					return;
+				}
 				console.warn('Unable to load ASS subtitle renderer', error);
 			})
 			.finally(() => {
 				if (this.loadRequestId === requestId) {
 					this.loadPromise = null;
 				}
+				if (this.trackAbortController === trackAbortController) {
+					this.trackAbortController = null;
+				}
+				if (!this.instance && this.video && this.track?.src && this.track !== track) {
+					this.ensureInstance();
+				}
 			});
 	}
 
+	private setInstanceTrack(src: string) {
+		const instance = this.instance;
+		if (!instance) {
+			return;
+		}
+		const requestId = ++this.trackRequestId;
+		this.cancelPendingTrackLoad();
+		const trackAbortController = new AbortController();
+		this.trackAbortController = trackAbortController;
+		void Promise.resolve(instance.ready)
+			.then(() => fetchAssRendererTrackContent(src, trackAbortController.signal))
+			.then((content) => {
+				if (
+					trackAbortController.signal.aborted ||
+					this.trackRequestId !== requestId ||
+					this.instance !== instance ||
+					this.track?.src !== src
+				) {
+					return;
+				}
+				if (instance.setTrack) {
+					return instance.setTrack(content);
+				}
+				return instance.setTrackByUrl?.(src);
+			})
+			.catch((error) => {
+				if (!trackAbortController.signal.aborted) {
+					console.warn('Unable to start ASS subtitle track', error);
+				}
+			})
+			.finally(() => {
+				if (this.trackAbortController === trackAbortController) {
+					this.trackAbortController = null;
+				}
+			});
+	}
+
+	private cancelPendingTrackLoad() {
+		this.trackAbortController?.abort();
+		this.trackAbortController = null;
+	}
+
 	private freeTrack() {
+		this.trackRequestId++;
+		this.cancelPendingTrackLoad();
 		try {
 			this.instance?.freeTrack();
 		} catch {
@@ -4469,6 +4616,8 @@ class ManagedLibASSTextRenderer implements TextRenderer {
 			return;
 		}
 		this.instance = null;
+		this.trackRequestId++;
+		this.cancelPendingTrackLoad();
 		try {
 			instance.freeTrack();
 		} catch {
@@ -4822,6 +4971,11 @@ export function Player({
 	const BASE_STATIC = `${staticBaseUrl}/${job.Id}`;
 	const assRendererConfig = useMemo<JASSUBRendererConfig>(() => {
 		const availableFonts: Record<string, string> = {};
+		const latinFontUrl = getPublicAssetUrl(ASS_DEFAULT_LATIN_FONT_FILE);
+
+		for (const family of ASS_LATIN_COMPAT_FONT_ALIASES) {
+			availableFonts[family.toLowerCase()] = latinFontUrl;
+		}
 
 		for (const [family, filename] of [defaultFallback, ...Object.values(fallbackFontsMap)]) {
 			if (!family || !filename) {
@@ -4850,7 +5004,7 @@ export function Player({
 			libassGlyphLimit: ASS_GLYPH_CACHE_LIMIT_MB,
 			fallbackFont: defaultFallback[0].toLowerCase(),
 			availableFonts,
-			fonts: Array.from(new Set(attachmentFonts)),
+			fonts: Array.from(new Set([latinFontUrl, ...attachmentFonts])),
 			useLocalFonts: false
 		};
 	}, [BASE_STATIC, job.Streams]);

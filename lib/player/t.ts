@@ -472,7 +472,7 @@ const subtitleFormatNames: Record<string, string> = {
 	ass: 'Styled',
 	srt: 'Text',
 	sup: 'Image',
-	vtt: 'Web'
+	vtt: 'Native'
 };
 
 function normalizeCueForgeSubtitleCandidate(value: string) {
