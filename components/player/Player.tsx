@@ -274,16 +274,8 @@ const ASS_BITMAP_CACHE_LIMIT_MB = 64;
 const ASS_GLYPH_CACHE_LIMIT_MB = 16;
 const ASS_DEFAULT_LATIN_FONT = 'Liberation Sans';
 const ASS_DEFAULT_LATIN_FONT_FILE = 'default.woff2';
-const ASS_LATIN_COMPAT_FONT_ALIASES = [
-	ASS_DEFAULT_LATIN_FONT,
-	'Arial',
-	'Arial Unicode MS',
-	'Helvetica',
-	'Tahoma',
-	'Times New Roman',
-	'Trebuchet MS',
-	'Verdana'
-];
+const ASS_ANNOTATION_FONT_ALIASES = [ASS_DEFAULT_LATIN_FONT, 'Arial', 'Arial Unicode MS'];
+const ASS_NUMBER_PATTERN = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/;
 const ROOM_TIME_SYNC_THRESHOLD_SECONDS = 6;
 const AUDIO_LANGUAGE_PRIORITY = ['jpn', 'eng', 'chi'];
 const SUBTITLE_LANGUAGE_PRIORITY = ['en'];
@@ -2698,74 +2690,107 @@ function namespaceAssStyleResetOverrides(text: string, styleNameMap: Map<string,
 	});
 }
 
+function formatScaledAssNumber(value: string, scale: number, integer = false) {
+	if (scale === 1) {
+		return value;
+	}
+	const trimmedValue = value.trim();
+	if (!ASS_NUMBER_PATTERN.test(trimmedValue)) {
+		return value;
+	}
+	const numericValue = Number.parseFloat(trimmedValue);
+	if (!Number.isFinite(numericValue)) {
+		return value;
+	}
+	const scaledValue = integer
+		? Math.round(numericValue * scale)
+		: Math.round(numericValue * scale * 1000) / 1000;
+	if (Object.is(scaledValue, -0)) {
+		return '0';
+	}
+	return String(scaledValue);
+}
+
+function scaleAssStyleValues(values: Record<string, string>, scale: number) {
+	if (scale === 1) {
+		return values;
+	}
+	for (const key of ['fontsize', 'spacing', 'outline', 'shadow']) {
+		values[key] = formatScaledAssNumber(values[key] ?? '', scale);
+	}
+	for (const key of ['marginl', 'marginr', 'marginv']) {
+		values[key] = formatScaledAssNumber(values[key] ?? '', scale, true);
+	}
+	return values;
+}
+
+function scaleAssEventMargins(values: Record<string, string>, scale: number) {
+	if (scale === 1) {
+		return values;
+	}
+	for (const key of ['marginl', 'marginr', 'marginv']) {
+		values[key] = formatScaledAssNumber(values[key] ?? '', scale, true);
+	}
+	return values;
+}
+
+function scaleAssOverrideText(text: string, scale: number) {
+	if (scale === 1) {
+		return text;
+	}
+	return text.replace(
+		/\\(fs|fsp|bord|xbord|ybord|shad|xshad|yshad|blur|be)(-?(?:\d+(?:\.\d+)?|\.\d+))/gi,
+		(match, tag: string, value: string) => {
+			const scaledValue = formatScaledAssNumber(value, scale, tag.toLowerCase() === 'be');
+			return scaledValue === value ? match : `\\${tag}${scaledValue}`;
+		}
+	);
+}
+
 function getAssRendererFontName(fontName: string) {
 	const normalizedFontName = fontName.trim().toLowerCase();
-	return ASS_LATIN_COMPAT_FONT_ALIASES.some(
-		(alias) => alias.toLowerCase() === normalizedFontName
-	)
+	return ASS_ANNOTATION_FONT_ALIASES.some((alias) => alias.toLowerCase() === normalizedFontName)
 		? ASS_DEFAULT_LATIN_FONT
 		: fontName;
 }
 
+function isAssPhoneticAnnotationOverride(text: string) {
+	return (
+		/\\c&HAAEBFF&/i.test(text) && /\\fscx60(?:\.0+)?/i.test(text) && /\\fscy60(?:\.0+)?/i.test(text)
+	);
+}
+
 function normalizeAssRendererOverrideFonts(text: string) {
-	return text.replace(/\\fn([^\\}]*)/gi, (match, fontName: string) => {
-		const rendererFontName = getAssRendererFontName(fontName);
-		return rendererFontName === fontName ? match : `\\fn${rendererFontName}`;
+	return text.replace(/\{([^}]*)\}/g, (block, overrideText: string) => {
+		if (!isAssPhoneticAnnotationOverride(overrideText)) {
+			return block;
+		}
+		return `{${overrideText.replace(/\\fn([^\\}]*)/gi, (match, fontName: string) => {
+			const rendererFontName = getAssRendererFontName(fontName);
+			return rendererFontName === fontName ? match : `\\fn${rendererFontName}`;
+		})}}`;
 	});
 }
 
-function normalizeAssRendererFonts(content: string) {
-	let section = '';
-	let styleColumns = ASS_STYLE_COLUMNS.map(String);
-	return content
-		.replace(/\r\n?/g, '\n')
-		.split('\n')
-		.map((line) => {
-			const sectionMatch = line.match(/^\[(.*)\]\s*$/);
-			if (sectionMatch) {
-				section = sectionMatch[1].trim().toLowerCase();
-				return line;
-			}
-			const separatorIndex = line.indexOf(':');
-			if (separatorIndex === -1) {
-				return normalizeAssRendererOverrideFonts(line);
-			}
-			const key = line.slice(0, separatorIndex).trim().toLowerCase();
-			const rawValue = line.slice(separatorIndex + 1).trim();
-			if (section === 'v4+ styles' || section === 'v4 styles') {
-				if (key === 'format') {
-					styleColumns = rawValue.split(',').map((value) => value.trim());
-					return line;
-				}
-				if (key === 'style') {
-					const rawValues = splitAssValues(rawValue, styleColumns.length);
-					const fontNameColumnIndex = styleColumns.findIndex(
-						(column) => normalizeAssColumnName(column) === 'fontname'
-					);
-					if (fontNameColumnIndex >= 0) {
-						rawValues[fontNameColumnIndex] = getAssRendererFontName(
-							rawValues[fontNameColumnIndex] ?? ''
-						);
-					}
-					return `Style: ${rawValues.join(',')}`;
-				}
-			}
-			return normalizeAssRendererOverrideFonts(line);
-		})
-		.join('\n');
-}
-
-function createNamespacedAssStyleValues(style: AssParsedStyle, styleNameMap: Map<string, string>) {
+function createNamespacedAssStyleValues(
+	style: AssParsedStyle,
+	styleNameMap: Map<string, string>,
+	scale: number
+) {
 	const styleName = getAssStyleName(style) || ASS_STYLE_DEFAULTS.name;
 	const values: Record<string, string> = {};
 	for (const column of ASS_STYLE_COLUMNS) {
 		values[normalizeAssColumnName(column)] = assValue(style.values, column, ASS_STYLE_DEFAULTS);
 	}
 	values.name = getMappedAssStyleName(styleName, styleNameMap, ASS_STYLE_DEFAULTS.name);
-	return values;
+	return scaleAssStyleValues(values, scale);
 }
 
-function createNamespacedAssEventValues(event: AssParsedEvent, styleNameMap: Map<string, string>) {
+function createNamespacedAssEventValues(
+	event: AssParsedEvent,
+	styleNameMap: Map<string, string>,
+	scale: number
+) {
 	const fallbackStyleName =
 		styleNameMap.get(normalizeAssStyleKey(ASS_STYLE_DEFAULTS.name)) ?? ASS_STYLE_DEFAULTS.name;
 	const values: Record<string, string> = {};
@@ -2773,8 +2798,11 @@ function createNamespacedAssEventValues(event: AssParsedEvent, styleNameMap: Map
 		values[normalizeAssColumnName(column)] = assValue(event.values, column, ASS_EVENT_DEFAULTS);
 	}
 	values.style = getMappedAssStyleName(values.style, styleNameMap, fallbackStyleName);
-	values.text = namespaceAssStyleResetOverrides(values.text, styleNameMap);
-	return values;
+	values.text = scaleAssOverrideText(
+		namespaceAssStyleResetOverrides(values.text, styleNameMap),
+		scale
+	);
+	return scaleAssEventMargins(values, scale);
 }
 
 function serializeAssRow(
@@ -2797,7 +2825,10 @@ function serializeMergedAssHeader(document: AssParsedDocument) {
 	return document.header.trimEnd() || '[Script Info]\nScriptType: v4.00+';
 }
 
-function serializeMergedAss(documents: AssParsedDocument[]) {
+function serializeMergedAss(
+	documents: AssParsedDocument[],
+	scale = getMergedSubtitleFontScale(documents.length)
+) {
 	if (documents.length === 0) {
 		return '';
 	}
@@ -2809,7 +2840,7 @@ function serializeMergedAss(documents: AssParsedDocument[]) {
 	documents.forEach((document, documentIndex) => {
 		const styleNameMap = getAssStyleNameMap(document, documentIndex);
 		for (const style of getAssDocumentStyles(document)) {
-			const values = createNamespacedAssStyleValues(style, styleNameMap);
+			const values = createNamespacedAssStyleValues(style, styleNameMap, scale);
 			const styleName = normalizeAssStyleKey(values.name);
 			if (emittedStyleNames.has(styleName)) {
 				continue;
@@ -2825,7 +2856,7 @@ function serializeMergedAss(documents: AssParsedDocument[]) {
 			) {
 				continue;
 			}
-			events.push(serializeAssEvent(createNamespacedAssEventValues(event, styleNameMap)));
+			events.push(serializeAssEvent(createNamespacedAssEventValues(event, styleNameMap, scale)));
 		}
 	});
 
@@ -4229,7 +4260,7 @@ async function fetchAssRendererTrackContent(src: string, signal?: AbortSignal) {
 	if (!response.ok) {
 		throw new Error(`Unable to load ASS subtitle track (${response.status})`);
 	}
-	return normalizeAssRendererFonts(await response.text());
+	return normalizeAssRendererOverrideFonts(await response.text());
 }
 
 function closeAssRenderImages(payload: JASSUBRenderPayload | null | undefined) {
@@ -4973,9 +5004,7 @@ export function Player({
 		const availableFonts: Record<string, string> = {};
 		const latinFontUrl = getPublicAssetUrl(ASS_DEFAULT_LATIN_FONT_FILE);
 
-		for (const family of ASS_LATIN_COMPAT_FONT_ALIASES) {
-			availableFonts[family.toLowerCase()] = latinFontUrl;
-		}
+		availableFonts[ASS_DEFAULT_LATIN_FONT.toLowerCase()] = latinFontUrl;
 
 		for (const [family, filename] of [defaultFallback, ...Object.values(fallbackFontsMap)]) {
 			if (!family || !filename) {
@@ -5004,7 +5033,7 @@ export function Player({
 			libassGlyphLimit: ASS_GLYPH_CACHE_LIMIT_MB,
 			fallbackFont: defaultFallback[0].toLowerCase(),
 			availableFonts,
-			fonts: Array.from(new Set([latinFontUrl, ...attachmentFonts])),
+			fonts: Array.from(new Set(attachmentFonts)),
 			useLocalFonts: false
 		};
 	}, [BASE_STATIC, job.Streams]);
