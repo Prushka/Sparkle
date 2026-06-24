@@ -2490,18 +2490,6 @@ function serializeMergedVtt(cues: MergedSubtitleCue[]) {
 		.join('\n\n')}\n`;
 }
 
-function formatAssTimestamp(seconds: number) {
-	const clampedSeconds = Math.max(0, seconds);
-	const hours = Math.floor(clampedSeconds / 3600);
-	const minutes = Math.floor((clampedSeconds % 3600) / 60);
-	const wholeSeconds = Math.floor(clampedSeconds % 60);
-	const centiseconds = Math.floor((clampedSeconds - Math.floor(clampedSeconds)) * 100);
-	return `${hours}:${String(minutes).padStart(2, '0')}:${String(wholeSeconds).padStart(
-		2,
-		'0'
-	)}.${String(centiseconds).padStart(2, '0')}`;
-}
-
 function parseAssTimestamp(value: string) {
 	const match = value.trim().match(/^(\d+):(\d{1,2}):(\d{1,2})(?:[.](\d{1,3}))?$/);
 	if (!match) {
@@ -2543,32 +2531,6 @@ function assValue(
 ) {
 	const key = normalizeAssColumnName(column);
 	return values[key] ?? defaults[key] ?? '';
-}
-
-function assNumber(value: string) {
-	const parsed = Number.parseFloat(value);
-	return Number.isFinite(parsed) ? parsed : null;
-}
-
-function formatAssNumber(value: number) {
-	return String(Math.round(value * 100) / 100).replace(/[.]0+$/, '');
-}
-
-function scaleAssNumericValue(value: string, scale: number, minimum = 0) {
-	const parsed = assNumber(value);
-	if (parsed === null) {
-		return value;
-	}
-	return formatAssNumber(Math.max(minimum, parsed * scale));
-}
-
-function scaleAssMarginValue(value: string, scale: number, offset = 0) {
-	const parsed = assNumber(value);
-	if (parsed === null) {
-		return value;
-	}
-	const next = Math.max(0, Math.round(parsed * scale + offset));
-	return String(next);
 }
 
 function parseAssDocument(
@@ -2665,163 +2627,105 @@ function getAssStyleName(style: AssParsedStyle) {
 	return assValue(style.values, 'Name', ASS_STYLE_DEFAULTS);
 }
 
-function getAssStyleFontName(style: AssParsedStyle | undefined) {
-	const fontName = style ? assValue(style.values, 'Fontname', ASS_STYLE_DEFAULTS).trim() : '';
-	return fontName || ASS_STYLE_DEFAULTS.fontname;
+function normalizeAssStyleKey(styleName: string) {
+	return styleName.trim().toLowerCase();
 }
 
-function findAssStyle(document: AssParsedDocument, styleName: string) {
-	const normalizedStyleName = styleName.trim().toLowerCase();
-	return (
-		document.styles.find(
-			(style) => getAssStyleName(style).trim().toLowerCase() === normalizedStyleName
-		) ?? null
-	);
+function getAssDocumentStyles(document: AssParsedDocument) {
+	return document.styles.length > 0 ? document.styles : parseAssDocument('', document.track).styles;
 }
 
-function getAssDefaultStyle(document: AssParsedDocument) {
-	return (
-		findAssStyle(document, 'Default') ??
-		document.styles[0] ??
-		parseAssDocument('', document.track).styles[0]
-	);
+function getAssMergedStyleName(styleName: string, documentIndex: number) {
+	return `sparkle_${documentIndex}_${(styleName.trim() || ASS_STYLE_DEFAULTS.name).replace(
+		/,/g,
+		'_'
+	)}`;
 }
 
-function getAssStyleFontMap(document: AssParsedDocument) {
-	const fontMap = new Map<string, string>();
-	for (const style of document.styles) {
-		fontMap.set(getAssStyleName(style).trim().toLowerCase(), getAssStyleFontName(style));
+function getAssStyleNameMap(document: AssParsedDocument, documentIndex: number) {
+	const styleNameMap = new Map<string, string>();
+	for (const style of getAssDocumentStyles(document)) {
+		const styleName = getAssStyleName(style) || ASS_STYLE_DEFAULTS.name;
+		styleNameMap.set(
+			normalizeAssStyleKey(styleName),
+			getAssMergedStyleName(styleName, documentIndex)
+		);
 	}
-	return fontMap;
+	if (!styleNameMap.has(normalizeAssStyleKey(ASS_STYLE_DEFAULTS.name))) {
+		styleNameMap.set(
+			normalizeAssStyleKey(ASS_STYLE_DEFAULTS.name),
+			getAssMergedStyleName(ASS_STYLE_DEFAULTS.name, documentIndex)
+		);
+	}
+	return styleNameMap;
 }
 
-function createMergedAssDefaultStyle(document: AssParsedDocument, densityScale: number) {
-	const style = getAssDefaultStyle(document);
+function getMappedAssStyleName(
+	styleName: string,
+	styleNameMap: Map<string, string>,
+	fallbackStyleName: string
+) {
+	const normalizedStyleName = normalizeAssStyleKey(styleName);
+	return styleNameMap.get(normalizedStyleName) ?? fallbackStyleName;
+}
+
+function namespaceAssStyleResetOverrides(text: string, styleNameMap: Map<string, string>) {
+	return text.replace(/\{([^}]*)\}/g, (_, overrideText: string) => {
+		const namespacedOverrideText = overrideText.replace(
+			/\\r([^\\}]*)/gi,
+			(match, styleName: string) => {
+				const trimmedStyleName = styleName.trim();
+				if (!trimmedStyleName) {
+					return '\\r';
+				}
+				const mappedStyleName = styleNameMap.get(normalizeAssStyleKey(trimmedStyleName));
+				return mappedStyleName ? `\\r${mappedStyleName}` : match;
+			}
+		);
+		return `{${namespacedOverrideText}}`;
+	});
+}
+
+function createNamespacedAssStyleValues(style: AssParsedStyle, styleNameMap: Map<string, string>) {
+	const styleName = getAssStyleName(style) || ASS_STYLE_DEFAULTS.name;
 	const values: Record<string, string> = {};
 	for (const column of ASS_STYLE_COLUMNS) {
 		values[normalizeAssColumnName(column)] = assValue(style.values, column, ASS_STYLE_DEFAULTS);
 	}
-	values.name = 'Default';
-	values.fontsize = scaleAssNumericValue(values.fontsize, densityScale, 12);
-	values.alignment = '2';
-	values.marginl = scaleAssMarginValue(values.marginl, 1);
-	values.marginr = scaleAssMarginValue(values.marginr, 1);
-	values.marginv = scaleAssMarginValue(values.marginv, 1);
+	values.name = getMappedAssStyleName(styleName, styleNameMap, ASS_STYLE_DEFAULTS.name);
 	return values;
 }
 
+function createNamespacedAssEventValues(event: AssParsedEvent, styleNameMap: Map<string, string>) {
+	const fallbackStyleName =
+		styleNameMap.get(normalizeAssStyleKey(ASS_STYLE_DEFAULTS.name)) ?? ASS_STYLE_DEFAULTS.name;
+	const values: Record<string, string> = {};
+	for (const column of ASS_EVENT_COLUMNS) {
+		values[normalizeAssColumnName(column)] = assValue(event.values, column, ASS_EVENT_DEFAULTS);
+	}
+	values.style = getMappedAssStyleName(values.style, styleNameMap, fallbackStyleName);
+	values.text = namespaceAssStyleResetOverrides(values.text, styleNameMap);
+	return values;
+}
+
+function serializeAssRow(
+	columns: readonly string[],
+	values: Record<string, string>,
+	defaults: Record<string, string>
+) {
+	return columns.map((column) => assValue(values, column, defaults)).join(',');
+}
+
 function serializeAssStyle(values: Record<string, string>) {
-	return `Style: ${ASS_STYLE_COLUMNS.map((column) =>
-		assValue(values, column, ASS_STYLE_DEFAULTS)
-	).join(',')}`;
+	return `Style: ${serializeAssRow(ASS_STYLE_COLUMNS, values, ASS_STYLE_DEFAULTS)}`;
 }
 
-function sanitizeAssFontName(fontName: string) {
-	return fontName.replace(/[\\{}]/g, '').trim();
+function serializeAssEvent(values: Record<string, string>) {
+	return `Dialogue: ${serializeAssRow(ASS_EVENT_COLUMNS, values, ASS_EVENT_DEFAULTS)}`;
 }
 
-function formatAssFontOverride(fontName: string) {
-	const sanitizedFontName = sanitizeAssFontName(fontName);
-	return sanitizedFontName ? `{\\fn${sanitizedFontName}}` : '';
-}
-
-function getAssOverrideFontName(
-	overrideText: string,
-	currentFontName: string,
-	defaultFontName: string,
-	styleFonts: Map<string, string>
-) {
-	let nextFontName = currentFontName;
-	const fontTagPattern = /\\(r|fn)([^\\}]*)/gi;
-	let match: RegExpExecArray | null;
-	while ((match = fontTagPattern.exec(overrideText))) {
-		const tagName = match[1].toLowerCase();
-		const tagValue = match[2].trim();
-		if (tagName === 'r') {
-			nextFontName = tagValue
-				? (styleFonts.get(tagValue.toLowerCase()) ?? defaultFontName)
-				: defaultFontName;
-			continue;
-		}
-		if (tagValue) {
-			nextFontName = tagValue;
-		}
-	}
-	return nextFontName;
-}
-
-function sanitizeMergedAssEventText(
-	text: string,
-	defaultFontName: string,
-	styleFonts: Map<string, string>
-) {
-	let output = '';
-	let cursor = 0;
-	let currentFontName = defaultFontName;
-	let emittedFontName = '';
-	const emitFontOverride = () => {
-		if (currentFontName && currentFontName !== emittedFontName) {
-			output += formatAssFontOverride(currentFontName);
-			emittedFontName = currentFontName;
-		}
-	};
-
-	emitFontOverride();
-	while (cursor < text.length) {
-		if (text[cursor] !== '{') {
-			output += text[cursor++];
-			continue;
-		}
-		const endIndex = text.indexOf('}', cursor + 1);
-		if (endIndex === -1) {
-			cursor++;
-			continue;
-		}
-		currentFontName = getAssOverrideFontName(
-			text.slice(cursor + 1, endIndex),
-			currentFontName,
-			defaultFontName,
-			styleFonts
-		);
-		emitFontOverride();
-		cursor = endIndex + 1;
-	}
-
-	return output
-		.replace(/\\[nN]/g, '\n')
-		.replace(/\\h/g, ' ')
-		.replace(/\r\n?/g, '\n')
-		.split('\n')
-		.map((line) => line.trim())
-		.filter((line) => line && !/^(?:\{\\fn[^}]+\})+$/.test(line))
-		.join('\n');
-}
-
-function createFontAwareMergedAssCue(event: AssParsedEvent, document: AssParsedDocument) {
-	const startTime = event.startTime;
-	const endTime = event.endTime;
-	const eventStyle = assValue(event.values, 'Style', ASS_EVENT_DEFAULTS);
-	const eventStyleFontName = getAssStyleFontName(
-		findAssStyle(document, eventStyle) ?? getAssDefaultStyle(document)
-	);
-	const text = sanitizeMergedAssEventText(
-		assValue(event.values, 'Text', ASS_EVENT_DEFAULTS),
-		eventStyleFontName,
-		getAssStyleFontMap(document)
-	);
-	if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || endTime <= startTime || !text) {
-		return null;
-	}
-	return { endTime, startTime, text };
-}
-
-function serializeAssMergedCueText(text: string) {
-	return text
-		.replace(/\r\n?/g, '\n')
-		.split('\n')
-		.map((line) => line.trim())
-		.filter(Boolean)
-		.join('\\N');
+function serializeMergedAssHeader(document: AssParsedDocument) {
+	return document.header.trimEnd() || '[Script Info]\nScriptType: v4.00+';
 }
 
 function serializeMergedAss(documents: AssParsedDocument[]) {
@@ -2829,39 +2733,42 @@ function serializeMergedAss(documents: AssParsedDocument[]) {
 		return '';
 	}
 	const primaryDocument = documents[0];
-	const densityScale = getMergedSubtitleFontScale(documents.length);
-	const defaultStyle = createMergedAssDefaultStyle(primaryDocument, densityScale);
-	const parsedDocuments: ParsedSubtitleDocument[] = [];
+	const styles: string[] = [];
+	const events: string[] = [];
+	const emittedStyleNames = new Set<string>();
 
-	for (const document of documents) {
-		parsedDocuments.push({
-			content: document.content,
-			cues: document.events
-				.map((event) => createFontAwareMergedAssCue(event, document))
-				.filter((cue): cue is SubtitleMergeCue => Boolean(cue)),
-			track: document.track
-		});
-	}
+	documents.forEach((document, documentIndex) => {
+		const styleNameMap = getAssStyleNameMap(document, documentIndex);
+		for (const style of getAssDocumentStyles(document)) {
+			const values = createNamespacedAssStyleValues(style, styleNameMap);
+			const styleName = normalizeAssStyleKey(values.name);
+			if (emittedStyleNames.has(styleName)) {
+				continue;
+			}
+			emittedStyleNames.add(styleName);
+			styles.push(serializeAssStyle(values));
+		}
+		for (const event of document.events) {
+			if (
+				!Number.isFinite(event.startTime) ||
+				!Number.isFinite(event.endTime) ||
+				event.endTime <= event.startTime
+			) {
+				continue;
+			}
+			events.push(serializeAssEvent(createNamespacedAssEventValues(event, styleNameMap)));
+		}
+	});
 
-	const cues = mergeSubtitleCues(parsedDocuments);
-	const events = cues
-		.map(
-			(cue) =>
-				`Dialogue: 0,${formatAssTimestamp(cue.startTime)},${formatAssTimestamp(
-					cue.endTime
-				)},Default,,0,0,0,,${serializeAssMergedCueText(cue.text)}`
-		)
-		.join('\n');
-
-	return `${primaryDocument.header.trimEnd()}
+	return `${serializeMergedAssHeader(primaryDocument)}
 
 [V4+ Styles]
 Format: ${ASS_STYLE_COLUMNS.join(', ')}
-${serializeAssStyle(defaultStyle)}
+${styles.join('\n')}
 
 [Events]
 Format: ${ASS_EVENT_COLUMNS.join(', ')}
-${events}
+${events.join('\n')}
 `;
 }
 

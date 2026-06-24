@@ -2,6 +2,15 @@
 const nextConfig = {
 	output: 'standalone',
 	reactStrictMode: true,
+	webpack(config, { dev }) {
+		if (dev) {
+			config.watchOptions = {
+				...config.watchOptions,
+				ignored: ['**/.playwright-mcp/**', '**/.agents/**', '**/.claude/**']
+			};
+		}
+		return config;
+	},
 	async headers() {
 		return [
 			{
