@@ -314,6 +314,8 @@ type SubtitleTypePriorityFormat = (typeof subtitleTypePriorityNormal)[number];
 
 export const chatLayouts = ['show', 'hide'];
 
+const externalSubtitleExtensions = new Set(['ass', 'vtt', 'srt', 'sup']);
+
 export function getSupportedCodecs() {
 	const supported: string[] = [];
 	try {
@@ -800,11 +802,37 @@ const replaceKeywordsAtEnd = (str: string, replacement: string) => {
 	return { result, replacedWord };
 };
 
+function getJobFiles(job: Job) {
+	const rawJob = job as Job & { files?: { [key: string]: number } };
+	return {
+		...(rawJob.files ?? {}),
+		...(job.Files ?? {})
+	};
+}
+
+function getJobStreams(job: Job) {
+	const rawJob = job as Job & { streams?: Stream[] };
+	return job.Streams ?? rawJob.streams ?? [];
+}
+
+function getSubtitleExtension(file: string) {
+	return file.split(/[?#]/)[0].split('.').pop()?.toLowerCase() || '';
+}
+
+function isExternalSubtitleFile(file: string) {
+	const cleanFile = file.split(/[?#]/)[0].toLowerCase();
+	return (
+		!cleanFile.includes('storyboard') && externalSubtitleExtensions.has(getSubtitleExtension(file))
+	);
+}
+
 export function preprocessJob(job: Job) {
 	const i = job.Input.replace(/\.[^/.]+$/, '');
 	const ks = replaceKeywordsAtEnd(i, '');
 	job.Input = ks.result;
 	job.ExtractedQuality = `${ks.replacedWord || ''}`;
+	job.Files = getJobFiles(job);
+	job.Streams = getJobStreams(job);
 	if (job.EncodedCodecs) {
 		job.EncodedCodecs.sort((a, b) => {
 			return codecsPriority.indexOf(a) - codecsPriority.indexOf(b);
@@ -815,8 +843,7 @@ export function preprocessJob(job: Job) {
 			}
 		}
 	}
-	if (!job.Streams) {
-		job.Streams = [];
+	if (job.Streams.length === 0) {
 		console.error('No streams found for job', job.Id, job.Input);
 	}
 	for (const stream of job.Streams) {
@@ -825,27 +852,23 @@ export function preprocessJob(job: Job) {
 		stream.Title = stream.Title ?? '';
 		stream.CodecType = stream.CodecType ?? '';
 	}
-	const existingSubtitles = job.Streams.filter((stream) => stream.CodecType === 'subtitle').map(
-		(stream) => stream.Location
+	const existingSubtitles = new Set(
+		job.Streams.filter((stream) => stream.CodecType === 'subtitle').map((stream) =>
+			stream.Location.toLowerCase()
+		)
 	);
 	let largestIndex = job.Streams.reduce((acc, stream) => Math.max(acc, stream.Index), 0);
 	for (const file in job.Files) {
-		if (!existingSubtitles.includes(file) && !file.includes('storyboard')) {
-			if (
-				file.endsWith('.ass') ||
-				file.endsWith('.vtt') ||
-				file.endsWith('.srt') ||
-				file.endsWith('.sup')
-			) {
-				largestIndex += 1;
-				job.Streams.push({
-					Index: largestIndex,
-					CodecType: 'subtitle',
-					Location: file,
-					Title: 'External - ' + file.split('.')[0],
-					Language: file.split('.')[0]
-				});
-			}
+		if (!existingSubtitles.has(file.toLowerCase()) && isExternalSubtitleFile(file)) {
+			largestIndex += 1;
+			job.Streams.push({
+				Index: largestIndex,
+				CodecType: 'subtitle',
+				Location: file,
+				Title: 'External - ' + file.replace(/\.[^.]+$/, ''),
+				Language: file.replace(/\.[^.]+$/, '')
+			});
+			existingSubtitles.add(file.toLowerCase());
 		}
 	}
 	job.Title = extractTitle(job);
