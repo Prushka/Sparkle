@@ -69,8 +69,8 @@ const PLAYER_ID_PATTERN = /^[A-Za-z0-9_:-]{1,128}$/;
 const COTTAGE_GAME_SURFACE_CLASS_NAME =
 	'relative mx-auto w-full max-w-[90rem] overflow-hidden bg-[#312820] outline-none focus-visible:outline-none';
 
-const ROOM_BOTTOM_Y = 324;
-const GARDEN_TOP_Y = 318;
+const ROOM_BOTTOM_Y = 400;
+const GARDEN_TOP_Y = ROOM_BOTTOM_Y - 6;
 const FLOOR_BOUNDS = { minX: 44, maxX: 1396, minY: 116, maxY: 520 };
 
 // Include front strips and legs so Y-sorted furniture never clips a walking player.

@@ -297,6 +297,43 @@ func TestSyncYouTubePreservesMissingTabsFromStaleSnapshot(t *testing.T) {
 	}
 }
 
+func TestSyncYouTubeRejectsStaleOpenTabRollback(t *testing.T) {
+	room := newRoom("youtube:room", "")
+	sender := testPlayer("sender-youtube", "Sender", 4)
+	room.players[sender.state.Id] = sender
+	room.youtube = YouTubeState{
+		Tabs: []YouTubeTabState{{
+			ID:           "tab_1",
+			Open:         true,
+			URL:          "https://www.youtube.com/watch?v=aaaaaaaaaaa",
+			VideoID:      "aaaaaaaaaaa",
+			Time:         120,
+			Paused:       false,
+			PlaybackRate: 1,
+			UpdatedAt:    10000,
+		}},
+		UpdatedAt: 10000,
+	}
+
+	room.syncYouTube(sender, &YouTubeState{
+		Tabs: []YouTubeTabState{{
+			ID:           "tab_1",
+			Open:         true,
+			VideoID:      "dQw4w9WgXcQ",
+			Time:         10,
+			Paused:       true,
+			PlaybackRate: 1,
+			UpdatedAt:    1000,
+		}},
+	})
+
+	tab := room.youtube.Tabs[0]
+	if tab.VideoID != "aaaaaaaaaaa" || tab.Time != 120 || tab.Paused {
+		t.Fatalf("stale youtube tab rollback applied = %#v", tab)
+	}
+	assertNoQueuedPayload(t, sender)
+}
+
 func TestSyncYouTubeClosedTabBlocksStaleReopen(t *testing.T) {
 	room := newRoom("youtube:room", "")
 	sender := testPlayer("sender-youtube", "Sender", 8)
@@ -524,6 +561,89 @@ func TestSyncChessRejectsSeatChangeDuringRound(t *testing.T) {
 	assertNoQueuedPayload(t, sender)
 }
 
+func TestSyncChessRejectsStaleMoveRollback(t *testing.T) {
+	room := newRoom("chess:room", "")
+	sender := testPlayer("alice-chess", "Alice", 4)
+	room.players[sender.state.Id] = sender
+	room.chess = ChessState{
+		Tabs: []ChessTabState{{
+			ID:       "game_1",
+			Open:     true,
+			Phase:    "playing",
+			Settings: ChessSettingsState{PieceSet: "classic", BoardTheme: "green", Timed: true, Minutes: 10},
+			White:    &ChessPlayerState{ID: "alice", Name: "Alice"},
+			Black:    &ChessPlayerState{ID: "bob", Name: "Bob"},
+			FEN:      "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+			Moves:    []ChessMoveState{{From: "e2", To: "e4", SAN: "e4"}},
+			Clocks:   ChessClockState{WhiteMs: 600000, BlackMs: 600000},
+		}},
+		UpdatedAt: 100,
+	}
+
+	room.syncChess(sender, &ChessState{
+		Tabs: []ChessTabState{{
+			ID:       "game_1",
+			Open:     true,
+			Phase:    "playing",
+			Settings: ChessSettingsState{PieceSet: "classic", BoardTheme: "green", Timed: true, Minutes: 10},
+			White:    &ChessPlayerState{ID: "alice", Name: "Alice"},
+			Black:    &ChessPlayerState{ID: "bob", Name: "Bob"},
+			FEN:      "start",
+			Moves:    nil,
+			Clocks:   ChessClockState{WhiteMs: 600000, BlackMs: 600000},
+		}},
+	})
+
+	tab := room.chess.Tabs[0]
+	if len(tab.Moves) != 1 || tab.FEN == "start" {
+		t.Fatalf("stale chess rollback applied = %#v", tab)
+	}
+	assertNoQueuedPayload(t, sender)
+}
+
+func TestSyncChessRejectsEndedGameDowngrade(t *testing.T) {
+	room := newRoom("chess:room", "")
+	sender := testPlayer("alice-chess", "Alice", 4)
+	room.players[sender.state.Id] = sender
+	result := &ChessResultState{Winner: "b", Reason: "resignation", Message: "Black wins by resignation"}
+	room.chess = ChessState{
+		Tabs: []ChessTabState{{
+			ID:       "game_1",
+			Open:     true,
+			Phase:    "ended",
+			Settings: ChessSettingsState{PieceSet: "classic", BoardTheme: "green", Timed: true, Minutes: 10},
+			White:    &ChessPlayerState{ID: "alice", Name: "Alice"},
+			Black:    &ChessPlayerState{ID: "bob", Name: "Bob"},
+			FEN:      "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+			Moves:    []ChessMoveState{{From: "e2", To: "e4", SAN: "e4"}},
+			Clocks:   ChessClockState{WhiteMs: 600000, BlackMs: 600000},
+			Result:   result,
+		}},
+		UpdatedAt: 100,
+	}
+
+	room.syncChess(sender, &ChessState{
+		Tabs: []ChessTabState{{
+			ID:       "game_1",
+			Open:     true,
+			Phase:    "playing",
+			Settings: ChessSettingsState{PieceSet: "classic", BoardTheme: "green", Timed: true, Minutes: 10},
+			White:    &ChessPlayerState{ID: "alice", Name: "Alice"},
+			Black:    &ChessPlayerState{ID: "bob", Name: "Bob"},
+			FEN:      "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1",
+			Moves:    []ChessMoveState{{From: "e2", To: "e4", SAN: "e4"}},
+			Clocks:   ChessClockState{WhiteMs: 600000, BlackMs: 600000},
+			Result:   nil,
+		}},
+	})
+
+	tab := room.chess.Tabs[0]
+	if tab.Phase != "ended" || tab.Result == nil {
+		t.Fatalf("ended chess game downgraded = %#v", tab)
+	}
+	assertNoQueuedPayload(t, sender)
+}
+
 func TestSyncChessPreservesMissingTabsFromStaleSnapshot(t *testing.T) {
 	room := newRoom("chess:room", "")
 	sender := testPlayer("alice-chess", "Alice", 4)
@@ -740,6 +860,111 @@ func TestSyncWordleClosedTabBlocksStaleReopen(t *testing.T) {
 		t.Fatalf("stale wordle snapshot reopened closed tab = %#v", room.wordle.Tabs)
 	}
 	assertNoQueuedPayload(t, receiver)
+}
+
+func TestSyncWordleRejectsStaleSetupRollback(t *testing.T) {
+	room := newRoom("wordle:room", "")
+	sender := testPlayer("alice-wordle", "Alice", 4)
+	room.players[sender.state.Id] = sender
+	room.wordle = WordleState{
+		Tabs: []WordleTabState{{
+			ID:       "wordle_1",
+			Open:     true,
+			Phase:    "playing",
+			Settings: WordleSettingsState{Mode: "competitive", Turns: 6},
+			Players:  []WordlePlayerState{{ID: "alice", Name: "Alice"}},
+			Boards: []WordleBoardState{{
+				ID:       "board_1",
+				PlayerID: "alice",
+				Rows:     []WordleRowState{defaultWordleRow(), defaultWordleRow(), defaultWordleRow(), defaultWordleRow(), defaultWordleRow(), defaultWordleRow()},
+			}},
+			StartedAt: 12345,
+			UpdatedAt: 100,
+		}},
+		UpdatedAt: 100,
+	}
+
+	room.syncWordle(sender, &WordleState{
+		Tabs: []WordleTabState{{
+			ID:        "wordle_1",
+			Open:      true,
+			Phase:     "setup",
+			Settings:  WordleSettingsState{Mode: "competitive", Turns: 6},
+			Players:   []WordlePlayerState{{ID: "alice", Name: "Alice"}},
+			UpdatedAt: 50,
+		}},
+	})
+
+	tab := room.wordle.Tabs[0]
+	if tab.Phase != "playing" || len(tab.Boards) != 1 || tab.StartedAt != 12345 {
+		t.Fatalf("stale wordle setup rollback applied = %#v", tab)
+	}
+	assertNoQueuedPayload(t, sender)
+}
+
+func TestSyncWordleRejectsStaleCoopBoardRollback(t *testing.T) {
+	room := newRoom("wordle:room", "")
+	sender := testPlayer("alice-wordle", "Alice", 4)
+	room.players[sender.state.Id] = sender
+	room.wordle = WordleState{
+		Tabs: []WordleTabState{{
+			ID:       "wordle_1",
+			Open:     true,
+			Phase:    "playing",
+			Settings: WordleSettingsState{Mode: "coop", Turns: 1},
+			Players: []WordlePlayerState{
+				{ID: "alice", Name: "Alice"},
+				{ID: "bob", Name: "Bob"},
+			},
+			Boards: []WordleBoardState{
+				{
+					ID: "board_1",
+					Rows: []WordleRowState{{
+						Statuses:  []string{"absent", "absent", "absent", "absent", "absent"},
+						Typed:     5,
+						Submitted: true,
+						PlayerID:  "alice",
+					}},
+					CurrentRow: 1,
+					Finished:   true,
+					FinishedAt: 100,
+				},
+				{ID: "board_2", Rows: []WordleRowState{defaultWordleRow()}},
+			},
+			ActiveBoardID: "board_2",
+			TurnPlayerID:  "bob",
+			StartedAt:     12345,
+			UpdatedAt:     100,
+		}},
+		UpdatedAt: 100,
+	}
+
+	room.syncWordle(sender, &WordleState{
+		Tabs: []WordleTabState{{
+			ID:       "wordle_1",
+			Open:     true,
+			Phase:    "playing",
+			Settings: WordleSettingsState{Mode: "coop", Turns: 1},
+			Players: []WordlePlayerState{
+				{ID: "alice", Name: "Alice"},
+				{ID: "bob", Name: "Bob"},
+			},
+			Boards: []WordleBoardState{{
+				ID:   "board_1",
+				Rows: []WordleRowState{defaultWordleRow()},
+			}},
+			ActiveBoardID: "board_1",
+			TurnPlayerID:  "alice",
+			StartedAt:     12345,
+			UpdatedAt:     50,
+		}},
+	})
+
+	tab := room.wordle.Tabs[0]
+	if tab.ActiveBoardID != "board_2" || tab.TurnPlayerID != "bob" || len(tab.Boards) != 2 {
+		t.Fatalf("stale wordle coop board rollback applied = %#v", tab)
+	}
+	assertNoQueuedPayload(t, sender)
 }
 
 func TestSyncWordleRejectsInvalidGuess(t *testing.T) {
@@ -1218,6 +1443,45 @@ func TestSyncCottageMergesDeltaAndBroadcastsToPeers(t *testing.T) {
 		Players:   []CottagePlayerState{player},
 		UpdatedAt: player.UpdatedAt,
 	})
+	assertNoQueuedPayload(t, receiver)
+}
+
+func TestSyncCottageRejectsUpdatingOtherPlayer(t *testing.T) {
+	room := newRoom("cottage:room", "")
+	sender := testPlayer("sender-cottage", "Sender socket", 4)
+	receiver := testPlayer("receiver-cottage", "Receiver socket", 4)
+	room.players[sender.state.Id] = sender
+	room.players[receiver.state.Id] = receiver
+	room.cottage = CottageState{
+		Players: []CottagePlayerState{{
+			ID:        "receiver",
+			Name:      "Receiver",
+			X:         500,
+			Y:         210,
+			Action:    "idle",
+			Facing:    "down",
+			UpdatedAt: 100,
+		}},
+		UpdatedAt: 100,
+	}
+
+	room.syncCottage(sender, &CottageState{
+		Players: []CottagePlayerState{{
+			ID:        "receiver",
+			Name:      "Receiver",
+			X:         120,
+			Y:         220,
+			Action:    "walking",
+			Facing:    "right",
+			UpdatedAt: 1,
+		}},
+		UpdatedAt: 1,
+	})
+
+	if room.cottage.Players[0].X != 500 || room.cottage.Players[0].Action != "idle" {
+		t.Fatalf("cottage accepted cross-player update = %#v", room.cottage.Players[0])
+	}
+	assertNoQueuedPayload(t, sender)
 	assertNoQueuedPayload(t, receiver)
 }
 

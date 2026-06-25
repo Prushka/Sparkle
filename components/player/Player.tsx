@@ -159,6 +159,7 @@ type MoveToastState = {
 	seconds: number;
 	firedBy?: RoomPlayer;
 	job: LibraryJob | undefined;
+	timestamp?: number;
 };
 
 type YouTubeFloatingTabProps = {
@@ -811,6 +812,16 @@ function areTabbedSyncStatesEqual<TTab extends { id: string; open: boolean; upda
 	right: TabbedSyncState<TTab>
 ) {
 	return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function nextTabbedSyncUpdatedAt<TTab extends { id: string; open: boolean; updatedAt: number }>(
+	state: TabbedSyncState<TTab>
+) {
+	const latestTabUpdatedAt = state.tabs.reduce(
+		(latest, tab) => Math.max(latest, tab.updatedAt),
+		state.updatedAt
+	);
+	return Math.max(Date.now(), latestTabUpdatedAt + 1);
 }
 
 function readStoredYouTubeSyncState(storageKey: string): YouTubeSyncState {
@@ -6097,8 +6108,8 @@ export function Player({
 
 	const updateYouTubeState = useCallback(
 		(tabId: string, patch: Partial<YouTubeTabSyncState>) => {
-			const timestamp = Date.now();
 			const current = youtubeStateRef.current;
+			const timestamp = nextTabbedSyncUpdatedAt(current);
 			const existingTab =
 				current.tabs.find((tab) => tab.id === tabId) ?? createDefaultYouTubeTab(tabId);
 			const nextTab = normalizeYouTubeTabSyncState(
@@ -6307,8 +6318,8 @@ export function Player({
 
 	const updateChessState = useCallback(
 		(tabId: string, patch: Partial<ChessTabSyncState>) => {
-			const timestamp = Date.now();
 			const current = chessStateRef.current;
+			const timestamp = nextTabbedSyncUpdatedAt(current);
 			const existingTab =
 				current.tabs.find((tab) => tab.id === tabId) ??
 				createDefaultChessTab(tabId, currentChessPlayer);
@@ -6522,8 +6533,8 @@ export function Player({
 
 	const updateWordleState = useCallback(
 		(tabId: string, patch: Partial<WordleTabSyncState>) => {
-			const timestamp = Date.now();
 			const current = wordleStateRef.current;
+			const timestamp = nextTabbedSyncUpdatedAt(current);
 			const existingTab =
 				current.tabs.find((tab) => tab.id === tabId) ??
 				createDefaultWordleTab(tabId, currentWordlePlayer);
@@ -7414,7 +7425,8 @@ export function Player({
 					setMoveToast({
 						seconds: moveSeconds,
 						job: target,
-						firedBy: state.firedBy
+						firedBy: state.firedBy,
+						timestamp: state.timestamp
 					});
 					state.moveToText =
 						target?.Title.title + (target?.Title?.episode ? ` ${target.Title.episode.se}` : '');
@@ -7656,7 +7668,7 @@ export function Player({
 
 	const handleMoveToastMove = useCallback(async () => {
 		if (moveToast?.job?.Id) {
-			await onRoomMediaChanged?.(moveToast.job.Id);
+			await onRoomMediaChanged?.(moveToast.job.Id, moveToast.timestamp);
 		} else {
 			await refreshRoomMedia();
 		}
@@ -8987,7 +8999,7 @@ export function Player({
 			{moveToast ? (
 				<div className="fixed bottom-4 left-1/2 z-[100] w-[90%] max-w-xl -translate-x-1/2">
 					<MoveToast
-						key={`${moveToast.job?.Id ?? 'unknown'}-${moveToast.seconds}-${moveToast.firedBy?.id ?? 'room'}`}
+						key={`${moveToast.job?.Id ?? 'unknown'}-${moveToast.seconds}-${moveToast.timestamp ?? 0}-${moveToast.firedBy?.id ?? 'room'}`}
 						historicalPlayers={historicalPlayers}
 						seconds={moveToast.seconds}
 						firedBy={moveToast.firedBy}

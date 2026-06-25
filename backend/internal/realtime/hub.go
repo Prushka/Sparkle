@@ -44,6 +44,7 @@ const (
 	statusHeartbeatTimeout          = 3 * time.Second
 	roomTimeSyncThresholdSeconds    = 6
 	youTubeTimeSyncThresholdSeconds = 6
+	staleTabUpdateSkewMilliseconds  = 2000
 	generatedRoomIDLength           = 10
 	roomIDAlphabet                  = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	cottageMinX                     = 44
@@ -1063,6 +1064,10 @@ func mergeYouTubeState(previous YouTubeState, incoming YouTubeState, timestamp i
 			continue
 		}
 		seen[previousTab.ID] = true
+		if isStaleSyncedTabUpdate(previousTab.UpdatedAt, incomingTab.UpdatedAt) {
+			next.Tabs = append(next.Tabs, previousTab)
+			continue
+		}
 		if !previousTab.Open {
 			next.Tabs = append(next.Tabs, previousTab)
 			continue
@@ -1090,6 +1095,12 @@ func mergeYouTubeState(previous YouTubeState, incoming YouTubeState, timestamp i
 		next.UpdatedAt = previous.UpdatedAt
 	}
 	return next, changed
+}
+
+func isStaleSyncedTabUpdate(previousUpdatedAt int64, incomingUpdatedAt int64) bool {
+	return previousUpdatedAt > 0 &&
+		incomingUpdatedAt > 0 &&
+		incomingUpdatedAt+staleTabUpdateSkewMilliseconds < previousUpdatedAt
 }
 
 func shouldBroadcastYouTubeState(previous YouTubeState, next YouTubeState) bool {
@@ -1274,9 +1285,58 @@ func chessTabUpdateAuthorized(previous ChessTabState, next ChessTabState, sender
 		if previous.Phase != "setup" && !chessSettingsAllowedAfterSetup(previous.Settings, next.Settings) {
 			return false
 		}
+		if !chessProgressionAllowed(previous, next) {
+			return false
+		}
 		return true
 	}
 	return chessJoinOnly(previous, next, senderID)
+}
+
+func chessProgressionAllowed(previous ChessTabState, next ChessTabState) bool {
+	switch previous.Phase {
+	case "setup":
+		return true
+	case "playing":
+		if next.Phase != "playing" && next.Phase != "ended" {
+			return false
+		}
+		if !chessMovesHavePrefix(next.Moves, previous.Moves) {
+			return false
+		}
+		if len(next.Moves) == len(previous.Moves) && next.FEN != previous.FEN {
+			return false
+		}
+		return true
+	case "ended":
+		if next.Phase == "setup" {
+			return next.FEN == "start" &&
+				len(next.Moves) == 0 &&
+				next.Result == nil &&
+				next.DrawOffer == nil
+		}
+		if next.Phase != "ended" ||
+			next.FEN != previous.FEN ||
+			!reflect.DeepEqual(previous.Moves, next.Moves) ||
+			!reflect.DeepEqual(previous.Result, next.Result) {
+			return false
+		}
+		return true
+	default:
+		return false
+	}
+}
+
+func chessMovesHavePrefix(moves []ChessMoveState, prefix []ChessMoveState) bool {
+	if len(moves) < len(prefix) {
+		return false
+	}
+	for index, move := range prefix {
+		if !reflect.DeepEqual(moves[index], move) {
+			return false
+		}
+	}
+	return true
 }
 
 func chessJoinOnly(previous ChessTabState, next ChessTabState, senderID string) bool {
@@ -1927,6 +1987,9 @@ func wordleTabUpdateAuthorized(previous WordleTabState, next WordleTabState, sen
 		return wasParticipant
 	}
 	if wasParticipant {
+		if !wordleProgressionAllowed(previous, next) {
+			return false
+		}
 		if previous.Phase == "playing" && !reflect.DeepEqual(previous.Players, next.Players) {
 			return false
 		}
@@ -1955,6 +2018,123 @@ func wordleJoinOnly(previous WordleTabState, next WordleTabState, senderID strin
 		return false
 	}
 	return wordleBoardsJoinOnly(previous.Boards, next.Boards, senderID)
+}
+
+func wordleProgressionAllowed(previous WordleTabState, next WordleTabState) bool {
+	switch previous.Phase {
+	case "setup":
+		return true
+	case "playing":
+		if next.Phase != "playing" && next.Phase != "ended" {
+			return false
+		}
+		if previous.StartedAt != next.StartedAt ||
+			!reflect.DeepEqual(previous.Settings, next.Settings) ||
+			!wordleBoardsIncludePrevious(next.Boards, previous.Boards) {
+			return false
+		}
+		if previous.Settings.Mode == "coop" && !wordleCoopProgressionAllowed(previous, next) {
+			return false
+		}
+		return true
+	case "ended":
+		if next.Phase == "setup" {
+			return wordleResetAllowed(previous, next)
+		}
+		return next.Phase == "ended" &&
+			previous.StartedAt == next.StartedAt &&
+			reflect.DeepEqual(previous.Settings, next.Settings) &&
+			reflect.DeepEqual(previous.Players, next.Players) &&
+			reflect.DeepEqual(previous.Boards, next.Boards) &&
+			reflect.DeepEqual(previous.Result, next.Result)
+	default:
+		return false
+	}
+}
+
+func wordleBoardsIncludePrevious(boards []WordleBoardState, previous []WordleBoardState) bool {
+	boardsByID := make(map[string]bool, len(boards))
+	for _, board := range boards {
+		boardsByID[board.ID] = true
+	}
+	for _, board := range previous {
+		if !boardsByID[board.ID] {
+			return false
+		}
+	}
+	return true
+}
+
+func wordleCoopProgressionAllowed(previous WordleTabState, next WordleTabState) bool {
+	if previous.ActiveBoardID == "" {
+		return true
+	}
+	previousActiveBoard, previousActiveIndex, ok := wordleBoardByID(previous.Boards, previous.ActiveBoardID)
+	if !ok {
+		return false
+	}
+	nextActiveBoard, nextActiveIndex, ok := wordleBoardByID(next.Boards, next.ActiveBoardID)
+	if !ok || nextActiveIndex < previousActiveIndex {
+		return false
+	}
+
+	previousSubmittedRows := wordleSubmittedRowCount(previousActiveBoard)
+	if nextActiveIndex == previousActiveIndex {
+		if next.TurnPlayerID == previous.TurnPlayerID {
+			return true
+		}
+		return next.TurnPlayerID == wordleNextTurnPlayerID(previous.Players, previous.TurnPlayerID) &&
+			wordleSubmittedRowCount(nextActiveBoard) > previousSubmittedRows
+	}
+
+	nextPreviousActiveBoard, _, ok := wordleBoardByID(next.Boards, previous.ActiveBoardID)
+	if !ok {
+		return false
+	}
+	return nextPreviousActiveBoard.Finished &&
+		wordleSubmittedRowCount(nextPreviousActiveBoard) > previousSubmittedRows &&
+		next.TurnPlayerID == wordleNextTurnPlayerID(previous.Players, previous.TurnPlayerID)
+}
+
+func wordleBoardByID(boards []WordleBoardState, id string) (WordleBoardState, int, bool) {
+	for index, board := range boards {
+		if board.ID == id {
+			return board, index, true
+		}
+	}
+	return WordleBoardState{}, -1, false
+}
+
+func wordleSubmittedRowCount(board WordleBoardState) int {
+	count := 0
+	for _, row := range board.Rows {
+		if row.Submitted {
+			count += 1
+		}
+	}
+	return count
+}
+
+func wordleNextTurnPlayerID(players []WordlePlayerState, current string) string {
+	if len(players) == 0 {
+		return ""
+	}
+	for index, player := range players {
+		if player.ID == current {
+			return players[(index+1)%len(players)].ID
+		}
+	}
+	return players[0].ID
+}
+
+func wordleResetAllowed(previous WordleTabState, next WordleTabState) bool {
+	return len(next.Boards) == 0 &&
+		next.ActiveBoardID == "" &&
+		next.TurnPlayerID == "" &&
+		next.StartedAt == 0 &&
+		next.Result == nil &&
+		reflect.DeepEqual(previous.Settings, next.Settings) &&
+		reflect.DeepEqual(previous.Players, next.Players)
 }
 
 func wordlePlayersAddOnlySender(previous []WordlePlayerState, next []WordlePlayerState, senderID string) bool {
@@ -2305,6 +2485,10 @@ func (r *Room) syncCottage(sender *Player, incoming *CottageState) {
 		r.sendCottageSnapshot(sender, timestamp)
 		return
 	}
+	state.Players = cottagePlayersOwnedBy(state.Players, cottageSenderPlayerID(sender))
+	if len(state.Players) == 0 {
+		return
+	}
 
 	var firedBy PlayerSnapshot
 	var targets []*Player
@@ -2332,6 +2516,24 @@ func (r *Room) syncCottage(sender *Player, incoming *CottageState) {
 	}
 	payload := SendPayload{Type: CottageSync, Cottage: &delta, FiredBy: &firedBy, Timestamp: timestamp}
 	sendPayloadToPlayers(targets, payload)
+}
+
+func cottageSenderPlayerID(sender *Player) string {
+	id := strings.TrimSpace(sender.state.Id)
+	return strings.TrimSuffix(id, "-cottage")
+}
+
+func cottagePlayersOwnedBy(players []CottagePlayerState, playerID string) []CottagePlayerState {
+	if playerID == "" {
+		return nil
+	}
+	owned := players[:0]
+	for _, player := range players {
+		if player.ID == playerID {
+			owned = append(owned, player)
+		}
+	}
+	return owned
 }
 
 func (r *Room) sendCottageSnapshot(sender *Player, timestamp int64) {

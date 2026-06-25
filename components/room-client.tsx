@@ -173,6 +173,7 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 	const [state, setState] = useState<LoadState>({ status: 'loading' });
 	const [retryKey, setRetryKey] = useState(0);
 	const lastMediaKeyRef = useRef('');
+	const latestMediaUpdatedRef = useRef(0);
 	const loadGenerationRef = useRef(0);
 	const previousRouteRef = useRef<RoomRoute | null>(null);
 	const previousRouteForLoadRef = useRef<RoomRoute | null>(null);
@@ -245,6 +246,9 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 				router.replace('/');
 				return;
 			}
+			if (typeof room.mediaUpdated === 'number') {
+				latestMediaUpdatedRef.current = Math.max(latestMediaUpdatedRef.current, room.mediaUpdated);
+			}
 
 			if (!routeMediaId) {
 				const fromMarkedLibraryHistory = getHistoryLibraryReturnRoomId() === effectiveRoomId;
@@ -254,9 +258,15 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 					((previousRoute?.view === 'media' && previousRoute.roomId === effectiveRoomId) ||
 						fromMarkedLibraryHistory)
 				) {
-					await updateRoomRecord(config.backendBaseUrl, effectiveRoomId, '');
+					const updated = await updateRoomRecord(config.backendBaseUrl, effectiveRoomId, '');
 					if (loadGenerationRef.current !== generation) {
 						return;
+					}
+					if (typeof updated.mediaUpdated === 'number') {
+						latestMediaUpdatedRef.current = Math.max(
+							latestMediaUpdatedRef.current,
+							updated.mediaUpdated
+						);
 					}
 					lastMediaKeyRef.current = '';
 					setState({ status: 'library', config, roomId: effectiveRoomId });
@@ -292,6 +302,9 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 					return;
 				}
 				mediaUpdated = updated.mediaUpdated;
+				if (typeof mediaUpdated === 'number') {
+					latestMediaUpdatedRef.current = Math.max(latestMediaUpdatedRef.current, mediaUpdated);
+				}
 			}
 
 			const mediaKey = `${effectiveRoomId}:${routeMediaId}:${mediaUpdated ?? 0}`;
@@ -345,6 +358,12 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 
 	const handleRoomMediaChanged = useCallback(
 		async (mediaId: string, mediaUpdated?: number) => {
+			if (typeof mediaUpdated === 'number') {
+				if (mediaUpdated < latestMediaUpdatedRef.current) {
+					return;
+				}
+				latestMediaUpdatedRef.current = mediaUpdated;
+			}
 			const currentRoomId = state.status === 'player' ? state.data.roomId : route.roomId;
 			if (!mediaId) {
 				lastMediaKeyRef.current = '';
