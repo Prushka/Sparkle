@@ -228,6 +228,7 @@ type SubtitleTrackInfo = {
 	cueForge: boolean;
 	src: string;
 	label: string;
+	settingsLabel: string;
 	kind: 'subtitles';
 	type: SubtitleTrackFormat;
 	language: string;
@@ -2020,12 +2021,67 @@ function getSubtitleTracksByFormat(
 	return tracks.filter((track) => track.format === format).sort(compareSubtitleTrackNames);
 }
 
-function compareSubtitleTrackNames(a: SubtitleTrackInfo, b: SubtitleTrackInfo) {
-	if (a.cueForge !== b.cueForge) {
-		return a.cueForge ? -1 : 1;
+function getSubtitleSettingsBaseLabel(track: SubtitleTrackInfo) {
+	return track.label.replace(/^\s*\d+\s*-\s*/, '').trim() || track.label;
+}
+
+function getSubtitleSettingsDuplicateKey(track: SubtitleTrackInfo) {
+	return [track.format, track.language, track.annotated ? 'annotated' : 'plain'].join('\t');
+}
+
+function withSubtitleSettingsLabels(tracks: SubtitleTrackInfo[]) {
+	const entries = tracks.map((track, index) => ({
+		baseLabel: getSubtitleSettingsBaseLabel(track),
+		index,
+		key: getSubtitleSettingsDuplicateKey(track),
+		track
+	}));
+	const entriesByKey = new Map<string, typeof entries>();
+	for (const entry of entries) {
+		const keyEntries = entriesByKey.get(entry.key);
+		if (keyEntries) {
+			keyEntries.push(entry);
+		} else {
+			entriesByKey.set(entry.key, [entry]);
+		}
 	}
+
+	const suffixes = new Map<number, number>();
+	for (const keyEntries of entriesByKey.values()) {
+		if (keyEntries.length <= 1) {
+			continue;
+		}
+		[...keyEntries]
+			.sort(
+				(a, b) =>
+					a.baseLabel.localeCompare(b.baseLabel, undefined, {
+						numeric: true,
+						sensitivity: 'base'
+					}) ||
+					a.track.src.localeCompare(b.track.src, undefined, {
+						numeric: true,
+						sensitivity: 'base'
+					}) ||
+					a.index - b.index
+			)
+			.forEach((entry, index) => suffixes.set(entry.index, index + 1));
+	}
+
+	return entries.map((entry) => {
+		const suffix = suffixes.get(entry.index);
+		return {
+			...entry.track,
+			settingsLabel: suffix ? `${entry.baseLabel} (${suffix})` : entry.baseLabel
+		};
+	});
+}
+
+function compareSubtitleTrackNames(a: SubtitleTrackInfo, b: SubtitleTrackInfo) {
 	return (
-		a.label.localeCompare(b.label, undefined, { numeric: true, sensitivity: 'base' }) ||
+		a.settingsLabel.localeCompare(b.settingsLabel, undefined, {
+			numeric: true,
+			sensitivity: 'base'
+		}) ||
 		a.language.localeCompare(b.language, undefined, { numeric: true, sensitivity: 'base' }) ||
 		a.src.localeCompare(b.src, undefined, { numeric: true, sensitivity: 'base' })
 	);
@@ -4095,7 +4151,7 @@ function SubtitlesMenuSection({
 						<SubtitleLayerCheckbox
 							key={track.src}
 							checked={selectedTrackSrcs.has(track.src)}
-							label={track.label}
+							label={track.settingsLabel}
 							onChange={(checked, trigger) => {
 								if (
 									!checked &&
@@ -6775,6 +6831,7 @@ export function Player({
 						cueForge: Boolean(cueForgeSubtitle),
 						src,
 						label: formatSubtitlePair(stream, true),
+						settingsLabel: '',
 						kind: 'subtitles',
 						type: format,
 						language: getSubtitleLanguage(stream),
@@ -6790,9 +6847,11 @@ export function Player({
 					}
 				}
 			}
-			subtitleTracksRef.current = subtitleTracks;
-			setSubtitleTracks(subtitleTracks);
-			const defaultSubtitleTrack = subtitleTracks.find((track) => track.default) ?? null;
+			const subtitleTracksWithSettingsLabels = withSubtitleSettingsLabels(subtitleTracks);
+			subtitleTracksRef.current = subtitleTracksWithSettingsLabels;
+			setSubtitleTracks(subtitleTracksWithSettingsLabels);
+			const defaultSubtitleTrack =
+				subtitleTracksWithSettingsLabels.find((track) => track.default) ?? null;
 			if (defaultSubtitleTrack) {
 				setPlayerTextTrackMode(
 					defaultSubtitleTextTrack ??
