@@ -3946,7 +3946,7 @@ function SubtitleLayerCheckbox({
 }: {
 	checked: boolean;
 	label: string;
-	onChange: (checked: boolean) => void;
+	onChange: (checked: boolean, trigger?: Event) => void;
 }) {
 	const readyForTriggerlessChangesRef = useRef(false);
 
@@ -3970,7 +3970,7 @@ function SubtitleLayerCheckbox({
 					if (nextChecked === checked || (!trigger && !readyForTriggerlessChangesRef.current)) {
 						return;
 					}
-					onChange(nextChecked);
+					onChange(nextChecked, trigger);
 				}}
 			/>
 		</DefaultMenuItem>
@@ -4003,26 +4003,56 @@ function SubtitlesMenuSection({
 		...extraSubtitleLayerSrcs
 	]);
 	const formatToggleGroupRef = useRef<HTMLDivElement | null>(null);
+	const offFormatButtonRef = useRef<HTMLButtonElement | null>(null);
 
-	useEffect(() => {
+	useLayoutEffect(() => {
 		const group = formatToggleGroupRef.current;
 		if (!group || typeof window === 'undefined') {
 			return;
 		}
 
+		const dispatchResize = () => {
+			const targets = new Set<HTMLElement>([group]);
+			const submenuItems = group.closest<HTMLElement>('.vds-menu-items[data-submenu]');
+			const rootItems = group.closest<HTMLElement>('.vds-settings-menu-items[data-root]');
+			if (submenuItems) {
+				targets.add(submenuItems);
+			}
+			if (rootItems) {
+				targets.add(rootItems);
+			}
+			for (const target of targets) {
+				target.dispatchEvent(new Event('vds-menu-resize', { bubbles: true }));
+			}
+		};
+
+		dispatchResize();
+
 		let secondFrame = 0;
+		let thirdFrame = 0;
 		const firstFrame = window.requestAnimationFrame(() => {
-			group.dispatchEvent(new Event('vds-menu-resize', { bubbles: true }));
+			dispatchResize();
 			secondFrame = window.requestAnimationFrame(() => {
-				group.dispatchEvent(new Event('vds-menu-resize', { bubbles: true }));
+				dispatchResize();
+				thirdFrame = window.requestAnimationFrame(dispatchResize);
 			});
 		});
+		const timeout = window.setTimeout(dispatchResize, 120);
+
+		let resizeObserver: ResizeObserver | null = null;
+		if (typeof ResizeObserver !== 'undefined') {
+			resizeObserver = new ResizeObserver(dispatchResize);
+			resizeObserver.observe(group.closest<HTMLElement>('.vds-menu-items[data-submenu]') ?? group);
+		}
 
 		return () => {
+			resizeObserver?.disconnect();
 			window.cancelAnimationFrame(firstFrame);
 			window.cancelAnimationFrame(secondFrame);
+			window.cancelAnimationFrame(thirdFrame);
+			window.clearTimeout(timeout);
 		};
-	}, [activeFormat, formatTracks.length]);
+	}, [activeFormat, formatTracks.length, selectedTrackSrcs.size]);
 
 	if (formats.length === 0) {
 		return null;
@@ -4049,6 +4079,7 @@ function SubtitlesMenuSection({
 								aria-checked={checked}
 								className="sparkle-subtitle-format-toggle"
 								onClick={() => onFormatChange(option.value)}
+								ref={option.value === 'off' ? offFormatButtonRef : undefined}
 								role="radio"
 								type="button"
 							>
@@ -4065,7 +4096,21 @@ function SubtitlesMenuSection({
 							key={track.src}
 							checked={selectedTrackSrcs.has(track.src)}
 							label={track.label}
-							onChange={(checked) => onToggleTrack(track, checked)}
+							onChange={(checked, trigger) => {
+								if (
+									!checked &&
+									selectedTrackSrcs.size === 1 &&
+									selectedTrackSrcs.has(track.src)
+								) {
+									trigger?.preventDefault();
+									trigger?.stopPropagation();
+									trigger?.stopImmediatePropagation();
+									offFormatButtonRef.current?.focus({ preventScroll: true });
+									window.setTimeout(() => onToggleTrack(track, checked), 0);
+									return;
+								}
+								onToggleTrack(track, checked);
+							}}
 						/>
 					))}
 				</DefaultMenuSection>
