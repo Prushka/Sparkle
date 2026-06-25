@@ -1063,7 +1063,8 @@ func mergeYouTubeState(previous YouTubeState, incoming YouTubeState, timestamp i
 			continue
 		}
 		seen[previousTab.ID] = true
-		if !incomingTab.Open {
+		if !previousTab.Open {
+			next.Tabs = append(next.Tabs, previousTab)
 			continue
 		}
 		incomingTab.UpdatedAt = timestamp
@@ -1071,7 +1072,7 @@ func mergeYouTubeState(previous YouTubeState, incoming YouTubeState, timestamp i
 	}
 
 	for _, incomingTab := range incoming.Tabs {
-		if seen[incomingTab.ID] || !incomingTab.Open {
+		if seen[incomingTab.ID] {
 			continue
 		}
 		incomingTab.UpdatedAt = timestamp
@@ -1223,8 +1224,8 @@ func mergeChessState(previous ChessState, incoming ChessState, senderID string, 
 			next.Tabs = append(next.Tabs, previousTab)
 			continue
 		}
-		if !incomingTab.Open {
-			changed = true
+		if !previousTab.Open {
+			next.Tabs = append(next.Tabs, previousTab)
 			continue
 		}
 		incomingTab.UpdatedAt = timestamp
@@ -1235,7 +1236,7 @@ func mergeChessState(previous ChessState, incoming ChessState, senderID string, 
 	}
 
 	for _, incomingTab := range incoming.Tabs {
-		if seen[incomingTab.ID] || !incomingTab.Open {
+		if seen[incomingTab.ID] {
 			continue
 		}
 		if !chessTabHasPlayer(incomingTab, senderID) {
@@ -1660,13 +1661,21 @@ func mergeWordleState(previous WordleState, incoming WordleState, senderID strin
 			next.Tabs = append(next.Tabs, previousTab)
 			continue
 		}
-		incomingTab, ok = applyWordleSubmissionRules(previousTab, incomingTab, senderID, timestamp)
-		if !ok {
+		if !previousTab.Open {
 			next.Tabs = append(next.Tabs, previousTab)
 			continue
 		}
 		if !incomingTab.Open {
-			changed = true
+			incomingTab.UpdatedAt = timestamp
+			if !reflect.DeepEqual(previousTab, incomingTab) {
+				changed = true
+			}
+			next.Tabs = append(next.Tabs, incomingTab)
+			continue
+		}
+		incomingTab, ok = applyWordleSubmissionRules(previousTab, incomingTab, senderID, timestamp)
+		if !ok {
+			next.Tabs = append(next.Tabs, previousTab)
 			continue
 		}
 		incomingTab.UpdatedAt = timestamp
@@ -1677,10 +1686,16 @@ func mergeWordleState(previous WordleState, incoming WordleState, senderID strin
 	}
 
 	for _, incomingTab := range incoming.Tabs {
-		if seen[incomingTab.ID] || !incomingTab.Open {
+		if seen[incomingTab.ID] {
 			continue
 		}
 		if !wordleTabHasPlayer(incomingTab, senderID) {
+			continue
+		}
+		if !incomingTab.Open {
+			incomingTab.UpdatedAt = timestamp
+			next.Tabs = append(next.Tabs, incomingTab)
+			changed = true
 			continue
 		}
 		var ok bool

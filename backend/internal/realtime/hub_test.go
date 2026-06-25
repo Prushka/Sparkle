@@ -297,6 +297,62 @@ func TestSyncYouTubePreservesMissingTabsFromStaleSnapshot(t *testing.T) {
 	}
 }
 
+func TestSyncYouTubeClosedTabBlocksStaleReopen(t *testing.T) {
+	room := newRoom("youtube:room", "")
+	sender := testPlayer("sender-youtube", "Sender", 8)
+	receiver := testPlayer("receiver-youtube", "Receiver", 8)
+	room.players[sender.state.Id] = sender
+	room.players[receiver.state.Id] = receiver
+	room.youtube = YouTubeState{
+		Tabs: []YouTubeTabState{{
+			ID:           "tab_1",
+			Open:         true,
+			URL:          "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+			VideoID:      "dQw4w9WgXcQ",
+			Time:         10,
+			Paused:       true,
+			PlaybackRate: 1,
+			UpdatedAt:    100,
+		}},
+		UpdatedAt: 100,
+	}
+
+	room.syncYouTube(sender, &YouTubeState{
+		Tabs: []YouTubeTabState{{
+			ID:           "tab_1",
+			Open:         false,
+			VideoID:      "dQw4w9WgXcQ",
+			Paused:       true,
+			PlaybackRate: 1,
+			UpdatedAt:    200,
+		}},
+	})
+
+	if len(room.youtube.Tabs) != 1 || room.youtube.Tabs[0].Open {
+		t.Fatalf("closed youtube tab was not stored as tombstone = %#v", room.youtube.Tabs)
+	}
+	payload := readQueuedPayload(t, receiver)
+	if payload.Type != YouTubeSync || payload.YouTube == nil || payload.YouTube.Tabs[0].Open {
+		t.Fatalf("youtube close payload = %#v", payload)
+	}
+
+	room.syncYouTube(sender, &YouTubeState{
+		Tabs: []YouTubeTabState{{
+			ID:           "tab_1",
+			Open:         true,
+			VideoID:      "dQw4w9WgXcQ",
+			Paused:       true,
+			PlaybackRate: 1,
+			UpdatedAt:    100,
+		}},
+	})
+
+	if len(room.youtube.Tabs) != 1 || room.youtube.Tabs[0].Open {
+		t.Fatalf("stale youtube snapshot reopened closed tab = %#v", room.youtube.Tabs)
+	}
+	assertNoQueuedPayload(t, receiver)
+}
+
 func TestSanitizeChessState(t *testing.T) {
 	got, ok := sanitizeChessState(&ChessState{
 		Tabs: []ChessTabState{{
@@ -518,6 +574,47 @@ func TestSyncChessPreservesMissingTabsFromStaleSnapshot(t *testing.T) {
 	}
 }
 
+func TestSyncChessClosedTabBlocksStaleReopen(t *testing.T) {
+	room := newRoom("chess:room", "")
+	sender := testPlayer("alice-chess", "Alice", 8)
+	receiver := testPlayer("bob-chess", "Bob", 8)
+	room.players[sender.state.Id] = sender
+	room.players[receiver.state.Id] = receiver
+	baseTab := ChessTabState{
+		ID:        "game_1",
+		Open:      true,
+		Phase:     "setup",
+		Settings:  ChessSettingsState{PieceSet: "classic", BoardTheme: "green", Timed: true, Minutes: 10},
+		White:     &ChessPlayerState{ID: "alice", Name: "Alice"},
+		FEN:       "start",
+		Clocks:    ChessClockState{WhiteMs: 600000, BlackMs: 600000},
+		UpdatedAt: 100,
+	}
+	room.chess = ChessState{Tabs: []ChessTabState{baseTab}, UpdatedAt: 100}
+
+	closedTab := baseTab
+	closedTab.Open = false
+	closedTab.UpdatedAt = 200
+	room.syncChess(sender, &ChessState{Tabs: []ChessTabState{closedTab}})
+
+	if len(room.chess.Tabs) != 1 || room.chess.Tabs[0].Open {
+		t.Fatalf("closed chess tab was not stored as tombstone = %#v", room.chess.Tabs)
+	}
+	payload := readQueuedPayload(t, receiver)
+	if payload.Type != ChessSync || payload.Chess == nil || payload.Chess.Tabs[0].Open {
+		t.Fatalf("chess close payload = %#v", payload)
+	}
+
+	staleOpenTab := baseTab
+	staleOpenTab.UpdatedAt = 100
+	room.syncChess(sender, &ChessState{Tabs: []ChessTabState{staleOpenTab}})
+
+	if len(room.chess.Tabs) != 1 || room.chess.Tabs[0].Open {
+		t.Fatalf("stale chess snapshot reopened closed tab = %#v", room.chess.Tabs)
+	}
+	assertNoQueuedPayload(t, receiver)
+}
+
 func TestSanitizeWordleState(t *testing.T) {
 	got, ok := sanitizeWordleState(&WordleState{
 		Tabs: []WordleTabState{{
@@ -604,6 +701,45 @@ func TestSanitizeWordleStateDoesNotSerializeGuessLetters(t *testing.T) {
 			t.Fatalf("wordle state leaked %q in JSON: %s", forbidden, encoded)
 		}
 	}
+}
+
+func TestSyncWordleClosedTabBlocksStaleReopen(t *testing.T) {
+	room := newRoom("wordle:room", "")
+	sender := testPlayer("alice-wordle", "Alice", 8)
+	receiver := testPlayer("bob-wordle", "Bob", 8)
+	room.players[sender.state.Id] = sender
+	room.players[receiver.state.Id] = receiver
+	baseTab := WordleTabState{
+		ID:        "wordle_1",
+		Open:      true,
+		Phase:     "setup",
+		Settings:  WordleSettingsState{Mode: "competitive", Turns: 6},
+		Players:   []WordlePlayerState{{ID: "alice", Name: "Alice"}},
+		UpdatedAt: 100,
+	}
+	room.wordle = WordleState{Tabs: []WordleTabState{baseTab}, UpdatedAt: 100}
+
+	closedTab := baseTab
+	closedTab.Open = false
+	closedTab.UpdatedAt = 200
+	room.syncWordle(sender, &WordleState{Tabs: []WordleTabState{closedTab}})
+
+	if len(room.wordle.Tabs) != 1 || room.wordle.Tabs[0].Open {
+		t.Fatalf("closed wordle tab was not stored as tombstone = %#v", room.wordle.Tabs)
+	}
+	payload := readQueuedPayload(t, receiver)
+	if payload.Type != WordleSync || payload.Wordle == nil || payload.Wordle.Tabs[0].Open {
+		t.Fatalf("wordle close payload = %#v", payload)
+	}
+
+	staleOpenTab := baseTab
+	staleOpenTab.UpdatedAt = 100
+	room.syncWordle(sender, &WordleState{Tabs: []WordleTabState{staleOpenTab}})
+
+	if len(room.wordle.Tabs) != 1 || room.wordle.Tabs[0].Open {
+		t.Fatalf("stale wordle snapshot reopened closed tab = %#v", room.wordle.Tabs)
+	}
+	assertNoQueuedPayload(t, receiver)
 }
 
 func TestSyncWordleRejectsInvalidGuess(t *testing.T) {

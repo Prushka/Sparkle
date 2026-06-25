@@ -747,6 +747,72 @@ function normalizeYouTubeSyncState(state: Partial<YouTubeSyncState> | null | und
 	};
 }
 
+type TabbedSyncState<TTab extends { id: string; open: boolean; updatedAt: number }> = {
+	tabs: TTab[];
+	updatedAt: number;
+};
+
+function shouldUseIncomingTabbedSyncTab<TTab extends { open: boolean; updatedAt: number }>(
+	current: TTab,
+	incoming: TTab
+) {
+	if (incoming.open !== current.open) {
+		return !incoming.open;
+	}
+	if (incoming.updatedAt !== current.updatedAt) {
+		return incoming.updatedAt > current.updatedAt;
+	}
+	return false;
+}
+
+function mergeTabbedSyncStates<
+	TTab extends { id: string; open: boolean; updatedAt: number },
+	TState extends TabbedSyncState<TTab>
+>(
+	currentState: TState,
+	incomingState: TState,
+	normalize: (state: Partial<TState> | null | undefined) => TState,
+	maxTabs: number
+) {
+	const current = normalize(currentState);
+	const incoming = normalize(incomingState);
+	const mergedTabs = new Map<string, TTab>();
+	const tabOrder: string[] = [];
+
+	for (const tab of current.tabs) {
+		mergedTabs.set(tab.id, tab);
+		tabOrder.push(tab.id);
+	}
+
+	for (const incomingTab of incoming.tabs) {
+		const currentTab = mergedTabs.get(incomingTab.id);
+		if (!currentTab) {
+			mergedTabs.set(incomingTab.id, incomingTab);
+			tabOrder.push(incomingTab.id);
+			continue;
+		}
+		if (shouldUseIncomingTabbedSyncTab(currentTab, incomingTab)) {
+			mergedTabs.set(incomingTab.id, incomingTab);
+		}
+	}
+
+	const tabs = tabOrder
+		.map((tabId) => mergedTabs.get(tabId))
+		.filter((tab): tab is TTab => Boolean(tab))
+		.slice(-maxTabs);
+	return normalize({
+		tabs,
+		updatedAt: Math.max(current.updatedAt, incoming.updatedAt)
+	} as Partial<TState>);
+}
+
+function areTabbedSyncStatesEqual<TTab extends { id: string; open: boolean; updatedAt: number }>(
+	left: TabbedSyncState<TTab>,
+	right: TabbedSyncState<TTab>
+) {
+	return JSON.stringify(left) === JSON.stringify(right);
+}
+
 function readStoredYouTubeSyncState(storageKey: string): YouTubeSyncState {
 	if (typeof window === 'undefined') {
 		return DEFAULT_YOUTUBE_SYNC_STATE;
@@ -6143,10 +6209,23 @@ export function Player({
 					sendYouTubeSnapshot(current, false);
 					return;
 				}
-				if (incoming.updatedAt < current.updatedAt) {
+				const nextState = mergeTabbedSyncStates(
+					current,
+					incoming,
+					normalizeYouTubeSyncState,
+					MAX_YOUTUBE_TABS
+				);
+				const shouldRepairIncoming = !areTabbedSyncStatesEqual(nextState, incoming);
+				if (areTabbedSyncStatesEqual(nextState, current)) {
+					if (shouldRepairIncoming) {
+						sendYouTubeSnapshot(nextState, false);
+					}
 					return;
 				}
-				applyYouTubeState(incoming);
+				applyYouTubeState(nextState);
+				if (shouldRepairIncoming) {
+					sendYouTubeSnapshot(nextState, false);
+				}
 			};
 
 			socket.onerror = () => {
@@ -6233,21 +6312,25 @@ export function Player({
 			const existingTab =
 				current.tabs.find((tab) => tab.id === tabId) ??
 				createDefaultChessTab(tabId, currentChessPlayer);
+			const nextTab = normalizeChessTabSyncState(
+				{
+					...existingTab,
+					...patch,
+					id: tabId,
+					updatedAt: timestamp
+				},
+				tabId
+			);
+			if (!nextTab) {
+				return;
+			}
 			const nextTabs =
 				patch.open === false
-					? current.tabs.filter((tab) => tab.id !== tabId)
-					: [
+					? [
 							...current.tabs.filter((tab) => tab.id !== tabId),
-							normalizeChessTabSyncState(
-								{
-									...existingTab,
-									...patch,
-									id: tabId,
-									updatedAt: timestamp
-								},
-								tabId
-							)
-						].filter((tab): tab is ChessTabSyncState => Boolean(tab));
+							{ ...nextTab, open: false, closeRequest: null }
+						]
+					: [...current.tabs.filter((tab) => tab.id !== tabId), nextTab];
 			const nextState = normalizeChessSyncState({
 				tabs: nextTabs.slice(-MAX_CHESS_TABS),
 				updatedAt: timestamp
@@ -6341,10 +6424,23 @@ export function Player({
 					sendChessSnapshot(current, false);
 					return;
 				}
-				if (incoming.updatedAt < current.updatedAt) {
+				const nextState = mergeTabbedSyncStates(
+					current,
+					incoming,
+					normalizeChessSyncState,
+					MAX_CHESS_TABS
+				);
+				const shouldRepairIncoming = !areTabbedSyncStatesEqual(nextState, incoming);
+				if (areTabbedSyncStatesEqual(nextState, current)) {
+					if (shouldRepairIncoming) {
+						sendChessSnapshot(nextState, false);
+					}
 					return;
 				}
-				applyChessState(incoming);
+				applyChessState(nextState);
+				if (shouldRepairIncoming) {
+					sendChessSnapshot(nextState, false);
+				}
 			};
 
 			socket.onerror = () => {
@@ -6451,10 +6547,7 @@ export function Player({
 				tabs: nextTabs.slice(-MAX_WORDLE_TABS),
 				updatedAt: timestamp
 			});
-			applyWordleState({
-				...nextState,
-				tabs: nextState.tabs.filter((tab) => tab.open)
-			});
+			applyWordleState(nextState);
 			sendWordleSnapshot(nextState);
 		},
 		[applyWordleState, currentWordlePlayer, sendWordleSnapshot]
@@ -6543,10 +6636,23 @@ export function Player({
 					sendWordleSnapshot(current, false);
 					return;
 				}
-				if (incoming.updatedAt < current.updatedAt) {
+				const nextState = mergeTabbedSyncStates(
+					current,
+					incoming,
+					normalizeWordleSyncState,
+					MAX_WORDLE_TABS
+				);
+				const shouldRepairIncoming = !areTabbedSyncStatesEqual(nextState, incoming);
+				if (areTabbedSyncStatesEqual(nextState, current)) {
+					if (shouldRepairIncoming) {
+						sendWordleSnapshot(nextState, false);
+					}
 					return;
 				}
-				applyWordleState(incoming);
+				applyWordleState(nextState);
+				if (shouldRepairIncoming) {
+					sendWordleSnapshot(nextState, false);
+				}
 			};
 
 			socket.onerror = () => {
