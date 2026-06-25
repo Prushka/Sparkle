@@ -69,8 +69,10 @@ const PLAYER_ID_PATTERN = /^[A-Za-z0-9_:-]{1,128}$/;
 const COTTAGE_GAME_SURFACE_CLASS_NAME =
 	'relative mx-auto w-full max-w-[90rem] overflow-hidden bg-[#312820] outline-none focus-visible:outline-none';
 
-const ROOM_BOTTOM_Y = 400;
+const BASE_ROOM_BOTTOM_Y = 324;
+const ROOM_BOTTOM_Y = 360;
 const GARDEN_TOP_Y = ROOM_BOTTOM_Y - 6;
+const GARDEN_ITEM_SHIFT = ROOM_BOTTOM_Y - BASE_ROOM_BOTTOM_Y;
 const FLOOR_BOUNDS = { minX: 44, maxX: 1396, minY: 116, maxY: 520 };
 
 // Include front strips and legs so Y-sorted furniture never clips a walking player.
@@ -93,10 +95,10 @@ const COLLIDERS: Rect[] = [
 	{ x: 1134, y: 292, w: 18, h: 12 },
 	{ x: 1286, y: 292, w: 18, h: 12 },
 	{ x: 1328, y: 116, w: 54, h: 92 },
-	{ x: 154, y: 390, w: 220, h: 78 },
-	{ x: 1008, y: 382, w: 220, h: 78 },
-	{ x: 408, y: 382, w: 224, h: 86 },
-	{ x: 1248, y: 424, w: 44, h: 74 }
+	{ x: 154, y: 390 + GARDEN_ITEM_SHIFT, w: 220, h: 78 },
+	{ x: 1008, y: 382 + GARDEN_ITEM_SHIFT, w: 220, h: 78 },
+	{ x: 408, y: 382 + GARDEN_ITEM_SHIFT, w: 224, h: 86 },
+	{ x: 1248, y: 424 + GARDEN_ITEM_SHIFT, w: 44, h: 74 }
 ];
 
 const INTERACTIONS: CottageInteraction[] = [
@@ -277,47 +279,47 @@ const INTERACTIONS: CottageInteraction[] = [
 	{
 		id: 'garden-bed',
 		x: 148,
-		y: 384,
+		y: 384 + GARDEN_ITEM_SHIFT,
 		w: 232,
 		h: 90,
 		anchorX: 264,
-		anchorY: 426,
+		anchorY: 426 + GARDEN_ITEM_SHIFT,
 		targetX: 264,
-		targetY: 488,
+		targetY: Math.min(FLOOR_BOUNDS.maxY, 488 + GARDEN_ITEM_SHIFT),
 		facing: 'up',
 		action: 'interacting',
 		radius: 74,
-		sortY: 474
+		sortY: 474 + GARDEN_ITEM_SHIFT
 	},
 	{
 		id: 'garden-pond',
 		x: 402,
-		y: 376,
+		y: 376 + GARDEN_ITEM_SHIFT,
 		w: 236,
 		h: 98,
 		anchorX: 520,
-		anchorY: 430,
+		anchorY: 430 + GARDEN_ITEM_SHIFT,
 		targetX: 520,
-		targetY: 492,
+		targetY: Math.min(FLOOR_BOUNDS.maxY, 492 + GARDEN_ITEM_SHIFT),
 		facing: 'up',
 		action: 'interacting',
 		radius: 76,
-		sortY: 476
+		sortY: 476 + GARDEN_ITEM_SHIFT
 	},
 	{
 		id: 'garden-tree',
 		x: 1216,
-		y: 356,
+		y: 356 + GARDEN_ITEM_SHIFT,
 		w: 120,
 		h: 152,
 		anchorX: 1270,
-		anchorY: 456,
+		anchorY: 456 + GARDEN_ITEM_SHIFT,
 		targetX: 1320,
-		targetY: 482,
+		targetY: 482 + GARDEN_ITEM_SHIFT,
 		facing: 'left',
 		action: 'interacting',
 		radius: 78,
-		sortY: 512
+		sortY: 512 + GARDEN_ITEM_SHIFT
 	}
 ];
 
@@ -1002,7 +1004,7 @@ function drawGardenGround(ctx: CanvasRenderingContext2D) {
 	for (let i = 0; i < 32; i += 1) {
 		const x = 70 + ((i * 173) % 1290);
 		const y = GARDEN_TOP_Y + 44 + ((i * 47) % 164);
-		if (x > 410 && x < 640 && y > 370 && y < 500) {
+		if (x > 410 && x < 640 && y > 370 + GARDEN_ITEM_SHIFT && y < 500 + GARDEN_ITEM_SHIFT) {
 			continue;
 		}
 		ctx.fillStyle = '#345f38';
@@ -1051,43 +1053,51 @@ function drawGardenBeds(ctx: CanvasRenderingContext2D) {
 		ctx.fillStyle = '#c98755';
 		ctx.fillRect(x + 16, y + 66, 188, 5);
 	};
-	drawBed(154, 390);
-	drawBed(1008, 382);
+	drawBed(154, 390 + GARDEN_ITEM_SHIFT);
+	drawBed(1008, 382 + GARDEN_ITEM_SHIFT);
 }
 
 function drawGardenPond(ctx: CanvasRenderingContext2D, time: number) {
-	drawEllipse(ctx, 520, 424, 112, 48, '#426f78');
-	drawEllipse(ctx, 520, 420, 96, 38, '#5e9cac');
+	drawEllipse(ctx, 520, 424 + GARDEN_ITEM_SHIFT, 112, 48, '#426f78');
+	drawEllipse(ctx, 520, 420 + GARDEN_ITEM_SHIFT, 96, 38, '#5e9cac');
 	ctx.strokeStyle = 'rgba(215, 244, 224, 0.5)';
 	ctx.lineWidth = 3;
 	for (let i = 0; i < 3; i += 1) {
 		ctx.beginPath();
-		ctx.ellipse(486 + i * 36, 414 + Math.sin(time / 400 + i) * 3, 22, 7, 0, 0, Math.PI * 2);
+		ctx.ellipse(
+			486 + i * 36,
+			414 + GARDEN_ITEM_SHIFT + Math.sin(time / 400 + i) * 3,
+			22,
+			7,
+			0,
+			0,
+			Math.PI * 2
+		);
 		ctx.stroke();
 	}
-	drawEllipse(ctx, 438, 398, 18, 8, '#6fa35f');
-	drawEllipse(ctx, 604, 442, 20, 9, '#6fa35f');
+	drawEllipse(ctx, 438, 398 + GARDEN_ITEM_SHIFT, 18, 8, '#6fa35f');
+	drawEllipse(ctx, 604, 442 + GARDEN_ITEM_SHIFT, 20, 9, '#6fa35f');
 	ctx.fillStyle = '#f3d77a';
-	ctx.fillRect(600, 434, 6, 6);
+	ctx.fillRect(600, 434 + GARDEN_ITEM_SHIFT, 6, 6);
 }
 
 function drawGardenTree(ctx: CanvasRenderingContext2D) {
-	fillRoundedRect(ctx, 1248, 420, 44, 78, 10, '#76543b');
+	fillRoundedRect(ctx, 1248, 420 + GARDEN_ITEM_SHIFT, 44, 78, 10, '#76543b');
 	ctx.fillStyle = '#5e3f2f';
-	ctx.fillRect(1264, 432, 8, 56);
+	ctx.fillRect(1264, 432 + GARDEN_ITEM_SHIFT, 8, 56);
 	const leaves = [
-		[1230, 390, 42, 40, '#426d45'],
-		[1274, 372, 54, 48, '#4f7e4f'],
-		[1316, 398, 44, 42, '#3f6845'],
-		[1248, 430, 48, 42, '#5b8b55'],
-		[1296, 430, 50, 42, '#477848']
+		[1230, 390 + GARDEN_ITEM_SHIFT, 42, 40, '#426d45'],
+		[1274, 372 + GARDEN_ITEM_SHIFT, 54, 48, '#4f7e4f'],
+		[1316, 398 + GARDEN_ITEM_SHIFT, 44, 42, '#3f6845'],
+		[1248, 430 + GARDEN_ITEM_SHIFT, 48, 42, '#5b8b55'],
+		[1296, 430 + GARDEN_ITEM_SHIFT, 50, 42, '#477848']
 	] as const;
 	for (const [x, y, radiusX, radiusY, fill] of leaves) {
 		drawEllipse(ctx, x, y, radiusX, radiusY, fill);
 	}
 	ctx.fillStyle = '#e2b36c';
-	ctx.fillRect(1288, 438, 8, 8);
-	ctx.fillRect(1236, 408, 7, 7);
+	ctx.fillRect(1288, 438 + GARDEN_ITEM_SHIFT, 8, 8);
+	ctx.fillRect(1236, 408 + GARDEN_ITEM_SHIFT, 7, 7);
 }
 
 function drawDecor(ctx: CanvasRenderingContext2D) {
@@ -1321,9 +1331,9 @@ function drawScene(
 		{ sortY: 279, draw: () => drawCouchFront(ctx) },
 		{ sortY: 289, draw: () => drawArmchairFront(ctx) },
 		{ sortY: 301, draw: () => drawBedFront(ctx) },
-		{ sortY: 474, draw: () => drawGardenBeds(ctx) },
-		{ sortY: 476, draw: () => drawGardenPond(ctx, time) },
-		{ sortY: 512, draw: () => drawGardenTree(ctx) },
+		{ sortY: 474 + GARDEN_ITEM_SHIFT, draw: () => drawGardenBeds(ctx) },
+		{ sortY: 476 + GARDEN_ITEM_SHIFT, draw: () => drawGardenPond(ctx, time) },
+		{ sortY: 512 + GARDEN_ITEM_SHIFT, draw: () => drawGardenTree(ctx) },
 		...players.map((player) => ({
 			sortY: getInteractionSortY(player),
 			draw: () => drawPlayer(ctx, player, time)
