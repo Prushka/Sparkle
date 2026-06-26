@@ -1071,6 +1071,57 @@ function drawEllipse(
 	ctx.fill();
 }
 
+function bloomColor(color: readonly [number, number, number], alpha: number) {
+	const clampedAlpha = Math.max(0, Math.min(1, alpha));
+	return `rgba(${color[0]}, ${color[1]}, ${color[2]}, ${clampedAlpha})`;
+}
+
+function drawBloomEllipse(
+	ctx: CanvasRenderingContext2D,
+	x: number,
+	y: number,
+	radiusX: number,
+	radiusY: number,
+	color: readonly [number, number, number],
+	alpha: number
+) {
+	const radius = Math.max(radiusX, radiusY, 1);
+	const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+	glow.addColorStop(0, bloomColor(color, alpha));
+	glow.addColorStop(0.38, bloomColor(color, alpha * 0.34));
+	glow.addColorStop(1, bloomColor(color, 0));
+
+	ctx.save();
+	ctx.translate(x, y);
+	ctx.scale(radiusX / radius, radiusY / radius);
+	ctx.fillStyle = glow;
+	ctx.beginPath();
+	ctx.arc(0, 0, radius, 0, Math.PI * 2);
+	ctx.fill();
+	ctx.restore();
+}
+
+function drawBloomSparkle(
+	ctx: CanvasRenderingContext2D,
+	x: number,
+	y: number,
+	size: number,
+	color: readonly [number, number, number],
+	alpha: number,
+	time: number,
+	phase: number
+) {
+	const pulse = 0.55 + Math.sin(time / 210 + phase) * 0.35;
+	const sparkleSize = size * pulse;
+	ctx.save();
+	ctx.translate(x, y);
+	ctx.rotate(Math.PI / 4);
+	ctx.fillStyle = bloomColor(color, alpha * pulse);
+	ctx.fillRect(-sparkleSize / 2, -1, sparkleSize, 2);
+	ctx.fillRect(-1, -sparkleSize / 2, 2, sparkleSize);
+	ctx.restore();
+}
+
 function drawPixelWindow(ctx: CanvasRenderingContext2D, x: number, y: number) {
 	fillRoundedRect(ctx, x, y, 118, 56, 7, '#6f8ea9');
 	ctx.fillStyle = '#d7f1ff';
@@ -2103,6 +2154,21 @@ function drawLighting(ctx: CanvasRenderingContext2D, time: number) {
 	ctx.save();
 	ctx.globalCompositeOperation = 'screen';
 	const firePulse = 0.72 + Math.sin(time / 190) * 0.08 + Math.sin(time / 73) * 0.05;
+	const emberPulse = 0.82 + Math.sin(time / 105) * 0.12;
+	const neonPulse = 0.72 + Math.sin(time / 260) * 0.18;
+	drawBloomEllipse(ctx, 724, 116, 190, 112, [255, 169, 74], 0.27 * firePulse);
+	drawBloomEllipse(ctx, 722, 112, 76, 52, [255, 229, 138], 0.42 * firePulse);
+	drawBloomEllipse(ctx, 184, 176, 136, 78, [255, 230, 170], 0.11);
+	drawBloomEllipse(ctx, 1120, 138, 144, 82, [178, 224, 255], 0.11);
+	drawBloomEllipse(ctx, -300, 188, 250, 124, [242, 63, 125], 0.22 * neonPulse);
+	drawBloomEllipse(ctx, -230, 166, 180, 98, [104, 212, 255], 0.12 * neonPulse);
+	drawBloomEllipse(ctx, 520, 420 + GARDEN_ITEM_SHIFT, 176, 92, [156, 238, 220], 0.12);
+	drawBloomEllipse(ctx, 562, 770, 180, 104, [255, 154, 74], 0.27 * firePulse);
+	drawBloomEllipse(ctx, 562, 758, 68, 48, [255, 225, 138], 0.34 * emberPulse);
+	drawBloomEllipse(ctx, YURT_CENTER_X, YURT_CENTER_Y - 112, 236, 124, [255, 229, 168], 0.12);
+	drawBloomSparkle(ctx, 602, 434 + GARDEN_ITEM_SHIFT, 20, [235, 248, 210], 0.42, time, 0.4);
+	drawBloomSparkle(ctx, 714, 760, 18, [255, 235, 176], 0.34, time, 1.7);
+	drawBloomSparkle(ctx, -428, 82, 20, [242, 63, 125], 0.46, time, 2.3);
 	let glow = ctx.createRadialGradient(724, 108, 10, 724, 118, 170);
 	glow.addColorStop(0, `rgba(255, 188, 91, ${0.45 * firePulse})`);
 	glow.addColorStop(0.55, `rgba(255, 130, 76, ${0.2 * firePulse})`);
