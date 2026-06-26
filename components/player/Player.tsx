@@ -3543,7 +3543,7 @@ function getSelectedSubtitleTrack(
 	}
 
 	const directSelected = selectedFromVidstackTrack(playerTextTracks?.selected, tracks);
-	if (directSelected) {
+	if (directSelected && (!directSelected.mode || directSelected.mode === 'showing')) {
 		return directSelected;
 	}
 
@@ -4179,11 +4179,21 @@ function SubtitlesMenuSection({
 		if (!group || typeof window === 'undefined') {
 			return;
 		}
+		const menuRoot = group.closest<HTMLElement>('.vds-subtitles-settings-menu');
+		const submenuItems = group.closest<HTMLElement>('.vds-menu-items[data-submenu]');
+		const rootItems = group.closest<HTMLElement>('.vds-settings-menu-items[data-root]');
+
+		const resetSubtitleMenuScroll = () => {
+			if (submenuItems) {
+				submenuItems.scrollTop = 0;
+			}
+			if (rootItems) {
+				rootItems.scrollTop = 0;
+			}
+		};
 
 		const dispatchResize = () => {
 			const targets = new Set<HTMLElement>([group]);
-			const submenuItems = group.closest<HTMLElement>('.vds-menu-items[data-submenu]');
-			const rootItems = group.closest<HTMLElement>('.vds-settings-menu-items[data-root]');
 			if (submenuItems) {
 				targets.add(submenuItems);
 			}
@@ -4195,31 +4205,77 @@ function SubtitlesMenuSection({
 			}
 		};
 
-		dispatchResize();
-
+		let firstFrame = 0;
 		let secondFrame = 0;
 		let thirdFrame = 0;
-		const firstFrame = window.requestAnimationFrame(() => {
-			dispatchResize();
-			secondFrame = window.requestAnimationFrame(() => {
-				dispatchResize();
-				thirdFrame = window.requestAnimationFrame(dispatchResize);
-			});
-		});
-		const timeout = window.setTimeout(dispatchResize, 120);
+		let timeout = 0;
 
-		let resizeObserver: ResizeObserver | null = null;
-		if (typeof ResizeObserver !== 'undefined') {
-			resizeObserver = new ResizeObserver(dispatchResize);
-			resizeObserver.observe(group.closest<HTMLElement>('.vds-menu-items[data-submenu]') ?? group);
-		}
-
-		return () => {
-			resizeObserver?.disconnect();
+		const cancelScheduledRefresh = () => {
 			window.cancelAnimationFrame(firstFrame);
 			window.cancelAnimationFrame(secondFrame);
 			window.cancelAnimationFrame(thirdFrame);
 			window.clearTimeout(timeout);
+			firstFrame = 0;
+			secondFrame = 0;
+			thirdFrame = 0;
+			timeout = 0;
+		};
+
+		const refreshSubtitleMenuLayout = () => {
+			cancelScheduledRefresh();
+			resetSubtitleMenuScroll();
+			dispatchResize();
+			firstFrame = window.requestAnimationFrame(() => {
+				resetSubtitleMenuScroll();
+				dispatchResize();
+				secondFrame = window.requestAnimationFrame(() => {
+					resetSubtitleMenuScroll();
+					dispatchResize();
+					thirdFrame = window.requestAnimationFrame(dispatchResize);
+				});
+			});
+			timeout = window.setTimeout(dispatchResize, 120);
+		};
+
+		const handleMenuKeyDown = (event: KeyboardEvent) => {
+			if (
+				event.key === 'Enter' ||
+				event.key === ' ' ||
+				event.key === 'ArrowRight' ||
+				event.key === 'ArrowLeft'
+			) {
+				refreshSubtitleMenuLayout();
+			}
+		};
+
+		refreshSubtitleMenuLayout();
+
+		let resizeObserver: ResizeObserver | null = null;
+		if (typeof ResizeObserver !== 'undefined') {
+			resizeObserver = new ResizeObserver(refreshSubtitleMenuLayout);
+			resizeObserver.observe(submenuItems ?? group);
+		}
+
+		let mutationObserver: MutationObserver | null = null;
+		if (typeof MutationObserver !== 'undefined') {
+			mutationObserver = new MutationObserver(refreshSubtitleMenuLayout);
+			for (const target of [menuRoot, submenuItems, rootItems]) {
+				mutationObserver.observe(target ?? group, {
+					attributeFilter: ['aria-hidden', 'class', 'data-open', 'hidden', 'style'],
+					attributes: true
+				});
+			}
+		}
+
+		menuRoot?.addEventListener('click', refreshSubtitleMenuLayout);
+		menuRoot?.addEventListener('keydown', handleMenuKeyDown);
+
+		return () => {
+			resizeObserver?.disconnect();
+			mutationObserver?.disconnect();
+			menuRoot?.removeEventListener('click', refreshSubtitleMenuLayout);
+			menuRoot?.removeEventListener('keydown', handleMenuKeyDown);
+			cancelScheduledRefresh();
 		};
 	}, [activeFormat, formatTracks.length, selectedTrackSrcs.size]);
 
@@ -5138,6 +5194,7 @@ export function Player({
 	const supPlayingRef = useRef(false);
 	const subtitleTracksRef = useRef<SubtitleTrackInfo[]>([]);
 	const selectedSubtitleTrackRef = useRef<SelectedSubtitleTrack | null>(null);
+	const subtitlesManuallyDisabledRef = useRef(false);
 	const mergedSubtitleTrackRef = useRef<MergedSubtitleTrackState | null>(null);
 	const mergedSubtitleRequestIdRef = useRef(0);
 	const prevTrackSrcRef = useRef<string | null>('');
@@ -5609,6 +5666,7 @@ export function Player({
 	const applySubtitleTrackSelection = useCallback(
 		(primaryTrack: SubtitleTrackInfo | null, layerTracks: SubtitleTrackInfo[] = []) => {
 			if (!primaryTrack) {
+				subtitlesManuallyDisabledRef.current = true;
 				clearMergedSubtitleTrack('disabled');
 				disablePlayerSubtitleTextTracks(playerElementRef.current, subtitleTracksRef.current);
 				saveStoredSubtitleSelectionOff();
@@ -5616,6 +5674,7 @@ export function Player({
 				return;
 			}
 
+			subtitlesManuallyDisabledRef.current = false;
 			const selectedTrack: SelectedSubtitleTrack = { ...primaryTrack, mode: 'showing' };
 			const nextLayerSrcs = isStackableSubtitleFormat(primaryTrack.format)
 				? sanitizeSubtitleLayerSelection(
@@ -6038,12 +6097,14 @@ export function Player({
 
 	const sendSettings = useCallback(
 		(options: { includeAudio?: boolean } = {}) => {
-			const selectedTrack = getSelectedSubtitleTrack(
-				playerEl,
-				getPlayerVideoElement(playerEl),
-				subtitleTracksRef.current,
-				selectedSubtitleTrackRef.current
-			);
+			const selectedTrack = subtitlesManuallyDisabledRef.current
+				? null
+				: getSelectedSubtitleTrack(
+						playerEl,
+						getPlayerVideoElement(playerEl),
+						subtitleTracksRef.current,
+						selectedSubtitleTrackRef.current
+					);
 			send({
 				type: SyncTypes.SubtitleSwitch,
 				subtitle: selectedTrack?.src
@@ -6968,9 +7029,12 @@ export function Player({
 				const subtitleStreams = sortedJob.Streams.filter(
 					(stream) => stream.CodecType === 'subtitle'
 				).sort((a, b) => compareSubtitleStreams(a, b, job.Files));
+				const storedSubtitleSelection = getStoredSubtitleSelection();
+				subtitlesManuallyDisabledRef.current =
+					isStoredSubtitleSelectionDisabled(storedSubtitleSelection);
 				const defaultSubtitleStream = pickPrioritySubtitleStream(
 					subtitleStreams,
-					getStoredSubtitleSelection()
+					storedSubtitleSelection
 				);
 				for (const stream of subtitleStreams) {
 					const cueForgeSubtitle = getCueForgeSubtitleInfo(stream);
@@ -7003,6 +7067,7 @@ export function Player({
 			const defaultSubtitleTrack =
 				subtitleTracksWithSettingsLabels.find((track) => track.default) ?? null;
 			if (defaultSubtitleTrack) {
+				subtitlesManuallyDisabledRef.current = false;
 				setPlayerTextTrackMode(
 					defaultSubtitleTextTrack ??
 						findPlayerTextTrackByOriginalSrc(textTracks, defaultSubtitleTrack.src),
@@ -7805,13 +7870,23 @@ export function Player({
 		const setSelectedSubtitleTrack = (
 			track: any,
 			mode?: TextTrackMode,
-			options: { allowClear?: boolean; storeLanguage?: boolean } = {}
+			options: {
+				allowClear?: boolean;
+				allowDisabledOverride?: boolean;
+				storeLanguage?: boolean;
+			} = {}
 		) => {
 			const nextTrack = selectedFromVidstackTrack(track, subtitleTracksRef.current);
 			const nextMode = mode ?? track?.mode;
 			if (nextTrack && (!nextMode || nextMode === 'showing')) {
+				if (subtitlesManuallyDisabledRef.current && !options.allowDisabledOverride) {
+					disablePlayerSubtitleTextTracks(playerElementRef.current, subtitleTracksRef.current);
+					return;
+				}
+				subtitlesManuallyDisabledRef.current = false;
 				updateSelectedSubtitleTrack(nextTrack);
 			} else if (options.allowClear) {
+				subtitlesManuallyDisabledRef.current = true;
 				updateSelectedSubtitleTrack(null);
 			}
 			if (options.storeLanguage && selectedSubtitleTrackRef.current) {
@@ -7826,6 +7901,8 @@ export function Player({
 		const handleTextTrackChangeRequest = (event: Event) => {
 			const detail = (event as CustomEvent).detail;
 			if (detail?.mode !== 'showing') {
+				subtitlesManuallyDisabledRef.current = true;
+				disablePlayerSubtitleTextTracks(playerElementRef.current, subtitleTracksRef.current);
 				saveStoredSubtitleSelectionOff();
 				updateSelectedSubtitleTrack(null);
 				return;
@@ -7839,6 +7916,7 @@ export function Player({
 			}
 			setSelectedSubtitleTrack(requestedTrack, detail.mode, {
 				allowClear: true,
+				allowDisabledOverride: true,
 				storeLanguage: true
 			});
 		};
@@ -8100,12 +8178,17 @@ export function Player({
 			updateTime();
 			updateLastTicked();
 			const videoElement = getPlayerVideoElement(player);
-			const selectedTrack = getSelectedSubtitleTrack(
-				player,
-				videoElement,
-				subtitleTracksRef.current,
-				selectedSubtitleTrackRef.current
-			);
+			const selectedTrack = subtitlesManuallyDisabledRef.current
+				? null
+				: getSelectedSubtitleTrack(
+						player,
+						videoElement,
+						subtitleTracksRef.current,
+						selectedSubtitleTrackRef.current
+					);
+			if (subtitlesManuallyDisabledRef.current) {
+				disablePlayerSubtitleTextTracks(player, subtitleTracksRef.current);
+			}
 			if (selectedTrack?.src !== selectedSubtitleTrackRef.current?.src) {
 				updateSelectedSubtitleTrackRef.current(selectedTrack);
 			}

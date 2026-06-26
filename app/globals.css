@@ -587,8 +587,22 @@ html::-webkit-scrollbar-thumb:hover,
 	border-radius: 0;
 }
 
+.vds-subtitles-settings-menu {
+	--sparkle-subtitles-submenu-height: calc((var(--player-height, 720px) * 0.7 - 3.125rem) * 0.8);
+}
+
 .vds-subtitles-settings-menu .vds-menu-items[data-submenu] {
+	width: 20.5rem !important;
+}
+
+.vds-subtitles-settings-menu .vds-menu-items[data-submenu] {
+	height: var(--sparkle-subtitles-submenu-height) !important;
+	justify-content: flex-start !important;
+	max-height: var(--sparkle-subtitles-submenu-height) !important;
+	min-height: var(--sparkle-subtitles-submenu-height) !important;
 	overflow-anchor: none;
+	overflow-y: auto;
+	place-content: flex-start !important;
 }
 
 .vds-video-layout .vds-settings-menu.vds-menu {
