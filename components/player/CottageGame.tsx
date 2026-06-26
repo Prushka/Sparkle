@@ -61,7 +61,7 @@ const CLUB_RIGHT_X = 18;
 const WORLD_MIN_X = CLUB_LEFT_X;
 const WORLD_MAX_X = MAP_WIDTH;
 const WORLD_WIDTH = WORLD_MAX_X - WORLD_MIN_X;
-const MAP_HEIGHT = 560;
+const MAP_HEIGHT = 1188;
 const ROOM_CROP_TOP = 28;
 const ROOM_CROP_BOTTOM = 8;
 const GAME_HEIGHT = 208;
@@ -78,7 +78,13 @@ const BASE_ROOM_BOTTOM_Y = 324;
 const ROOM_BOTTOM_Y = 360;
 const GARDEN_TOP_Y = ROOM_BOTTOM_Y - 6;
 const GARDEN_ITEM_SHIFT = ROOM_BOTTOM_Y - BASE_ROOM_BOTTOM_Y;
-const FLOOR_BOUNDS = { minX: CLUB_LEFT_X + 44, maxX: 1396, minY: 116, maxY: 520 };
+const YURT_CENTER_X = 720;
+const YURT_CENTER_Y = 880;
+const YURT_RADIUS_X = 382;
+const YURT_RADIUS_Y = 244;
+const YURT_TOP_Y = YURT_CENTER_Y - YURT_RADIUS_Y;
+const YURT_BOTTOM_Y = YURT_CENTER_Y + YURT_RADIUS_Y;
+const FLOOR_BOUNDS = { minX: CLUB_LEFT_X + 44, maxX: 1396, minY: 116, maxY: YURT_BOTTOM_Y - 22 };
 const GARDEN_BEDS = [
 	{ x: 154, y: 390 + GARDEN_ITEM_SHIFT },
 	{ x: 1008, y: 382 + GARDEN_ITEM_SHIFT }
@@ -92,6 +98,16 @@ const ROOM_WALL_COLLIDERS: Rect[] = [
 	{ x: 18, y: ROOM_BOTTOM_Y - 20, w: 630, h: 12 },
 	{ x: 792, y: ROOM_BOTTOM_Y - 20, w: MAP_WIDTH - 810, h: 12 },
 	{ x: MAP_WIDTH - 28, y: 128, w: 10, h: ROOM_BOTTOM_Y - 128 }
+];
+
+const YURT_WALL_COLLIDERS: Rect[] = [
+	{ x: YURT_CENTER_X - YURT_RADIUS_X + 28, y: YURT_TOP_Y + 86, w: 36, h: 330 },
+	{ x: YURT_CENTER_X + YURT_RADIUS_X - 64, y: YURT_TOP_Y + 86, w: 36, h: 330 },
+	{ x: YURT_CENTER_X - YURT_RADIUS_X + 70, y: YURT_TOP_Y + 12, w: 238, h: 34 },
+	{ x: YURT_CENTER_X + 74, y: YURT_TOP_Y + 12, w: 238, h: 34 },
+	{ x: YURT_CENTER_X - 250, y: YURT_BOTTOM_Y - 66, w: 500, h: 36 },
+	{ x: YURT_CENTER_X - YURT_RADIUS_X + 70, y: YURT_BOTTOM_Y - 130, w: 106, h: 52 },
+	{ x: YURT_CENTER_X + YURT_RADIUS_X - 176, y: YURT_BOTTOM_Y - 130, w: 106, h: 52 }
 ];
 
 // Include front strips and legs so Y-sorted furniture never clips a walking player.
@@ -124,10 +140,15 @@ const FURNITURE_COLLIDERS: Rect[] = [
 	{ x: 154, y: 390 + GARDEN_ITEM_SHIFT, w: 220, h: 78 },
 	{ x: 1008, y: 382 + GARDEN_ITEM_SHIFT, w: 220, h: 78 },
 	{ x: 408, y: 382 + GARDEN_ITEM_SHIFT, w: 224, h: 86 },
-	{ x: 1248, y: 424 + GARDEN_ITEM_SHIFT, w: 44, h: 74 }
+	{ x: 1248, y: 424 + GARDEN_ITEM_SHIFT, w: 44, h: 74 },
+	{ x: 520, y: 742, w: 84, h: 50 },
+	{ x: 880, y: 900, w: 166, h: 62 },
+	{ x: 898, y: 730, w: 164, h: 84 },
+	{ x: 438, y: 846, w: 122, h: 58 },
+	{ x: 828, y: 982, w: 168, h: 58 }
 ];
 
-const COLLIDERS: Rect[] = [...ROOM_WALL_COLLIDERS, ...FURNITURE_COLLIDERS];
+const COLLIDERS: Rect[] = [...ROOM_WALL_COLLIDERS, ...YURT_WALL_COLLIDERS, ...FURNITURE_COLLIDERS];
 
 const INTERACTIONS: CottageInteraction[] = [
 	{
@@ -438,6 +459,96 @@ const INTERACTIONS: CottageInteraction[] = [
 		action: 'interacting',
 		radius: 78,
 		sortY: 512 + GARDEN_ITEM_SHIFT
+	},
+	{
+		id: 'yurt-hearth',
+		x: 512,
+		y: 728,
+		w: 112,
+		h: 86,
+		anchorX: 660,
+		anchorY: 782,
+		targetX: 660,
+		targetY: 782,
+		facing: 'left',
+		action: 'interacting',
+		radius: 96,
+		sortY: 798
+	},
+	{
+		id: 'yurt-table',
+		x: 866,
+		y: 888,
+		w: 186,
+		h: 92,
+		anchorX: 824,
+		anchorY: 970,
+		targetX: 824,
+		targetY: 970,
+		facing: 'right',
+		action: 'sitting',
+		radius: 100,
+		sortY: 980
+	},
+	{
+		id: 'yurt-bed',
+		x: 890,
+		y: 716,
+		w: 184,
+		h: 122,
+		anchorX: 980,
+		anchorY: 790,
+		targetX: 842,
+		targetY: 794,
+		facing: 'right',
+		action: 'sleeping',
+		radius: 98,
+		sortY: 846
+	},
+	{
+		id: 'yurt-chest',
+		x: 426,
+		y: 838,
+		w: 146,
+		h: 86,
+		anchorX: 612,
+		anchorY: 894,
+		targetX: 612,
+		targetY: 894,
+		facing: 'left',
+		action: 'interacting',
+		radius: 88,
+		sortY: 924
+	},
+	{
+		id: 'yurt-dombra',
+		x: 452,
+		y: 938,
+		w: 150,
+		h: 108,
+		anchorX: 616,
+		anchorY: 992,
+		targetX: 616,
+		targetY: 992,
+		facing: 'left',
+		action: 'interacting',
+		radius: 92,
+		sortY: 1010
+	},
+	{
+		id: 'yurt-loom',
+		x: 820,
+		y: 972,
+		w: 184,
+		h: 110,
+		anchorX: 782,
+		anchorY: 1020,
+		targetX: 782,
+		targetY: 1020,
+		facing: 'right',
+		action: 'interacting',
+		radius: 96,
+		sortY: 1060
 	}
 ];
 
@@ -1562,20 +1673,299 @@ function drawGardenGround(ctx: CanvasRenderingContext2D) {
 }
 
 function drawGardenPath(ctx: CanvasRenderingContext2D) {
-	const pathGradient = ctx.createLinearGradient(0, ROOM_BOTTOM_Y - 24, 0, MAP_HEIGHT - 30);
+	const pathStartY = ROOM_BOTTOM_Y - 24;
+	const pathBottomY = YURT_TOP_Y + 8;
+	const innerPathStartY = ROOM_BOTTOM_Y - 14;
+	const innerPathBottomY = YURT_TOP_Y + 4;
+	const pathGradient = ctx.createLinearGradient(0, pathStartY, 0, pathBottomY);
 	pathGradient.addColorStop(0, '#ba9367');
 	pathGradient.addColorStop(1, '#80624d');
-	fillRoundedRect(ctx, 660, ROOM_BOTTOM_Y - 24, 120, MAP_HEIGHT - ROOM_BOTTOM_Y - 6, 16, '#8c6a4f');
+	fillRoundedRect(ctx, 660, pathStartY, 120, pathBottomY - pathStartY, 16, '#8c6a4f');
 	ctx.fillStyle = pathGradient;
-	ctx.fillRect(674, ROOM_BOTTOM_Y - 14, 92, MAP_HEIGHT - ROOM_BOTTOM_Y - 28);
+	ctx.fillRect(674, innerPathStartY, 92, innerPathBottomY - innerPathStartY);
 	ctx.fillStyle = '#d2b37f';
-	for (let y = ROOM_BOTTOM_Y + 6; y < MAP_HEIGHT - 58; y += 36) {
+	for (let y = ROOM_BOTTOM_Y + 6; y < pathBottomY - 38; y += 36) {
 		fillRoundedRect(ctx, 686 + ((y / 36) % 2) * 16, y, 44, 14, 7, '#d2b37f');
 		fillRoundedRect(ctx, 742 - ((y / 36) % 2) * 16, y + 14, 34, 12, 6, '#ba9367');
 	}
 	fillRoundedRect(ctx, 648, ROOM_BOTTOM_Y - 28, 144, 18, 6, '#6b4a38');
 	ctx.fillStyle = '#e0b87d';
 	ctx.fillRect(674, ROOM_BOTTOM_Y - 20, 92, 5);
+	fillRoundedRect(ctx, YURT_CENTER_X - 92, YURT_TOP_Y - 10, 184, 20, 8, '#6b4a38');
+	ctx.fillStyle = '#e0b87d';
+	ctx.fillRect(YURT_CENTER_X - 62, YURT_TOP_Y - 4, 124, 5);
+}
+
+function drawYurtShell(ctx: CanvasRenderingContext2D, time: number) {
+	drawEllipse(
+		ctx,
+		YURT_CENTER_X,
+		YURT_CENTER_Y + 12,
+		YURT_RADIUS_X + 18,
+		YURT_RADIUS_Y + 14,
+		'rgba(36, 24, 18, 0.24)'
+	);
+	drawEllipse(ctx, YURT_CENTER_X, YURT_CENTER_Y, YURT_RADIUS_X, YURT_RADIUS_Y, '#8b6745');
+	drawEllipse(
+		ctx,
+		YURT_CENTER_X,
+		YURT_CENTER_Y - 8,
+		YURT_RADIUS_X - 18,
+		YURT_RADIUS_Y - 18,
+		'#ead7aa'
+	);
+	ctx.save();
+	ctx.beginPath();
+	ctx.ellipse(
+		YURT_CENTER_X,
+		YURT_CENTER_Y - 8,
+		YURT_RADIUS_X - 42,
+		YURT_RADIUS_Y - 44,
+		0,
+		0,
+		Math.PI * 2
+	);
+	ctx.clip();
+	ctx.fillStyle = '#d9bf86';
+	ctx.fillRect(YURT_CENTER_X - YURT_RADIUS_X, YURT_TOP_Y, YURT_RADIUS_X * 2, YURT_RADIUS_Y * 2);
+	ctx.fillStyle = 'rgba(255,255,255,0.16)';
+	for (let y = YURT_TOP_Y + 62; y < YURT_BOTTOM_Y - 48; y += 38) {
+		ctx.fillRect(YURT_CENTER_X - 310, y, 620, 3);
+	}
+	ctx.strokeStyle = 'rgba(118, 78, 46, 0.42)';
+	ctx.lineWidth = 3;
+	for (let i = 0; i < 24; i += 1) {
+		const angle = (Math.PI * 2 * i) / 24 + 0.05;
+		ctx.beginPath();
+		ctx.moveTo(YURT_CENTER_X, YURT_CENTER_Y - 132);
+		ctx.lineTo(
+			YURT_CENTER_X + Math.cos(angle) * (YURT_RADIUS_X - 76),
+			YURT_CENTER_Y - 12 + Math.sin(angle) * (YURT_RADIUS_Y - 72)
+		);
+		ctx.stroke();
+	}
+	drawEllipse(ctx, YURT_CENTER_X, YURT_CENTER_Y + 20, 154, 86, '#9f3f46');
+	drawEllipse(ctx, YURT_CENTER_X, YURT_CENTER_Y + 18, 126, 68, '#1e6f78');
+	drawEllipse(ctx, YURT_CENTER_X, YURT_CENTER_Y + 16, 82, 42, '#d6b35d');
+	ctx.strokeStyle = '#f3ddb1';
+	ctx.lineWidth = 4;
+	ctx.beginPath();
+	ctx.ellipse(YURT_CENTER_X, YURT_CENTER_Y + 18, 116, 58, 0, 0, Math.PI * 2);
+	ctx.stroke();
+	ctx.fillStyle = '#f3ddb1';
+	for (let i = 0; i < 14; i += 1) {
+		const x = YURT_CENTER_X - 138 + i * 22;
+		ctx.fillRect(x, YURT_CENTER_Y - 52, 10, 12);
+		ctx.fillRect(x, YURT_CENTER_Y + 82, 10, 12);
+	}
+	ctx.restore();
+
+	ctx.strokeStyle = '#6d4a30';
+	ctx.lineWidth = 10;
+	ctx.beginPath();
+	ctx.ellipse(
+		YURT_CENTER_X,
+		YURT_CENTER_Y,
+		YURT_RADIUS_X - 10,
+		YURT_RADIUS_Y - 10,
+		0,
+		0,
+		Math.PI * 2
+	);
+	ctx.stroke();
+	ctx.strokeStyle = '#d0a85a';
+	ctx.lineWidth = 4;
+	ctx.beginPath();
+	ctx.ellipse(
+		YURT_CENTER_X,
+		YURT_CENTER_Y,
+		YURT_RADIUS_X - 34,
+		YURT_RADIUS_Y - 34,
+		0,
+		0,
+		Math.PI * 2
+	);
+	ctx.stroke();
+
+	drawEllipse(ctx, YURT_CENTER_X, YURT_CENTER_Y - 132, 62, 36, '#a75736');
+	ctx.strokeStyle = '#f1d18a';
+	ctx.lineWidth = 4;
+	ctx.beginPath();
+	ctx.ellipse(YURT_CENTER_X, YURT_CENTER_Y - 132, 44, 24, 0, 0, Math.PI * 2);
+	ctx.moveTo(YURT_CENTER_X - 36, YURT_CENTER_Y - 132);
+	ctx.lineTo(YURT_CENTER_X + 36, YURT_CENTER_Y - 132);
+	ctx.moveTo(YURT_CENTER_X, YURT_CENTER_Y - 156);
+	ctx.lineTo(YURT_CENTER_X, YURT_CENTER_Y - 108);
+	ctx.stroke();
+
+	fillRoundedRect(ctx, YURT_CENTER_X - 86, YURT_TOP_Y + 4, 172, 64, 22, '#8c6a4f');
+	fillRoundedRect(ctx, YURT_CENTER_X - 66, YURT_TOP_Y + 14, 132, 48, 16, '#c79b62');
+	ctx.fillStyle = '#4e3829';
+	ctx.fillRect(YURT_CENTER_X - 4, YURT_TOP_Y + 16, 8, 44);
+	ctx.strokeStyle = `rgba(241, 209, 138, ${0.6 + Math.sin(time / 240) * 0.18})`;
+	ctx.lineWidth = 3;
+	ctx.beginPath();
+	ctx.moveTo(YURT_CENTER_X - 54, YURT_TOP_Y + 58);
+	ctx.quadraticCurveTo(YURT_CENTER_X, YURT_TOP_Y + 88, YURT_CENTER_X + 54, YURT_TOP_Y + 58);
+	ctx.stroke();
+}
+
+function drawYurtHearthBase(ctx: CanvasRenderingContext2D, time: number) {
+	drawEllipse(ctx, 562, 774, 48, 25, '#5f4638');
+	drawEllipse(ctx, 562, 770, 36, 18, '#2d2b2c');
+	ctx.fillStyle = '#d0b05f';
+	ctx.fillRect(546, 748, 32, 25);
+	drawEllipse(ctx, 562, 748, 18, 8, '#d0b05f');
+	ctx.fillStyle = '#9c6d3d';
+	ctx.fillRect(558, 732, 8, 17);
+	const flame = Math.sin(time / 130) * 3;
+	ctx.fillStyle = '#ffb347';
+	ctx.beginPath();
+	ctx.moveTo(562, 770);
+	ctx.bezierCurveTo(544, 754 + flame, 554, 736, 564, 730 + flame);
+	ctx.bezierCurveTo(580, 748, 578, 762, 562, 770);
+	ctx.fill();
+	ctx.fillStyle = '#ffe08a';
+	ctx.beginPath();
+	ctx.moveTo(563, 768);
+	ctx.bezierCurveTo(554, 756, 560, 742 + flame, 568, 738);
+	ctx.bezierCurveTo(574, 752, 574, 762, 563, 768);
+	ctx.fill();
+}
+
+function drawYurtHearthFront(ctx: CanvasRenderingContext2D) {
+	drawEllipse(ctx, 562, 782, 52, 16, '#6f5242');
+	ctx.fillStyle = '#d0b05f';
+	for (let x = 528; x <= 592; x += 16) {
+		ctx.fillRect(x, 784, 10, 5);
+	}
+}
+
+function drawYurtTableBase(ctx: CanvasRenderingContext2D) {
+	fillRoundedRect(ctx, 880, 900, 166, 62, 14, '#8c5f3b');
+	fillRoundedRect(ctx, 900, 908, 126, 40, 9, '#c58a4f');
+	ctx.fillStyle = '#f2d79c';
+	ctx.fillRect(920, 920, 30, 16);
+	ctx.fillRect(974, 921, 28, 15);
+	drawEllipse(ctx, 964, 940, 30, 11, '#8ab862');
+	ctx.fillStyle = '#d86c51';
+	ctx.fillRect(956, 934, 8, 11);
+	ctx.fillRect(968, 933, 8, 12);
+}
+
+function drawYurtTableFront(ctx: CanvasRenderingContext2D) {
+	ctx.fillStyle = '#5f3e2c';
+	ctx.fillRect(898, 960, 14, 18);
+	ctx.fillRect(1014, 960, 14, 18);
+	fillRoundedRect(ctx, 888, 954, 148, 10, 5, '#6e472f');
+}
+
+function drawYurtBedBase(ctx: CanvasRenderingContext2D) {
+	fillRoundedRect(ctx, 898, 730, 164, 84, 14, '#7f4e3e');
+	fillRoundedRect(ctx, 914, 742, 132, 56, 10, '#bb5360');
+	fillRoundedRect(ctx, 924, 750, 50, 25, 8, '#f0d8ad');
+	fillRoundedRect(ctx, 986, 750, 46, 25, 8, '#f0d8ad');
+	ctx.fillStyle = '#d0b05f';
+	for (let x = 924; x < 1030; x += 20) {
+		ctx.fillRect(x, 788, 11, 8);
+	}
+}
+
+function drawYurtBedFront(ctx: CanvasRenderingContext2D) {
+	fillRoundedRect(ctx, 904, 804, 152, 14, 7, '#6b4337');
+	ctx.fillStyle = '#5f3e2c';
+	ctx.fillRect(908, 812, 14, 12);
+	ctx.fillRect(1040, 812, 14, 12);
+}
+
+function drawYurtChestBase(ctx: CanvasRenderingContext2D) {
+	fillRoundedRect(ctx, 438, 846, 122, 58, 9, '#8d4f32');
+	fillRoundedRect(ctx, 452, 860, 94, 30, 6, '#c66e43');
+	ctx.strokeStyle = '#f0c96b';
+	ctx.lineWidth = 3;
+	ctx.beginPath();
+	ctx.moveTo(452, 874);
+	ctx.lineTo(546, 874);
+	ctx.moveTo(499, 860);
+	ctx.lineTo(499, 890);
+	ctx.stroke();
+	drawEllipse(ctx, 499, 875, 8, 5, '#2f85a3');
+}
+
+function drawYurtChestFront(ctx: CanvasRenderingContext2D) {
+	fillRoundedRect(ctx, 446, 896, 106, 10, 5, '#5f3e2c');
+	ctx.fillStyle = '#5f3e2c';
+	ctx.fillRect(446, 904, 12, 8);
+	ctx.fillRect(540, 904, 12, 8);
+}
+
+function drawYurtDombra(ctx: CanvasRenderingContext2D) {
+	ctx.strokeStyle = '#5e3a24';
+	ctx.lineWidth = 5;
+	ctx.lineCap = 'round';
+	ctx.beginPath();
+	ctx.moveTo(488, 1012);
+	ctx.lineTo(566, 944);
+	ctx.stroke();
+	drawEllipse(ctx, 478, 1020, 22, 12, '#b56d3a');
+	drawEllipse(ctx, 470, 1024, 14, 8, '#d08c4e');
+	ctx.strokeStyle = '#ead7aa';
+	ctx.lineWidth = 1;
+	ctx.beginPath();
+	ctx.moveTo(482, 1018);
+	ctx.lineTo(564, 946);
+	ctx.moveTo(490, 1024);
+	ctx.lineTo(572, 952);
+	ctx.stroke();
+	ctx.fillStyle = '#1e6f78';
+	fillRoundedRect(ctx, 532, 974, 44, 9, 5, '#1e6f78');
+}
+
+function drawYurtLoomBase(ctx: CanvasRenderingContext2D) {
+	fillRoundedRect(ctx, 828, 982, 168, 58, 9, '#6b4a38');
+	ctx.fillStyle = '#2f2d31';
+	ctx.fillRect(844, 992, 136, 4);
+	ctx.fillRect(844, 1028, 136, 4);
+	ctx.fillStyle = '#bb5360';
+	for (let x = 852; x < 974; x += 16) {
+		ctx.fillRect(x, 996, 9, 34);
+	}
+	ctx.fillStyle = '#d0b05f';
+	for (let x = 862; x < 974; x += 32) {
+		ctx.fillRect(x, 1006, 20, 8);
+	}
+}
+
+function drawYurtLoomFront(ctx: CanvasRenderingContext2D) {
+	fillRoundedRect(ctx, 840, 1034, 144, 10, 5, '#4f3629');
+	ctx.strokeStyle = '#f0d8ad';
+	ctx.lineWidth = 2;
+	ctx.beginPath();
+	ctx.moveTo(842, 1040);
+	ctx.lineTo(826, 1066);
+	ctx.moveTo(980, 1040);
+	ctx.lineTo(998, 1066);
+	ctx.stroke();
+}
+
+function drawYurtFront(ctx: CanvasRenderingContext2D) {
+	ctx.save();
+	ctx.beginPath();
+	ctx.ellipse(YURT_CENTER_X, YURT_CENTER_Y, YURT_RADIUS_X - 6, YURT_RADIUS_Y - 8, 0, 0, Math.PI);
+	ctx.lineWidth = 22;
+	ctx.strokeStyle = '#6d4a30';
+	ctx.stroke();
+	ctx.beginPath();
+	ctx.ellipse(YURT_CENTER_X, YURT_CENTER_Y, YURT_RADIUS_X - 30, YURT_RADIUS_Y - 30, 0, 0, Math.PI);
+	ctx.lineWidth = 8;
+	ctx.strokeStyle = '#d0a85a';
+	ctx.stroke();
+	ctx.fillStyle = '#ead7aa';
+	for (let i = 0; i < 17; i += 1) {
+		const x = YURT_CENTER_X - 252 + i * 32;
+		fillRoundedRect(ctx, x, YURT_BOTTOM_Y - 72 + (i % 2) * 5, 20, 11, 5, '#ead7aa');
+	}
+	ctx.restore();
 }
 
 function drawGardenBedBase(ctx: CanvasRenderingContext2D, x: number, y: number) {
@@ -1706,6 +2096,7 @@ function drawFloorAndWalls(ctx: CanvasRenderingContext2D, time: number) {
 	drawPixelWindow(ctx, 190, 44);
 	drawPixelWindow(ctx, 1018, 44);
 	drawGardenPath(ctx);
+	drawYurtShell(ctx, time);
 }
 
 function drawLighting(
@@ -2155,7 +2546,9 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: CottagePlayerSyncStat
 	const bob = player.action === 'walking' ? Math.sin(time / 85 + player.x * 0.08) * 2 : 0;
 	const poseX = player.x;
 	const poseY =
-		player.action === 'sleeping' && interaction?.id === 'bed' ? interaction.anchorY - 28 : player.y;
+		player.action === 'sleeping' && (interaction?.id === 'bed' || interaction?.id === 'yurt-bed')
+			? interaction.anchorY - 28
+			: player.y;
 	const nameY = player.action === 'sleeping' ? poseY - 34 : poseY - 48 + bob;
 	drawEllipse(ctx, player.x, player.y + 4, 18, 8, 'rgba(35, 24, 18, 0.22)');
 
@@ -2255,6 +2648,18 @@ function drawScene(
 		]),
 		{ sortY: 476 + GARDEN_ITEM_SHIFT, draw: () => drawGardenPond(ctx, time) },
 		{ sortY: 512 + GARDEN_ITEM_SHIFT, draw: () => drawGardenTree(ctx) },
+		{ sortY: 798, draw: () => drawYurtHearthBase(ctx, time) },
+		{ sortY: 808, draw: () => drawYurtHearthFront(ctx) },
+		{ sortY: 810, draw: () => drawYurtBedBase(ctx) },
+		{ sortY: 858, draw: () => drawYurtBedFront(ctx) },
+		{ sortY: 892, draw: () => drawYurtChestBase(ctx) },
+		{ sortY: 916, draw: () => drawYurtChestFront(ctx) },
+		{ sortY: 948, draw: () => drawYurtTableBase(ctx) },
+		{ sortY: 978, draw: () => drawYurtTableFront(ctx) },
+		{ sortY: 1010, draw: () => drawYurtDombra(ctx) },
+		{ sortY: 1040, draw: () => drawYurtLoomBase(ctx) },
+		{ sortY: 1062, draw: () => drawYurtLoomFront(ctx) },
+		{ sortY: YURT_BOTTOM_Y - 10, draw: () => drawYurtFront(ctx) },
 		...players.map((player) => ({
 			sortY: getInteractionSortY(player),
 			draw: () => drawPlayer(ctx, player, time)
