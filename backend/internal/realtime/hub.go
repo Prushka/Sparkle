@@ -47,7 +47,7 @@ const (
 	staleTabUpdateSkewMilliseconds  = 2000
 	generatedRoomIDLength           = 10
 	roomIDAlphabet                  = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	cottageMinX                     = 44
+	cottageMinX                     = -476
 	cottageMaxX                     = 1396
 	cottageMinY                     = 116
 	cottageMaxY                     = 520

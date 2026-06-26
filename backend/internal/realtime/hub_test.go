@@ -1347,7 +1347,7 @@ func TestSanitizeCottageState(t *testing.T) {
 				ID:            "player:one",
 				Name:          strings.Repeat("A", 90),
 				ProfileID:     "../bad",
-				X:             12,
+				X:             -999,
 				Y:             240,
 				TargetX:       &targetX,
 				TargetY:       &targetY,

@@ -56,6 +56,11 @@ type MoveTarget = {
 };
 
 const MAP_WIDTH = 1440;
+const CLUB_LEFT_X = -520;
+const CLUB_RIGHT_X = 18;
+const WORLD_MIN_X = CLUB_LEFT_X;
+const WORLD_MAX_X = MAP_WIDTH;
+const WORLD_WIDTH = WORLD_MAX_X - WORLD_MIN_X;
 const MAP_HEIGHT = 560;
 const ROOM_CROP_TOP = 28;
 const ROOM_CROP_BOTTOM = 8;
@@ -73,10 +78,17 @@ const BASE_ROOM_BOTTOM_Y = 324;
 const ROOM_BOTTOM_Y = 360;
 const GARDEN_TOP_Y = ROOM_BOTTOM_Y - 6;
 const GARDEN_ITEM_SHIFT = ROOM_BOTTOM_Y - BASE_ROOM_BOTTOM_Y;
-const FLOOR_BOUNDS = { minX: 44, maxX: 1396, minY: 116, maxY: 520 };
+const FLOOR_BOUNDS = { minX: CLUB_LEFT_X + 44, maxX: 1396, minY: 116, maxY: 520 };
 
 // Include front strips and legs so Y-sorted furniture never clips a walking player.
 const COLLIDERS: Rect[] = [
+	{ x: -486, y: 62, w: 116, h: 76 },
+	{ x: -472, y: 170, w: 112, h: 62 },
+	{ x: -456, y: 270, w: 138, h: 42 },
+	{ x: -294, y: 68, w: 76, h: 84 },
+	{ x: -274, y: 204, w: 132, h: 64 },
+	{ x: -112, y: 72, w: 94, h: 80 },
+	{ x: -122, y: 284, w: 118, h: 36 },
 	{ x: 50, y: 54, w: 92, h: 68 },
 	{ x: 185, y: 66, w: 122, h: 45 },
 	{ x: 378, y: 76, w: 96, h: 42 },
@@ -102,6 +114,96 @@ const COLLIDERS: Rect[] = [
 ];
 
 const INTERACTIONS: CottageInteraction[] = [
+	{
+		id: 'club-lounge',
+		x: -480,
+		y: 164,
+		w: 130,
+		h: 76,
+		anchorX: -418,
+		anchorY: 214,
+		targetX: -418,
+		targetY: 254,
+		facing: 'down',
+		action: 'sitting',
+		radius: 60,
+		sortY: 258
+	},
+	{
+		id: 'club-stage',
+		x: -464,
+		y: 258,
+		w: 160,
+		h: 64,
+		anchorX: -386,
+		anchorY: 302,
+		targetX: -386,
+		targetY: 330,
+		facing: 'up',
+		action: 'interacting',
+		radius: 68,
+		sortY: 326
+	},
+	{
+		id: 'club-cross',
+		x: -306,
+		y: 58,
+		w: 98,
+		h: 108,
+		anchorX: -256,
+		anchorY: 162,
+		targetX: -256,
+		targetY: 194,
+		facing: 'up',
+		action: 'interacting',
+		radius: 64,
+		sortY: 172
+	},
+	{
+		id: 'club-swing',
+		x: -286,
+		y: 184,
+		w: 158,
+		h: 100,
+		anchorX: -214,
+		anchorY: 250,
+		targetX: -214,
+		targetY: 306,
+		facing: 'up',
+		action: 'interacting',
+		radius: 72,
+		sortY: 286
+	},
+	{
+		id: 'club-rack',
+		x: -124,
+		y: 66,
+		w: 114,
+		h: 94,
+		anchorX: -66,
+		anchorY: 164,
+		targetX: -66,
+		targetY: 194,
+		facing: 'up',
+		action: 'interacting',
+		radius: 62,
+		sortY: 166
+	},
+	{
+		id: 'club-bench',
+		x: -130,
+		y: 276,
+		w: 132,
+		h: 58,
+		anchorX: -66,
+		anchorY: 316,
+		targetX: -66,
+		targetY: 342,
+		facing: 'up',
+		action: 'sitting',
+		radius: 58,
+		sortY: 342
+	},
 	{
 		id: 'couch-left',
 		x: 164,
@@ -367,6 +469,9 @@ function isWalkable(x: number, y: number) {
 		y < FLOOR_BOUNDS.minY ||
 		y > FLOOR_BOUNDS.maxY
 	) {
+		return false;
+	}
+	if (x < CLUB_RIGHT_X && y > ROOM_BOTTOM_Y - PLAYER_RADIUS) {
 		return false;
 	}
 	return !COLLIDERS.some((collider) => isPointInRect(x, y, collider, PLAYER_RADIUS));
@@ -965,6 +1070,147 @@ function drawPlant(ctx: CanvasRenderingContext2D) {
 	ctx.fill();
 }
 
+function drawClubRoom(ctx: CanvasRenderingContext2D, time: number) {
+	const wallGradient = ctx.createLinearGradient(CLUB_LEFT_X, 22, CLUB_RIGHT_X, 128);
+	wallGradient.addColorStop(0, '#17151b');
+	wallGradient.addColorStop(0.52, '#262029');
+	wallGradient.addColorStop(1, '#111217');
+	fillRoundedRect(
+		ctx,
+		CLUB_LEFT_X + 18,
+		16,
+		CLUB_RIGHT_X - CLUB_LEFT_X,
+		ROOM_BOTTOM_Y + 10,
+		8,
+		'#151016'
+	);
+	ctx.fillStyle = wallGradient;
+	ctx.fillRect(CLUB_LEFT_X + 28, 28, CLUB_RIGHT_X - CLUB_LEFT_X - 18, 96);
+	ctx.fillStyle = '#4d1d2b';
+	ctx.fillRect(CLUB_LEFT_X + 28, 118, CLUB_RIGHT_X - CLUB_LEFT_X - 18, 10);
+	const floorGradient = ctx.createLinearGradient(0, 128, 0, ROOM_BOTTOM_Y);
+	floorGradient.addColorStop(0, '#3a3038');
+	floorGradient.addColorStop(1, '#16151a');
+	ctx.fillStyle = floorGradient;
+	ctx.fillRect(CLUB_LEFT_X + 28, 128, CLUB_RIGHT_X - CLUB_LEFT_X - 18, ROOM_BOTTOM_Y - 128);
+	for (let y = 134; y < ROOM_BOTTOM_Y; y += 20) {
+		ctx.fillStyle = y % 40 === 0 ? 'rgba(255,255,255,0.08)' : 'rgba(115,22,55,0.20)';
+		ctx.fillRect(CLUB_LEFT_X + 34, y, CLUB_RIGHT_X - CLUB_LEFT_X - 32, 2);
+		for (let x = CLUB_LEFT_X + 42 + ((y / 20) % 3) * 28; x < CLUB_RIGHT_X - 34; x += 92) {
+			ctx.fillStyle = 'rgba(0,0,0,0.24)';
+			ctx.fillRect(x, y - 18, 2, 18);
+		}
+	}
+
+	fillRoundedRect(ctx, -484, 58, 112, 66, 7, '#31212b');
+	ctx.fillStyle = '#0d0d12';
+	ctx.fillRect(-474, 66, 92, 50);
+	ctx.fillStyle = '#f23f7d';
+	ctx.font = '700 13px Inter, ui-sans-serif, system-ui, sans-serif';
+	ctx.textAlign = 'center';
+	ctx.textBaseline = 'middle';
+	ctx.fillText('BERLIN 18+', -428, 85);
+	ctx.strokeStyle = `rgba(242, 63, 125, ${0.62 + Math.sin(time / 190) * 0.18})`;
+	ctx.lineWidth = 3;
+	roundedRect(ctx, -470, 68, 84, 32, 5);
+	ctx.stroke();
+	ctx.fillStyle = '#68d4ff';
+	ctx.fillText('NACHT', -428, 105);
+
+	fillRoundedRect(ctx, -480, 172, 126, 58, 12, '#4d1f31');
+	fillRoundedRect(ctx, -468, 162, 102, 34, 10, '#7a3150');
+	fillRoundedRect(ctx, -462, 204, 44, 34, 8, '#913a5c');
+	fillRoundedRect(ctx, -408, 204, 44, 34, 8, '#913a5c');
+	ctx.fillStyle = '#25131c';
+	ctx.fillRect(-458, 232, 16, 10);
+	ctx.fillRect(-382, 232, 16, 10);
+
+	fillRoundedRect(ctx, -466, 268, 156, 44, 12, '#24171f');
+	fillRoundedRect(ctx, -454, 258, 132, 24, 9, '#503045');
+	ctx.fillStyle = '#ef3d75';
+	for (let i = 0; i < 7; i += 1) {
+		drawEllipse(ctx, -444 + i * 20, 300 + Math.sin(time / 260 + i) * 2, 5, 4, '#ef3d75');
+	}
+	ctx.fillStyle = '#0f1015';
+	ctx.fillRect(-392, 224, 10, 74);
+	ctx.fillStyle = '#dadce8';
+	ctx.fillRect(-389, 222, 4, 78);
+
+	ctx.strokeStyle = '#5c6273';
+	ctx.lineWidth = 7;
+	ctx.beginPath();
+	ctx.moveTo(-260, 74);
+	ctx.lineTo(-302, 142);
+	ctx.moveTo(-218, 74);
+	ctx.lineTo(-268, 148);
+	ctx.stroke();
+	ctx.strokeStyle = '#1f2028';
+	ctx.lineWidth = 14;
+	ctx.beginPath();
+	ctx.moveTo(-286, 70);
+	ctx.lineTo(-224, 150);
+	ctx.moveTo(-218, 72);
+	ctx.lineTo(-294, 148);
+	ctx.stroke();
+	ctx.fillStyle = '#3c4250';
+	ctx.fillRect(-300, 66, 92, 10);
+	ctx.fillRect(-300, 146, 92, 10);
+	ctx.fillStyle = '#a4a9b8';
+	ctx.fillRect(-256, 54, 14, 112);
+	for (let y = 86; y <= 128; y += 21) {
+		ctx.fillStyle = '#7f243f';
+		drawEllipse(ctx, -254, y, 7, 5, '#7f243f');
+		drawEllipse(ctx, -226, y + 8, 7, 5, '#7f243f');
+	}
+
+	ctx.strokeStyle = '#525869';
+	ctx.lineWidth = 5;
+	ctx.beginPath();
+	ctx.moveTo(-278, 184);
+	ctx.lineTo(-260, 250);
+	ctx.moveTo(-152, 184);
+	ctx.lineTo(-170, 250);
+	ctx.stroke();
+	ctx.strokeStyle = '#b5b8c4';
+	ctx.lineWidth = 3;
+	ctx.beginPath();
+	ctx.moveTo(-254, 168);
+	ctx.lineTo(-254, 232);
+	ctx.moveTo(-176, 168);
+	ctx.lineTo(-176, 232);
+	ctx.stroke();
+	fillRoundedRect(ctx, -260, 232, 92, 32, 13, '#642a43');
+	fillRoundedRect(ctx, -248, 240, 68, 15, 7, '#a74468');
+
+	fillRoundedRect(ctx, -120, 70, 98, 76, 6, '#252333');
+	ctx.fillStyle = '#4f5264';
+	ctx.fillRect(-108, 84, 74, 5);
+	ctx.fillRect(-108, 116, 74, 5);
+	const gearColors = ['#c6c8d2', '#8b2f4f', '#2f85a3', '#d0b05f'];
+	for (let i = 0; i < 8; i += 1) {
+		ctx.fillStyle = gearColors[i % gearColors.length];
+		ctx.fillRect(-104 + i * 9, 90 + (i % 2) * 26, 5, 18);
+		drawEllipse(ctx, -101 + i * 9, 108 + (i % 2) * 26, 5, 3, gearColors[i % gearColors.length]);
+	}
+
+	fillRoundedRect(ctx, -128, 284, 126, 34, 10, '#32202b');
+	fillRoundedRect(ctx, -118, 274, 104, 24, 8, '#7b3150');
+	ctx.fillStyle = '#151016';
+	ctx.fillRect(-112, 318, 16, 12);
+	ctx.fillRect(-34, 318, 16, 12);
+
+	ctx.fillStyle = 'rgba(104, 212, 255, 0.18)';
+	for (let i = 0; i < 10; i += 1) {
+		ctx.fillRect(CLUB_LEFT_X + 54 + i * 46, 42, 18, 70);
+	}
+
+	ctx.fillStyle = '#2f2630';
+	ctx.fillRect(CLUB_RIGHT_X - 18, 132, 18, ROOM_BOTTOM_Y - 132);
+	fillRoundedRect(ctx, CLUB_RIGHT_X - 18, 230, 38, 96, 8, '#5a3e34');
+	ctx.fillStyle = '#241d1b';
+	ctx.fillRect(CLUB_RIGHT_X - 10, 240, 22, 74);
+}
+
 function drawGardenGround(ctx: CanvasRenderingContext2D) {
 	const grassGradient = ctx.createLinearGradient(0, GARDEN_TOP_Y, 0, MAP_HEIGHT - 18);
 	grassGradient.addColorStop(0, '#4f774c');
@@ -1114,13 +1360,14 @@ function drawDecor(ctx: CanvasRenderingContext2D) {
 	drawPlant(ctx);
 }
 
-function drawFloorAndWalls(ctx: CanvasRenderingContext2D) {
+function drawFloorAndWalls(ctx: CanvasRenderingContext2D, time: number) {
 	const wallGradient = ctx.createLinearGradient(0, 0, 0, 122);
 	wallGradient.addColorStop(0, '#6d7564');
 	wallGradient.addColorStop(1, '#a5916d');
 	ctx.fillStyle = '#312820';
-	ctx.fillRect(0, 0, MAP_WIDTH, MAP_HEIGHT);
+	ctx.fillRect(WORLD_MIN_X, 0, WORLD_WIDTH, MAP_HEIGHT);
 	drawGardenGround(ctx);
+	drawClubRoom(ctx, time);
 	fillRoundedRect(ctx, 18, 16, MAP_WIDTH - 36, ROOM_BOTTOM_Y + 10, 8, '#5a3e34');
 	ctx.fillStyle = wallGradient;
 	ctx.fillRect(28, 28, MAP_WIDTH - 56, 94);
@@ -1186,6 +1433,12 @@ function drawLighting(
 	glow.addColorStop(1, 'rgba(179, 222, 255, 0)');
 	ctx.fillStyle = glow;
 	ctx.fillRect(980, 44, 280, 210);
+	glow = ctx.createRadialGradient(-300, 184, 12, -300, 184, 240);
+	glow.addColorStop(0, 'rgba(242, 63, 125, 0.28)');
+	glow.addColorStop(0.55, 'rgba(104, 212, 255, 0.12)');
+	glow.addColorStop(1, 'rgba(242, 63, 125, 0)');
+	ctx.fillStyle = glow;
+	ctx.fillRect(CLUB_LEFT_X + 24, 26, CLUB_RIGHT_X - CLUB_LEFT_X, 314);
 	ctx.restore();
 
 	ctx.save();
@@ -1314,9 +1567,9 @@ function drawScene(
 ) {
 	ctx.clearRect(0, 0, canvasWidth, GAME_HEIGHT);
 	ctx.save();
-	const mapOffsetX = Math.max(0, (canvasWidth - MAP_WIDTH) / 2);
+	const mapOffsetX = Math.max(0, (canvasWidth - WORLD_WIDTH) / 2);
 	ctx.translate(mapOffsetX - cameraX, -cameraY);
-	drawFloorAndWalls(ctx);
+	drawFloorAndWalls(ctx, time);
 	drawBookshelf(ctx);
 	drawFireplace(ctx, time);
 	drawTeaCounter(ctx);
@@ -1345,7 +1598,7 @@ function drawScene(
 		item.draw();
 	}
 
-	drawLighting(ctx, time, cameraX, cameraY, Math.min(canvasWidth, MAP_WIDTH));
+	drawLighting(ctx, time, cameraX, cameraY, Math.min(canvasWidth, WORLD_WIDTH));
 	ctx.restore();
 }
 
@@ -1532,7 +1785,7 @@ export function CottageGame({
 	const remoteActionUntilRef = useRef<Record<string, number>>({});
 	const roomPlayersRef = useRef<RoomPlayer[]>(roomPlayers);
 	const currentPlayerRef = useRef<CottagePlayerIdentity | null>(currentPlayer);
-	const canvasSizeRef = useRef({ width: MAP_WIDTH, height: GAME_HEIGHT, dpr: 1 });
+	const canvasSizeRef = useRef({ width: WORLD_WIDTH, height: GAME_HEIGHT, dpr: 1 });
 	const cameraXRef = useRef(0);
 	const cameraYRef = useRef(ROOM_CROP_TOP);
 	const targetRef = useRef<MoveTarget | null>(null);
@@ -1944,9 +2197,10 @@ export function CottageGame({
 				? playersRef.current[currentPlayerRef.current.id]
 				: null;
 			const size = canvasSizeRef.current;
-			const viewWidth = Math.min(MAP_WIDTH, size.width);
-			const cameraTarget = self ? self.x - viewWidth / 2 : MAP_WIDTH / 2 - viewWidth / 2;
-			cameraXRef.current = clamp(cameraTarget, 0, Math.max(0, MAP_WIDTH - viewWidth));
+			const viewWidth = Math.min(WORLD_WIDTH, size.width);
+			const defaultCameraX = WORLD_MIN_X + (WORLD_WIDTH - viewWidth) / 2;
+			const cameraTarget = self ? self.x - viewWidth / 2 : defaultCameraX;
+			cameraXRef.current = clamp(cameraTarget, WORLD_MIN_X, WORLD_MAX_X - viewWidth);
 			const cameraMinY = ROOM_CROP_TOP;
 			const cameraMaxY = Math.max(cameraMinY, MAP_HEIGHT - ROOM_CROP_BOTTOM - GAME_HEIGHT);
 			const cameraTargetY = self
@@ -1986,7 +2240,7 @@ export function CottageGame({
 		}
 		const rect = canvas.getBoundingClientRect();
 		const size = canvasSizeRef.current;
-		const mapOffsetX = Math.max(0, (size.width - MAP_WIDTH) / 2);
+		const mapOffsetX = Math.max(0, (size.width - WORLD_WIDTH) / 2);
 		return {
 			x: clamp(
 				event.clientX - rect.left - mapOffsetX + cameraXRef.current,
