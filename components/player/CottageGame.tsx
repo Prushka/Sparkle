@@ -155,7 +155,7 @@ const INTERACTIONS: CottageInteraction[] = [
 		targetX: -256,
 		targetY: 184,
 		facing: 'up',
-		action: 'interacting',
+		action: 'sitting',
 		radius: 64,
 		sortY: 172
 	},
@@ -170,7 +170,7 @@ const INTERACTIONS: CottageInteraction[] = [
 		targetX: -204,
 		targetY: 314,
 		facing: 'up',
-		action: 'interacting',
+		action: 'sitting',
 		radius: 72,
 		sortY: 286
 	},
@@ -1098,6 +1098,7 @@ function drawPlant(ctx: CanvasRenderingContext2D) {
 }
 
 function drawClubRoom(ctx: CanvasRenderingContext2D, time: number) {
+	const pulse = 0.62 + Math.sin(time / 190) * 0.18;
 	const wallGradient = ctx.createLinearGradient(CLUB_LEFT_X, 22, CLUB_RIGHT_X, 128);
 	wallGradient.addColorStop(0, '#17151b');
 	wallGradient.addColorStop(0.52, '#262029');
@@ -1115,6 +1116,18 @@ function drawClubRoom(ctx: CanvasRenderingContext2D, time: number) {
 	ctx.fillRect(CLUB_LEFT_X + 28, 28, CLUB_RIGHT_X - CLUB_LEFT_X - 18, 96);
 	ctx.fillStyle = '#4d1d2b';
 	ctx.fillRect(CLUB_LEFT_X + 28, 118, CLUB_RIGHT_X - CLUB_LEFT_X - 18, 10);
+	ctx.fillStyle = 'rgba(20, 20, 28, 0.72)';
+	for (let x = CLUB_LEFT_X + 62; x < CLUB_RIGHT_X - 38; x += 28) {
+		ctx.fillRect(x, 34, 3, 88);
+	}
+	ctx.strokeStyle = 'rgba(207, 208, 220, 0.24)';
+	ctx.lineWidth = 2;
+	ctx.beginPath();
+	for (let x = CLUB_LEFT_X + 76; x < CLUB_RIGHT_X - 46; x += 64) {
+		ctx.moveTo(x, 34);
+		ctx.lineTo(x, 118);
+	}
+	ctx.stroke();
 	const floorGradient = ctx.createLinearGradient(0, 128, 0, ROOM_BOTTOM_Y);
 	floorGradient.addColorStop(0, '#3a3038');
 	floorGradient.addColorStop(1, '#16151a');
@@ -1129,28 +1142,60 @@ function drawClubRoom(ctx: CanvasRenderingContext2D, time: number) {
 		}
 	}
 
-	fillRoundedRect(ctx, -484, 58, 112, 66, 7, '#31212b');
+	fillRoundedRect(ctx, -492, 54, 128, 76, 7, '#31212b');
 	ctx.fillStyle = '#0d0d12';
-	ctx.fillRect(-474, 66, 92, 50);
+	ctx.fillRect(-482, 62, 108, 58);
 	ctx.fillStyle = '#f23f7d';
-	ctx.font = '700 13px Inter, ui-sans-serif, system-ui, sans-serif';
+	ctx.font = '800 13px Inter, ui-sans-serif, system-ui, sans-serif';
 	ctx.textAlign = 'center';
 	ctx.textBaseline = 'middle';
-	ctx.fillText('BERLIN 18+', -428, 85);
-	ctx.strokeStyle = `rgba(242, 63, 125, ${0.62 + Math.sin(time / 190) * 0.18})`;
+	ctx.fillText('BERLIN XXX', -428, 82);
+	ctx.strokeStyle = `rgba(242, 63, 125, ${pulse})`;
 	ctx.lineWidth = 3;
-	roundedRect(ctx, -470, 68, 84, 32, 5);
+	roundedRect(ctx, -478, 66, 100, 38, 5);
 	ctx.stroke();
 	ctx.fillStyle = '#68d4ff';
-	ctx.fillText('NACHT', -428, 105);
+	ctx.font = '700 10px Inter, ui-sans-serif, system-ui, sans-serif';
+	ctx.fillText('18+ NACHT', -428, 104);
 
-	fillRoundedRect(ctx, -480, 172, 126, 58, 12, '#4d1f31');
-	fillRoundedRect(ctx, -468, 162, 102, 34, 10, '#7a3150');
-	fillRoundedRect(ctx, -462, 204, 44, 34, 8, '#913a5c');
-	fillRoundedRect(ctx, -408, 204, 44, 34, 8, '#913a5c');
+	fillRoundedRect(ctx, -488, 172, 140, 60, 12, '#4d1f31');
+	fillRoundedRect(ctx, -474, 160, 112, 36, 10, '#7a3150');
+	fillRoundedRect(ctx, -468, 204, 48, 34, 8, '#913a5c');
+	fillRoundedRect(ctx, -404, 204, 48, 34, 8, '#913a5c');
 	ctx.fillStyle = '#25131c';
-	ctx.fillRect(-458, 232, 16, 10);
-	ctx.fillRect(-382, 232, 16, 10);
+	ctx.fillRect(-462, 232, 16, 10);
+	ctx.fillRect(-378, 232, 16, 10);
+	ctx.strokeStyle = '#c9cad5';
+	ctx.lineWidth = 2;
+	ctx.beginPath();
+	ctx.arc(-472, 184, 7, 0, Math.PI * 2);
+	ctx.arc(-364, 184, 7, 0, Math.PI * 2);
+	ctx.moveTo(-465, 184);
+	ctx.lineTo(-371, 184);
+	ctx.stroke();
+	ctx.strokeStyle = '#231019';
+	ctx.lineWidth = 3;
+	ctx.beginPath();
+	ctx.moveTo(-468, 176);
+	ctx.lineTo(-356, 176);
+	ctx.moveTo(-462, 214);
+	ctx.lineTo(-356, 214);
+	ctx.stroke();
+	fillRoundedRect(ctx, -348, 196, 22, 40, 6, '#21141d');
+	ctx.strokeStyle = '#d1d3de';
+	ctx.lineWidth = 2;
+	ctx.beginPath();
+	ctx.arc(-337, 206, 6, 0, Math.PI * 2);
+	ctx.arc(-337, 225, 6, 0, Math.PI * 2);
+	ctx.moveTo(-337, 212);
+	ctx.lineTo(-337, 219);
+	ctx.stroke();
+	ctx.strokeStyle = '#8b2f4f';
+	ctx.lineWidth = 4;
+	ctx.beginPath();
+	ctx.moveTo(-482, 218);
+	ctx.bezierCurveTo(-500, 214, -502, 190, -478, 184);
+	ctx.stroke();
 
 	fillRoundedRect(ctx, -462, 272, 132, 34, 11, '#24171f');
 	fillRoundedRect(ctx, -446, 260, 112, 22, 8, '#503045');
@@ -1162,6 +1207,19 @@ function drawClubRoom(ctx: CanvasRenderingContext2D, time: number) {
 	ctx.fillRect(-392, 224, 10, 74);
 	ctx.fillStyle = '#dadce8';
 	ctx.fillRect(-389, 222, 4, 78);
+	ctx.strokeStyle = `rgba(239, 61, 117, ${pulse})`;
+	ctx.lineWidth = 2;
+	roundedRect(ctx, -458, 268, 124, 36, 10);
+	ctx.stroke();
+	ctx.fillStyle = '#21141d';
+	fillRoundedRect(ctx, -458, 308, 18, 12, 4, '#21141d');
+	fillRoundedRect(ctx, -354, 308, 18, 12, 4, '#21141d');
+	ctx.strokeStyle = '#d1d3de';
+	ctx.lineWidth = 2;
+	ctx.beginPath();
+	ctx.arc(-449, 314, 5, 0, Math.PI * 2);
+	ctx.arc(-345, 314, 5, 0, Math.PI * 2);
+	ctx.stroke();
 
 	ctx.strokeStyle = '#5c6273';
 	ctx.lineWidth = 7;
@@ -1184,10 +1242,47 @@ function drawClubRoom(ctx: CanvasRenderingContext2D, time: number) {
 	ctx.fillRect(-300, 146, 92, 10);
 	ctx.fillStyle = '#a4a9b8';
 	ctx.fillRect(-256, 54, 14, 112);
-	for (let y = 86; y <= 128; y += 21) {
+	ctx.strokeStyle = '#d1d3de';
+	ctx.lineWidth = 2;
+	for (const [x, y] of [
+		[-294, 78],
+		[-212, 78],
+		[-292, 148],
+		[-214, 148]
+	] as const) {
+		ctx.beginPath();
+		ctx.arc(x, y, 8, 0, Math.PI * 2);
+		ctx.stroke();
 		ctx.fillStyle = '#7f243f';
-		drawEllipse(ctx, -254, y, 7, 5, '#7f243f');
-		drawEllipse(ctx, -226, y + 8, 7, 5, '#7f243f');
+		fillRoundedRect(ctx, x - 9, y - 3, 18, 6, 3, '#7f243f');
+	}
+	ctx.strokeStyle = '#8b90a0';
+	ctx.lineWidth = 2;
+	for (let y = 86; y <= 128; y += 21) {
+		ctx.beginPath();
+		ctx.moveTo(-258, y);
+		ctx.lineTo(-286, y - 8);
+		ctx.moveTo(-242, y + 8);
+		ctx.lineTo(-216, y + 1);
+		ctx.stroke();
+	}
+	ctx.fillStyle = '#151016';
+	fillRoundedRect(ctx, -272, 102, 34, 22, 8, '#151016');
+	ctx.strokeStyle = '#c6c8d2';
+	ctx.lineWidth = 2;
+	ctx.beginPath();
+	ctx.arc(-255, 112, 11, 0, Math.PI * 2);
+	ctx.stroke();
+	ctx.fillStyle = '#7f243f';
+	for (const [x, y] of [
+		[-294, 94],
+		[-214, 94],
+		[-292, 134],
+		[-216, 134]
+	] as const) {
+		fillRoundedRect(ctx, x - 10, y - 3, 20, 6, 3, '#7f243f');
+		ctx.fillStyle = '#d0b05f';
+		ctx.fillRect(x - 2, y - 5, 4, 10);
 	}
 
 	ctx.strokeStyle = '#525869';
@@ -1206,29 +1301,171 @@ function drawClubRoom(ctx: CanvasRenderingContext2D, time: number) {
 	ctx.moveTo(-174, 172);
 	ctx.lineTo(-174, 234);
 	ctx.stroke();
-	fillRoundedRect(ctx, -242, 236, 78, 28, 12, '#642a43');
-	fillRoundedRect(ctx, -232, 242, 58, 13, 6, '#a74468');
-
-	fillRoundedRect(ctx, -112, 72, 84, 68, 6, '#252333');
-	ctx.fillStyle = '#4f5264';
-	ctx.fillRect(-102, 84, 62, 5);
-	ctx.fillRect(-102, 112, 62, 5);
-	const gearColors = ['#c6c8d2', '#8b2f4f', '#2f85a3', '#d0b05f'];
-	for (let i = 0; i < 6; i += 1) {
-		ctx.fillStyle = gearColors[i % gearColors.length];
-		ctx.fillRect(-98 + i * 10, 90 + (i % 2) * 24, 5, 17);
-		drawEllipse(ctx, -95 + i * 10, 107 + (i % 2) * 24, 5, 3, gearColors[i % gearColors.length]);
+	ctx.strokeStyle = '#d1d3de';
+	ctx.lineWidth = 2;
+	for (const [x, y] of [
+		[-236, 182],
+		[-170, 182],
+		[-246, 254],
+		[-160, 254]
+	] as const) {
+		ctx.beginPath();
+		ctx.arc(x, y, 6, 0, Math.PI * 2);
+		ctx.stroke();
 	}
+	fillRoundedRect(ctx, -248, 236, 94, 30, 12, '#642a43');
+	fillRoundedRect(ctx, -236, 242, 70, 14, 6, '#a74468');
+	ctx.strokeStyle = '#22151d';
+	ctx.lineWidth = 3;
+	ctx.beginPath();
+	ctx.moveTo(-244, 246);
+	ctx.lineTo(-158, 246);
+	ctx.moveTo(-226, 236);
+	ctx.lineTo(-212, 266);
+	ctx.moveTo(-182, 236);
+	ctx.lineTo(-196, 266);
+	ctx.stroke();
+	ctx.strokeStyle = '#d1d3de';
+	ctx.lineWidth = 2;
+	ctx.beginPath();
+	ctx.arc(-224, 272, 8, 0, Math.PI * 2);
+	ctx.arc(-180, 272, 8, 0, Math.PI * 2);
+	ctx.moveTo(-224, 264);
+	ctx.lineTo(-236, 286);
+	ctx.moveTo(-180, 264);
+	ctx.lineTo(-166, 286);
+	ctx.stroke();
+	ctx.strokeStyle = '#8b2f4f';
+	ctx.lineWidth = 4;
+	ctx.beginPath();
+	ctx.moveTo(-248, 236);
+	ctx.bezierCurveTo(-238, 282, -164, 282, -154, 236);
+	ctx.stroke();
 
-	fillRoundedRect(ctx, -116, 288, 104, 28, 9, '#32202b');
-	fillRoundedRect(ctx, -106, 278, 84, 22, 8, '#7b3150');
+	fillRoundedRect(ctx, -124, 66, 112, 96, 6, '#252333');
+	ctx.fillStyle = '#4f5264';
+	ctx.fillRect(-114, 82, 92, 5);
+	ctx.fillRect(-114, 112, 92, 5);
+	ctx.fillRect(-114, 142, 92, 5);
+	ctx.strokeStyle = '#c6c8d2';
+	ctx.lineWidth = 2;
+	ctx.beginPath();
+	ctx.arc(-104, 98, 7, 0, Math.PI * 2);
+	ctx.arc(-88, 98, 7, 0, Math.PI * 2);
+	ctx.moveTo(-97, 98);
+	ctx.lineTo(-95, 98);
+	ctx.stroke();
+	fillRoundedRect(ctx, -72, 88, 10, 28, 5, '#8b2f4f');
+	drawEllipse(ctx, -67, 84, 10, 6, '#8b2f4f');
+	ctx.strokeStyle = '#d0b05f';
+	ctx.lineWidth = 2;
+	ctx.beginPath();
+	ctx.moveTo(-46, 88);
+	ctx.lineTo(-46, 116);
+	for (let i = 0; i < 5; i += 1) {
+		ctx.moveTo(-46, 98);
+		ctx.lineTo(-58 + i * 6, 118);
+	}
+	ctx.stroke();
+	ctx.strokeStyle = '#2f85a3';
+	ctx.lineWidth = 4;
+	ctx.beginPath();
+	ctx.arc(-102, 130, 14, 0.25, Math.PI * 1.75);
+	ctx.stroke();
+	ctx.fillStyle = '#c6c8d2';
+	for (let i = 0; i < 3; i += 1) {
+		ctx.fillRect(-76 + i * 14, 124, 5, 24);
+		drawEllipse(ctx, -74 + i * 14, 148, 5, 3, '#c6c8d2');
+	}
+	ctx.strokeStyle = '#8b2f4f';
+	ctx.lineWidth = 2;
+	ctx.beginPath();
+	ctx.arc(-36, 130, 11, 0, Math.PI * 2);
+	ctx.stroke();
 	ctx.fillStyle = '#151016';
-	ctx.fillRect(-102, 316, 14, 10);
-	ctx.fillRect(-38, 316, 14, 10);
+	fillRoundedRect(ctx, -28, 90, 10, 30, 5, '#151016');
+	drawEllipse(ctx, -23, 88, 7, 9, '#151016');
+	fillRoundedRect(ctx, -31, 118, 16, 5, 3, '#151016');
+	ctx.fillStyle = '#2f85a3';
+	ctx.beginPath();
+	ctx.moveTo(-28, 140);
+	ctx.quadraticCurveTo(-18, 126, -8, 140);
+	ctx.quadraticCurveTo(-12, 154, -24, 154);
+	ctx.closePath();
+	ctx.fill();
+	drawEllipse(ctx, -18, 158, 17, 4, '#2f85a3');
+	ctx.strokeStyle = '#d0b05f';
+	ctx.lineWidth = 2;
+	for (let i = 0; i < 3; i += 1) {
+		ctx.beginPath();
+		ctx.arc(-110 + i * 12, 150, 6 + i * 2, 0.2, Math.PI * 1.8);
+		ctx.stroke();
+	}
+	ctx.strokeStyle = '#8b2f4f';
+	ctx.lineWidth = 3;
+	ctx.beginPath();
+	ctx.moveTo(-58, 124);
+	ctx.lineTo(-38, 148);
+	ctx.moveTo(-38, 124);
+	ctx.lineTo(-58, 148);
+	ctx.stroke();
+
+	fillRoundedRect(ctx, -128, 288, 120, 30, 9, '#32202b');
+	fillRoundedRect(ctx, -116, 276, 96, 24, 8, '#7b3150');
+	ctx.strokeStyle = '#22151d';
+	ctx.lineWidth = 3;
+	ctx.beginPath();
+	ctx.moveTo(-112, 288);
+	ctx.lineTo(-22, 288);
+	ctx.moveTo(-92, 276);
+	ctx.lineTo(-76, 300);
+	ctx.moveTo(-54, 276);
+	ctx.lineTo(-38, 300);
+	ctx.stroke();
+	ctx.strokeStyle = '#d1d3de';
+	ctx.lineWidth = 2;
+	for (const x of [-116, -18]) {
+		ctx.beginPath();
+		ctx.arc(x, 286, 6, 0, Math.PI * 2);
+		ctx.stroke();
+	}
+	ctx.fillStyle = '#151016';
+	ctx.fillRect(-112, 318, 14, 10);
+	ctx.fillRect(-34, 318, 14, 10);
+	fillRoundedRect(ctx, -118, 320, 28, 18, 7, '#24171f');
+	fillRoundedRect(ctx, -42, 320, 28, 18, 7, '#24171f');
+	ctx.strokeStyle = '#d1d3de';
+	ctx.lineWidth = 2;
+	for (const [x, y] of [
+		[-104, 328],
+		[-28, 328],
+		[-116, 296],
+		[-18, 296]
+	] as const) {
+		ctx.beginPath();
+		ctx.arc(x, y, 6, 0, Math.PI * 2);
+		ctx.stroke();
+	}
+	ctx.strokeStyle = '#8b2f4f';
+	ctx.lineWidth = 4;
+	ctx.beginPath();
+	ctx.moveTo(-116, 284);
+	ctx.lineTo(-20, 306);
+	ctx.moveTo(-116, 304);
+	ctx.lineTo(-20, 282);
+	ctx.stroke();
 
 	ctx.fillStyle = 'rgba(104, 212, 255, 0.18)';
 	for (let i = 0; i < 10; i += 1) {
 		ctx.fillRect(CLUB_LEFT_X + 54 + i * 46, 42, 18, 70);
+	}
+	ctx.strokeStyle = 'rgba(242, 63, 125, 0.34)';
+	ctx.lineWidth = 2;
+	for (let x = CLUB_LEFT_X + 40; x < CLUB_RIGHT_X - 42; x += 38) {
+		ctx.beginPath();
+		ctx.moveTo(x, 128);
+		ctx.lineTo(x + Math.sin(time / 360 + x) * 4, 356);
+		ctx.stroke();
 	}
 
 	ctx.fillStyle = '#2f2630';
@@ -1513,6 +1750,368 @@ function drawInteractionSpark(
 	ctx.restore();
 }
 
+function strokeClubLimb(
+	ctx: CanvasRenderingContext2D,
+	points: readonly (readonly [number, number])[],
+	color: string,
+	width = 6
+) {
+	ctx.strokeStyle = color;
+	ctx.lineWidth = width;
+	ctx.lineCap = 'round';
+	ctx.lineJoin = 'round';
+	ctx.beginPath();
+	points.forEach(([x, y], index) => {
+		if (index === 0) {
+			ctx.moveTo(x, y);
+			return;
+		}
+		ctx.lineTo(x, y);
+	});
+	ctx.stroke();
+}
+
+function drawClubPoseHead(
+	ctx: CanvasRenderingContext2D,
+	x: number,
+	y: number,
+	facing: CottagePlayerFacing = 'down'
+) {
+	fillRoundedRect(ctx, x - 12, y - 12, 24, 24, 10, '#f0b78b');
+	ctx.fillStyle = '#4f322a';
+	if (facing === 'up') {
+		ctx.fillRect(x - 12, y - 13, 24, 12);
+		return;
+	}
+	ctx.fillRect(x - 12, y - 14, 24, 8);
+	ctx.fillRect(x - 12, y - 9, 5, 8);
+	ctx.fillRect(x + 7, y - 9, 5, 8);
+	ctx.fillStyle = '#3a2926';
+	const eyeOffset = facing === 'left' ? -2 : facing === 'right' ? 2 : 0;
+	ctx.fillRect(x - 5 + eyeOffset, y - 2, 3, 3);
+	ctx.fillRect(x + 4 + eyeOffset, y - 2, 3, 3);
+}
+
+function drawClubCuff(ctx: CanvasRenderingContext2D, x: number, y: number) {
+	ctx.strokeStyle = '#d1d3de';
+	ctx.lineWidth = 2;
+	ctx.beginPath();
+	ctx.arc(x, y, 5, 0, Math.PI * 2);
+	ctx.stroke();
+	fillRoundedRect(ctx, x - 7, y - 2, 14, 4, 2, '#7f243f');
+}
+
+function drawClubPlayerPose(
+	ctx: CanvasRenderingContext2D,
+	player: CottagePlayerSyncState,
+	interaction: CottageInteraction | undefined,
+	color: string,
+	time: number
+) {
+	if (
+		!interaction?.id.startsWith('club-') ||
+		(player.action !== 'interacting' && player.action !== 'sitting')
+	) {
+		return false;
+	}
+
+	const skin = '#f0b78b';
+	const pants = '#3d3b48';
+	const boot = '#24242d';
+	const sway = Math.sin(time / 180) * 2;
+
+	ctx.save();
+	switch (interaction.id) {
+		case 'club-lounge':
+			ctx.translate(0, 6);
+			strokeClubLimb(
+				ctx,
+				[
+					[-2, -8],
+					[18, 4],
+					[30, 8]
+				],
+				pants,
+				7
+			);
+			strokeClubLimb(
+				ctx,
+				[
+					[-10, -4],
+					[-30, 4],
+					[-40, 8]
+				],
+				pants,
+				7
+			);
+			fillRoundedRect(ctx, -34, -30, 58, 24, 10, color);
+			ctx.fillStyle = 'rgba(255,255,255,0.18)';
+			ctx.fillRect(-22, -24, 28, 5);
+			strokeClubLimb(
+				ctx,
+				[
+					[-24, -22],
+					[-42, -28]
+				],
+				skin,
+				5
+			);
+			strokeClubLimb(
+				ctx,
+				[
+					[14, -20],
+					[28, -30]
+				],
+				skin,
+				5
+			);
+			drawClubPoseHead(ctx, -34, -34, 'right');
+			break;
+		case 'club-stage':
+			strokeClubLimb(
+				ctx,
+				[
+					[9, -31],
+					[9 + sway, -54],
+					[5 + sway, -72]
+				],
+				skin,
+				5
+			);
+			strokeClubLimb(
+				ctx,
+				[
+					[-10, -29],
+					[-24, -14]
+				],
+				skin,
+				5
+			);
+			strokeClubLimb(
+				ctx,
+				[
+					[-6, 8],
+					[-18, 24]
+				],
+				pants,
+				7
+			);
+			strokeClubLimb(
+				ctx,
+				[
+					[7, 8],
+					[18, 15],
+					[22, 28]
+				],
+				pants,
+				7
+			);
+			fillRoundedRect(ctx, -14, -34, 28, 42, 9, color);
+			ctx.fillStyle = 'rgba(255,255,255,0.18)';
+			ctx.fillRect(-8, -27, 16, 5);
+			drawClubPoseHead(ctx, 0, -48, 'down');
+			ctx.fillStyle = '#fff0a8';
+			for (let i = 0; i < 3; i += 1) {
+				drawEllipse(ctx, -22 + i * 20, -56 + Math.sin(time / 160 + i) * 3, 3, 3, '#fff0a8');
+			}
+			break;
+		case 'club-cross':
+			strokeClubLimb(
+				ctx,
+				[
+					[-10, -32],
+					[-28, -60],
+					[-38, -78]
+				],
+				skin,
+				5
+			);
+			strokeClubLimb(
+				ctx,
+				[
+					[10, -32],
+					[28, -60],
+					[38, -78]
+				],
+				skin,
+				5
+			);
+			strokeClubLimb(
+				ctx,
+				[
+					[-8, 7],
+					[-13, 28]
+				],
+				pants,
+				7
+			);
+			strokeClubLimb(
+				ctx,
+				[
+					[8, 7],
+					[13, 28]
+				],
+				pants,
+				7
+			);
+			fillRoundedRect(ctx, -14, -36, 28, 44, 9, color);
+			ctx.fillStyle = 'rgba(255,255,255,0.16)';
+			ctx.fillRect(-8, -29, 16, 5);
+			drawClubPoseHead(ctx, 0, -50, 'up');
+			drawClubCuff(ctx, -38, -78);
+			drawClubCuff(ctx, 38, -78);
+			break;
+		case 'club-swing':
+			ctx.translate(0, -6);
+			strokeClubLimb(
+				ctx,
+				[
+					[-20, -22],
+					[-28, -48]
+				],
+				skin,
+				5
+			);
+			strokeClubLimb(
+				ctx,
+				[
+					[18, -22],
+					[30, -48]
+				],
+				skin,
+				5
+			);
+			strokeClubLimb(
+				ctx,
+				[
+					[14, -6],
+					[36, 6],
+					[48, 4]
+				],
+				pants,
+				7
+			);
+			strokeClubLimb(
+				ctx,
+				[
+					[5, -2],
+					[24, 18],
+					[38, 20]
+				],
+				pants,
+				7
+			);
+			fillRoundedRect(ctx, -34, -28, 66, 24, 10, color);
+			ctx.fillStyle = 'rgba(255,255,255,0.18)';
+			ctx.fillRect(-18, -22, 30, 5);
+			drawClubPoseHead(ctx, -42, -26, 'right');
+			ctx.fillStyle = boot;
+			drawEllipse(ctx, 52, 4, 7, 4, boot);
+			drawEllipse(ctx, 42, 20, 7, 4, boot);
+			drawClubCuff(ctx, -28, -48);
+			drawClubCuff(ctx, 30, -48);
+			break;
+		case 'club-rack':
+			strokeClubLimb(
+				ctx,
+				[
+					[10, -29],
+					[28, -49],
+					[35, -66]
+				],
+				skin,
+				5
+			);
+			strokeClubLimb(
+				ctx,
+				[
+					[-11, -27],
+					[-22, -16]
+				],
+				skin,
+				5
+			);
+			strokeClubLimb(
+				ctx,
+				[
+					[-7, 8],
+					[-9, 27]
+				],
+				pants,
+				7
+			);
+			strokeClubLimb(
+				ctx,
+				[
+					[7, 8],
+					[10, 27]
+				],
+				pants,
+				7
+			);
+			fillRoundedRect(ctx, -14, -34, 28, 42, 9, color);
+			ctx.fillStyle = 'rgba(255,255,255,0.18)';
+			ctx.fillRect(-8, -27, 16, 5);
+			drawClubPoseHead(ctx, 0, -48, 'up');
+			ctx.fillStyle = '#8b2f4f';
+			fillRoundedRect(ctx, 31, -76, 10, 24, 5, '#8b2f4f');
+			drawEllipse(ctx, 36, -79, 10, 6, '#8b2f4f');
+			break;
+		case 'club-bench':
+			ctx.translate(0, -2);
+			strokeClubLimb(
+				ctx,
+				[
+					[-8, -7],
+					[-22, 12],
+					[-22, 28]
+				],
+				pants,
+				7
+			);
+			strokeClubLimb(
+				ctx,
+				[
+					[8, -7],
+					[24, 10],
+					[24, 28]
+				],
+				pants,
+				7
+			);
+			fillRoundedRect(ctx, -42, -30, 72, 22, 10, color);
+			ctx.fillStyle = 'rgba(255,255,255,0.18)';
+			ctx.fillRect(-24, -24, 32, 5);
+			strokeClubLimb(
+				ctx,
+				[
+					[-26, -22],
+					[-46, -28]
+				],
+				skin,
+				5
+			);
+			strokeClubLimb(
+				ctx,
+				[
+					[18, -21],
+					[38, -28]
+				],
+				skin,
+				5
+			);
+			drawClubPoseHead(ctx, -48, -30, 'right');
+			drawClubCuff(ctx, -46, -28);
+			drawClubCuff(ctx, 38, -28);
+			break;
+		default:
+			ctx.restore();
+			return false;
+	}
+	ctx.restore();
+	return true;
+}
+
 function drawPlayer(ctx: CanvasRenderingContext2D, player: CottagePlayerSyncState, time: number) {
 	const interaction = findInteraction(player.interactionId);
 	const color = getPlayerFallbackColor(player.name);
@@ -1525,7 +2124,9 @@ function drawPlayer(ctx: CanvasRenderingContext2D, player: CottagePlayerSyncStat
 
 	ctx.save();
 	ctx.translate(poseX, poseY + bob);
-	if (player.action === 'sleeping') {
+	if (drawClubPlayerPose(ctx, player, interaction, color, time)) {
+		ctx.restore();
+	} else if (player.action === 'sleeping') {
 		ctx.rotate(-0.05);
 		fillRoundedRect(ctx, -32, -16, 68, 28, 10, color);
 		fillRoundedRect(ctx, -37, -18, 24, 24, 10, '#f0b78b');
