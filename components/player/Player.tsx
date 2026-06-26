@@ -2102,6 +2102,18 @@ function getSubtitleSettingsBaseLabel(track: SubtitleTrackInfo) {
 	return track.label.replace(/^\s*\d+\s*-\s*/, '').trim() || track.label;
 }
 
+function formatSubtitleSettingsLabel(label: string) {
+	let formattedLabel = label.trim();
+	const suffixes: string[] = [];
+	let suffixMatch = formattedLabel.match(/\s+\(([^()]+)\)\s*$/);
+	while (suffixMatch) {
+		suffixes.unshift(suffixMatch[1].trim());
+		formattedLabel = formattedLabel.slice(0, suffixMatch.index).trimEnd();
+		suffixMatch = formattedLabel.match(/\s+\(([^()]+)\)\s*$/);
+	}
+	return [formattedLabel, ...suffixes].filter(Boolean).join(' - ') || label;
+}
+
 function getSubtitleSettingsDuplicateKey(track: SubtitleTrackInfo) {
 	return [track.format, track.language, track.annotated ? 'annotated' : 'plain'].join('\t');
 }
@@ -2146,9 +2158,10 @@ function withSubtitleSettingsLabels(tracks: SubtitleTrackInfo[]) {
 
 	return entries.map((entry) => {
 		const suffix = suffixes.get(entry.index);
+		const label = suffix ? `${entry.baseLabel} (${suffix})` : entry.baseLabel;
 		return {
 			...entry.track,
-			settingsLabel: suffix ? `${entry.baseLabel} (${suffix})` : entry.baseLabel
+			settingsLabel: formatSubtitleSettingsLabel(label)
 		};
 	});
 }
@@ -4230,11 +4243,7 @@ function SubtitlesMenuSection({
 							checked={selectedTrackSrcs.has(track.src)}
 							label={track.settingsLabel}
 							onChange={(checked, trigger) => {
-								if (
-									!checked &&
-									selectedTrackSrcs.size === 1 &&
-									selectedTrackSrcs.has(track.src)
-								) {
+								if (!checked && selectedTrackSrcs.size === 1 && selectedTrackSrcs.has(track.src)) {
 									trigger?.preventDefault();
 									trigger?.stopPropagation();
 									trigger?.stopImmediatePropagation();
