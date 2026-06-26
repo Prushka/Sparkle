@@ -80,8 +80,18 @@ const GARDEN_TOP_Y = ROOM_BOTTOM_Y - 6;
 const GARDEN_ITEM_SHIFT = ROOM_BOTTOM_Y - BASE_ROOM_BOTTOM_Y;
 const FLOOR_BOUNDS = { minX: CLUB_LEFT_X + 44, maxX: 1396, minY: 116, maxY: 520 };
 
+const ROOM_WALL_COLLIDERS: Rect[] = [
+	{ x: CLUB_LEFT_X + 18, y: 16, w: CLUB_RIGHT_X - CLUB_LEFT_X, h: 100 },
+	{ x: 18, y: 16, w: MAP_WIDTH - 36, h: 100 },
+	{ x: CLUB_RIGHT_X - 18, y: 128, w: 18, h: 90 },
+	{ x: CLUB_RIGHT_X - 18, y: 330, w: 18, h: ROOM_BOTTOM_Y - 330 },
+	{ x: 18, y: ROOM_BOTTOM_Y - 20, w: 630, h: 12 },
+	{ x: 792, y: ROOM_BOTTOM_Y - 20, w: MAP_WIDTH - 810, h: 12 },
+	{ x: MAP_WIDTH - 28, y: 128, w: 10, h: ROOM_BOTTOM_Y - 128 }
+];
+
 // Include front strips and legs so Y-sorted furniture never clips a walking player.
-const COLLIDERS: Rect[] = [
+const FURNITURE_COLLIDERS: Rect[] = [
 	{ x: -486, y: 62, w: 106, h: 64 },
 	{ x: -472, y: 170, w: 98, h: 50 },
 	{ x: -462, y: 274, w: 122, h: 30 },
@@ -112,6 +122,8 @@ const COLLIDERS: Rect[] = [
 	{ x: 408, y: 382 + GARDEN_ITEM_SHIFT, w: 224, h: 86 },
 	{ x: 1248, y: 424 + GARDEN_ITEM_SHIFT, w: 44, h: 74 }
 ];
+
+const COLLIDERS: Rect[] = [...ROOM_WALL_COLLIDERS, ...FURNITURE_COLLIDERS];
 
 const INTERACTIONS: CottageInteraction[] = [
 	{
@@ -477,6 +489,25 @@ function isWalkable(x: number, y: number) {
 	return !COLLIDERS.some((collider) => isPointInRect(x, y, collider, PLAYER_RADIUS));
 }
 
+function findNearestWalkablePoint(x: number, y: number) {
+	if (isWalkable(x, y)) {
+		return { x, y };
+	}
+	const radii = [12, 24, 36, 52, 72, 96];
+	for (const radius of radii) {
+		const steps = Math.max(8, Math.ceil((Math.PI * 2 * radius) / 16));
+		for (let step = 0; step < steps; step += 1) {
+			const angle = (Math.PI * 2 * step) / steps;
+			const candidateX = clamp(x + Math.cos(angle) * radius, FLOOR_BOUNDS.minX, FLOOR_BOUNDS.maxX);
+			const candidateY = clamp(y + Math.sin(angle) * radius, FLOOR_BOUNDS.minY, FLOOR_BOUNDS.maxY);
+			if (isWalkable(candidateX, candidateY)) {
+				return { x: candidateX, y: candidateY };
+			}
+		}
+	}
+	return null;
+}
+
 function getSpawnPoint(id: string, name: string) {
 	const hash = hashString(`${id}:${name}`);
 	const spawnXs = [400, 750, 1050, 250, 1260, 610, 850, 1160];
@@ -704,8 +735,9 @@ function interactPlayer(
 }
 
 function moveWithCollision(player: CottagePlayerSyncState, dx: number, dy: number) {
-	let x = player.x;
-	let y = player.y;
+	const start = findNearestWalkablePoint(player.x, player.y) ?? { x: player.x, y: player.y };
+	let x = start.x;
+	let y = start.y;
 	const nextX = clamp(x + dx, FLOOR_BOUNDS.minX, FLOOR_BOUNDS.maxX);
 	if (isWalkable(nextX, y)) {
 		x = nextX;
