@@ -82,13 +82,13 @@ const FLOOR_BOUNDS = { minX: CLUB_LEFT_X + 44, maxX: 1396, minY: 116, maxY: 520 
 
 // Include front strips and legs so Y-sorted furniture never clips a walking player.
 const COLLIDERS: Rect[] = [
-	{ x: -486, y: 62, w: 116, h: 76 },
-	{ x: -472, y: 170, w: 112, h: 62 },
-	{ x: -456, y: 270, w: 138, h: 42 },
-	{ x: -294, y: 68, w: 76, h: 84 },
-	{ x: -274, y: 204, w: 132, h: 64 },
-	{ x: -112, y: 72, w: 94, h: 80 },
-	{ x: -122, y: 284, w: 118, h: 36 },
+	{ x: -486, y: 62, w: 106, h: 64 },
+	{ x: -472, y: 170, w: 98, h: 50 },
+	{ x: -462, y: 274, w: 122, h: 30 },
+	{ x: -300, y: 66, w: 68, h: 78 },
+	{ x: -252, y: 224, w: 92, h: 38 },
+	{ x: -110, y: 72, w: 82, h: 68 },
+	{ x: -112, y: 288, w: 96, h: 28 },
 	{ x: 50, y: 54, w: 92, h: 68 },
 	{ x: 185, y: 66, w: 122, h: 45 },
 	{ x: 378, y: 76, w: 96, h: 42 },
@@ -138,7 +138,7 @@ const INTERACTIONS: CottageInteraction[] = [
 		anchorX: -386,
 		anchorY: 302,
 		targetX: -386,
-		targetY: 330,
+		targetY: 336,
 		facing: 'up',
 		action: 'interacting',
 		radius: 68,
@@ -153,7 +153,7 @@ const INTERACTIONS: CottageInteraction[] = [
 		anchorX: -256,
 		anchorY: 162,
 		targetX: -256,
-		targetY: 194,
+		targetY: 184,
 		facing: 'up',
 		action: 'interacting',
 		radius: 64,
@@ -167,8 +167,8 @@ const INTERACTIONS: CottageInteraction[] = [
 		h: 100,
 		anchorX: -214,
 		anchorY: 250,
-		targetX: -214,
-		targetY: 306,
+		targetX: -204,
+		targetY: 314,
 		facing: 'up',
 		action: 'interacting',
 		radius: 72,
@@ -183,7 +183,7 @@ const INTERACTIONS: CottageInteraction[] = [
 		anchorX: -66,
 		anchorY: 164,
 		targetX: -66,
-		targetY: 194,
+		targetY: 184,
 		facing: 'up',
 		action: 'interacting',
 		radius: 62,
@@ -197,8 +197,8 @@ const INTERACTIONS: CottageInteraction[] = [
 		h: 58,
 		anchorX: -66,
 		anchorY: 316,
-		targetX: -66,
-		targetY: 342,
+		targetX: -64,
+		targetY: 338,
 		facing: 'up',
 		action: 'sitting',
 		radius: 58,
@@ -605,6 +605,33 @@ function getInteractionTarget(interaction: CottageInteraction): MoveTarget {
 	};
 }
 
+function getSafeInteractionExit(interaction: CottageInteraction): MoveTarget {
+	const target = getInteractionTarget(interaction);
+	if (isWalkable(target.x, target.y)) {
+		return target;
+	}
+	const offsets = [
+		[0, -26],
+		[0, 26],
+		[-28, 0],
+		[28, 0],
+		[-28, -24],
+		[28, -24],
+		[-28, 24],
+		[28, 24],
+		[0, -52],
+		[0, 52]
+	] as const;
+	for (const [dx, dy] of offsets) {
+		const x = clamp(target.x + dx, FLOOR_BOUNDS.minX, FLOOR_BOUNDS.maxX);
+		const y = clamp(target.y + dy, FLOOR_BOUNDS.minY, FLOOR_BOUNDS.maxY);
+		if (isWalkable(x, y)) {
+			return { x, y, interactionId: interaction.id };
+		}
+	}
+	return target;
+}
+
 function getInteractionSortY(player: CottagePlayerSyncState) {
 	const interaction = findInteraction(player.interactionId);
 	if (
@@ -646,7 +673,7 @@ function standPlayer(
 	updatedAt = Date.now()
 ): CottagePlayerSyncState {
 	const interaction = findInteraction(player.interactionId);
-	const exitTarget = interaction ? getInteractionTarget(interaction) : null;
+	const exitTarget = interaction ? getSafeInteractionExit(interaction) : null;
 	return {
 		...player,
 		...(exitTarget ? { x: exitTarget.x, y: exitTarget.y } : {}),
@@ -1125,11 +1152,11 @@ function drawClubRoom(ctx: CanvasRenderingContext2D, time: number) {
 	ctx.fillRect(-458, 232, 16, 10);
 	ctx.fillRect(-382, 232, 16, 10);
 
-	fillRoundedRect(ctx, -466, 268, 156, 44, 12, '#24171f');
-	fillRoundedRect(ctx, -454, 258, 132, 24, 9, '#503045');
+	fillRoundedRect(ctx, -462, 272, 132, 34, 11, '#24171f');
+	fillRoundedRect(ctx, -446, 260, 112, 22, 8, '#503045');
 	ctx.fillStyle = '#ef3d75';
 	for (let i = 0; i < 7; i += 1) {
-		drawEllipse(ctx, -444 + i * 20, 300 + Math.sin(time / 260 + i) * 2, 5, 4, '#ef3d75');
+		drawEllipse(ctx, -436 + i * 16, 298 + Math.sin(time / 260 + i) * 2, 5, 4, '#ef3d75');
 	}
 	ctx.fillStyle = '#0f1015';
 	ctx.fillRect(-392, 224, 10, 74);
@@ -1166,38 +1193,38 @@ function drawClubRoom(ctx: CanvasRenderingContext2D, time: number) {
 	ctx.strokeStyle = '#525869';
 	ctx.lineWidth = 5;
 	ctx.beginPath();
-	ctx.moveTo(-278, 184);
-	ctx.lineTo(-260, 250);
-	ctx.moveTo(-152, 184);
-	ctx.lineTo(-170, 250);
+	ctx.moveTo(-250, 188);
+	ctx.lineTo(-236, 250);
+	ctx.moveTo(-150, 188);
+	ctx.lineTo(-166, 250);
 	ctx.stroke();
 	ctx.strokeStyle = '#b5b8c4';
 	ctx.lineWidth = 3;
 	ctx.beginPath();
-	ctx.moveTo(-254, 168);
-	ctx.lineTo(-254, 232);
-	ctx.moveTo(-176, 168);
-	ctx.lineTo(-176, 232);
+	ctx.moveTo(-232, 172);
+	ctx.lineTo(-232, 234);
+	ctx.moveTo(-174, 172);
+	ctx.lineTo(-174, 234);
 	ctx.stroke();
-	fillRoundedRect(ctx, -260, 232, 92, 32, 13, '#642a43');
-	fillRoundedRect(ctx, -248, 240, 68, 15, 7, '#a74468');
+	fillRoundedRect(ctx, -242, 236, 78, 28, 12, '#642a43');
+	fillRoundedRect(ctx, -232, 242, 58, 13, 6, '#a74468');
 
-	fillRoundedRect(ctx, -120, 70, 98, 76, 6, '#252333');
+	fillRoundedRect(ctx, -112, 72, 84, 68, 6, '#252333');
 	ctx.fillStyle = '#4f5264';
-	ctx.fillRect(-108, 84, 74, 5);
-	ctx.fillRect(-108, 116, 74, 5);
+	ctx.fillRect(-102, 84, 62, 5);
+	ctx.fillRect(-102, 112, 62, 5);
 	const gearColors = ['#c6c8d2', '#8b2f4f', '#2f85a3', '#d0b05f'];
-	for (let i = 0; i < 8; i += 1) {
+	for (let i = 0; i < 6; i += 1) {
 		ctx.fillStyle = gearColors[i % gearColors.length];
-		ctx.fillRect(-104 + i * 9, 90 + (i % 2) * 26, 5, 18);
-		drawEllipse(ctx, -101 + i * 9, 108 + (i % 2) * 26, 5, 3, gearColors[i % gearColors.length]);
+		ctx.fillRect(-98 + i * 10, 90 + (i % 2) * 24, 5, 17);
+		drawEllipse(ctx, -95 + i * 10, 107 + (i % 2) * 24, 5, 3, gearColors[i % gearColors.length]);
 	}
 
-	fillRoundedRect(ctx, -128, 284, 126, 34, 10, '#32202b');
-	fillRoundedRect(ctx, -118, 274, 104, 24, 8, '#7b3150');
+	fillRoundedRect(ctx, -116, 288, 104, 28, 9, '#32202b');
+	fillRoundedRect(ctx, -106, 278, 84, 22, 8, '#7b3150');
 	ctx.fillStyle = '#151016';
-	ctx.fillRect(-112, 318, 16, 12);
-	ctx.fillRect(-34, 318, 16, 12);
+	ctx.fillRect(-102, 316, 14, 10);
+	ctx.fillRect(-38, 316, 14, 10);
 
 	ctx.fillStyle = 'rgba(104, 212, 255, 0.18)';
 	for (let i = 0; i < 10; i += 1) {
