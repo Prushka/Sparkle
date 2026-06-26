@@ -3234,6 +3234,21 @@ function waitForTimeout(ms: number) {
 	return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 }
 
+async function waitForPictureInPictureExit(player: MediaPlayerInstance | null, timeoutMs = 500) {
+	const deadline = Date.now() + timeoutMs;
+	while (Date.now() < deadline) {
+		const video = getPlayerVideoElement(player) as SparklePictureInPictureVideoElement | null;
+		if (!isNativePictureInPictureActive(video) && !isPlayerPictureInPictureStateActive(player)) {
+			return true;
+		}
+		syncStalePlayerPictureInPictureState(player);
+		await waitForNextFrame();
+	}
+
+	const video = getPlayerVideoElement(player) as SparklePictureInPictureVideoElement | null;
+	return !isNativePictureInPictureActive(video) && !isPlayerPictureInPictureStateActive(player);
+}
+
 function waitForVideoFrame(video: HTMLVideoElement, timeoutMs = 250) {
 	return new Promise<void>((resolve) => {
 		let settled = false;
@@ -3410,15 +3425,23 @@ async function exitPlayerPictureInPicture(player: MediaPlayerInstance | null, tr
 
 	const nativeExited = await exitNativePictureInPicture(player);
 	let staleStateSynced = syncStalePlayerPictureInPictureState(player);
+	if (staleStateSynced) {
+		await waitForPictureInPictureExit(player, 250);
+	}
 	if (getSafePlayerPictureInPicture(player)) {
 		try {
 			await player.exitPictureInPicture(trigger);
 			staleStateSynced = syncStalePlayerPictureInPictureState(player) || staleStateSynced;
+			await waitForPictureInPictureExit(player);
 			return true;
 		} catch {
 			staleStateSynced = syncStalePlayerPictureInPictureState(player) || staleStateSynced;
+			await waitForPictureInPictureExit(player);
 			return nativeExited || staleStateSynced;
 		}
+	}
+	if (nativeExited || staleStateSynced) {
+		await waitForPictureInPictureExit(player);
 	}
 	return nativeExited || staleStateSynced;
 }
@@ -5137,6 +5160,7 @@ export function Player({
 	const volumeCanPlayRestoredRef = useRef(false);
 	const autoPictureInPictureRequestIdRef = useRef(0);
 	const autoPictureInPicturePendingRef = useRef(false);
+	const autoPictureInPictureExitPendingRef = useRef(false);
 	const shouldExitAutoPictureInPictureRef = useRef(false);
 	const playbackSyncSuppressionTimerRef = useRef<number | null>(null);
 	const onRoomMediaChangedRef = useLatestRef(onRoomMediaChanged);
@@ -7964,6 +7988,10 @@ export function Player({
 			const shouldExit = force || shouldExitAutoPictureInPictureRef.current;
 			shouldExitAutoPictureInPictureRef.current = false;
 			setSafePlayerAutoPictureInPicture(player, false);
+			if (autoPictureInPictureExitPendingRef.current && !force) {
+				return;
+			}
+			autoPictureInPictureExitPendingRef.current = true;
 
 			try {
 				if (shouldExit) {
@@ -7974,10 +8002,14 @@ export function Player({
 			} catch {
 				// Returning to the app should never be blocked by PiP cleanup.
 			} finally {
-				if (shouldExit && !document.hidden) {
-					await restoreVideoAfterPictureInPicture(player, mediaProviderEl);
+				try {
+					if (shouldExit && !document.hidden) {
+						await restoreVideoAfterPictureInPicture(player, mediaProviderEl);
+					}
+					updateAutoPictureInPicturePreference(player);
+				} finally {
+					autoPictureInPictureExitPendingRef.current = false;
 				}
-				updateAutoPictureInPicturePreference(player);
 			}
 		};
 
