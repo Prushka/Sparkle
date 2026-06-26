@@ -79,6 +79,10 @@ const ROOM_BOTTOM_Y = 360;
 const GARDEN_TOP_Y = ROOM_BOTTOM_Y - 6;
 const GARDEN_ITEM_SHIFT = ROOM_BOTTOM_Y - BASE_ROOM_BOTTOM_Y;
 const FLOOR_BOUNDS = { minX: CLUB_LEFT_X + 44, maxX: 1396, minY: 116, maxY: 520 };
+const GARDEN_BEDS = [
+	{ x: 154, y: 390 + GARDEN_ITEM_SHIFT },
+	{ x: 1008, y: 382 + GARDEN_ITEM_SHIFT }
+] as const;
 
 const ROOM_WALL_COLLIDERS: Rect[] = [
 	{ x: CLUB_LEFT_X + 18, y: 16, w: CLUB_RIGHT_X - CLUB_LEFT_X, h: 100 },
@@ -1574,29 +1578,30 @@ function drawGardenPath(ctx: CanvasRenderingContext2D) {
 	ctx.fillRect(674, ROOM_BOTTOM_Y - 20, 92, 5);
 }
 
-function drawGardenBeds(ctx: CanvasRenderingContext2D) {
-	const drawBed = (x: number, y: number) => {
-		fillRoundedRect(ctx, x, y, 220, 78, 10, '#7a4f38');
-		fillRoundedRect(ctx, x + 12, y + 10, 196, 56, 8, '#6b4c2e');
-		ctx.fillStyle = '#365f37';
-		for (let row = 0; row < 3; row += 1) {
-			ctx.fillRect(x + 24, y + 20 + row * 14, 172, 4);
-			for (let i = 0; i < 7; i += 1) {
-				drawEllipse(
-					ctx,
-					x + 38 + i * 24,
-					y + 18 + row * 14,
-					5,
-					8,
-					row === 1 ? '#8ab862' : '#6f9f59'
-				);
-			}
+function drawGardenBedBase(ctx: CanvasRenderingContext2D, x: number, y: number) {
+	fillRoundedRect(ctx, x, y, 220, 78, 10, '#7a4f38');
+	fillRoundedRect(ctx, x + 12, y + 10, 196, 56, 8, '#6b4c2e');
+	ctx.fillStyle = '#365f37';
+	for (let row = 0; row < 3; row += 1) {
+		ctx.fillRect(x + 24, y + 20 + row * 14, 172, 4);
+		for (let i = 0; i < 7; i += 1) {
+			drawEllipse(ctx, x + 38 + i * 24, y + 18 + row * 14, 5, 8, row === 1 ? '#8ab862' : '#6f9f59');
 		}
-		ctx.fillStyle = '#c98755';
-		ctx.fillRect(x + 16, y + 66, 188, 5);
-	};
-	drawBed(154, 390 + GARDEN_ITEM_SHIFT);
-	drawBed(1008, 382 + GARDEN_ITEM_SHIFT);
+	}
+}
+
+function drawGardenBedFront(ctx: CanvasRenderingContext2D, x: number, y: number) {
+	ctx.fillStyle = '#c98755';
+	ctx.fillRect(x + 16, y + 66, 188, 5);
+	ctx.fillStyle = '#5d3f2f';
+	ctx.fillRect(x + 20, y + 70, 18, 8);
+	ctx.fillRect(x + 182, y + 70, 18, 8);
+	ctx.strokeStyle = '#6b472f';
+	ctx.lineWidth = 3;
+	ctx.beginPath();
+	ctx.moveTo(x + 18, y + 69.5);
+	ctx.lineTo(x + 202, y + 69.5);
+	ctx.stroke();
 }
 
 function drawGardenPond(ctx: CanvasRenderingContext2D, time: number) {
@@ -2244,7 +2249,10 @@ function drawScene(
 		{ sortY: 279, draw: () => drawCouchFront(ctx) },
 		{ sortY: 289, draw: () => drawArmchairFront(ctx) },
 		{ sortY: 301, draw: () => drawBedFront(ctx) },
-		{ sortY: 474 + GARDEN_ITEM_SHIFT, draw: () => drawGardenBeds(ctx) },
+		...GARDEN_BEDS.flatMap((bed) => [
+			{ sortY: bed.y + 56, draw: () => drawGardenBedBase(ctx, bed.x, bed.y) },
+			{ sortY: bed.y + 70, draw: () => drawGardenBedFront(ctx, bed.x, bed.y) }
+		]),
 		{ sortY: 476 + GARDEN_ITEM_SHIFT, draw: () => drawGardenPond(ctx, time) },
 		{ sortY: 512 + GARDEN_ITEM_SHIFT, draw: () => drawGardenTree(ctx) },
 		...players.map((player) => ({
