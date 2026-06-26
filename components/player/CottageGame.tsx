@@ -2099,13 +2099,7 @@ function drawFloorAndWalls(ctx: CanvasRenderingContext2D, time: number) {
 	drawYurtShell(ctx, time);
 }
 
-function drawLighting(
-	ctx: CanvasRenderingContext2D,
-	time: number,
-	cameraX: number,
-	cameraY: number,
-	canvasWidth: number
-) {
+function drawLighting(ctx: CanvasRenderingContext2D, time: number) {
 	ctx.save();
 	ctx.globalCompositeOperation = 'screen';
 	const firePulse = 0.72 + Math.sin(time / 190) * 0.08 + Math.sin(time / 73) * 0.05;
@@ -2131,23 +2125,38 @@ function drawLighting(
 	glow.addColorStop(1, 'rgba(242, 63, 125, 0)');
 	ctx.fillStyle = glow;
 	ctx.fillRect(CLUB_LEFT_X + 24, 26, CLUB_RIGHT_X - CLUB_LEFT_X, 314);
-	ctx.restore();
-
-	ctx.save();
-	ctx.globalCompositeOperation = 'multiply';
-	const vignette = ctx.createRadialGradient(
-		cameraX + canvasWidth / 2,
-		190,
-		130,
-		cameraX + canvasWidth / 2,
-		190,
-		620
+	glow = ctx.createRadialGradient(
+		520,
+		420 + GARDEN_ITEM_SHIFT,
+		10,
+		520,
+		420 + GARDEN_ITEM_SHIFT,
+		170
 	);
-	vignette.addColorStop(0, 'rgba(255,255,255,0)');
-	vignette.addColorStop(0.75, 'rgba(77,48,34,0.08)');
-	vignette.addColorStop(1, 'rgba(38,26,29,0.35)');
-	ctx.fillStyle = vignette;
-	ctx.fillRect(cameraX, cameraY, canvasWidth, GAME_HEIGHT);
+	glow.addColorStop(0, 'rgba(188, 236, 218, 0.16)');
+	glow.addColorStop(0.55, 'rgba(100, 190, 205, 0.08)');
+	glow.addColorStop(1, 'rgba(100, 190, 205, 0)');
+	ctx.fillStyle = glow;
+	ctx.fillRect(336, 344 + GARDEN_ITEM_SHIFT, 368, 230);
+	glow = ctx.createRadialGradient(562, 760, 8, 562, 770, 190);
+	glow.addColorStop(0, `rgba(255, 184, 82, ${0.34 * firePulse})`);
+	glow.addColorStop(0.46, `rgba(255, 139, 74, ${0.16 * firePulse})`);
+	glow.addColorStop(1, 'rgba(255, 139, 74, 0)');
+	ctx.fillStyle = glow;
+	ctx.fillRect(370, 610, 390, 310);
+	glow = ctx.createRadialGradient(
+		YURT_CENTER_X,
+		YURT_CENTER_Y - 132,
+		6,
+		YURT_CENTER_X,
+		YURT_CENTER_Y - 84,
+		260
+	);
+	glow.addColorStop(0, 'rgba(255, 232, 174, 0.18)');
+	glow.addColorStop(0.58, 'rgba(255, 223, 162, 0.08)');
+	glow.addColorStop(1, 'rgba(255, 223, 162, 0)');
+	ctx.fillStyle = glow;
+	ctx.fillRect(YURT_CENTER_X - 260, YURT_CENTER_Y - 210, 520, 340);
 	ctx.restore();
 }
 
@@ -2671,7 +2680,7 @@ function drawScene(
 		item.draw();
 	}
 
-	drawLighting(ctx, time, cameraX, cameraY, Math.min(canvasWidth, WORLD_WIDTH));
+	drawLighting(ctx, time);
 	ctx.restore();
 }
 
@@ -2835,7 +2844,6 @@ export function CottageGamePlaceholder() {
 				<div className="absolute right-0 top-[14%] h-[54%] w-[52%] rounded-full bg-[#3f6845]" />
 			</div>
 
-			<div className="absolute inset-0 bg-[radial-gradient(circle_at_51%_28%,rgba(255,188,91,0.28),transparent_22%),radial-gradient(circle_at_16%_62%,rgba(255,225,160,0.14),transparent_22%),linear-gradient(180deg,rgba(255,255,255,0.06),transparent_38%,rgba(30,20,18,0.22))] mix-blend-screen" />
 			<div className="absolute inset-0 bg-black/10" />
 		</div>
 	);
@@ -3451,10 +3459,6 @@ export function CottageGame({
 				className="block w-full cursor-pointer select-none"
 				style={{ height: GAME_HEIGHT }}
 				onPointerDown={handlePointerDown}
-			/>
-			<div
-				aria-hidden="true"
-				className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_-10%,rgba(255,245,213,0.17),transparent_36%),linear-gradient(180deg,rgba(255,255,255,0.08),transparent_32%,rgba(34,24,20,0.16))] mix-blend-screen"
 			/>
 		</div>
 	);
