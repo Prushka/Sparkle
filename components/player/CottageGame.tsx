@@ -1010,6 +1010,30 @@ function getDirectionalDestination(
 	return cursor;
 }
 
+function movePlayerWithKeyboard(
+	player: CottagePlayerSyncState,
+	moveX: number,
+	moveY: number,
+	deltaSeconds: number,
+	updatedAt: number
+): CottagePlayerSyncState {
+	const magnitude = Math.hypot(moveX, moveY) || 1;
+	const dx = (moveX / magnitude) * PLAYER_SPEED * deltaSeconds;
+	const dy = (moveY / magnitude) * PLAYER_SPEED * deltaSeconds;
+	const moved = moveWithCollision(player, dx, dy);
+	const didMove = moved.x !== player.x || moved.y !== player.y;
+	return {
+		...player,
+		...moved,
+		action: didMove ? 'walking' : 'idle',
+		facing: getFacingFromDelta(moveX, moveY, player.facing),
+		interactionId: undefined,
+		targetX: undefined,
+		targetY: undefined,
+		updatedAt
+	};
+}
+
 function hasPlayerChanged(a: CottagePlayerSyncState, b: CottagePlayerSyncState) {
 	return (
 		Math.abs(a.x - b.x) > 0.1 ||
@@ -2944,7 +2968,7 @@ export function CottageGame({
 	const lastFrameAtRef = useRef(0);
 	const animationFrameRef = useRef<number | null>(null);
 
-	const sendSelfSnapshot = useCallback(() => {
+	const sendSelfSnapshot = useCallback((playerSnapshot?: CottagePlayerSyncState) => {
 		const self = currentPlayerRef.current;
 		if (!self) {
 			return;
@@ -2954,7 +2978,7 @@ export function CottageGame({
 		}
 		const latestSelf = currentPlayerRef.current;
 		const latestSocket = socketRef.current;
-		const latestPlayer = latestSelf ? playersRef.current[latestSelf.id] : null;
+		const latestPlayer = playerSnapshot ?? (latestSelf ? playersRef.current[latestSelf.id] : null);
 		if (!latestPlayer || latestSocket?.readyState !== WebSocket.OPEN) {
 			return;
 		}
@@ -3202,6 +3226,7 @@ export function CottageGame({
 			const current = playersRef.current[selfId] ?? createDefaultPlayer(currentPlayerRef.current!);
 			let next = current;
 			let shouldSend = false;
+			let snapshotToSend: CottagePlayerSyncState | undefined;
 			const keys = keysRef.current;
 			const left = keys.has('arrowleft') || keys.has('a');
 			const right = keys.has('arrowright') || keys.has('d');
@@ -3233,21 +3258,21 @@ export function CottageGame({
 					actionUntilRef.current = 0;
 					shouldSend = true;
 				}
-				if (keyboardDirectionRef.current !== keyboardDirection || !targetRef.current) {
+				targetRef.current = null;
+				if (keyboardDirectionRef.current !== keyboardDirection) {
 					const destination = getDirectionalDestination(next, moveX, moveY);
 					keyboardDirectionRef.current = keyboardDirection;
 					if (distance(next.x, next.y, destination.x, destination.y) >= 5) {
-						targetRef.current = destination;
-						next = setPlayerMoveTarget(next, destination, now);
+						snapshotToSend = setPlayerMoveTarget(next, destination, now);
 						shouldSend = true;
 					} else {
-						targetRef.current = null;
 						if (next.action === 'walking') {
-							next = standPlayer(next, now);
+							snapshotToSend = standPlayer(next, now);
 							shouldSend = true;
 						}
 					}
 				}
+				next = movePlayerWithKeyboard(next, moveX, moveY, deltaSeconds, now);
 			} else if (keyboardDirectionRef.current) {
 				keyboardDirectionRef.current = '';
 				if (targetRef.current && !targetRef.current.interactionId) {
@@ -3259,7 +3284,7 @@ export function CottageGame({
 				}
 			}
 
-			if (targetRef.current) {
+			if (!hasKeyboardMovement && targetRef.current) {
 				const activeTarget = targetRef.current;
 				const previousAction = next.action;
 				next = advancePlayerTowardTarget(next, deltaSeconds, now);
@@ -3284,8 +3309,10 @@ export function CottageGame({
 					[selfId]: next
 				};
 				if (shouldSend) {
-					sendSelfSnapshot();
+					sendSelfSnapshot(snapshotToSend ?? next);
 				}
+			} else if (shouldSend && snapshotToSend) {
+				sendSelfSnapshot(snapshotToSend);
 			}
 		},
 		[sendSelfSnapshot]
