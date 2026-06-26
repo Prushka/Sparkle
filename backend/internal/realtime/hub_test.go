@@ -1340,7 +1340,7 @@ func TestSanitizeWordleSettingsDefaultsToSixTurns(t *testing.T) {
 
 func TestSanitizeCottageState(t *testing.T) {
 	targetX := 250.0
-	targetY := 999.0
+	targetY := 9999.0
 	got, ok := sanitizeCottageState(&CottageState{
 		Players: []CottagePlayerState{
 			{

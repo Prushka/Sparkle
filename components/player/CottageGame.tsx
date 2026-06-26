@@ -69,7 +69,6 @@ const PLAYER_SPEED = 124;
 const PLAYER_RADIUS = 11;
 const INTERACTION_CLICK_RADIUS = 24;
 const INTERACTION_ACTION_MS = 2500;
-const KEYBOARD_SYNC_INTERVAL_MS = 100;
 const PLAYER_ID_PATTERN = /^[A-Za-z0-9_:-]{1,128}$/;
 const COTTAGE_GAME_SURFACE_CLASS_NAME =
 	'relative mx-auto w-full max-w-[90rem] overflow-hidden bg-[#312820] outline-none focus-visible:outline-none';
@@ -984,28 +983,31 @@ function advancePlayerTowardTarget(
 	};
 }
 
-function movePlayerWithKeyboard(
+function getDirectionalDestination(
 	player: CottagePlayerSyncState,
 	moveX: number,
-	moveY: number,
-	deltaSeconds: number,
-	updatedAt: number
-): CottagePlayerSyncState {
+	moveY: number
+): MoveTarget {
 	const magnitude = Math.hypot(moveX, moveY) || 1;
-	const dx = (moveX / magnitude) * PLAYER_SPEED * deltaSeconds;
-	const dy = (moveY / magnitude) * PLAYER_SPEED * deltaSeconds;
-	const moved = moveWithCollision(player, dx, dy);
-	const didMove = moved.x !== player.x || moved.y !== player.y;
-	return {
-		...player,
-		...moved,
-		action: didMove ? 'walking' : 'idle',
-		facing: getFacingFromDelta(moveX, moveY, player.facing),
-		interactionId: undefined,
-		targetX: undefined,
-		targetY: undefined,
-		updatedAt
-	};
+	const stepX = (moveX / magnitude) * 8;
+	const stepY = (moveY / magnitude) * 8;
+	let cursor = { x: player.x, y: player.y };
+	for (let i = 0; i < 260; i += 1) {
+		const moved = moveWithCollision({ ...player, x: cursor.x, y: cursor.y }, stepX, stepY);
+		if (moved.x === cursor.x && moved.y === cursor.y) {
+			break;
+		}
+		cursor = moved;
+		if (
+			cursor.x <= FLOOR_BOUNDS.minX ||
+			cursor.x >= FLOOR_BOUNDS.maxX ||
+			cursor.y <= FLOOR_BOUNDS.minY ||
+			cursor.y >= FLOOR_BOUNDS.maxY
+		) {
+			break;
+		}
+	}
+	return cursor;
 }
 
 function hasPlayerChanged(a: CottagePlayerSyncState, b: CottagePlayerSyncState) {
@@ -2937,7 +2939,6 @@ export function CottageGame({
 	const cameraYRef = useRef(ROOM_CROP_TOP);
 	const targetRef = useRef<MoveTarget | null>(null);
 	const keyboardDirectionRef = useRef('');
-	const lastKeyboardSnapshotAtRef = useRef(0);
 	const keysRef = useRef<Set<string>>(new Set());
 	const actionUntilRef = useRef(0);
 	const lastFrameAtRef = useRef(0);
@@ -3232,22 +3233,23 @@ export function CottageGame({
 					actionUntilRef.current = 0;
 					shouldSend = true;
 				}
-				targetRef.current = null;
-				const keyboardDirectionChanged = keyboardDirectionRef.current !== keyboardDirection;
-				const beforeKeyboardMove = next;
-				next = movePlayerWithKeyboard(next, moveX, moveY, deltaSeconds, now);
-				keyboardDirectionRef.current = keyboardDirection;
-				if (
-					hasPlayerChanged(beforeKeyboardMove, next) &&
-					(keyboardDirectionChanged ||
-						now - lastKeyboardSnapshotAtRef.current >= KEYBOARD_SYNC_INTERVAL_MS)
-				) {
-					lastKeyboardSnapshotAtRef.current = now;
-					shouldSend = true;
+				if (keyboardDirectionRef.current !== keyboardDirection || !targetRef.current) {
+					const destination = getDirectionalDestination(next, moveX, moveY);
+					keyboardDirectionRef.current = keyboardDirection;
+					if (distance(next.x, next.y, destination.x, destination.y) >= 5) {
+						targetRef.current = destination;
+						next = setPlayerMoveTarget(next, destination, now);
+						shouldSend = true;
+					} else {
+						targetRef.current = null;
+						if (next.action === 'walking') {
+							next = standPlayer(next, now);
+							shouldSend = true;
+						}
+					}
 				}
 			} else if (keyboardDirectionRef.current) {
 				keyboardDirectionRef.current = '';
-				lastKeyboardSnapshotAtRef.current = 0;
 				if (targetRef.current && !targetRef.current.interactionId) {
 					targetRef.current = null;
 				}
@@ -3419,7 +3421,6 @@ export function CottageGame({
 					};
 			targetRef.current = walkTarget;
 			keyboardDirectionRef.current = '';
-			lastKeyboardSnapshotAtRef.current = 0;
 			const self = playersRef.current[selfId];
 			if (self) {
 				const now = Date.now();
@@ -3491,7 +3492,6 @@ export function CottageGame({
 				actionUntilRef.current = 0;
 				targetRef.current = null;
 				keyboardDirectionRef.current = '';
-				lastKeyboardSnapshotAtRef.current = 0;
 				sendSelfSnapshot();
 				return;
 			}
