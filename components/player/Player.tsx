@@ -298,6 +298,8 @@ const ASS_ANNOTATION_FONT_ALIASES = [ASS_DEFAULT_LATIN_FONT, 'Arial', 'Arial Uni
 const ASS_ARABIC_SCRIPT_FONT = fallbackFontsByScript.Arabic[0] ?? ASS_ARABIC_FONT;
 const ASS_BENGALI_FONT = fallbackFontsByScript.Bengali[0] ?? 'Noto Sans Bengali';
 const ASS_CHINESE_FONT = fallbackFontsByScript.Han[0] ?? 'Noto Sans SC Thin';
+// Used only for glyphs missing from the selected ASS style font; SC has the broadest shipped coverage.
+const ASS_MISSING_GLYPH_FALLBACK_FONT = ASS_CHINESE_FONT;
 const ASS_DEVANAGARI_FONT = fallbackFontsByScript.Devanagari[0] ?? 'Noto Sans Devanagari';
 const ASS_ETHIOPIC_FONT = fallbackFontsByScript.Ethiopic[0] ?? 'Noto Sans Ethiopic';
 const ASS_GEORGIAN_FONT = 'Noto Sans Georgian';
@@ -2393,9 +2395,7 @@ function getChineseSubtitleVariantVisibilityByFormat(tracks: SubtitleTrackInfo[]
 		variants.add(variant);
 		variantsByFormat.set(track.format, variants);
 	}
-	return new Map(
-		[...variantsByFormat].map(([format, variants]) => [format, variants.size > 1])
-	);
+	return new Map([...variantsByFormat].map(([format, variants]) => [format, variants.size > 1]));
 }
 
 function getSubtitleSettingsBaseLabel(track: SubtitleTrackInfo) {
@@ -5869,6 +5869,7 @@ export function Player({
 			availableFonts[family.toLowerCase()] = fontUrl;
 		}
 
+		const fallbackFontUrls = Object.values(availableFonts);
 		const attachmentFonts =
 			job.Streams?.filter(
 				(stream) =>
@@ -5886,9 +5887,9 @@ export function Player({
 			legacyWasmUrl: getPublicAssetUrl('jassub-worker.wasm.js'),
 			libassMemoryLimit: ASS_BITMAP_CACHE_LIMIT_MB,
 			libassGlyphLimit: ASS_GLYPH_CACHE_LIMIT_MB,
-			fallbackFont: defaultFallback[0].toLowerCase(),
+			fallbackFont: ASS_MISSING_GLYPH_FALLBACK_FONT.toLowerCase(),
 			availableFonts,
-			fonts: Array.from(new Set(attachmentFonts)),
+			fonts: Array.from(new Set([...fallbackFontUrls, ...attachmentFonts])),
 			useLocalFonts: false
 		};
 	}, [BASE_STATIC, job.Streams]);
