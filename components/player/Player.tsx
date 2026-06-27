@@ -276,6 +276,15 @@ const ASS_BITMAP_CACHE_LIMIT_MB = 64;
 const ASS_GLYPH_CACHE_LIMIT_MB = 16;
 const ASS_DEFAULT_LATIN_FONT = 'Liberation Sans';
 const ASS_DEFAULT_LATIN_FONT_FILE = 'default.woff2';
+const ASS_ARABIC_FONT = 'Noto Naskh Arabic';
+const ASS_ARABIC_FONT_FILE = 'NotoNaskhArabic-Regular.ttf';
+const ASS_ARABIC_FONT_ALIASES = [
+	ASS_ARABIC_FONT,
+	'Adobe Arabic',
+	'Arabic Typesetting',
+	'Geeza Pro',
+	'SF Arabic'
+];
 const ASS_ANNOTATION_FONT_ALIASES = [ASS_DEFAULT_LATIN_FONT, 'Arial', 'Arial Unicode MS'];
 const ASS_NUMBER_PATTERN = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/;
 const ROOM_TIME_SYNC_THRESHOLD_SECONDS = 6;
@@ -2764,6 +2773,16 @@ function parseAssDocument(
 	let playResY: number | null = null;
 	const styles: AssParsedStyle[] = [];
 	const events: AssParsedEvent[] = [];
+	const fontSections: string[] = [];
+	let activeFontSection: string[] | null = null;
+
+	const flushActiveFontSection = () => {
+		const fontSection = activeFontSection?.join('\n').trimEnd();
+		if (fontSection) {
+			fontSections.push(fontSection);
+		}
+		activeFontSection = null;
+	};
 
 	for (const line of lines) {
 		const playResXMatch = line.match(/^PlayResX:\s*(\d+(?:\.\d+)?)/i);
@@ -2776,7 +2795,13 @@ function parseAssDocument(
 		}
 		const sectionMatch = line.match(/^\[(.*)\]\s*$/);
 		if (sectionMatch) {
+			flushActiveFontSection();
 			section = sectionMatch[1].trim().toLowerCase();
+			activeFontSection = section === 'fonts' ? [] : null;
+			continue;
+		}
+		if (section === 'fonts') {
+			activeFontSection?.push(line);
 			continue;
 		}
 		const separatorIndex = line.indexOf(':');
@@ -2822,10 +2847,13 @@ function parseAssDocument(
 		}
 	}
 
+	flushActiveFontSection();
+
 	return {
 		content,
 		eventColumns,
 		events,
+		fontSections,
 		header: header.trimEnd(),
 		playResX: Number.isFinite(playResX) ? playResX : null,
 		playResY: Number.isFinite(playResY) ? playResY : null,
@@ -2955,10 +2983,15 @@ function scaleAssOverrideText(text: string, scale: number) {
 	);
 }
 
-function getAssRendererFontName(fontName: string) {
+function getAssRendererFontName(fontName: string, options: { phoneticAnnotation?: boolean } = {}) {
 	const normalizedFontName = fontName.trim().toLowerCase();
+	if (ASS_ARABIC_FONT_ALIASES.some((alias) => alias.toLowerCase() === normalizedFontName)) {
+		return ASS_ARABIC_FONT;
+	}
 	return ASS_ANNOTATION_FONT_ALIASES.some((alias) => alias.toLowerCase() === normalizedFontName)
-		? ASS_DEFAULT_LATIN_FONT
+		? options.phoneticAnnotation
+			? ASS_DEFAULT_LATIN_FONT
+			: fontName
 		: fontName;
 }
 
@@ -2970,14 +3003,61 @@ function isAssPhoneticAnnotationOverride(text: string) {
 
 function normalizeAssRendererOverrideFonts(text: string) {
 	return text.replace(/\{([^}]*)\}/g, (block, overrideText: string) => {
-		if (!isAssPhoneticAnnotationOverride(overrideText)) {
-			return block;
-		}
+		const phoneticAnnotation = isAssPhoneticAnnotationOverride(overrideText);
 		return `{${overrideText.replace(/\\fn([^\\}]*)/gi, (match, fontName: string) => {
-			const rendererFontName = getAssRendererFontName(fontName);
+			const rendererFontName = getAssRendererFontName(fontName, { phoneticAnnotation });
 			return rendererFontName === fontName ? match : `\\fn${rendererFontName}`;
 		})}}`;
 	});
+}
+
+function normalizeAssRendererStyleFonts(content: string) {
+	let section = '';
+	let styleColumns = ASS_STYLE_COLUMNS.map(String);
+	return content
+		.replace(/\r\n?/g, '\n')
+		.split('\n')
+		.map((line) => {
+			const sectionMatch = line.match(/^\[(.*)\]\s*$/);
+			if (sectionMatch) {
+				section = sectionMatch[1].trim().toLowerCase();
+				return line;
+			}
+			if (section !== 'v4+ styles' && section !== 'v4 styles') {
+				return line;
+			}
+			const separatorIndex = line.indexOf(':');
+			if (separatorIndex === -1) {
+				return line;
+			}
+			const key = line.slice(0, separatorIndex).trim().toLowerCase();
+			const rawValue = line.slice(separatorIndex + 1).trim();
+			if (key === 'format') {
+				styleColumns = rawValue.split(',').map((value) => value.trim());
+				return line;
+			}
+			if (key !== 'style') {
+				return line;
+			}
+			const fontNameIndex = styleColumns.findIndex(
+				(column) => normalizeAssColumnName(column) === 'fontname'
+			);
+			if (fontNameIndex === -1) {
+				return line;
+			}
+			const values = splitAssValues(rawValue, styleColumns.length);
+			const rendererFontName = getAssRendererFontName(values[fontNameIndex] ?? '');
+			if (rendererFontName === values[fontNameIndex]) {
+				return line;
+			}
+			values[fontNameIndex] = rendererFontName;
+			return `${line.slice(0, separatorIndex + 1)} ${values.join(',')}`;
+		})
+		.join('\n');
+}
+
+function normalizeAssRendererFonts(content: string) {
+	return normalizeAssRendererOverrideFonts(normalizeAssRendererStyleFonts(content));
 }
 
 function createNamespacedAssStyleValues(
@@ -3033,6 +3113,22 @@ function serializeMergedAssHeader(document: AssParsedDocument) {
 	return document.header.trimEnd() || '[Script Info]\nScriptType: v4.00+';
 }
 
+function serializeMergedAssFontSections(documents: AssParsedDocument[]) {
+	const fontSections: string[] = [];
+	const emittedFontSections = new Set<string>();
+	for (const document of documents) {
+		for (const fontSection of document.fontSections) {
+			const normalizedFontSection = fontSection.trim();
+			if (!normalizedFontSection || emittedFontSections.has(normalizedFontSection)) {
+				continue;
+			}
+			emittedFontSections.add(normalizedFontSection);
+			fontSections.push(normalizedFontSection);
+		}
+	}
+	return fontSections.length > 0 ? `\n[Fonts]\n${fontSections.join('\n')}\n` : '';
+}
+
 function serializeMergedAss(
 	documents: AssParsedDocument[],
 	scale = getMergedSubtitleFontScale(documents.length)
@@ -3077,7 +3173,7 @@ ${styles.join('\n')}
 [Events]
 Format: ${ASS_EVENT_COLUMNS.join(', ')}
 ${events.join('\n')}
-`;
+${serializeMergedAssFontSections(documents)}`;
 }
 
 async function buildMergedSubtitleContent(
@@ -4469,6 +4565,7 @@ type AssParsedDocument = {
 	content: string;
 	eventColumns: string[];
 	events: AssParsedEvent[];
+	fontSections: string[];
 	header: string;
 	playResX: number | null;
 	playResY: number | null;
@@ -4588,7 +4685,7 @@ async function fetchAssRendererTrackContent(src: string, signal?: AbortSignal) {
 	if (!response.ok) {
 		throw new Error(`Unable to load ASS subtitle track (${response.status})`);
 	}
-	return normalizeAssRendererOverrideFonts(await response.text());
+	return normalizeAssRendererFonts(await response.text());
 }
 
 function closeAssRenderImages(payload: JASSUBRenderPayload | null | undefined) {
@@ -5335,8 +5432,12 @@ export function Player({
 	const assRendererConfig = useMemo<JASSUBRendererConfig>(() => {
 		const availableFonts: Record<string, string> = {};
 		const latinFontUrl = getPublicAssetUrl(ASS_DEFAULT_LATIN_FONT_FILE);
+		const arabicFontUrl = getPublicAssetUrl(ASS_ARABIC_FONT_FILE);
 
 		availableFonts[ASS_DEFAULT_LATIN_FONT.toLowerCase()] = latinFontUrl;
+		for (const family of ASS_ARABIC_FONT_ALIASES) {
+			availableFonts[family.toLowerCase()] = arabicFontUrl;
+		}
 
 		for (const [family, filename] of [defaultFallback, ...Object.values(fallbackFontsMap)]) {
 			if (!family || !filename) {

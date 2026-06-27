@@ -652,9 +652,11 @@ export const languageSrcMap: { [key: string]: string } = {
 export const defaultFallback: string[] = ['Noto Sans SC Thin', 'NotoSansSC-VariableFont_wght.ttf'];
 
 export const fallbackFontsMap: { [key: string]: string[] } = {
+	'ar-SA': ['Noto Naskh Arabic', 'NotoNaskhArabic-Regular.ttf'],
 	'zh-CN': ['Noto Sans SC Thin', 'NotoSansSC-VariableFont_wght.ttf'],
 	'ja-JP': ['Noto Sans JP Thin', 'NotoSansJP-VariableFont_wght.ttf'],
-	'ko-KR': ['NanumGothicCoding', 'NanumGothicCoding-Regular.ttf']
+	'ko-KR': ['NanumGothicCoding', 'NanumGothicCoding-Regular.ttf'],
+	'ur-PK': ['Noto Naskh Arabic', 'NotoNaskhArabic-Regular.ttf']
 };
 
 export function formatSeconds(seconds: number | undefined): string {
