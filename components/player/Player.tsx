@@ -4637,15 +4637,21 @@ function SubtitlesMenuSection({
 			timeout = 0;
 		};
 
-		const refreshSubtitleMenuLayout = () => {
+		const refreshSubtitleMenuLayout = (options: { resetScroll?: boolean } = {}) => {
 			cancelScheduledRefresh();
-			resetSubtitleMenuScroll();
+			if (options.resetScroll) {
+				resetSubtitleMenuScroll();
+			}
 			dispatchResize();
 			firstFrame = window.requestAnimationFrame(() => {
-				resetSubtitleMenuScroll();
+				if (options.resetScroll) {
+					resetSubtitleMenuScroll();
+				}
 				dispatchResize();
 				secondFrame = window.requestAnimationFrame(() => {
-					resetSubtitleMenuScroll();
+					if (options.resetScroll) {
+						resetSubtitleMenuScroll();
+					}
 					dispatchResize();
 					thirdFrame = window.requestAnimationFrame(dispatchResize);
 				});
@@ -4653,28 +4659,17 @@ function SubtitlesMenuSection({
 			timeout = window.setTimeout(dispatchResize, 120);
 		};
 
-		const handleMenuKeyDown = (event: KeyboardEvent) => {
-			if (
-				event.key === 'Enter' ||
-				event.key === ' ' ||
-				event.key === 'ArrowRight' ||
-				event.key === 'ArrowLeft'
-			) {
-				refreshSubtitleMenuLayout();
-			}
-		};
-
-		refreshSubtitleMenuLayout();
+		refreshSubtitleMenuLayout({ resetScroll: true });
 
 		let resizeObserver: ResizeObserver | null = null;
 		if (typeof ResizeObserver !== 'undefined') {
-			resizeObserver = new ResizeObserver(refreshSubtitleMenuLayout);
+			resizeObserver = new ResizeObserver(() => refreshSubtitleMenuLayout());
 			resizeObserver.observe(submenuItems ?? group);
 		}
 
 		let mutationObserver: MutationObserver | null = null;
 		if (typeof MutationObserver !== 'undefined') {
-			mutationObserver = new MutationObserver(refreshSubtitleMenuLayout);
+			mutationObserver = new MutationObserver(() => refreshSubtitleMenuLayout());
 			for (const target of [menuRoot, submenuItems, rootItems]) {
 				mutationObserver.observe(target ?? group, {
 					attributeFilter: ['aria-hidden', 'class', 'data-open', 'hidden', 'style'],
@@ -4683,17 +4678,12 @@ function SubtitlesMenuSection({
 			}
 		}
 
-		menuRoot?.addEventListener('click', refreshSubtitleMenuLayout);
-		menuRoot?.addEventListener('keydown', handleMenuKeyDown);
-
 		return () => {
 			resizeObserver?.disconnect();
 			mutationObserver?.disconnect();
-			menuRoot?.removeEventListener('click', refreshSubtitleMenuLayout);
-			menuRoot?.removeEventListener('keydown', handleMenuKeyDown);
 			cancelScheduledRefresh();
 		};
-	}, [activeFormat, formatTracks.length, selectedTrackSrcs.size]);
+	}, [activeFormat, formatTracks.length]);
 
 	if (formats.length === 0) {
 		return null;
