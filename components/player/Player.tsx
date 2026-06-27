@@ -3910,6 +3910,14 @@ async function exitPlayerPictureInPicture(player: MediaPlayerInstance | null, tr
 		return false;
 	}
 
+	let playerExited = false;
+	try {
+		await player.exitPictureInPicture(trigger);
+		playerExited = true;
+	} catch {
+		// The player can report no active PiP while the native video element is still stuck there.
+	}
+
 	const nativeExited = await exitNativePictureInPicture(player);
 	let staleStateSynced = syncStalePlayerPictureInPictureState(player);
 	if (staleStateSynced) {
@@ -3918,19 +3926,20 @@ async function exitPlayerPictureInPicture(player: MediaPlayerInstance | null, tr
 	if (getSafePlayerPictureInPicture(player)) {
 		try {
 			await player.exitPictureInPicture(trigger);
+			playerExited = true;
 			staleStateSynced = syncStalePlayerPictureInPictureState(player) || staleStateSynced;
 			await waitForPictureInPictureExit(player);
 			return true;
 		} catch {
 			staleStateSynced = syncStalePlayerPictureInPictureState(player) || staleStateSynced;
 			await waitForPictureInPictureExit(player);
-			return nativeExited || staleStateSynced;
+			return playerExited || nativeExited || staleStateSynced;
 		}
 	}
-	if (nativeExited || staleStateSynced) {
+	if (playerExited || nativeExited || staleStateSynced) {
 		await waitForPictureInPictureExit(player);
 	}
-	return nativeExited || staleStateSynced;
+	return playerExited || nativeExited || staleStateSynced;
 }
 
 function isPictureInPictureControlEvent(event: Event, root: HTMLElement | null | undefined) {
@@ -3941,6 +3950,13 @@ function isPictureInPictureControlEvent(event: Event, root: HTMLElement | null |
 		'.vds-pip-button, [data-media-tooltip="pip"], media-pip-button'
 	);
 	return Boolean(pipControl && (!root || root.contains(pipControl)));
+}
+
+function isEditableKeyboardEventTarget(target: EventTarget | null) {
+	if (typeof Element === 'undefined' || !(target instanceof Element)) {
+		return false;
+	}
+	return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
 }
 
 function isProbablyIOSWebKit() {
@@ -8562,10 +8578,10 @@ export function Player({
 				return;
 			}
 
-			shouldExitAutoPictureInPictureRef.current = true;
 			if (updateAutoPictureInPicturePreference(player, true)) {
 				await waitForTimeout(250);
 				if (document.hidden && getSafePlayerPictureInPicture(player)) {
+					shouldExitAutoPictureInPictureRef.current = true;
 					return;
 				}
 			}
@@ -8577,13 +8593,14 @@ export function Player({
 			const requestId = ++autoPictureInPictureRequestIdRef.current;
 			autoPictureInPicturePendingRef.current = true;
 			try {
-				await enterPlayerPictureInPicture(player, trigger);
-				if (
-					autoPictureInPictureRequestIdRef.current !== requestId &&
-					!document.hidden &&
-					getSafePlayerPictureInPicture(player)
-				) {
+				const entered = await enterPlayerPictureInPicture(player, trigger);
+				if (entered && autoPictureInPictureRequestIdRef.current === requestId && document.hidden) {
+					shouldExitAutoPictureInPictureRef.current = true;
+				}
+				if (autoPictureInPictureRequestIdRef.current !== requestId && !document.hidden) {
+					shouldExitAutoPictureInPictureRef.current = false;
 					await exitPlayerPictureInPicture(player, trigger);
+					await restoreVideoAfterPictureInPicture(player, mediaProviderEl);
 				}
 			} catch {
 				// Auto PiP is browser/permission dependent; playback should continue normally.
@@ -8597,25 +8614,28 @@ export function Player({
 		const exitAutoPictureInPicture = async (trigger?: Event, force = false) => {
 			autoPictureInPictureRequestIdRef.current += 1;
 			autoPictureInPicturePendingRef.current = false;
-			const shouldExit = force || shouldExitAutoPictureInPictureRef.current;
+			const shouldRestoreAutoPictureInPicture = shouldExitAutoPictureInPictureRef.current;
+			const hadPictureInPicture = getSafePlayerPictureInPicture(player);
 			shouldExitAutoPictureInPictureRef.current = false;
-			setSafePlayerAutoPictureInPicture(player, false);
+			if (!force && !shouldRestoreAutoPictureInPicture && !hadPictureInPicture) {
+				updateAutoPictureInPicturePreference(player);
+				return;
+			}
 			if (autoPictureInPictureExitPendingRef.current && !force) {
 				return;
 			}
 			autoPictureInPictureExitPendingRef.current = true;
 
 			try {
-				if (shouldExit) {
+				if (force || shouldRestoreAutoPictureInPicture || hadPictureInPicture) {
+					setSafePlayerAutoPictureInPicture(player, false);
 					await exitPlayerPictureInPicture(player, trigger);
-				} else {
-					syncStalePlayerPictureInPictureState(player);
 				}
 			} catch {
 				// Returning to the app should never be blocked by PiP cleanup.
 			} finally {
 				try {
-					if (shouldExit && !document.hidden) {
+					if (!document.hidden) {
 						await restoreVideoAfterPictureInPicture(player, mediaProviderEl);
 					}
 					updateAutoPictureInPicturePreference(player);
@@ -8627,7 +8647,7 @@ export function Player({
 
 		const handleForeground = (event?: Event) => {
 			inBgRef.current = false;
-			void exitAutoPictureInPicture(event);
+			void exitAutoPictureInPicture(event, true);
 		};
 
 		const handleBackground = (event?: Event) => {
@@ -8658,7 +8678,7 @@ export function Player({
 		};
 		window.addEventListener('pageshow', pageShow);
 		const windowFocus = (event: FocusEvent) => {
-			if (!document.hidden) {
+			if (!document.hidden && inBgRef.current) {
 				handleForeground(event);
 			}
 		};
@@ -8686,9 +8706,26 @@ export function Player({
 			}
 			pictureInPictureControlActivation(event);
 		};
+		const pictureInPictureShortcutKeyDown = (event: KeyboardEvent) => {
+			if (
+				event.defaultPrevented ||
+				event.metaKey ||
+				event.ctrlKey ||
+				event.altKey ||
+				event.key.toLowerCase() !== 'i' ||
+				isEditableKeyboardEventTarget(event.target) ||
+				!getSafePlayerPictureInPicture(player)
+			) {
+				return;
+			}
+			event.preventDefault();
+			event.stopImmediatePropagation();
+			void exitAutoPictureInPicture(event, true);
+		};
 		player.el?.addEventListener('pointerup', pictureInPictureControlActivation, true);
 		player.el?.addEventListener('click', pictureInPictureControlActivation, true);
 		player.el?.addEventListener('keydown', pictureInPictureControlKeyDown, true);
+		document.addEventListener('keydown', pictureInPictureShortcutKeyDown, true);
 		const mouseMove = () => {
 			if (chatFocusedSecsRef.current !== 0) {
 				chatFocusedSecsRef.current = 0;
@@ -8801,6 +8838,7 @@ export function Player({
 			player.el?.removeEventListener('pointerup', pictureInPictureControlActivation, true);
 			player.el?.removeEventListener('click', pictureInPictureControlActivation, true);
 			player.el?.removeEventListener('keydown', pictureInPictureControlKeyDown, true);
+			document.removeEventListener('keydown', pictureInPictureShortcutKeyDown, true);
 			document.removeEventListener('mousemove', mouseMove);
 			player.el?.removeEventListener('mouseleave', mouseLeave);
 		};
