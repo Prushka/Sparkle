@@ -2406,6 +2406,68 @@ function isManagedSubtitleTextTrack(track: any, tracks: SubtitleTrackInfo[]) {
 	return tracks.some((info) => track?.id === info.src || track?.src === info.src);
 }
 
+function getCaptionTextTrackOptionKey(track: any) {
+	const kind = track?.kind;
+	if (kind !== 'captions' && kind !== 'subtitles') {
+		return null;
+	}
+	const id = typeof track?.id === 'string' ? track.id : '';
+	const label = typeof track?.label === 'string' ? track.label.toLowerCase() : '';
+	if (!id && !label) {
+		return null;
+	}
+	return `${id}:${kind}-${label}`;
+}
+
+function removeDuplicateCaptionTextTracks(textTracks: any, preferredTrack?: any) {
+	if (!textTracks?.remove) {
+		return;
+	}
+	const tracksByKey = new Map<string, any[]>();
+	for (const track of toArray(textTracks)) {
+		const key = getCaptionTextTrackOptionKey(track);
+		if (!key) {
+			continue;
+		}
+		const matches = tracksByKey.get(key);
+		if (matches) {
+			matches.push(track);
+		} else {
+			tracksByKey.set(key, [track]);
+		}
+	}
+	for (const tracks of tracksByKey.values()) {
+		if (tracks.length < 2) {
+			continue;
+		}
+		const trackToKeep =
+			(preferredTrack && tracks.includes(preferredTrack) ? preferredTrack : null) ??
+			tracks.find((track) => track?.mode === 'showing') ??
+			tracks[tracks.length - 1];
+		for (const track of tracks) {
+			if (track !== trackToKeep) {
+				removePlayerTextTrack(textTracks, track);
+			}
+		}
+	}
+}
+
+function addUniquePlayerTextTrack(textTracks: any, textTrack: any) {
+	if (!textTracks?.add || !textTrack) {
+		return;
+	}
+	const nextKey = getCaptionTextTrackOptionKey(textTrack);
+	if (nextKey) {
+		for (const existingTrack of toArray(textTracks)) {
+			if (existingTrack !== textTrack && getCaptionTextTrackOptionKey(existingTrack) === nextKey) {
+				removePlayerTextTrack(textTracks, existingTrack);
+			}
+		}
+	}
+	textTracks.add(textTrack);
+	removeDuplicateCaptionTextTracks(textTracks, textTrack);
+}
+
 function showPlayerSubtitleTextTrack(
 	player: MediaPlayerInstance | null,
 	tracks: SubtitleTrackInfo[],
@@ -2499,7 +2561,7 @@ function restoreSubtitleTextTrackOrder(
 			replacement && trackInfo.src === replacement.primarySrc
 				? replacement.textTrack
 				: originalTrackBySrc.get(trackInfo.src) || createSubtitleTextTrack(trackInfo);
-		textTracks.add(textTrack);
+		addUniquePlayerTextTrack(textTracks, textTrack);
 		setPlayerTextTrackMode(textTrack, modeBySrc.get(trackInfo.src) ?? 'disabled');
 	}
 }
@@ -6885,7 +6947,7 @@ export function Player({
 		};
 	}, [assRendererConfig, playerEl]);
 
-	useEffect(() => {
+	useLayoutEffect(() => {
 		if (!playerEl) {
 			return;
 		}
@@ -7056,7 +7118,7 @@ export function Player({
 					};
 					subtitleTracks.push(track);
 					const textTrack = createSubtitleTextTrack(track);
-					textTracks.add(textTrack);
+					addUniquePlayerTextTrack(textTracks, textTrack);
 					if (track.default) {
 						defaultSubtitleTextTrack = textTrack;
 					}
@@ -7923,6 +7985,10 @@ export function Player({
 			setSelectedSubtitleTrack((event as CustomEvent).detail);
 		};
 
+		const dedupeCaptionTracks = () => {
+			removeDuplicateCaptionTextTracks(playerEl.textTracks);
+		};
+
 		const handleTextTrackChangeRequest = (event: Event) => {
 			const detail = (event as CustomEvent).detail;
 			if (detail?.mode !== 'showing') {
@@ -7949,7 +8015,10 @@ export function Player({
 		playerEl.addEventListener?.('text-track-change', handleTextTrackChange);
 		playerEl.addEventListener?.('media-text-track-change-request', handleTextTrackChangeRequest);
 		try {
+			dedupeCaptionTracks();
+			playerEl.textTracks?.addEventListener?.('add', dedupeCaptionTracks);
 			playerEl.textTracks?.addEventListener?.('mode-change', handleTextTrackChange);
+			playerEl.textTracks?.addEventListener?.('mode-change', dedupeCaptionTracks);
 		} catch {
 			// Text tracks can disappear during provider teardown.
 		}
@@ -7961,7 +8030,9 @@ export function Player({
 				handleTextTrackChangeRequest
 			);
 			try {
+				playerEl.textTracks?.removeEventListener?.('add', dedupeCaptionTracks);
 				playerEl.textTracks?.removeEventListener?.('mode-change', handleTextTrackChange);
+				playerEl.textTracks?.removeEventListener?.('mode-change', dedupeCaptionTracks);
 			} catch {
 				// Text tracks can disappear during provider teardown.
 			}
