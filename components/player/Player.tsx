@@ -224,6 +224,7 @@ type LocalSystemMessage = Chat & {
 };
 
 type SubtitleTrackFormat = 'ass' | 'srt' | 'sup' | 'vtt';
+type ChineseSubtitleVariant = 'Simplified' | 'Traditional';
 
 type SubtitleTrackInfo = {
 	annotated: boolean;
@@ -2361,6 +2362,42 @@ function getSubtitleTracksByFormat(
 	return tracks.filter((track) => track.format === format).sort(compareSubtitleTrackNames);
 }
 
+function getChineseSubtitleVariant(language: string): ChineseSubtitleVariant | null {
+	const normalizedLanguage = language.trim().toLowerCase();
+	if (
+		normalizedLanguage === 'zh-cn' ||
+		normalizedLanguage === 'zh-hans' ||
+		normalizedLanguage === 'zh-sg'
+	) {
+		return 'Simplified';
+	}
+	if (
+		normalizedLanguage === 'zh-tw' ||
+		normalizedLanguage === 'zh-hant' ||
+		normalizedLanguage === 'zh-hk' ||
+		normalizedLanguage === 'zh-mo'
+	) {
+		return 'Traditional';
+	}
+	return null;
+}
+
+function getChineseSubtitleVariantVisibilityByFormat(tracks: SubtitleTrackInfo[]) {
+	const variantsByFormat = new Map<SubtitleTrackFormat, Set<ChineseSubtitleVariant>>();
+	for (const track of tracks) {
+		const variant = getChineseSubtitleVariant(track.language);
+		if (!variant) {
+			continue;
+		}
+		const variants = variantsByFormat.get(track.format) ?? new Set<ChineseSubtitleVariant>();
+		variants.add(variant);
+		variantsByFormat.set(track.format, variants);
+	}
+	return new Map(
+		[...variantsByFormat].map(([format, variants]) => [format, variants.size > 1])
+	);
+}
+
 function getSubtitleSettingsBaseLabel(track: SubtitleTrackInfo) {
 	return track.label.replace(/^\s*\d+\s*-\s*/, '').trim() || track.label;
 }
@@ -2377,11 +2414,35 @@ function formatSubtitleSettingsLabel(label: string) {
 	return [formattedLabel, ...suffixes].filter(Boolean).join(' - ') || label;
 }
 
+function formatChineseSubtitleSettingsLabel(
+	label: string,
+	variant: ChineseSubtitleVariant,
+	showVariant: boolean
+) {
+	let formattedLabel = label
+		.replace(/\bsimplified\s+chinese\b/gi, 'Chinese - Simplified')
+		.replace(/\btraditional\s+chinese\b/gi, 'Chinese - Traditional')
+		.replace(/\bChinese\s*-\s*simplified\b/gi, 'Chinese - Simplified')
+		.replace(/\bChinese\s*-\s*traditional\b/gi, 'Chinese - Traditional');
+
+	if (showVariant && !new RegExp(`\\bChinese\\s*-\\s*${variant}\\b`).test(formattedLabel)) {
+		formattedLabel = formattedLabel.replace(/\bChinese\b/, `Chinese - ${variant}`);
+	}
+	if (!showVariant) {
+		formattedLabel = formattedLabel.replace(
+			new RegExp(`\\bChinese\\s*-\\s*${variant}\\b`, 'g'),
+			'Chinese'
+		);
+	}
+	return formattedLabel;
+}
+
 function getSubtitleSettingsDuplicateKey(track: SubtitleTrackInfo) {
 	return [track.format, track.language, track.annotated ? 'annotated' : 'plain'].join('\t');
 }
 
 function withSubtitleSettingsLabels(tracks: SubtitleTrackInfo[]) {
+	const showChineseVariantByFormat = getChineseSubtitleVariantVisibilityByFormat(tracks);
 	const entries = tracks.map((track, index) => ({
 		baseLabel: getSubtitleSettingsBaseLabel(track),
 		index,
@@ -2422,9 +2483,17 @@ function withSubtitleSettingsLabels(tracks: SubtitleTrackInfo[]) {
 	return entries.map((entry) => {
 		const suffix = suffixes.get(entry.index);
 		const label = suffix ? `${entry.baseLabel} (${suffix})` : entry.baseLabel;
+		const settingsLabel = formatSubtitleSettingsLabel(label);
+		const chineseVariant = getChineseSubtitleVariant(entry.track.language);
 		return {
 			...entry.track,
-			settingsLabel: formatSubtitleSettingsLabel(label)
+			settingsLabel: chineseVariant
+				? formatChineseSubtitleSettingsLabel(
+						settingsLabel,
+						chineseVariant,
+						showChineseVariantByFormat.get(entry.track.format) ?? false
+					)
+				: settingsLabel
 		};
 	});
 }

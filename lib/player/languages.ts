@@ -36,8 +36,8 @@ export type CueForgeLanguageMetadata = {
 
 export const cueForgeLanguages = [
 	{ ids: ['eng', 'en'], name: 'English' },
-	{ ids: ['chi', 'zho', 'zh', 'zh-hans', 'zh-cn', 'zh-sg', 'cmn'], name: 'SIMPLIFIED Chinese' },
-	{ ids: ['zht', 'zh-hant', 'zh-tw', 'zh-hk', 'zh-mo'], name: 'TRADITIONAL Chinese' },
+	{ ids: ['chi', 'zho', 'zh', 'zh-hans', 'zh-cn', 'zh-sg', 'cmn'], name: 'Chinese - Simplified' },
+	{ ids: ['zht', 'zh-hant', 'zh-tw', 'zh-hk', 'zh-mo'], name: 'Chinese - Traditional' },
 	{ ids: ['spa', 'es'], name: 'Spanish' },
 	{ ids: ['hin', 'hi'], name: 'Hindi' },
 	{ ids: ['arb'], name: 'Modern Standard Arabic' },
@@ -155,8 +155,8 @@ export const cueForgeLanguages = [
 
 export const cueForgeLanguageMetadataByName = {
 	English: { languageTag: 'en-US', script: 'Latin' },
-	'SIMPLIFIED Chinese': { languageTag: 'zh-CN', script: 'Han' },
-	'TRADITIONAL Chinese': { languageTag: 'zh-TW', script: 'Han' },
+	'Chinese - Simplified': { languageTag: 'zh-CN', script: 'Han' },
+	'Chinese - Traditional': { languageTag: 'zh-TW', script: 'Han' },
 	Spanish: { languageTag: 'es-ES', script: 'Latin' },
 	Hindi: { languageTag: 'hi-IN', script: 'Devanagari' },
 	'Modern Standard Arabic': { languageTag: 'arb', script: 'Arabic' },
