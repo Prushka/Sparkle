@@ -549,8 +549,9 @@ const AUDIO_LANGUAGE_PRIORITY = ['jpn', 'eng', 'chi'];
 const SUBTITLE_LANGUAGE_PRIORITY = ['en'];
 const DEFAULT_SUBTITLE_FORMAT_PRIORITY = ['ass', 'vtt', 'srt', 'sup'] as const;
 const STACKABLE_SUBTITLE_FORMATS = new Set<SubtitleTrackFormat>(['ass', 'vtt']);
-const MAX_MERGED_SUBTITLE_DENSITY = 5;
 const MERGED_SUBTITLE_FONT_SCALE_STEP = 0.12;
+const MERGED_ASS_SUBTITLE_MIN_FONT_SCALE = 0.7;
+const MERGED_VTT_SUBTITLE_MIN_FONT_SCALE = 0.5;
 
 const PLAYER_KEY_SHORTCUTS: MediaKeyShortcuts = {
 	togglePaused: 'k Space',
@@ -2329,13 +2330,12 @@ function saveStoredSubtitleLayerSelections(
 	window.localStorage.setItem(SUBTITLE_LAYERS_STORAGE_KEY, JSON.stringify(storedSelections));
 }
 
-function getMergedSubtitleFontScale(count: number) {
-	return Math.max(
-		0.7,
-		1 -
-			Math.max(0, Math.min(count, MAX_MERGED_SUBTITLE_DENSITY) - 1) *
-				MERGED_SUBTITLE_FONT_SCALE_STEP
-	);
+function getMergedSubtitleFontScale(count: number, minScale = MERGED_ASS_SUBTITLE_MIN_FONT_SCALE) {
+	return Math.max(minScale, 1 - Math.max(0, count - 1) * MERGED_SUBTITLE_FONT_SCALE_STEP);
+}
+
+function getMergedSubtitleMinFontScale(format: SubtitleTrackFormat | null) {
+	return format === 'vtt' ? MERGED_VTT_SUBTITLE_MIN_FONT_SCALE : MERGED_ASS_SUBTITLE_MIN_FONT_SCALE;
 }
 
 function getStackableSubtitleTracks(
@@ -9106,7 +9106,12 @@ export function Player({
 		extraSubtitleLayerSrcs
 	);
 	const mediaPlayerStyle: CSSProperties & Record<`--${string}`, string> = {
-		'--sparkle-subtitle-font-scale': String(getMergedSubtitleFontScale(selectedSubtitleLayerCount))
+		'--sparkle-subtitle-font-scale': String(
+			getMergedSubtitleFontScale(
+				selectedSubtitleLayerCount,
+				getMergedSubtitleMinFontScale(selectedSubtitleTrack?.format ?? null)
+			)
+		)
 	};
 	const activeSubtitleFormat = selectedSubtitleTrack?.format ?? null;
 	const subtitlesSettingsSummary = selectedSubtitleTrack
