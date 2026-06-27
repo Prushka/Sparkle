@@ -76,6 +76,7 @@ import {
 	codecMap,
 	compareSubtitleStreams,
 	defaultFallback,
+	fallbackFontsByScript,
 	fallbackFontsMap,
 	formatMbps,
 	formatPair,
@@ -284,21 +285,49 @@ const ASS_ARABIC_FONT_ALIASES = [
 	ASS_ARABIC_FONT,
 	'Adobe Arabic',
 	'Arabic Typesetting',
+	'Andalus',
 	'Geeza Pro',
+	'Sakkal Majalla',
+	'Simplified Arabic',
+	'Traditional Arabic',
+	'Urdu Typesetting',
 	'SF Arabic'
 ];
 const ASS_ANNOTATION_FONT_ALIASES = [ASS_DEFAULT_LATIN_FONT, 'Arial', 'Arial Unicode MS'];
-const ASS_CHINESE_FONT = fallbackFontsMap['zh-CN']?.[0] ?? 'Noto Sans SC Thin';
-const ASS_JAPANESE_FONT = fallbackFontsMap['ja-JP']?.[0] ?? 'Noto Sans JP Thin';
-const ASS_KOREAN_FONT = fallbackFontsMap['ko-KR']?.[0] ?? 'NanumGothicCoding';
+const ASS_ARABIC_SCRIPT_FONT = fallbackFontsByScript.Arabic[0] ?? ASS_ARABIC_FONT;
+const ASS_BENGALI_FONT = fallbackFontsByScript.Bengali[0] ?? 'Noto Sans Bengali';
+const ASS_CHINESE_FONT = fallbackFontsByScript.Han[0] ?? 'Noto Sans SC Thin';
+const ASS_DEVANAGARI_FONT = fallbackFontsByScript.Devanagari[0] ?? 'Noto Sans Devanagari';
+const ASS_ETHIOPIC_FONT = fallbackFontsByScript.Ethiopic[0] ?? 'Noto Sans Ethiopic';
+const ASS_GEORGIAN_FONT = 'Noto Sans Georgian';
+const ASS_GUJARATI_FONT = fallbackFontsByScript.Gujarati[0] ?? 'Noto Sans Gujarati';
+const ASS_GURMUKHI_FONT = fallbackFontsByScript.Gurmukhi[0] ?? 'Noto Sans Gurmukhi';
+const ASS_HEBREW_FONT = fallbackFontsByScript.Hebrew[0] ?? 'Noto Sans Hebrew';
+const ASS_JAPANESE_FONT = fallbackFontsByScript.Japanese[0] ?? 'Noto Sans JP Thin';
+const ASS_KANNADA_FONT = fallbackFontsByScript.Kannada[0] ?? 'Noto Sans Kannada';
+const ASS_KHMER_FONT = fallbackFontsByScript.Khmer[0] ?? 'Noto Sans Khmer';
+const ASS_KOREAN_FONT = fallbackFontsByScript.Hangul[0] ?? 'NanumGothicCoding';
+const ASS_LAO_FONT = 'Noto Sans Lao';
+const ASS_MALAYALAM_FONT = fallbackFontsByScript.Malayalam[0] ?? 'Noto Sans Malayalam';
+const ASS_MYANMAR_FONT = fallbackFontsByScript.Myanmar[0] ?? 'Noto Sans Myanmar';
+const ASS_NKO_FONT = fallbackFontsByScript.NKo[0] ?? 'Noto Sans NKo';
+const ASS_ORIYA_FONT = fallbackFontsByScript.Oriya[0] ?? 'Noto Sans Oriya';
+const ASS_SINHALA_FONT = fallbackFontsByScript.Sinhala[0] ?? 'Noto Sans Sinhala';
+const ASS_TAMIL_FONT = fallbackFontsByScript.Tamil[0] ?? 'Noto Sans Tamil';
+const ASS_TELUGU_FONT = fallbackFontsByScript.Telugu[0] ?? 'Noto Sans Telugu';
+const ASS_THAI_FONT = fallbackFontsByScript.Thai[0] ?? 'Noto Sans Thai';
+const ASS_TIFINAGH_FONT = fallbackFontsByScript.Tifinagh[0] ?? 'Noto Sans Tifinagh';
 const ASS_COMMON_PLATFORM_FONT_ALIASES = [
 	'Aharoni',
 	'Apple SD Gothic Neo',
 	'Arial',
 	'Arial Black',
+	'Arial Cyr',
+	'Arial Greek',
 	'Arial Narrow',
 	'Arial Unicode MS',
 	'Aparajita',
+	'Batang',
 	'Browallia New',
 	'Calibri',
 	'Cambria',
@@ -308,10 +337,15 @@ const ASS_COMMON_PLATFORM_FONT_ALIASES = [
 	'David',
 	'DejaVu Sans',
 	'DengXian',
+	'DokChampa',
+	'Dotum',
+	'Ebrima',
 	'FangSong',
 	'FrankRuehl',
 	'Gautami',
 	'Georgia',
+	'Gulim',
+	'Gungsuh',
 	'Heiti SC',
 	'Helvetica',
 	'Helvetica Neue',
@@ -323,7 +357,10 @@ const ASS_COMMON_PLATFORM_FONT_ALIASES = [
 	'Kartika',
 	'Khmer UI',
 	'Kokila',
+	'Krungthep',
 	'Latha',
+	'Lao UI',
+	'Leelawadee',
 	'Leelawadee UI',
 	'Levenim MT',
 	'Lucida Grande',
@@ -363,6 +400,8 @@ const ASS_COMMON_PLATFORM_FONT_ALIASES = [
 	'STSong',
 	'Sylfaen',
 	'Tahoma',
+	'Times New Roman Cyr',
+	'Times New Roman Greek',
 	'Times New Roman',
 	'Trebuchet MS',
 	'Tunga',
@@ -380,86 +419,106 @@ const ASS_COMMON_PLATFORM_FONT_ALIAS_SET = new Set(
 );
 const ASS_SCRIPT_FALLBACK_FONTS = [
 	{
-		family: ASS_ARABIC_FONT,
-		filename: ASS_ARABIC_FONT_FILE,
+		family: ASS_ARABIC_SCRIPT_FONT,
+		filename: fallbackFontsByScript.Arabic[1] ?? ASS_ARABIC_FONT_FILE,
 		pattern: /[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]/
 	},
 	{
 		family: ASS_JAPANESE_FONT,
-		filename: 'NotoSansJP-VariableFont_wght.ttf',
+		filename: fallbackFontsByScript.Japanese[1] ?? 'NotoSansJP-VariableFont_wght.ttf',
 		pattern: /[\u3040-\u30ff]/
 	},
 	{
 		family: ASS_KOREAN_FONT,
-		filename: 'NanumGothicCoding-Regular.ttf',
+		filename: fallbackFontsByScript.Hangul[1] ?? 'NanumGothicCoding-Regular.ttf',
 		pattern: /[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af]/
 	},
 	{
 		family: ASS_CHINESE_FONT,
-		filename: 'NotoSansSC-VariableFont_wght.ttf',
+		filename: fallbackFontsByScript.Han[1] ?? 'NotoSansSC-VariableFont_wght.ttf',
 		pattern: /[\u3400-\u9fff\uf900-\ufaff]/
 	},
 	{
-		family: 'Noto Sans Hebrew',
-		filename: 'NotoSansHebrew-Regular.ttf',
+		family: ASS_HEBREW_FONT,
+		filename: fallbackFontsByScript.Hebrew[1] ?? 'NotoSansHebrew-Regular.ttf',
 		pattern: /[\u0590-\u05ff]/
 	},
 	{
-		family: 'Noto Sans Devanagari',
-		filename: 'NotoSansDevanagari-Regular.ttf',
+		family: ASS_DEVANAGARI_FONT,
+		filename: fallbackFontsByScript.Devanagari[1] ?? 'NotoSansDevanagari-Regular.ttf',
 		pattern: /[\u0900-\u097f]/
 	},
 	{
-		family: 'Noto Sans Bengali',
-		filename: 'NotoSansBengali-Regular.ttf',
+		family: ASS_BENGALI_FONT,
+		filename: fallbackFontsByScript.Bengali[1] ?? 'NotoSansBengali-Regular.ttf',
 		pattern: /[\u0980-\u09ff]/
 	},
 	{
-		family: 'Noto Sans Gurmukhi',
-		filename: 'NotoSansGurmukhi-Regular.ttf',
+		family: ASS_GURMUKHI_FONT,
+		filename: fallbackFontsByScript.Gurmukhi[1] ?? 'NotoSansGurmukhi-Regular.ttf',
 		pattern: /[\u0a00-\u0a7f]/
 	},
 	{
-		family: 'Noto Sans Gujarati',
-		filename: 'NotoSansGujarati-Regular.ttf',
+		family: ASS_GUJARATI_FONT,
+		filename: fallbackFontsByScript.Gujarati[1] ?? 'NotoSansGujarati-Regular.ttf',
 		pattern: /[\u0a80-\u0aff]/
 	},
-	{ family: 'Noto Sans Oriya', filename: 'NotoSansOriya-Regular.ttf', pattern: /[\u0b00-\u0b7f]/ },
-	{ family: 'Noto Sans Tamil', filename: 'NotoSansTamil-Regular.ttf', pattern: /[\u0b80-\u0bff]/ },
 	{
-		family: 'Noto Sans Telugu',
-		filename: 'NotoSansTelugu-Regular.ttf',
+		family: ASS_ORIYA_FONT,
+		filename: fallbackFontsByScript.Oriya[1] ?? 'NotoSansOriya-Regular.ttf',
+		pattern: /[\u0b00-\u0b7f]/
+	},
+	{
+		family: ASS_TAMIL_FONT,
+		filename: fallbackFontsByScript.Tamil[1] ?? 'NotoSansTamil-Regular.ttf',
+		pattern: /[\u0b80-\u0bff]/
+	},
+	{
+		family: ASS_TELUGU_FONT,
+		filename: fallbackFontsByScript.Telugu[1] ?? 'NotoSansTelugu-Regular.ttf',
 		pattern: /[\u0c00-\u0c7f]/
 	},
 	{
-		family: 'Noto Sans Kannada',
-		filename: 'NotoSansKannada-Regular.ttf',
+		family: ASS_KANNADA_FONT,
+		filename: fallbackFontsByScript.Kannada[1] ?? 'NotoSansKannada-Regular.ttf',
 		pattern: /[\u0c80-\u0cff]/
 	},
 	{
-		family: 'Noto Sans Malayalam',
-		filename: 'NotoSansMalayalam-Regular.ttf',
+		family: ASS_MALAYALAM_FONT,
+		filename: fallbackFontsByScript.Malayalam[1] ?? 'NotoSansMalayalam-Regular.ttf',
 		pattern: /[\u0d00-\u0d7f]/
 	},
 	{
-		family: 'Noto Sans Sinhala',
-		filename: 'NotoSansSinhala-Regular.ttf',
+		family: ASS_SINHALA_FONT,
+		filename: fallbackFontsByScript.Sinhala[1] ?? 'NotoSansSinhala-Regular.ttf',
 		pattern: /[\u0d80-\u0dff]/
 	},
-	{ family: 'Noto Sans Thai', filename: 'NotoSansThai-Regular.ttf', pattern: /[\u0e00-\u0e7f]/ },
-	{ family: 'Noto Sans Lao', filename: 'NotoSansLao-Regular.ttf', pattern: /[\u0e80-\u0eff]/ },
 	{
-		family: 'Noto Sans Myanmar',
-		filename: 'NotoSansMyanmar-Regular.ttf',
+		family: ASS_THAI_FONT,
+		filename: fallbackFontsByScript.Thai[1] ?? 'NotoSansThai-Regular.ttf',
+		pattern: /[\u0e00-\u0e7f]/
+	},
+	{ family: ASS_LAO_FONT, filename: 'NotoSansLao-Regular.ttf', pattern: /[\u0e80-\u0eff]/ },
+	{
+		family: ASS_MYANMAR_FONT,
+		filename: fallbackFontsByScript.Myanmar[1] ?? 'NotoSansMyanmar-Regular.ttf',
 		pattern: /[\u1000-\u109f]/
 	},
 	{
-		family: 'Noto Sans Ethiopic',
-		filename: 'NotoSansEthiopic-Regular.ttf',
+		family: ASS_ETHIOPIC_FONT,
+		filename: fallbackFontsByScript.Ethiopic[1] ?? 'NotoSansEthiopic-Regular.ttf',
 		pattern: /[\u1200-\u137f]/
 	},
-	{ family: 'Noto Sans Khmer', filename: 'NotoSansKhmer-Regular.ttf', pattern: /[\u1780-\u17ff]/ },
-	{ family: 'Noto Sans NKo', filename: 'NotoSansNKo-Regular.ttf', pattern: /[\u07c0-\u07ff]/ },
+	{
+		family: ASS_KHMER_FONT,
+		filename: fallbackFontsByScript.Khmer[1] ?? 'NotoSansKhmer-Regular.ttf',
+		pattern: /[\u1780-\u17ff]/
+	},
+	{
+		family: ASS_NKO_FONT,
+		filename: fallbackFontsByScript.NKo[1] ?? 'NotoSansNKo-Regular.ttf',
+		pattern: /[\u07c0-\u07ff]/
+	},
 	{
 		family: 'Noto Sans Armenian',
 		filename: 'NotoSansArmenian-Regular.ttf',
@@ -469,6 +528,11 @@ const ASS_SCRIPT_FALLBACK_FONTS = [
 		family: 'Noto Sans Georgian',
 		filename: 'NotoSansGeorgian-Regular.ttf',
 		pattern: /[\u10a0-\u10ff\u1c90-\u1cbf]/
+	},
+	{
+		family: ASS_TIFINAGH_FONT,
+		filename: fallbackFontsByScript.Tifinagh[1] ?? 'NotoSansTifinagh-Regular.ttf',
+		pattern: /[\u2d30-\u2d7f]/
 	},
 	{
 		family: ASS_DEFAULT_UNICODE_FONT,
@@ -3182,33 +3246,14 @@ function getAssRendererLanguageFallbackFont(language: string | null | undefined)
 	if (!normalizedLanguage) {
 		return null;
 	}
-	const exactFallback = Object.entries(fallbackFontsMap).find(
-		([languageTag]) => languageTag.toLowerCase() === normalizedLanguage
-	)?.[1]?.[0];
-	if (exactFallback) {
-		return exactFallback;
-	}
-	if (normalizedLanguage === 'zh' || normalizedLanguage.startsWith('zh-')) {
-		return ASS_CHINESE_FONT;
-	}
-	if (normalizedLanguage === 'ja' || normalizedLanguage.startsWith('ja-')) {
-		return ASS_JAPANESE_FONT;
-	}
-	if (normalizedLanguage === 'ko' || normalizedLanguage.startsWith('ko-')) {
-		return ASS_KOREAN_FONT;
-	}
-	if (
-		normalizedLanguage === 'ar' ||
-		normalizedLanguage.startsWith('ar-') ||
-		normalizedLanguage === 'ur' ||
-		normalizedLanguage.startsWith('ur-')
-	) {
-		return ASS_ARABIC_FONT;
-	}
-	if (normalizedLanguage === 'kk' || normalizedLanguage.startsWith('kk-')) {
-		return ASS_DEFAULT_UNICODE_FONT;
-	}
-	return null;
+	const fallbackEntry = Object.entries(fallbackFontsMap).find(([languageTag]) => {
+		const normalizedLanguageTag = languageTag.toLowerCase();
+		return (
+			normalizedLanguageTag === normalizedLanguage ||
+			normalizedLanguageTag.split('-')[0] === normalizedLanguage
+		);
+	});
+	return fallbackEntry?.[1]?.[0] ?? null;
 }
 
 function getAssRendererScriptFallbackFont(content: string, language?: string | null) {

@@ -1,5 +1,10 @@
 import type { ChatEmojiRef } from '@/lib/player/emoji';
-import { getCueForgeLanguageName } from '@/lib/player/languages';
+import {
+	cueForgeLanguageMetadataByName,
+	cueForgeLanguages,
+	getCueForgeLanguageName,
+	type CueForgeLanguageScript
+} from '@/lib/player/languages';
 
 export interface DiscordUser {
 	username: string;
@@ -572,7 +577,7 @@ export function getSubtitleSortName(stream: Stream) {
 	return formatSubtitleBaseName(stream);
 }
 
-export const languageMap: { [key: string]: string } = {
+const languageDisplayNameOverrides: { [key: string]: string } = {
 	eng: 'English-English',
 	ara: 'Arabic-العربية',
 	ger: 'German-Deutsch',
@@ -613,56 +618,64 @@ export const languageMap: { [key: string]: string } = {
 	fil: 'Filipino-Filipino'
 };
 
-export const languageSrcMap: { [key: string]: string } = {
-	eng: 'en-US',
-	ara: 'ar-SA',
-	ger: 'de-DE',
-	spa: 'es-ES',
-	fre: 'fr-FR',
-	ita: 'it-IT',
-	por: 'pt-PT',
-	rus: 'ru-RU',
-	kaz: 'kk-KZ',
-	kk: 'kk-KZ',
-	chi: 'zh-CN',
-	jpn: 'ja-JP',
-	kor: 'ko-KR',
-	hin: 'hi-IN',
-	urd: 'ur-PK',
-	tur: 'tr-TR',
-	vie: 'vi-VN',
-	tha: 'th-TH',
-	dut: 'nl-NL',
-	swe: 'sv-SE',
-	dan: 'da-DK',
-	nor: 'no-NO',
+const legacyLanguageSrcMap: { [key: string]: string } = {
 	baq: 'eu-ES',
 	cat: 'ca-ES',
-	hrv: 'hr-HR',
-	cze: 'cs-CZ',
-	fin: 'fi-FI',
 	glg: 'gl-ES',
-	gre: 'el-GR',
-	heb: 'he-IL',
-	hun: 'hu-HU',
-	may: 'ms-MY',
-	nob: 'nb-NO',
-	pol: 'pl-PL',
-	rum: 'ro-RO',
-	ukr: 'uk-UA',
-	fil: 'fil-PH'
+	hrv: 'hr-HR',
+	nob: 'nb-NO'
 };
+
+export const languageMap: { [key: string]: string } = Object.fromEntries([
+	...cueForgeLanguages.flatMap((language) =>
+		language.ids.map((id) => [id, languageDisplayNameOverrides[id] || language.name])
+	),
+	...Object.entries(languageDisplayNameOverrides)
+]);
+
+export const languageSrcMap: { [key: string]: string } = Object.fromEntries([
+	...cueForgeLanguages.flatMap((language) => {
+		const metadata = cueForgeLanguageMetadataByName[language.name];
+		return language.ids.map((id) => [id, metadata.languageTag]);
+	}),
+	...Object.entries(legacyLanguageSrcMap)
+]);
 
 export const defaultFallback: string[] = ['Noto Sans', 'NotoSans-Regular.ttf'];
 
-export const fallbackFontsMap: { [key: string]: string[] } = {
-	'ar-SA': ['Noto Naskh Arabic', 'NotoNaskhArabic-Regular.ttf'],
-	'zh-CN': ['Noto Sans SC Thin', 'NotoSansSC-VariableFont_wght.ttf'],
-	'ja-JP': ['Noto Sans JP Thin', 'NotoSansJP-VariableFont_wght.ttf'],
-	'kk-KZ': defaultFallback,
-	'ko-KR': ['NanumGothicCoding', 'NanumGothicCoding-Regular.ttf'],
-	'ur-PK': ['Noto Naskh Arabic', 'NotoNaskhArabic-Regular.ttf']
+export const fallbackFontsByScript: Record<CueForgeLanguageScript, string[]> = {
+	Arabic: ['Noto Naskh Arabic', 'NotoNaskhArabic-Regular.ttf'],
+	Bengali: ['Noto Sans Bengali', 'NotoSansBengali-Regular.ttf'],
+	Cyrillic: defaultFallback,
+	Devanagari: ['Noto Sans Devanagari', 'NotoSansDevanagari-Regular.ttf'],
+	Ethiopic: ['Noto Sans Ethiopic', 'NotoSansEthiopic-Regular.ttf'],
+	Greek: defaultFallback,
+	Gujarati: ['Noto Sans Gujarati', 'NotoSansGujarati-Regular.ttf'],
+	Gurmukhi: ['Noto Sans Gurmukhi', 'NotoSansGurmukhi-Regular.ttf'],
+	Han: ['Noto Sans SC Thin', 'NotoSansSC-VariableFont_wght.ttf'],
+	Hangul: ['NanumGothicCoding', 'NanumGothicCoding-Regular.ttf'],
+	Hebrew: ['Noto Sans Hebrew', 'NotoSansHebrew-Regular.ttf'],
+	Japanese: ['Noto Sans JP Thin', 'NotoSansJP-VariableFont_wght.ttf'],
+	Kannada: ['Noto Sans Kannada', 'NotoSansKannada-Regular.ttf'],
+	Khmer: ['Noto Sans Khmer', 'NotoSansKhmer-Regular.ttf'],
+	Latin: defaultFallback,
+	Malayalam: ['Noto Sans Malayalam', 'NotoSansMalayalam-Regular.ttf'],
+	Myanmar: ['Noto Sans Myanmar', 'NotoSansMyanmar-Regular.ttf'],
+	NKo: ['Noto Sans NKo', 'NotoSansNKo-Regular.ttf'],
+	Oriya: ['Noto Sans Oriya', 'NotoSansOriya-Regular.ttf'],
+	Sinhala: ['Noto Sans Sinhala', 'NotoSansSinhala-Regular.ttf'],
+	Tamil: ['Noto Sans Tamil', 'NotoSansTamil-Regular.ttf'],
+	Telugu: ['Noto Sans Telugu', 'NotoSansTelugu-Regular.ttf'],
+	Thai: ['Noto Sans Thai', 'NotoSansThai-Regular.ttf'],
+	Tifinagh: ['Noto Sans Tifinagh', 'NotoSansTifinagh-Regular.ttf']
 };
+
+export const fallbackFontsMap: { [key: string]: string[] } = Object.fromEntries(
+	cueForgeLanguages.map((language) => {
+		const metadata = cueForgeLanguageMetadataByName[language.name];
+		return [metadata.languageTag, fallbackFontsByScript[metadata.script]];
+	})
+);
 
 export function formatSeconds(seconds: number | undefined): string {
 	if (seconds === undefined) {
