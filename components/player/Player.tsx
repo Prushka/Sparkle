@@ -5244,6 +5244,7 @@ export function Player({
 	const [copiedRoomLink, setCopiedRoomLink] = useState(false);
 	const [exited, setExited] = useState(false);
 	const [moveToast, setMoveToast] = useState<MoveToastState | null>(null);
+	const [audioRemountKey, setAudioRemountKey] = useState(0);
 	const [name, setName] = useState('');
 	const [profileNameDraft, setProfileNameDraft] = useState('');
 	const [profileId, setProfileId] = useState('');
@@ -8302,6 +8303,7 @@ export function Player({
 				time: getSafePlayerCurrentTime(player) ?? 0,
 				paused: getSafePlayerPaused(player) ?? true
 			};
+			setAudioRemountKey((value) => value + 1);
 			setSelectedAudio(curr);
 		}
 	}
@@ -8558,7 +8560,7 @@ export function Player({
 					{mounted && thumbnailVttSrc && playerSrcUrl ? (
 						<MediaPlayer
 							className={mediaPlayerClassName}
-							key={`${playerSrcUrl}:${thumbnailVttSrc}`}
+							key={`${playerSrcUrl}:${audioRemountKey}:${thumbnailVttSrc}`}
 							src={playerSrcUrl}
 							style={mediaPlayerStyle}
 							title={job.Input}
