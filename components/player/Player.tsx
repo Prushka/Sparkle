@@ -276,6 +276,8 @@ const ASS_BITMAP_CACHE_LIMIT_MB = 64;
 const ASS_GLYPH_CACHE_LIMIT_MB = 16;
 const ASS_DEFAULT_LATIN_FONT = 'Liberation Sans';
 const ASS_DEFAULT_LATIN_FONT_FILE = 'default.woff2';
+const ASS_DEFAULT_UNICODE_FONT = defaultFallback[0] ?? 'Noto Sans';
+const ASS_DEFAULT_UNICODE_FONT_FILE = defaultFallback[1] ?? 'NotoSans-Regular.ttf';
 const ASS_ARABIC_FONT = 'Noto Naskh Arabic';
 const ASS_ARABIC_FONT_FILE = 'NotoNaskhArabic-Regular.ttf';
 const ASS_ARABIC_FONT_ALIASES = [
@@ -286,6 +288,194 @@ const ASS_ARABIC_FONT_ALIASES = [
 	'SF Arabic'
 ];
 const ASS_ANNOTATION_FONT_ALIASES = [ASS_DEFAULT_LATIN_FONT, 'Arial', 'Arial Unicode MS'];
+const ASS_CHINESE_FONT = fallbackFontsMap['zh-CN']?.[0] ?? 'Noto Sans SC Thin';
+const ASS_JAPANESE_FONT = fallbackFontsMap['ja-JP']?.[0] ?? 'Noto Sans JP Thin';
+const ASS_KOREAN_FONT = fallbackFontsMap['ko-KR']?.[0] ?? 'NanumGothicCoding';
+const ASS_COMMON_PLATFORM_FONT_ALIASES = [
+	'Aharoni',
+	'Apple SD Gothic Neo',
+	'Arial',
+	'Arial Black',
+	'Arial Narrow',
+	'Arial Unicode MS',
+	'Aparajita',
+	'Browallia New',
+	'Calibri',
+	'Cambria',
+	'Cordia New',
+	'Courier New',
+	'DaunPenh',
+	'David',
+	'DejaVu Sans',
+	'DengXian',
+	'FangSong',
+	'FrankRuehl',
+	'Gautami',
+	'Georgia',
+	'Heiti SC',
+	'Helvetica',
+	'Helvetica Neue',
+	'Hiragino Kaku Gothic ProN',
+	'Hiragino Sans',
+	'Iskoola Pota',
+	'KaiTi',
+	'Kalinga',
+	'Kartika',
+	'Khmer UI',
+	'Kokila',
+	'Latha',
+	'Leelawadee UI',
+	'Levenim MT',
+	'Lucida Grande',
+	'Lucida Sans Unicode',
+	'Malgun Gothic',
+	'Mangal',
+	'Meiryo',
+	'Microsoft Sans Serif',
+	'Microsoft YaHei',
+	'Microsoft JhengHei',
+	'MingLiU',
+	'Miriam',
+	'MS Gothic',
+	'MS Mincho',
+	'MS PGothic',
+	'MS PMincho',
+	'MS Sans Serif',
+	'MoolBoran',
+	'Myanmar Text',
+	'Narkisim',
+	'Nirmala UI',
+	'NSimSun',
+	'Nyala',
+	'Osaka',
+	'Padauk',
+	'PingFang SC',
+	'PMingLiU',
+	'Raavi',
+	'Segoe UI',
+	'Shonar Bangla',
+	'SimHei',
+	'SimKai',
+	'SimSun',
+	'Songti SC',
+	'Shruti',
+	'STHeiti',
+	'STSong',
+	'Sylfaen',
+	'Tahoma',
+	'Times New Roman',
+	'Trebuchet MS',
+	'Tunga',
+	'Utsaah',
+	'Vani',
+	'Verdana',
+	'Vijaya',
+	'Vrinda',
+	'Yu Gothic',
+	'sans-serif',
+	'serif'
+];
+const ASS_COMMON_PLATFORM_FONT_ALIAS_SET = new Set(
+	ASS_COMMON_PLATFORM_FONT_ALIASES.map(normalizeAssFontLookupName)
+);
+const ASS_SCRIPT_FALLBACK_FONTS = [
+	{
+		family: ASS_ARABIC_FONT,
+		filename: ASS_ARABIC_FONT_FILE,
+		pattern: /[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]/
+	},
+	{
+		family: ASS_JAPANESE_FONT,
+		filename: 'NotoSansJP-VariableFont_wght.ttf',
+		pattern: /[\u3040-\u30ff]/
+	},
+	{
+		family: ASS_KOREAN_FONT,
+		filename: 'NanumGothicCoding-Regular.ttf',
+		pattern: /[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af]/
+	},
+	{
+		family: ASS_CHINESE_FONT,
+		filename: 'NotoSansSC-VariableFont_wght.ttf',
+		pattern: /[\u3400-\u9fff\uf900-\ufaff]/
+	},
+	{
+		family: 'Noto Sans Hebrew',
+		filename: 'NotoSansHebrew-Regular.ttf',
+		pattern: /[\u0590-\u05ff]/
+	},
+	{
+		family: 'Noto Sans Devanagari',
+		filename: 'NotoSansDevanagari-Regular.ttf',
+		pattern: /[\u0900-\u097f]/
+	},
+	{
+		family: 'Noto Sans Bengali',
+		filename: 'NotoSansBengali-Regular.ttf',
+		pattern: /[\u0980-\u09ff]/
+	},
+	{
+		family: 'Noto Sans Gurmukhi',
+		filename: 'NotoSansGurmukhi-Regular.ttf',
+		pattern: /[\u0a00-\u0a7f]/
+	},
+	{
+		family: 'Noto Sans Gujarati',
+		filename: 'NotoSansGujarati-Regular.ttf',
+		pattern: /[\u0a80-\u0aff]/
+	},
+	{ family: 'Noto Sans Oriya', filename: 'NotoSansOriya-Regular.ttf', pattern: /[\u0b00-\u0b7f]/ },
+	{ family: 'Noto Sans Tamil', filename: 'NotoSansTamil-Regular.ttf', pattern: /[\u0b80-\u0bff]/ },
+	{
+		family: 'Noto Sans Telugu',
+		filename: 'NotoSansTelugu-Regular.ttf',
+		pattern: /[\u0c00-\u0c7f]/
+	},
+	{
+		family: 'Noto Sans Kannada',
+		filename: 'NotoSansKannada-Regular.ttf',
+		pattern: /[\u0c80-\u0cff]/
+	},
+	{
+		family: 'Noto Sans Malayalam',
+		filename: 'NotoSansMalayalam-Regular.ttf',
+		pattern: /[\u0d00-\u0d7f]/
+	},
+	{
+		family: 'Noto Sans Sinhala',
+		filename: 'NotoSansSinhala-Regular.ttf',
+		pattern: /[\u0d80-\u0dff]/
+	},
+	{ family: 'Noto Sans Thai', filename: 'NotoSansThai-Regular.ttf', pattern: /[\u0e00-\u0e7f]/ },
+	{ family: 'Noto Sans Lao', filename: 'NotoSansLao-Regular.ttf', pattern: /[\u0e80-\u0eff]/ },
+	{
+		family: 'Noto Sans Myanmar',
+		filename: 'NotoSansMyanmar-Regular.ttf',
+		pattern: /[\u1000-\u109f]/
+	},
+	{
+		family: 'Noto Sans Ethiopic',
+		filename: 'NotoSansEthiopic-Regular.ttf',
+		pattern: /[\u1200-\u137f]/
+	},
+	{ family: 'Noto Sans Khmer', filename: 'NotoSansKhmer-Regular.ttf', pattern: /[\u1780-\u17ff]/ },
+	{ family: 'Noto Sans NKo', filename: 'NotoSansNKo-Regular.ttf', pattern: /[\u07c0-\u07ff]/ },
+	{
+		family: 'Noto Sans Armenian',
+		filename: 'NotoSansArmenian-Regular.ttf',
+		pattern: /[\u0530-\u058f]/
+	},
+	{
+		family: 'Noto Sans Georgian',
+		filename: 'NotoSansGeorgian-Regular.ttf',
+		pattern: /[\u10a0-\u10ff\u1c90-\u1cbf]/
+	},
+	{
+		family: ASS_DEFAULT_UNICODE_FONT,
+		filename: ASS_DEFAULT_UNICODE_FONT_FILE,
+		pattern: /[\u00a0-\u024f\u0370-\u052f\u1e00-\u1eff]/
+	}
+] as const;
 const ASS_NUMBER_PATTERN = /^-?(?:\d+(?:\.\d+)?|\.\d+)$/;
 const ROOM_TIME_SYNC_THRESHOLD_SECONDS = 6;
 const AUDIO_LANGUAGE_PRIORITY = ['jpn', 'eng', 'chi'];
@@ -2983,16 +3173,75 @@ function scaleAssOverrideText(text: string, scale: number) {
 	);
 }
 
-function getAssRendererFontName(fontName: string, options: { phoneticAnnotation?: boolean } = {}) {
-	const normalizedFontName = fontName.trim().toLowerCase();
+function normalizeAssFontLookupName(fontName: string) {
+	return fontName.trim().replace(/^@/, '').toLowerCase();
+}
+
+function getAssRendererLanguageFallbackFont(language: string | null | undefined) {
+	const normalizedLanguage = language?.trim().toLowerCase();
+	if (!normalizedLanguage) {
+		return null;
+	}
+	const exactFallback = Object.entries(fallbackFontsMap).find(
+		([languageTag]) => languageTag.toLowerCase() === normalizedLanguage
+	)?.[1]?.[0];
+	if (exactFallback) {
+		return exactFallback;
+	}
+	if (normalizedLanguage === 'zh' || normalizedLanguage.startsWith('zh-')) {
+		return ASS_CHINESE_FONT;
+	}
+	if (normalizedLanguage === 'ja' || normalizedLanguage.startsWith('ja-')) {
+		return ASS_JAPANESE_FONT;
+	}
+	if (normalizedLanguage === 'ko' || normalizedLanguage.startsWith('ko-')) {
+		return ASS_KOREAN_FONT;
+	}
+	if (
+		normalizedLanguage === 'ar' ||
+		normalizedLanguage.startsWith('ar-') ||
+		normalizedLanguage === 'ur' ||
+		normalizedLanguage.startsWith('ur-')
+	) {
+		return ASS_ARABIC_FONT;
+	}
+	if (normalizedLanguage === 'kk' || normalizedLanguage.startsWith('kk-')) {
+		return ASS_DEFAULT_UNICODE_FONT;
+	}
+	return null;
+}
+
+function getAssRendererScriptFallbackFont(content: string, language?: string | null) {
+	const languageFallback = getAssRendererLanguageFallbackFont(language);
+	if (languageFallback) {
+		return languageFallback;
+	}
+	return ASS_SCRIPT_FALLBACK_FONTS.find(({ pattern }) => pattern.test(content))?.family ?? null;
+}
+
+function shouldUseAssRendererScriptFallback(fontName: string) {
+	const normalizedFontName = normalizeAssFontLookupName(fontName);
+	return normalizedFontName ? ASS_COMMON_PLATFORM_FONT_ALIAS_SET.has(normalizedFontName) : false;
+}
+
+function getAssRendererFontName(
+	fontName: string,
+	options: { fallbackFont?: string | null; phoneticAnnotation?: boolean } = {}
+) {
+	const normalizedFontName = normalizeAssFontLookupName(fontName);
 	if (ASS_ARABIC_FONT_ALIASES.some((alias) => alias.toLowerCase() === normalizedFontName)) {
 		return ASS_ARABIC_FONT;
 	}
-	return ASS_ANNOTATION_FONT_ALIASES.some((alias) => alias.toLowerCase() === normalizedFontName)
-		? options.phoneticAnnotation
-			? ASS_DEFAULT_LATIN_FONT
-			: fontName
-		: fontName;
+	const annotationFont = ASS_ANNOTATION_FONT_ALIASES.some(
+		(alias) => alias.toLowerCase() === normalizedFontName
+	);
+	if (options.phoneticAnnotation && annotationFont) {
+		return ASS_DEFAULT_LATIN_FONT;
+	}
+	if (options.fallbackFont && shouldUseAssRendererScriptFallback(fontName)) {
+		return options.fallbackFont;
+	}
+	return fontName;
 }
 
 function isAssPhoneticAnnotationOverride(text: string) {
@@ -3001,17 +3250,20 @@ function isAssPhoneticAnnotationOverride(text: string) {
 	);
 }
 
-function normalizeAssRendererOverrideFonts(text: string) {
+function normalizeAssRendererOverrideFonts(text: string, fallbackFont: string | null) {
 	return text.replace(/\{([^}]*)\}/g, (block, overrideText: string) => {
 		const phoneticAnnotation = isAssPhoneticAnnotationOverride(overrideText);
 		return `{${overrideText.replace(/\\fn([^\\}]*)/gi, (match, fontName: string) => {
-			const rendererFontName = getAssRendererFontName(fontName, { phoneticAnnotation });
+			const rendererFontName = getAssRendererFontName(fontName, {
+				fallbackFont,
+				phoneticAnnotation
+			});
 			return rendererFontName === fontName ? match : `\\fn${rendererFontName}`;
 		})}}`;
 	});
 }
 
-function normalizeAssRendererStyleFonts(content: string) {
+function normalizeAssRendererStyleFonts(content: string, fallbackFont: string | null) {
 	let section = '';
 	let styleColumns = ASS_STYLE_COLUMNS.map(String);
 	return content
@@ -3046,7 +3298,9 @@ function normalizeAssRendererStyleFonts(content: string) {
 				return line;
 			}
 			const values = splitAssValues(rawValue, styleColumns.length);
-			const rendererFontName = getAssRendererFontName(values[fontNameIndex] ?? '');
+			const rendererFontName = getAssRendererFontName(values[fontNameIndex] ?? '', {
+				fallbackFont
+			});
 			if (rendererFontName === values[fontNameIndex]) {
 				return line;
 			}
@@ -3056,8 +3310,12 @@ function normalizeAssRendererStyleFonts(content: string) {
 		.join('\n');
 }
 
-function normalizeAssRendererFonts(content: string) {
-	return normalizeAssRendererOverrideFonts(normalizeAssRendererStyleFonts(content));
+function normalizeAssRendererFonts(content: string, language?: string | null) {
+	const fallbackFont = getAssRendererScriptFallbackFont(content, language);
+	return normalizeAssRendererOverrideFonts(
+		normalizeAssRendererStyleFonts(content, fallbackFont),
+		fallbackFont
+	);
 }
 
 function createNamespacedAssStyleValues(
@@ -4680,12 +4938,16 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 let assRendererModulePromise: Promise<{ default: LibASSConstructor }> | null = null;
 let captionsParserModulePromise: Promise<CaptionsParserModule> | null = null;
 
-async function fetchAssRendererTrackContent(src: string, signal?: AbortSignal) {
+async function fetchAssRendererTrackContent(
+	src: string,
+	options: { language?: string | null; signal?: AbortSignal } = {}
+) {
+	const { language, signal } = options;
 	const response = await fetch(src, { signal });
 	if (!response.ok) {
 		throw new Error(`Unable to load ASS subtitle track (${response.status})`);
 	}
-	return normalizeAssRendererFonts(await response.text());
+	return normalizeAssRendererFonts(await response.text(), language);
 }
 
 function closeAssRenderImages(payload: JASSUBRenderPayload | null | undefined) {
@@ -4941,7 +5203,7 @@ class ManagedLibASSTextRenderer implements TextRenderer {
 			this.ensureInstance();
 			return;
 		}
-		this.setInstanceTrack(track.src);
+		this.setInstanceTrack(track);
 	}
 
 	detach() {
@@ -4962,14 +5224,15 @@ class ManagedLibASSTextRenderer implements TextRenderer {
 
 		const requestId = ++this.loadRequestId;
 		const video = this.video;
+		const trackLanguage = track.language;
 		const trackAbortController = new AbortController();
 		this.trackAbortController = trackAbortController;
 		this.loadPromise = this.loader()
 			.then(async (module) => {
-				const subContent = await fetchAssRendererTrackContent(
-					trackSrc,
-					trackAbortController.signal
-				);
+				const subContent = await fetchAssRendererTrackContent(trackSrc, {
+					language: trackLanguage,
+					signal: trackAbortController.signal
+				});
 				if (
 					this.loadRequestId !== requestId ||
 					this.video !== video ||
@@ -5014,9 +5277,10 @@ class ManagedLibASSTextRenderer implements TextRenderer {
 			});
 	}
 
-	private setInstanceTrack(src: string) {
+	private setInstanceTrack(track: TextTrack) {
 		const instance = this.instance;
-		if (!instance) {
+		const src = track.src;
+		if (!instance || !src) {
 			return;
 		}
 		const requestId = ++this.trackRequestId;
@@ -5024,7 +5288,12 @@ class ManagedLibASSTextRenderer implements TextRenderer {
 		const trackAbortController = new AbortController();
 		this.trackAbortController = trackAbortController;
 		void Promise.resolve(instance.ready)
-			.then(() => fetchAssRendererTrackContent(src, trackAbortController.signal))
+			.then(() =>
+				fetchAssRendererTrackContent(src, {
+					language: track.language,
+					signal: trackAbortController.signal
+				})
+			)
 			.then((content) => {
 				if (
 					trackAbortController.signal.aborted ||
@@ -5437,6 +5706,9 @@ export function Player({
 		availableFonts[ASS_DEFAULT_LATIN_FONT.toLowerCase()] = latinFontUrl;
 		for (const family of ASS_ARABIC_FONT_ALIASES) {
 			availableFonts[family.toLowerCase()] = arabicFontUrl;
+		}
+		for (const { family, filename } of ASS_SCRIPT_FALLBACK_FONTS) {
+			availableFonts[family.toLowerCase()] = getPublicAssetUrl(filename);
 		}
 
 		for (const [family, filename] of [defaultFallback, ...Object.values(fallbackFontsMap)]) {

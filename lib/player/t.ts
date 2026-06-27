@@ -581,6 +581,8 @@ export const languageMap: { [key: string]: string } = {
 	ita: 'Italian-Italiano',
 	por: 'Portuguese-Português',
 	rus: 'Russian-Русский',
+	kaz: 'Kazakh-Қазақша',
+	kk: 'Kazakh-Қазақша',
 	chi: 'Chinese-中文',
 	jpn: 'Japanese-日本語',
 	kor: 'Korean-한국어',
@@ -620,6 +622,8 @@ export const languageSrcMap: { [key: string]: string } = {
 	ita: 'it-IT',
 	por: 'pt-PT',
 	rus: 'ru-RU',
+	kaz: 'kk-KZ',
+	kk: 'kk-KZ',
 	chi: 'zh-CN',
 	jpn: 'ja-JP',
 	kor: 'ko-KR',
@@ -649,12 +653,13 @@ export const languageSrcMap: { [key: string]: string } = {
 	fil: 'fil-PH'
 };
 
-export const defaultFallback: string[] = ['Noto Sans SC Thin', 'NotoSansSC-VariableFont_wght.ttf'];
+export const defaultFallback: string[] = ['Noto Sans', 'NotoSans-Regular.ttf'];
 
 export const fallbackFontsMap: { [key: string]: string[] } = {
 	'ar-SA': ['Noto Naskh Arabic', 'NotoNaskhArabic-Regular.ttf'],
 	'zh-CN': ['Noto Sans SC Thin', 'NotoSansSC-VariableFont_wght.ttf'],
 	'ja-JP': ['Noto Sans JP Thin', 'NotoSansJP-VariableFont_wght.ttf'],
+	'kk-KZ': defaultFallback,
 	'ko-KR': ['NanumGothicCoding', 'NanumGothicCoding-Regular.ttf'],
 	'ur-PK': ['Noto Naskh Arabic', 'NotoNaskhArabic-Regular.ttf']
 };
