@@ -550,7 +550,7 @@ const SUBTITLE_LANGUAGE_PRIORITY = ['en'];
 const DEFAULT_SUBTITLE_FORMAT_PRIORITY = ['ass', 'vtt', 'srt', 'sup'] as const;
 const STACKABLE_SUBTITLE_FORMATS = new Set<SubtitleTrackFormat>(['ass', 'vtt']);
 const MAX_MERGED_SUBTITLE_DENSITY = 5;
-const MERGED_SUBTITLE_FONT_SCALE_STEP = 0.18;
+const MERGED_SUBTITLE_FONT_SCALE_STEP = 0.12;
 
 const PLAYER_KEY_SHORTCUTS: MediaKeyShortcuts = {
 	togglePaused: 'k Space',
