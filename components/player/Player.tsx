@@ -3126,7 +3126,12 @@ function normalizeAssStyleKey(styleName: string) {
 }
 
 function getAssDocumentStyles(document: AssParsedDocument) {
-	return document.styles.length > 0 ? document.styles : parseAssDocument('', document.track).styles;
+	return document.styles.length > 0
+		? document.styles
+		: parseAssDocument(
+				normalizeAssRendererFonts(EMPTY_ASS_TRACK, document.track.language),
+				document.track
+			).styles;
 }
 
 function getAssMergedStyleName(styleName: string, documentIndex: number) {
@@ -3363,6 +3368,24 @@ function normalizeAssRendererFonts(content: string, language?: string | null) {
 	);
 }
 
+function markAssRendererFontsNormalized(content: string) {
+	if (content.includes(ASS_RENDERER_FONT_NORMALIZATION_MARKER)) {
+		return content;
+	}
+	const normalizedContent = content.replace(/\r\n?/g, '\n');
+	const lines = normalizedContent.split('\n');
+	const scriptInfoIndex = lines.findIndex((line) => /^\[script info\]\s*$/i.test(line));
+	if (scriptInfoIndex >= 0) {
+		lines.splice(scriptInfoIndex + 1, 0, ASS_RENDERER_FONT_NORMALIZATION_MARKER);
+		return lines.join('\n');
+	}
+	return `${ASS_RENDERER_FONT_NORMALIZATION_MARKER}\n${normalizedContent}`;
+}
+
+function areAssRendererFontsNormalized(content: string) {
+	return content.includes(ASS_RENDERER_FONT_NORMALIZATION_MARKER);
+}
+
 function createNamespacedAssStyleValues(
 	style: AssParsedStyle,
 	styleNameMap: Map<string, string>,
@@ -3488,9 +3511,12 @@ async function buildMergedSubtitleContent(
 	}
 	if (tracks[0].format === 'ass') {
 		const documents = await Promise.all(
-			tracks.map(async (track) => parseAssDocument(await fetchSubtitleText(track, signal), track))
+			tracks.map(async (track) => {
+				const content = await fetchSubtitleText(track, signal);
+				return parseAssDocument(normalizeAssRendererFonts(content, track.language), track);
+			})
 		);
-		return serializeMergedAss(documents);
+		return markAssRendererFontsNormalized(serializeMergedAss(documents));
 	}
 	const parser = await loadCaptionsParserModule();
 	const documents = await Promise.all(
@@ -4970,6 +4996,7 @@ Style: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 `;
+const ASS_RENDERER_FONT_NORMALIZATION_MARKER = '; Sparkle-Ass-Renderer-Fonts-Normalized: per-track';
 let assRendererModulePromise: Promise<{ default: LibASSConstructor }> | null = null;
 let captionsParserModulePromise: Promise<CaptionsParserModule> | null = null;
 
@@ -4982,7 +5009,10 @@ async function fetchAssRendererTrackContent(
 	if (!response.ok) {
 		throw new Error(`Unable to load ASS subtitle track (${response.status})`);
 	}
-	return normalizeAssRendererFonts(await response.text(), language);
+	const content = await response.text();
+	return areAssRendererFontsNormalized(content)
+		? content
+		: normalizeAssRendererFonts(content, language);
 }
 
 function closeAssRenderImages(payload: JASSUBRenderPayload | null | undefined) {
