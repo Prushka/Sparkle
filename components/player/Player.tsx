@@ -5206,6 +5206,7 @@ export function Player({
 	const awaitingInitialPlaybackSyncRef = useRef(false);
 	const pendingRemotePlaybackSyncRef = useRef<PendingRemotePlaybackSync | null>(null);
 	const pendingAudioSwitchPlaybackRef = useRef<PendingAudioSwitchPlayback | null>(null);
+	const audioSwitchPlaybackRestoringRef = useRef(false);
 	const inBgRef = useRef(false);
 	const exitedRef = useRef(false);
 	const interactedRef = useRef(interacted);
@@ -6132,9 +6133,8 @@ export function Player({
 		if (!player) {
 			return;
 		}
-		const pendingAudioSwitch = pendingAudioSwitchPlaybackRef.current;
-		sendSettings({ includeAudio: pendingAudioSwitch?.audio !== effectiveAudio });
-	}, [effectiveAudio, playerEl, sendSettings, videoSrc]);
+		sendSettings();
+	}, [playerEl, sendSettings, videoSrc]);
 
 	useEffect(() => {
 		if (!mediaProviderEl || !playerEl || !playerSrcUrl) {
@@ -7313,6 +7313,9 @@ export function Player({
 		if (pendingAudioSwitchPlaybackRef.current) {
 			return false;
 		}
+		if (audioSwitchPlaybackRestoringRef.current) {
+			return false;
+		}
 		return !consumePlaybackSyncSuppression();
 	}, [consumePlaybackSyncSuppression]);
 
@@ -7394,7 +7397,19 @@ export function Player({
 			return;
 		}
 
-		pendingAudioSwitchPlaybackRef.current = null;
+		audioSwitchPlaybackRestoringRef.current = true;
+		const finishAudioSwitchPlaybackRestore = () => {
+			window.setTimeout(() => {
+				if (pendingAudioSwitchPlaybackRef.current === pending) {
+					pendingAudioSwitchPlaybackRef.current = null;
+				}
+				if (!pendingAudioSwitchPlaybackRef.current) {
+					audioSwitchPlaybackRestoringRef.current = false;
+				}
+				updateAutoPictureInPicturePreference(player, !pending.paused);
+				updateMediaSessionState();
+			}, 0);
+		};
 		const time = Math.max(0, pending.time);
 		if (time > 0) {
 			setSafePlayerCurrentTime(player, time);
@@ -7408,26 +7423,35 @@ export function Player({
 		if (pending.paused) {
 			if (currentlyPaused === false) {
 				armPlaybackSyncSuppression();
-				Promise.resolve(player.pause()).catch((error) => {
-					clearPlaybackSyncSuppression();
-					console.warn('Unable to preserve pause state after audio track switch', error);
-				});
+				Promise.resolve(player.pause())
+					.catch((error) => {
+						clearPlaybackSyncSuppression();
+						console.warn('Unable to preserve pause state after audio track switch', error);
+					})
+					.finally(finishAudioSwitchPlaybackRestore);
+			} else {
+				finishAudioSwitchPlaybackRestore();
 			}
 			return;
 		}
 
 		if (currentlyPaused !== false) {
 			armPlaybackSyncSuppression();
-			Promise.resolve(player.play()).catch((error) => {
-				clearPlaybackSyncSuppression();
-				console.warn('Unable to resume after audio track switch', error);
-			});
+			Promise.resolve(player.play())
+				.catch((error) => {
+					clearPlaybackSyncSuppression();
+					console.warn('Unable to resume after audio track switch', error);
+				})
+				.finally(finishAudioSwitchPlaybackRestore);
+		} else {
+			finishAudioSwitchPlaybackRestore();
 		}
 	}, [
 		armPlaybackSyncSuppression,
 		clearPlaybackSyncSuppression,
 		effectiveAudio,
-		setCurrentlyWatching
+		setCurrentlyWatching,
+		updateMediaSessionState
 	]);
 	const applyRemotePlaybackSyncRef = useLatestRef(applyRemotePlaybackSync);
 	const sendProfileRef = useLatestRef(sendProfile);
@@ -8590,11 +8614,17 @@ export function Player({
 							onPause={() => {
 								supRef.current?.pauseHandler();
 								supPlayingRef.current = false;
+								const isAudioSwitchPlaybackEvent =
+									Boolean(pendingAudioSwitchPlaybackRef.current) ||
+									audioSwitchPlaybackRestoringRef.current;
+								const shouldSyncPlayback = shouldSendPlaybackSync();
 								updateAutoPictureInPicturePreference(playerEl, false);
-								if (shouldSendPlaybackSync()) {
+								if (shouldSyncPlayback) {
 									send({ paused: true, type: SyncTypes.PauseSync });
 								}
-								setCurrentlyWatching((value) => (value ? { ...value, paused: true } : null));
+								if (!isAudioSwitchPlaybackEvent) {
+									setCurrentlyWatching((value) => (value ? { ...value, paused: true } : null));
+								}
 								updateMediaSessionState();
 							}}
 							onPlay={() => {
@@ -8602,12 +8632,20 @@ export function Player({
 								if (supRef.current) {
 									supPlayingRef.current = true;
 								}
-								startWatchRoomConnection();
-								if (shouldSendPlaybackSync() && interactedRef.current) {
+								const isAudioSwitchPlaybackEvent =
+									Boolean(pendingAudioSwitchPlaybackRef.current) ||
+									audioSwitchPlaybackRestoringRef.current;
+								if (!isAudioSwitchPlaybackEvent) {
+									startWatchRoomConnection();
+								}
+								const shouldSyncPlayback = shouldSendPlaybackSync();
+								if (shouldSyncPlayback && interactedRef.current) {
 									send({ paused: false, type: SyncTypes.PauseSync });
 								}
+								if (!isAudioSwitchPlaybackEvent) {
+									setCurrentlyWatching((value) => (value ? { ...value, paused: false } : null));
+								}
 								updateAutoPictureInPicturePreference(playerEl, true);
-								setCurrentlyWatching((value) => (value ? { ...value, paused: false } : null));
 								updateMediaSessionState();
 							}}
 							onVolumeChange={({ muted, volume }: { muted: boolean; volume: number }) => {
