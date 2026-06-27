@@ -23,8 +23,7 @@ import {
 } from '@/lib/player/t';
 
 type RoomRoute =
-	| { roomId: string; view: 'library' }
-	| { roomId: string; view: 'media'; mediaId: string };
+	{ roomId: string; view: 'library' } | { roomId: string; view: 'media'; mediaId: string };
 
 type SearchValues = {
 	legacyRoomId?: string;

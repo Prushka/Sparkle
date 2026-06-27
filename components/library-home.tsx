@@ -43,12 +43,7 @@ import { useTheme } from '@/lib/theme';
 
 type LibraryKind = 'all' | 'movies' | 'shows';
 type SortMode =
-	| 'recent-desc'
-	| 'recent-asc'
-	| 'title-asc'
-	| 'title-desc'
-	| 'duration-desc'
-	| 'duration-asc';
+	'recent-desc' | 'recent-asc' | 'title-asc' | 'title-desc' | 'duration-desc' | 'duration-asc';
 const INITIAL_LIBRARY_ITEMS = 100;
 const LIBRARY_ITEMS_BATCH = 100;
 

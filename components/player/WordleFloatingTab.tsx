@@ -6,7 +6,6 @@ import {
 	useCallback,
 	useEffect,
 	useLayoutEffect,
-	useMemo,
 	useRef,
 	useState
 } from 'react';
@@ -92,6 +91,10 @@ function nextFloatingTabZIndex() {
 	zWindow.__sparkleFloatingTabZIndex = next;
 	wordleTabZIndexCounter = next;
 	return next;
+}
+
+function getWordleTimestamp() {
+	return Date.now();
 }
 
 function readStoredLayout(storageKey: string): WordleTabLayout | null {
@@ -314,7 +317,7 @@ function submitBoardRow(
 		currentRow: nextRow,
 		solved,
 		finished,
-		finishedAt: finished ? Date.now() : 0
+		finishedAt: finished ? getWordleTimestamp() : 0
 	};
 }
 
@@ -549,7 +552,7 @@ export function WordleFloatingTab({
 		);
 	}
 	const activeAnswerIndex = answerIndexForBoard(activeBoard);
-	const headerStatus = useMemo(() => {
+	const headerStatus = (() => {
 		const mode = state.settings.mode === 'coop' ? 'Coop' : 'Competitive';
 		if (state.phase === 'setup') {
 			return `${mode} / ${state.players.length} players / ${turns} turns`;
@@ -566,17 +569,7 @@ export function WordleFloatingTab({
 		}
 		const progress = myBoard ? `${Math.min(myBoard.currentRow + 1, turns)}/${turns}` : `0/${turns}`;
 		return `${mode} / ${state.players.length} players / ${progress}`;
-	}, [
-		activePlayer,
-		myBoard,
-		state.activeBoardId,
-		state.boards,
-		state.phase,
-		state.players.length,
-		state.result,
-		state.settings.mode,
-		turns
-	]);
+	})();
 
 	useEffect(() => {
 		return () => {
@@ -601,16 +594,40 @@ export function WordleFloatingTab({
 	}, [collapsedStorageKey, initialIndex, storageKey]);
 
 	useEffect(() => {
-		setDraft('');
+		let cancelled = false;
+		queueMicrotask(() => {
+			if (!cancelled) {
+				setDraft('');
+			}
+		});
+		return () => {
+			cancelled = true;
+		};
 	}, [activeRowKey]);
 
 	useEffect(() => {
-		setDraft('');
-		setMessage('');
+		let cancelled = false;
+		queueMicrotask(() => {
+			if (!cancelled) {
+				setDraft('');
+				setMessage('');
+			}
+		});
+		return () => {
+			cancelled = true;
+		};
 	}, [activeBoard?.id, state.id, state.phase, state.startedAt]);
 
 	useEffect(() => {
-		setLocalGuesses(readLocalGuesses(localGuessStorageKey));
+		let cancelled = false;
+		queueMicrotask(() => {
+			if (!cancelled) {
+				setLocalGuesses(readLocalGuesses(localGuessStorageKey));
+			}
+		});
+		return () => {
+			cancelled = true;
+		};
 	}, [localGuessStorageKey]);
 
 	const saveLayout = useCallback(
@@ -985,7 +1002,7 @@ export function WordleFloatingTab({
 		}
 		setDraft('');
 		setMessage('');
-		const startedAt = Date.now();
+		const startedAt = getWordleTimestamp();
 		if (state.settings.mode === 'competitive') {
 			const boards = state.players.map((player) => createBoard(turns, player.id));
 			onStateChange({
