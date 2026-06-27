@@ -3830,19 +3830,27 @@ function waitForVideoFrame(video: HTMLVideoElement, timeoutMs = 250) {
 
 async function restoreVideoAfterPictureInPicture(
 	player: MediaPlayerInstance | null,
-	mediaProvider: MediaProviderInstance | null
+	mediaProvider: MediaProviderInstance | null,
+	options: {
+		reloadProvider?: boolean;
+		repaintSeek?: boolean;
+		waitForFrame?: boolean;
+	} = {}
 ) {
 	const video = getPlayerVideoElement(player) as SparklePictureInPictureVideoElement | null;
 	if (!video || typeof document === 'undefined' || !document.contains(video)) {
 		return;
 	}
+	const { reloadProvider = true, repaintSeek = true, waitForFrame = true } = options;
 
 	prepareVideoElementForBackgroundPlayback(video);
 
-	try {
-		mediaProvider?.load(video);
-	} catch {
-		// Provider can already be attached; repaint nudges below still apply.
+	if (reloadProvider) {
+		try {
+			mediaProvider?.load(video);
+		} catch {
+			// Provider can already be attached; repaint nudges below still apply.
+		}
 	}
 
 	const wasPaused = video.paused;
@@ -3863,7 +3871,12 @@ async function restoreVideoAfterPictureInPicture(
 
 	await waitForNextFrame();
 
-	if (time !== null && duration !== null && video.readyState >= HTMLMediaElement.HAVE_METADATA) {
+	if (
+		repaintSeek &&
+		time !== null &&
+		duration !== null &&
+		video.readyState >= HTMLMediaElement.HAVE_METADATA
+	) {
 		const maxTime = Math.max(0, duration - 0.05);
 		const repaintTime =
 			time < maxTime ? Math.min(maxTime, time + 0.001) : Math.max(0, time - 0.001);
@@ -3886,7 +3899,9 @@ async function restoreVideoAfterPictureInPicture(
 		}
 	}
 
-	await waitForVideoFrame(video);
+	if (waitForFrame) {
+		await waitForVideoFrame(video);
+	}
 
 	try {
 		video.style.transform = previousTransform;
@@ -8670,7 +8685,11 @@ export function Player({
 				if (autoPictureInPictureRequestIdRef.current !== requestId && !document.hidden) {
 					shouldExitAutoPictureInPictureRef.current = false;
 					await exitPlayerPictureInPicture(player, trigger);
-					await restoreVideoAfterPictureInPicture(player, mediaProviderEl);
+					await restoreVideoAfterPictureInPicture(player, mediaProviderEl, {
+						reloadProvider: false,
+						repaintSeek: false,
+						waitForFrame: false
+					});
 				}
 			} catch {
 				// Auto PiP is browser/permission dependent; playback should continue normally.
@@ -8706,7 +8725,11 @@ export function Player({
 			} finally {
 				try {
 					if (!document.hidden) {
-						await restoreVideoAfterPictureInPicture(player, mediaProviderEl);
+						await restoreVideoAfterPictureInPicture(player, mediaProviderEl, {
+							reloadProvider: false,
+							repaintSeek: false,
+							waitForFrame: false
+						});
 					}
 					updateAutoPictureInPicturePreference(player);
 				} finally {
