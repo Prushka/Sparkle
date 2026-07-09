@@ -589,7 +589,20 @@ html::-webkit-scrollbar-thumb:hover,
 }
 
 .vds-subtitles-settings-menu {
-	--sparkle-subtitles-submenu-height: calc((var(--player-height, 720px) * 0.7 - 3.125rem) * 0.8);
+	--sparkle-subtitles-submenu-min-height: 16rem;
+	--sparkle-subtitles-submenu-height: min(
+		max(
+			var(--sparkle-subtitles-submenu-min-height),
+			calc((var(--player-height, 720px) * 0.7 - 3.125rem) * 0.8)
+		),
+		calc(100dvh - 12rem)
+	);
+}
+
+@media (max-width: 640px) {
+	.vds-subtitles-settings-menu {
+		--sparkle-subtitles-submenu-min-height: 20.8rem;
+	}
 }
 
 .vds-subtitles-settings-menu .vds-menu-items[data-submenu] {
