@@ -615,11 +615,10 @@ function PosterCard({
 						title={title}
 						className={posterClassName}
 					/>
-					<div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 bg-gradient-to-t from-black/80 via-black/35 to-transparent p-3 opacity-0 transition group-hover:opacity-100">
+					<div className="absolute inset-x-0 bottom-0 flex items-end bg-gradient-to-t from-black/80 via-black/35 to-transparent p-3 opacity-0 transition group-hover:opacity-100">
 						<span className="flex size-9 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg">
 							<IconPlayerPlay size={18} stroke={2.6} />
 						</span>
-						<CodecPill job={job} />
 					</div>
 					{isFresh ? <FreshBadge /> : null}
 				</div>
@@ -674,9 +673,8 @@ function EpisodeCard({
 					<h4 className="line-clamp-2 min-h-8 text-[0.8125rem] font-extrabold leading-4 text-card-foreground">
 						{episode.title}
 					</h4>
-					<div className="mt-1.5 flex min-w-0 items-center justify-between gap-2 text-[0.7rem] text-muted-foreground">
+					<div className="mt-1.5 min-w-0 text-[0.7rem] text-muted-foreground">
 						<span className="truncate">{formatDuration(job.Duration)}</span>
-						<CodecPill job={job} compact />
 					</div>
 				</div>
 			</Link>
@@ -795,22 +793,6 @@ function InfoChip({ icon: Icon, children }: { icon: IconComponent; children: Rea
 		<span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/45 px-2.5 py-1">
 			<Icon className="size-3.5 text-muted-foreground" stroke={2.2} />
 			{children}
-		</span>
-	);
-}
-
-function CodecPill({ job, compact = false }: { job: LibraryJob; compact?: boolean }) {
-	const codecs = job.EncodedCodecs?.map(codecLabel).filter(Boolean) ?? [];
-	const label = codecs[0] ?? job.ExtractedQuality ?? 'Video';
-
-	return (
-		<span
-			className={cn(
-				'inline-flex shrink-0 items-center rounded-md bg-black/55 font-black uppercase tracking-normal text-white ring-1 ring-white/10',
-				compact ? 'px-1.5 py-0.5 text-[0.625rem]' : 'px-2 py-1 text-[0.68rem]'
-			)}
-		>
-			{label}
 		</span>
 	);
 }
@@ -1022,24 +1004,6 @@ function getFreshJobIds(jobs: LibraryJob[]) {
 		ids.add(job.Id);
 	}
 	return ids;
-}
-
-function normalizeCodec(codec: string) {
-	return codec.toLowerCase().replace(/-8bit|-10bit/g, '');
-}
-
-function codecLabel(codec: string) {
-	const normalized = normalizeCodec(codec);
-	if (normalized === 'av1') {
-		return 'AV1';
-	}
-	if (normalized === 'hevc') {
-		return 'HEVC';
-	}
-	if (normalized === 'h264') {
-		return 'H.264';
-	}
-	return codec.toUpperCase();
 }
 
 function normalizeSortTitle(title: string) {
