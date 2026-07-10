@@ -770,12 +770,6 @@ html::-webkit-scrollbar-thumb:hover,
 	display: none !important;
 }
 
-.vds-google-cast-tooltip,
-.vds-google-cast-button,
-media-google-cast-button {
-	display: none !important;
-}
-
 .player-status-text {
 	font-size: 0.84rem;
 }

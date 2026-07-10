@@ -4151,6 +4151,58 @@ function getSelectedSubtitleTrack(
 	return matchingTrack ? { ...matchingTrack, mode: nativeShowing.mode } : null;
 }
 
+function setNativeSubtitleTextTrackModes(
+	player: MediaPlayerInstance | null,
+	tracks: SubtitleTrackInfo[],
+	selectedTrack: SelectedSubtitleTrack | null
+) {
+	const video = getPlayerVideoElement(player);
+	const nativeTextTracks = video?.textTracks;
+	if (!video || !nativeTextTracks) {
+		return false;
+	}
+
+	const selectedVttTrack =
+		selectedTrack?.format === 'vtt'
+			? (tracks.find((track) => track.src === selectedTrack.src) ?? selectedTrack)
+			: null;
+	const previousOnChange = nativeTextTracks.onchange;
+	let touched = false;
+
+	try {
+		nativeTextTracks.onchange = null;
+	} catch {
+		// Vidstack owns this handler; temporarily releasing it lets AirPlay see the VTT mode.
+	}
+
+	for (const nativeTrack of Array.from(nativeTextTracks)) {
+		const trackInfo = findSubtitleTrack(tracks, nativeTrack);
+		if (!trackInfo) {
+			continue;
+		}
+		const nextMode =
+			selectedVttTrack && trackInfo.src === selectedVttTrack.src ? 'showing' : 'disabled';
+		if (nativeTrack.mode !== nextMode) {
+			nativeTrack.mode = nextMode;
+			touched = true;
+		}
+	}
+
+	if (previousOnChange && typeof window !== 'undefined') {
+		window.setTimeout(() => {
+			try {
+				if (video.textTracks === nativeTextTracks && nativeTextTracks.onchange === null) {
+					nativeTextTracks.onchange = previousOnChange;
+				}
+			} catch {
+				// The provider may have been torn down while switching media or remote playback state.
+			}
+		}, 0);
+	}
+
+	return touched || Boolean(selectedVttTrack);
+}
+
 function areDiscordUsersEqual(
 	a: Discord['user'] | null | undefined,
 	b: Discord['user'] | null | undefined
@@ -5813,6 +5865,7 @@ export function Player({
 	const autoPictureInPicturePendingRef = useRef(false);
 	const autoPictureInPictureExitPendingRef = useRef(false);
 	const shouldExitAutoPictureInPictureRef = useRef(false);
+	const externalTextTrackSyncForcedRef = useRef(false);
 	const playbackSyncSuppressionTimerRef = useRef<number | null>(null);
 	const onRoomMediaChangedRef = useLatestRef(onRoomMediaChanged);
 	const [mounted, setMounted] = useState(false);
@@ -5855,6 +5908,8 @@ export function Player({
 	const playerPaused = useMediaState('paused', playerElementRef);
 	const playerWidth = useMediaState('width', playerElementRef);
 	const playerHeight = useMediaState('height', playerElementRef);
+	const remotePlaybackState = useMediaState('remotePlaybackState', playerElementRef);
+	const remotePlaybackType = useMediaState('remotePlaybackType', playerElementRef);
 	const floatingTabsTranslucent = playerPaused === false;
 	const playerSmallLayout = isSmallPlayerLayout(playerWidth, playerHeight);
 	const [playerVolume, setPlayerVolume] = useState(initialVolume);
@@ -6305,6 +6360,15 @@ export function Player({
 		},
 		[clearMergedSubtitleTrack, updateSelectedSubtitleTrack]
 	);
+	const syncExternalPlaybackTextTracks = useCallback(() => {
+		const synced = setNativeSubtitleTextTrackModes(
+			playerElementRef.current,
+			subtitleTracksRef.current,
+			selectedSubtitleTrackRef.current
+		);
+		externalTextTrackSyncForcedRef.current = externalTextTrackSyncForcedRef.current || synced;
+		return synced;
+	}, []);
 
 	const changeSubtitleFormat = useCallback(
 		(format: SubtitleTrackFormat | 'off') => {
@@ -8601,6 +8665,55 @@ export function Player({
 			cancelled = true;
 		};
 	}, [playerEl, selectedSubtitleTrack, subtitleTracks]);
+
+	useEffect(() => {
+		if (!playerEl) {
+			return;
+		}
+
+		const syncNowAndNextFrame = () => {
+			syncExternalPlaybackTextTracks();
+			if (typeof window !== 'undefined') {
+				window.requestAnimationFrame(syncExternalPlaybackTextTracks);
+			}
+		};
+
+		playerEl.addEventListener?.('media-airplay-request', syncNowAndNextFrame);
+		playerEl.addEventListener?.('media-google-cast-request', syncNowAndNextFrame);
+		playerEl.addEventListener?.('remote-playback-change', syncNowAndNextFrame);
+
+		return () => {
+			playerEl.removeEventListener?.('media-airplay-request', syncNowAndNextFrame);
+			playerEl.removeEventListener?.('media-google-cast-request', syncNowAndNextFrame);
+			playerEl.removeEventListener?.('remote-playback-change', syncNowAndNextFrame);
+		};
+	}, [playerEl, syncExternalPlaybackTextTracks]);
+
+	useEffect(() => {
+		const remotePlaybackActive =
+			remotePlaybackState === 'connecting' || remotePlaybackState === 'connected';
+
+		if (remotePlaybackActive) {
+			syncExternalPlaybackTextTracks();
+			if (typeof window === 'undefined') {
+				return;
+			}
+			const timer = window.setTimeout(syncExternalPlaybackTextTracks, 100);
+			return () => window.clearTimeout(timer);
+		}
+
+		if (remotePlaybackState === 'disconnected' && externalTextTrackSyncForcedRef.current) {
+			externalTextTrackSyncForcedRef.current = false;
+			setNativeSubtitleTextTrackModes(playerElementRef.current, subtitleTracksRef.current, null);
+		}
+	}, [
+		extraSubtitleLayerSrcs,
+		remotePlaybackState,
+		remotePlaybackType,
+		selectedSubtitleTrack,
+		subtitleTracks,
+		syncExternalPlaybackTextTracks
+	]);
 
 	useEffect(() => {
 		controlsShowingRef.current = controlsShowing;
