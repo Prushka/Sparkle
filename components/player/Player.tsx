@@ -72,16 +72,17 @@ import {
 } from '@/lib/player/chess-notifications';
 import {
 	BroadcastTypes,
-	codecDisplayMap,
-	codecMap,
 	compareSubtitleStreams,
 	defaultFallback,
 	fallbackFontsByScript,
 	fallbackFontsMap,
+	formatCodecName,
 	formatMbps,
 	formatPair,
 	formatSubtitlePair,
 	formatSeconds,
+	getCodecMediaFilename,
+	getCodecMimeValue,
 	getCueForgeSubtitleInfo,
 	getName,
 	getSubtitleFormatName,
@@ -6030,9 +6031,9 @@ export function Player({
 		}
 		const effectiveAudio = stream ? getStreamAudioValue(stream) : selectedAudio;
 		return {
-			src: `${BASE_STATIC}/${effectiveCodec}-${effectiveAudio}.mp4`,
+			src: `${BASE_STATIC}/${getCodecMediaFilename(effectiveCodec, effectiveAudio)}`,
 			type: 'video/mp4',
-			codec: codecMap[effectiveCodec],
+			codec: getCodecMimeValue(effectiveCodec),
 			sCodec: effectiveCodec,
 			audio: effectiveAudio
 		};
@@ -6047,7 +6048,7 @@ export function Player({
 	const playerSrcUrl = videoSrc?.src ?? '';
 	const effectiveAudio = videoSrc?.audio || selectedAudio;
 	const autoCodec =
-		videoSrc?.sCodec && selectedCodec === 'auto' ? `(${codecDisplayMap[videoSrc.sCodec]})` : '';
+		videoSrc?.sCodec && selectedCodec === 'auto' ? `(${formatCodecName(videoSrc.sCodec)})` : '';
 	const effectiveAudioStream = videoSrc?.sCodec
 		? job.MappedAudio[videoSrc.sCodec]?.find(
 				(stream) => `${stream.Index}-${stream.Language}` === effectiveAudio
@@ -6059,7 +6060,7 @@ export function Player({
 	const videoSettingsCodecLabel =
 		selectedCodec === 'auto'
 			? `Auto ${autoCodec}`.trim()
-			: `${codecDisplayMap[selectedCodec] ?? selectedCodec}${formatMbps(job, selectedCodec)}`;
+			: `${formatCodecName(selectedCodec)}${formatMbps(job, selectedCodec)}`;
 	const videoSettingsSummary = `${videoSettingsAudioLabel} • ${videoSettingsCodecLabel}`;
 	const videoSettingsCodecHeader = ['Codec', job.ExtractedQuality].filter(Boolean).join(' • ');
 	const videoSettingsAudioOptions =
@@ -6078,7 +6079,7 @@ export function Player({
 			value: 'auto'
 		},
 		...job.EncodedCodecs.map((codec) => ({
-			label: `${codecDisplayMap[codec] ?? codec}${formatMbps(job, codec)}${
+			label: `${formatCodecName(codec)}${formatMbps(job, codec)}${
 				supportedCodecs.includes(codec) ? '' : ' (unsupported)'
 			}`,
 			value: codec
@@ -6667,10 +6668,10 @@ export function Player({
 			return;
 		}
 		const timer = window.setTimeout(() => {
-			setSupportedCodecs(getSupportedCodecs());
+			setSupportedCodecs(getSupportedCodecs(job.EncodedCodecs));
 		}, 0);
 		return () => window.clearTimeout(timer);
-	}, []);
+	}, [job.EncodedCodecs]);
 
 	useEffect(() => {
 		if (typeof window === 'undefined') {

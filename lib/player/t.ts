@@ -293,9 +293,7 @@ export type Chat = {
 	timeStr: string;
 };
 
-export const codecsPriority = ['av1', 'hevc', 'h264-10bit', 'h264-8bit'];
 export const hideControlsOnChatFocused = 1.5;
-export const supportedCodecs = ['av1', 'hevc', 'h264-8bit'];
 export const codecMap: { [key: string]: string } = {
 	av1: 'av01.0.01M.08',
 	hevc: 'hvc1.1.6.L93.B0',
@@ -304,12 +302,39 @@ export const codecMap: { [key: string]: string } = {
 };
 export const moveSeconds = 5;
 
-export const codecDisplayMap: { [key: string]: string } = {
-	av1: 'AV1',
-	hevc: 'HEVC',
-	'h264-8bit': 'H.264',
-	auto: 'Auto'
-};
+const tvCodecSuffix = '-tv';
+const autoCodecFamilyPriority = ['av1', 'hevc', 'h264'];
+
+function isTvCodec(codec: string) {
+	return codec.toLowerCase().endsWith(tvCodecSuffix);
+}
+
+export function getCodecBaseName(codec: string) {
+	return isTvCodec(codec) ? codec.slice(0, -tvCodecSuffix.length) : codec;
+}
+
+export function formatCodecName(codec: string) {
+	const baseCodec = getCodecBaseName(codec).toUpperCase();
+	return isTvCodec(codec) ? `${baseCodec} (TV)` : baseCodec;
+}
+
+export function getCodecMediaFilename(codec: string, audio = '') {
+	const baseCodec = getCodecBaseName(codec);
+	const audioSuffix = audio ? `-${audio}` : '';
+	const tvSuffix = isTvCodec(codec) ? '.tv' : '';
+	return `${baseCodec}${audioSuffix}${tvSuffix}.mp4`;
+}
+
+export function getCodecMimeValue(codec: string) {
+	const baseCodec = getCodecBaseName(codec);
+	return codecMap[baseCodec.toLowerCase()] ?? baseCodec;
+}
+
+function getAutoCodecPriority(codec: string) {
+	const baseCodec = getCodecBaseName(codec).toLowerCase();
+	const familyIndex = autoCodecFamilyPriority.findIndex((family) => baseCodec.startsWith(family));
+	return familyIndex === -1 ? autoCodecFamilyPriority.length : familyIndex;
+}
 
 const subtitleTypePriorityNormal = ['ass', 'sup', 'vtt'] as const;
 const subtitleTypePriorityIOS = ['vtt', 'ass', 'sup'] as const;
@@ -321,17 +346,16 @@ export const chatLayouts = ['show', 'hide'];
 
 const externalSubtitleExtensions = new Set(['ass', 'vtt', 'srt', 'sup']);
 
-export function getSupportedCodecs() {
+export function getSupportedCodecs(codecs: string[]) {
 	const supported: string[] = [];
 	try {
 		if (typeof document === 'undefined') {
 			return supported;
 		}
-		for (const codec of supportedCodecs) {
-			const obj = document.createElement('video');
-			const toTest = `video/mp4; codecs="${codecMap[codec]}"`;
+		const obj = document.createElement('video');
+		for (const codec of codecs) {
+			const toTest = `video/mp4; codecs="${getCodecMimeValue(codec)}"`;
 			const canPlayType = obj.canPlayType(toTest);
-			console.log(codecMap[codec], canPlayType);
 			if (canPlayType !== '') {
 				supported.push(codec);
 			}
@@ -339,7 +363,7 @@ export function getSupportedCodecs() {
 	} catch (error) {
 		console.log(error);
 	}
-	return supported;
+	return supported.sort((a, b) => getAutoCodecPriority(a) - getAutoCodecPriority(b));
 }
 
 export enum SyncTypes {
@@ -756,11 +780,13 @@ export function getMbps(job: Job | undefined | null, codec: string): number {
 }
 
 export function formatMbps(job: Job | undefined | null, codec: string): string {
-	let suffix = '';
-	if (job?.MappedAudio[codec]?.[0]) {
-		suffix = `-${job.MappedAudio[codec][0].Index}-${job.MappedAudio[codec][0].Language}`;
-	}
-	const mbps = getMbps(job, `${codec}${suffix}`);
+	const stream = job?.MappedAudio[codec]?.[0];
+	const audio = stream ? `${stream.Index}-${stream.Language}` : '';
+	const filename = getCodecMediaFilename(codec, audio);
+	const mbps =
+		job?.Files?.[filename] && job.Duration
+			? job.Files[filename] / 1024 / 1024 / job.Duration / 0.125
+			: 0;
 	if (mbps === 0) {
 		return '';
 	}
@@ -846,6 +872,46 @@ function isExternalSubtitleFile(file: string) {
 	);
 }
 
+function codecHasMediaFile(job: Job, codec: string) {
+	if (job.Files[getCodecMediaFilename(codec)]) {
+		return true;
+	}
+	return (job.MappedAudio?.[codec] ?? []).some((stream) =>
+		Boolean(job.Files[getCodecMediaFilename(codec, `${stream.Index}-${stream.Language}`)])
+	);
+}
+
+function getJobCodecs(job: Job) {
+	const codecs: string[] = [];
+	const seen = new Set<string>();
+	const mappedCodecs = Object.keys(job.MappedAudio ?? {});
+	const mappedCodecByLowercase = new Map(mappedCodecs.map((codec) => [codec.toLowerCase(), codec]));
+	const addCodec = (codec: string) => {
+		const normalized = codec.toLowerCase();
+		if (!codec || seen.has(normalized)) {
+			return;
+		}
+		seen.add(normalized);
+		codecs.push(codec);
+	};
+
+	for (const codec of job.EncodedCodecs ?? []) {
+		addCodec(codec);
+		if (!isTvCodec(codec)) {
+			const tvCodec = mappedCodecByLowercase.get(`${codec.toLowerCase()}${tvCodecSuffix}`);
+			if (tvCodec && codecHasMediaFile(job, tvCodec)) {
+				addCodec(tvCodec);
+			}
+		}
+	}
+	for (const codec of mappedCodecs) {
+		if (codecHasMediaFile(job, codec)) {
+			addCodec(codec);
+		}
+	}
+	return codecs;
+}
+
 export function preprocessJob(job: Job) {
 	const i = job.Input.replace(/\.[^/.]+$/, '');
 	const ks = replaceKeywordsAtEnd(i, '');
@@ -853,16 +919,8 @@ export function preprocessJob(job: Job) {
 	job.ExtractedQuality = `${ks.replacedWord || ''}`;
 	job.Files = getJobFiles(job);
 	job.Streams = getJobStreams(job);
-	if (job.EncodedCodecs) {
-		job.EncodedCodecs.sort((a, b) => {
-			return codecsPriority.indexOf(a) - codecsPriority.indexOf(b);
-		});
-		for (const codec of [...job.EncodedCodecs]) {
-			if (!supportedCodecs.includes(codec)) {
-				job.EncodedCodecs.splice(job.EncodedCodecs.indexOf(codec), 1);
-			}
-		}
-	}
+	job.MappedAudio = job.MappedAudio ?? {};
+	job.EncodedCodecs = getJobCodecs(job);
 	if (job.Streams.length === 0) {
 		console.error('No streams found for job', job.Id, job.Input);
 	}
@@ -908,14 +966,7 @@ export function preprocessLibraryJobs(jobs: LibraryJob[]) {
 			const ks = replaceKeywordsAtEnd(i, '');
 			job.Input = ks.result;
 			job.ExtractedQuality = `${ks.replacedWord || ''}`;
-			if (job.EncodedCodecs) {
-				job.EncodedCodecs.sort((a, b) => codecsPriority.indexOf(a) - codecsPriority.indexOf(b));
-				for (const codec of [...job.EncodedCodecs]) {
-					if (!supportedCodecs.includes(codec)) {
-						job.EncodedCodecs.splice(job.EncodedCodecs.indexOf(codec), 1);
-					}
-				}
-			}
+			job.EncodedCodecs = [...new Set(job.EncodedCodecs ?? [])];
 			job.Files = job.Files ?? {};
 			job.Title = extractTitle(job as Job);
 			return job;
