@@ -627,6 +627,7 @@ html::-webkit-scrollbar-thumb:hover,
 	width: var(--media-button-size, 38px);
 }
 
+/* Keep Vidstack's final opacity keyframe while making every menu state change instant. */
 .vds-video-layout :is(.vds-settings-menu, .vds-settings-menu-items, .vds-player-settings-menu),
 .vds-video-layout
 	:is(.vds-settings-menu, .vds-settings-menu-items, .vds-player-settings-menu)::before,
@@ -639,7 +640,8 @@ html::-webkit-scrollbar-thumb:hover,
 .vds-video-layout
 	:is(.vds-settings-menu, .vds-settings-menu-items, .vds-player-settings-menu)
 	*::after {
-	animation: none !important;
+	animation-delay: 0s !important;
+	animation-duration: 0s !important;
 	transition: none !important;
 }
 
