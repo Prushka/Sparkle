@@ -549,6 +549,7 @@ const ROOM_TIME_SYNC_THRESHOLD_SECONDS = 6;
 const AUDIO_LANGUAGE_PRIORITY = ['jpn', 'eng', 'chi'];
 const SUBTITLE_LANGUAGE_PRIORITY = ['en'];
 const DEFAULT_SUBTITLE_FORMAT_PRIORITY = ['ass', 'vtt', 'srt', 'sup'] as const;
+const MOBILE_DEFAULT_SUBTITLE_FORMAT_PRIORITY = ['vtt', 'ass', 'srt', 'sup'] as const;
 const STACKABLE_SUBTITLE_FORMATS = new Set<SubtitleTrackFormat>(['ass', 'vtt']);
 const MERGED_SUBTITLE_FONT_SCALE_STEP = 0.12;
 const MERGED_ASS_SUBTITLE_MIN_FONT_SCALE = 0.7;
@@ -2061,6 +2062,34 @@ function compareSubtitleFormats(a: SubtitleTrackFormat, b: SubtitleTrackFormat) 
 	return getSubtitleFormatPriority(a) - getSubtitleFormatPriority(b) || a.localeCompare(b);
 }
 
+function isIOSOrAndroidDevice() {
+	if (typeof navigator === 'undefined') {
+		return false;
+	}
+	const userAgent = navigator.userAgent || '';
+	const platform = navigator.platform || '';
+	return (
+		/android|iphone|ipad|ipod/i.test(userAgent) ||
+		(platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+	);
+}
+
+function compareDefaultSubtitleFormats(
+	a: SubtitleTrackFormat,
+	b: SubtitleTrackFormat,
+	preferMobileNative: boolean
+) {
+	const priority = preferMobileNative
+		? MOBILE_DEFAULT_SUBTITLE_FORMAT_PRIORITY
+		: DEFAULT_SUBTITLE_FORMAT_PRIORITY;
+	const aIndex = priority.indexOf(a);
+	const bIndex = priority.indexOf(b);
+	return (
+		(aIndex === -1 ? priority.length : aIndex) - (bIndex === -1 ? priority.length : bIndex) ||
+		a.localeCompare(b)
+	);
+}
+
 function areStringArraysEqual(a: string[], b: string[]) {
 	return a.length === b.length && a.every((value, index) => value === b[index]);
 }
@@ -2626,7 +2655,8 @@ function pickPrioritySubtitleStreamBySelection(
 
 function pickPrioritySubtitleStream(
 	streams: Stream[],
-	storedSelection: StoredSubtitleSelection | null
+	storedSelection: StoredSubtitleSelection | null,
+	preferMobileNative = false
 ) {
 	if (isStoredSubtitleSelectionDisabled(storedSelection)) {
 		return null;
@@ -2654,7 +2684,9 @@ function pickPrioritySubtitleStream(
 		}
 	}
 
-	for (const format of [...streamsByFormat.keys()].sort(compareSubtitleFormats)) {
+	for (const format of [...streamsByFormat.keys()].sort((a, b) =>
+		compareDefaultSubtitleFormats(a, b, preferMobileNative && storedSelection === null)
+	)) {
 		const priorityMatch = pickPrioritySubtitleStreamBySelection(
 			streamsByFormat.get(format) ?? [],
 			storedSelection
@@ -7644,7 +7676,8 @@ export function Player({
 					isStoredSubtitleSelectionDisabled(storedSubtitleSelection);
 				const defaultSubtitleStream = pickPrioritySubtitleStream(
 					subtitleStreams,
-					storedSubtitleSelection
+					storedSubtitleSelection,
+					isIOSOrAndroidDevice()
 				);
 				for (const stream of subtitleStreams) {
 					const cueForgeSubtitle = getCueForgeSubtitleInfo(stream);
