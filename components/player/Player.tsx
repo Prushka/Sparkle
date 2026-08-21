@@ -4778,23 +4778,27 @@ function SubtitlesMenuSection({
 }: {
 	activeFormat: SubtitleTrackFormat | null;
 	extraSubtitleLayerSrcs: string[];
-	onFormatChange: (format: SubtitleTrackFormat | 'off') => void;
+	onFormatChange: (format: SubtitleTrackFormat) => void;
 	onToggleTrack: (track: SubtitleTrackInfo, checked: boolean) => void;
 	selectedTrack: SelectedSubtitleTrack | null;
 	tracks: SubtitleTrackInfo[];
 }) {
 	const formats = getAvailableSubtitleFormats(tracks);
-	const formatOptions: Array<{ label: string; value: SubtitleTrackFormat | 'off' }> = [
-		{ label: 'Off', value: 'off' },
-		...formats.map((format) => ({ label: getSubtitleFormatName(format), value: format }))
-	];
-	const formatTracks = getSubtitleTracksByFormat(tracks, activeFormat);
+	const [preferredFormat, setPreferredFormat] = useState<SubtitleTrackFormat | null>(activeFormat);
+	const displayedFormat =
+		activeFormat ??
+		(preferredFormat && formats.includes(preferredFormat) ? preferredFormat : formats[0]) ??
+		null;
+	const formatOptions = formats.map((format) => ({
+		label: getSubtitleFormatName(format),
+		value: format
+	}));
+	const formatTracks = getSubtitleTracksByFormat(tracks, displayedFormat);
 	const selectedTrackSrcs = new Set([
 		...(selectedTrack ? [selectedTrack.src] : []),
 		...extraSubtitleLayerSrcs
 	]);
 	const formatToggleGroupRef = useRef<HTMLDivElement | null>(null);
-	const offFormatButtonRef = useRef<HTMLButtonElement | null>(null);
 
 	useLayoutEffect(() => {
 		const group = formatToggleGroupRef.current;
@@ -4899,7 +4903,7 @@ function SubtitlesMenuSection({
 		<>
 			<DefaultMenuSection
 				label="Format"
-				value={activeFormat ? getSubtitleFormatName(activeFormat) : 'Off'}
+				value={displayedFormat ? getSubtitleFormatName(displayedFormat) : ''}
 			>
 				<div
 					aria-label="Subtitle format"
@@ -4909,14 +4913,16 @@ function SubtitlesMenuSection({
 					role="radiogroup"
 				>
 					{formatOptions.map((option) => {
-						const checked = option.value === 'off' ? !activeFormat : activeFormat === option.value;
+						const checked = displayedFormat === option.value;
 						return (
 							<button
 								key={option.value}
 								aria-checked={checked}
 								className="sparkle-subtitle-format-toggle"
-								onClick={() => onFormatChange(option.value)}
-								ref={option.value === 'off' ? offFormatButtonRef : undefined}
+								onClick={() => {
+									setPreferredFormat(option.value);
+									onFormatChange(option.value);
+								}}
 								role="radio"
 								type="button"
 							>
@@ -4926,24 +4932,14 @@ function SubtitlesMenuSection({
 					})}
 				</div>
 			</DefaultMenuSection>
-			{activeFormat && formatTracks.length > 0 ? (
+			{displayedFormat && formatTracks.length > 0 ? (
 				<DefaultMenuSection label="Tracks" value={`${selectedTrackSrcs.size || 0}`}>
 					{formatTracks.map((track) => (
 						<SubtitleLayerCheckbox
 							key={track.src}
 							checked={selectedTrackSrcs.has(track.src)}
 							label={track.settingsLabel}
-							onChange={(checked, trigger) => {
-								if (!checked && selectedTrackSrcs.size === 1 && selectedTrackSrcs.has(track.src)) {
-									trigger?.preventDefault();
-									trigger?.stopPropagation();
-									trigger?.stopImmediatePropagation();
-									offFormatButtonRef.current?.focus({ preventScroll: true });
-									window.setTimeout(() => onToggleTrack(track, checked), 0);
-									return;
-								}
-								onToggleTrack(track, checked);
-							}}
+							onChange={(checked) => onToggleTrack(track, checked)}
 						/>
 					))}
 				</DefaultMenuSection>
@@ -6342,12 +6338,7 @@ export function Player({
 	}, []);
 
 	const changeSubtitleFormat = useCallback(
-		(format: SubtitleTrackFormat | 'off') => {
-			if (format === 'off') {
-				applySubtitleTrackSelection(null);
-				return;
-			}
-
+		(format: SubtitleTrackFormat) => {
 			const tracks = subtitleTracksRef.current;
 			const storedSelection = getStoredSubtitleSelection();
 			const primaryTrack = pickSubtitleTrackForFormat(
