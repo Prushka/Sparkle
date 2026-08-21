@@ -256,6 +256,11 @@ func staticFiles(outputDir string) http.Handler {
 			http.NotFound(w, r)
 			return
 		}
+		// Media responses can legitimately take longer than the API write
+		// deadline when a client is buffering or seeking through a large file.
+		// Clear the per-request deadline for this response only; API endpoints
+		// retain the server-level WriteTimeout protection.
+		_ = http.NewResponseController(w).SetWriteDeadline(time.Time{})
 		if strings.HasPrefix(r.URL.Path, "/static/pfp/") {
 			w.Header().Set("Cache-Control", "no-store, no-cache, max-age=0")
 			w.Header().Set("Pragma", "no-cache")
