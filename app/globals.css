@@ -627,6 +627,22 @@ html::-webkit-scrollbar-thumb:hover,
 	width: var(--media-button-size, 38px);
 }
 
+.vds-video-layout :is(.vds-settings-menu, .vds-settings-menu-items, .vds-player-settings-menu),
+.vds-video-layout
+	:is(.vds-settings-menu, .vds-settings-menu-items, .vds-player-settings-menu)::before,
+.vds-video-layout
+	:is(.vds-settings-menu, .vds-settings-menu-items, .vds-player-settings-menu)::after,
+.vds-video-layout :is(.vds-settings-menu, .vds-settings-menu-items, .vds-player-settings-menu) *,
+.vds-video-layout
+	:is(.vds-settings-menu, .vds-settings-menu-items, .vds-player-settings-menu)
+	*::before,
+.vds-video-layout
+	:is(.vds-settings-menu, .vds-settings-menu-items, .vds-player-settings-menu)
+	*::after {
+	animation: none !important;
+	transition: none !important;
+}
+
 .vds-video-layout .vds-settings-menu > .vds-settings-menu-items[data-root][data-placement] {
 	/* Keep settings anchored to the player instead of Floating UI viewport shifts. */
 	left: auto !important;

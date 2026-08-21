@@ -582,7 +582,6 @@ type SparklePictureInPictureDocument = Document & {
 	exitPictureInPicture?: () => Promise<void>;
 };
 type SparklePictureInPictureVideoElement = HTMLVideoElement & {
-	autoPictureInPicture?: boolean;
 	requestPictureInPicture?: () => Promise<PictureInPictureWindow>;
 	webkitPresentationMode?: SparkleWebKitPresentationMode;
 	webkitSupportsPresentationMode?: (mode: SparkleWebKitPresentationMode) => boolean;
@@ -3787,10 +3786,6 @@ function waitForNextFrame() {
 	});
 }
 
-function waitForTimeout(ms: number) {
-	return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
-}
-
 async function waitForPictureInPictureExit(player: MediaPlayerInstance | null, timeoutMs = 500) {
 	const deadline = Date.now() + timeoutMs;
 	while (Date.now() < deadline) {
@@ -4042,19 +4037,6 @@ function isEditableKeyboardEventTarget(target: EventTarget | null) {
 		return false;
 	}
 	return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'));
-}
-
-function isProbablyIOSWebKit() {
-	if (typeof navigator === 'undefined') {
-		return false;
-	}
-	const platform = navigator.platform || '';
-	const userAgent = navigator.userAgent || '';
-	return (
-		/iP(ad|hone|od)/.test(platform) ||
-		(platform === 'MacIntel' && navigator.maxTouchPoints > 1) ||
-		/iP(ad|hone|od)/.test(userAgent)
-	);
 }
 
 function findSubtitleTrack(
@@ -5662,31 +5644,6 @@ function getSafePlayerPlaybackRate(player: MediaPlayerInstance | null) {
 	}
 }
 
-function setSafePlayerAutoPictureInPicture(player: MediaPlayerInstance | null, enabled: boolean) {
-	const videoElement = getPlayerVideoElement(player) as SparklePictureInPictureVideoElement | null;
-	prepareVideoElementForBackgroundPlayback(videoElement);
-	if (!videoElement || !('autoPictureInPicture' in videoElement)) {
-		return false;
-	}
-
-	try {
-		videoElement.autoPictureInPicture = enabled;
-		return videoElement.autoPictureInPicture === enabled;
-	} catch {
-		return false;
-	}
-}
-
-function updateAutoPictureInPicturePreference(
-	player: MediaPlayerInstance | null,
-	playing = getSafePlayerPaused(player) === false
-) {
-	return setSafePlayerAutoPictureInPicture(
-		player,
-		playing && getSafePlayerCanPictureInPicture(player)
-	);
-}
-
 function setSafePlayerCurrentTime(player: MediaPlayerInstance | null, time: number) {
 	if (!player || !Number.isFinite(time)) {
 		return false;
@@ -5852,6 +5809,7 @@ export function Player({
 	const awaitingInitialPlaybackSyncRef = useRef(false);
 	const pendingRemotePlaybackSyncRef = useRef<PendingRemotePlaybackSync | null>(null);
 	const pendingAudioSwitchPlaybackRef = useRef<PendingAudioSwitchPlayback | null>(null);
+	const pendingMediaProgressResetRef = useRef<string | null>(null);
 	const audioSwitchPlaybackRestoringRef = useRef(false);
 	const inBgRef = useRef(false);
 	const exitedRef = useRef(false);
@@ -5862,10 +5820,6 @@ export function Player({
 	const volumeInitializedRef = useRef(false);
 	const volumeRestoringRef = useRef(false);
 	const volumeCanPlayRestoredRef = useRef(false);
-	const autoPictureInPictureRequestIdRef = useRef(0);
-	const autoPictureInPicturePendingRef = useRef(false);
-	const autoPictureInPictureExitPendingRef = useRef(false);
-	const shouldExitAutoPictureInPictureRef = useRef(false);
 	const externalTextTrackSyncForcedRef = useRef(false);
 	const playbackSyncSuppressionTimerRef = useRef<number | null>(null);
 	const onRoomMediaChangedRef = useLatestRef(onRoomMediaChanged);
@@ -5993,8 +5947,24 @@ export function Player({
 	const [wordleState, setWordleState] = useState<WordleSyncState>(DEFAULT_WORDLE_SYNC_STATE);
 
 	useLayoutEffect(() => {
+		const mediaChanged = currentMediaIdRef.current !== job.Id;
 		currentRoomRef.current = room;
 		currentMediaIdRef.current = job.Id;
+		if (!mediaChanged) {
+			return;
+		}
+
+		pendingMediaProgressResetRef.current = `${room}:${job.Id}`;
+		pendingRemotePlaybackSyncRef.current = null;
+		pendingAudioSwitchPlaybackRef.current = null;
+		audioSwitchPlaybackRestoringRef.current = false;
+		playerCanPlayRef.current = false;
+		lastSentTimeRef.current = 0;
+		if (playbackSyncSuppressionTimerRef.current !== null) {
+			window.clearTimeout(playbackSyncSuppressionTimerRef.current);
+			playbackSyncSuppressionTimerRef.current = null;
+		}
+		suppressNextPlaybackSyncRef.current = false;
 	}, [job.Id, room]);
 
 	const discord = discordAuth as Discord | null;
@@ -7783,7 +7753,7 @@ export function Player({
 	);
 
 	const updateTime = useCallback(() => {
-		if (pendingAudioSwitchPlaybackRef.current) {
+		if (pendingAudioSwitchPlaybackRef.current || pendingMediaProgressResetRef.current) {
 			return;
 		}
 		const player = playerElementRef.current;
@@ -7976,6 +7946,9 @@ export function Player({
 		if (awaitingInitialPlaybackSyncRef.current) {
 			return false;
 		}
+		if (pendingMediaProgressResetRef.current) {
+			return false;
+		}
 		if (pendingAudioSwitchPlaybackRef.current) {
 			return false;
 		}
@@ -7996,6 +7969,24 @@ export function Player({
 			roomId,
 			mediaId
 		};
+	}, []);
+
+	const resetPendingMediaProgress = useCallback((player: MediaPlayerInstance | null) => {
+		const pendingTarget = pendingMediaProgressResetRef.current;
+		if (!pendingTarget) {
+			return true;
+		}
+		const currentTarget = `${currentRoomRef.current}:${currentMediaIdRef.current}`;
+		if (pendingTarget !== currentTarget) {
+			pendingMediaProgressResetRef.current = null;
+			return true;
+		}
+		if (!getPlayerVideoElement(player) || !setSafePlayerCurrentTime(player, 0)) {
+			return false;
+		}
+		lastSentTimeRef.current = 0;
+		pendingMediaProgressResetRef.current = null;
+		return true;
 	}, []);
 
 	const applyRemotePlaybackSync = useCallback(
@@ -8072,7 +8063,6 @@ export function Player({
 				if (!pendingAudioSwitchPlaybackRef.current) {
 					audioSwitchPlaybackRestoringRef.current = false;
 				}
-				updateAutoPictureInPicturePreference(player, !pending.paused);
 				updateMediaSessionState();
 			}, 0);
 		};
@@ -8734,6 +8724,9 @@ export function Player({
 		if (!playerEl || !playerCanPlay) {
 			return;
 		}
+		if (!resetPendingMediaProgress(playerEl)) {
+			return;
+		}
 		restorePendingAudioSwitchPlayback();
 		const pendingRemotePlaybackSync = pendingRemotePlaybackSyncRef.current;
 		if (pendingRemotePlaybackSync) {
@@ -8751,6 +8744,7 @@ export function Player({
 		applyRemotePlaybackSync,
 		playerCanPlay,
 		playerEl,
+		resetPendingMediaProgress,
 		restoreInitialVolume,
 		restorePendingAudioSwitchPlayback
 	]);
@@ -8759,143 +8753,40 @@ export function Player({
 		if (!playerEl) {
 			return;
 		}
-		updateAutoPictureInPicturePreference(playerEl);
-
-		return () => {
-			setSafePlayerAutoPictureInPicture(playerEl, false);
-		};
-	}, [playerCanPlay, playerEl]);
-
-	useEffect(() => {
-		if (!playerEl) {
-			return;
-		}
 		const player = playerEl;
 
-		const enterAutoPictureInPicture = async (trigger?: Event) => {
-			if (getSafePlayerPaused(player) !== false || getSafePlayerPictureInPicture(player)) {
+		let pictureInPictureExitPending = false;
+		const exitPictureInPicture = async (trigger?: Event) => {
+			if (pictureInPictureExitPending) {
 				return;
 			}
-
-			if (updateAutoPictureInPicturePreference(player, true)) {
-				await waitForTimeout(250);
-				if (document.hidden && getSafePlayerPictureInPicture(player)) {
-					shouldExitAutoPictureInPictureRef.current = true;
-					return;
-				}
-			}
-
-			if (autoPictureInPicturePendingRef.current || !getSafePlayerCanPictureInPicture(player)) {
-				return;
-			}
-
-			const requestId = ++autoPictureInPictureRequestIdRef.current;
-			autoPictureInPicturePendingRef.current = true;
+			pictureInPictureExitPending = true;
 			try {
-				const entered = await enterPlayerPictureInPicture(player, trigger);
-				if (entered && autoPictureInPictureRequestIdRef.current === requestId && document.hidden) {
-					shouldExitAutoPictureInPictureRef.current = true;
-				}
-				if (autoPictureInPictureRequestIdRef.current !== requestId && !document.hidden) {
-					shouldExitAutoPictureInPictureRef.current = false;
-					await exitPlayerPictureInPicture(player, trigger);
+				await exitPlayerPictureInPicture(player, trigger);
+				if (!document.hidden) {
 					await restoreVideoAfterPictureInPicture(player, mediaProviderEl, {
 						reloadProvider: false,
 						repaintSeek: false,
 						waitForFrame: false
 					});
 				}
-			} catch {
-				// Auto PiP is browser/permission dependent; playback should continue normally.
 			} finally {
-				if (autoPictureInPictureRequestIdRef.current === requestId) {
-					autoPictureInPicturePendingRef.current = false;
-				}
+				pictureInPictureExitPending = false;
 			}
 		};
 
-		const exitAutoPictureInPicture = async (trigger?: Event, force = false) => {
-			autoPictureInPictureRequestIdRef.current += 1;
-			autoPictureInPicturePendingRef.current = false;
-			const shouldRestoreAutoPictureInPicture = shouldExitAutoPictureInPictureRef.current;
-			const hadPictureInPicture = getSafePlayerPictureInPicture(player);
-			shouldExitAutoPictureInPictureRef.current = false;
-			if (!force && !shouldRestoreAutoPictureInPicture && !hadPictureInPicture) {
-				updateAutoPictureInPicturePreference(player);
-				return;
-			}
-			if (autoPictureInPictureExitPendingRef.current && !force) {
-				return;
-			}
-			autoPictureInPictureExitPendingRef.current = true;
-
-			try {
-				if (force || shouldRestoreAutoPictureInPicture || hadPictureInPicture) {
-					setSafePlayerAutoPictureInPicture(player, false);
-					await exitPlayerPictureInPicture(player, trigger);
-				}
-			} catch {
-				// Returning to the app should never be blocked by PiP cleanup.
-			} finally {
-				try {
-					if (!document.hidden) {
-						await restoreVideoAfterPictureInPicture(player, mediaProviderEl, {
-							reloadProvider: false,
-							repaintSeek: false,
-							waitForFrame: false
-						});
-					}
-					updateAutoPictureInPicturePreference(player);
-				} finally {
-					autoPictureInPictureExitPendingRef.current = false;
-				}
-			}
-		};
-
-		const handleForeground = (event?: Event) => {
-			inBgRef.current = false;
-			void exitAutoPictureInPicture(event, true);
-		};
-
-		const handleBackground = (event?: Event) => {
-			inBgRef.current = true;
-			void enterAutoPictureInPicture(event);
-		};
-
-		const visibilityChange = (event: Event) => {
+		const visibilityChange = () => {
 			const paused = getSafePlayerPaused(player);
 			if (document.hidden) {
 				send({ state: 'bg', type: SyncTypes.StateSync, paused: paused ?? true });
 				inBgRef.current = true;
-				handleBackground(event);
 			} else {
-				handleForeground(event);
+				inBgRef.current = false;
 				void refreshRoomMedia();
 				send({ state: 'fg', type: SyncTypes.StateSync, paused: paused ?? true });
-				inBgRef.current = false;
 			}
 		};
 		document.addEventListener('visibilitychange', visibilityChange);
-		const pageHide = (event: PageTransitionEvent) => {
-			handleBackground(event);
-		};
-		window.addEventListener('pagehide', pageHide);
-		const pageShow = (event: PageTransitionEvent) => {
-			handleForeground(event);
-		};
-		window.addEventListener('pageshow', pageShow);
-		const windowFocus = (event: FocusEvent) => {
-			if (!document.hidden && inBgRef.current) {
-				handleForeground(event);
-			}
-		};
-		window.addEventListener('focus', windowFocus);
-		const windowBlur = (event: FocusEvent) => {
-			if (!document.hidden && isProbablyIOSWebKit()) {
-				handleBackground(event);
-			}
-		};
-		window.addEventListener('blur', windowBlur);
 		const pictureInPictureControlActivation = (event: Event) => {
 			if (
 				!isPictureInPictureControlEvent(event, player.el) ||
@@ -8905,7 +8796,7 @@ export function Player({
 			}
 			event.preventDefault();
 			event.stopImmediatePropagation();
-			void exitAutoPictureInPicture(event, true);
+			void exitPictureInPicture(event);
 		};
 		const pictureInPictureControlKeyDown = (event: KeyboardEvent) => {
 			if (event.key !== 'Enter' && event.key !== ' ') {
@@ -8927,7 +8818,7 @@ export function Player({
 			}
 			event.preventDefault();
 			event.stopImmediatePropagation();
-			void exitAutoPictureInPicture(event, true);
+			void exitPictureInPicture(event);
 		};
 		player.el?.addEventListener('pointerup', pictureInPictureControlActivation, true);
 		player.el?.addEventListener('click', pictureInPictureControlActivation, true);
@@ -8948,6 +8839,9 @@ export function Player({
 		player.el?.addEventListener('mouseleave', mouseLeave);
 
 		const interval = window.setInterval(() => {
+			if (!resetPendingMediaProgress(player)) {
+				return;
+			}
 			const pendingRemotePlaybackSync = pendingRemotePlaybackSyncRef.current;
 			if (pendingRemotePlaybackSync && playerCanPlayRef.current) {
 				pendingRemotePlaybackSyncRef.current = null;
@@ -9038,10 +8932,6 @@ export function Player({
 		return () => {
 			window.clearInterval(interval);
 			document.removeEventListener('visibilitychange', visibilityChange);
-			window.removeEventListener('pagehide', pageHide);
-			window.removeEventListener('pageshow', pageShow);
-			window.removeEventListener('focus', windowFocus);
-			window.removeEventListener('blur', windowBlur);
 			player.el?.removeEventListener('pointerup', pictureInPictureControlActivation, true);
 			player.el?.removeEventListener('click', pictureInPictureControlActivation, true);
 			player.el?.removeEventListener('keydown', pictureInPictureControlKeyDown, true);
@@ -9055,6 +8945,7 @@ export function Player({
 		mediaProviderEl,
 		playerEl,
 		refreshRoomMedia,
+		resetPendingMediaProgress,
 		send,
 		updateLastTicked,
 		updateSelectedSubtitleTrackRef,
@@ -9343,7 +9234,7 @@ export function Player({
 					{mounted && thumbnailVttSrc && playerSrcUrl ? (
 						<MediaPlayer
 							className={mediaPlayerClassName}
-							key={`${playerSrcUrl}:${audioRemountKey}:${thumbnailVttSrc}`}
+							key={`${job.Id}:${playerSrcUrl}:${audioRemountKey}:${thumbnailVttSrc}`}
 							src={playerSrcUrl}
 							style={mediaPlayerStyle}
 							title={job.Input}
@@ -9377,7 +9268,6 @@ export function Player({
 									Boolean(pendingAudioSwitchPlaybackRef.current) ||
 									audioSwitchPlaybackRestoringRef.current;
 								const shouldSyncPlayback = shouldSendPlaybackSync();
-								updateAutoPictureInPicturePreference(playerEl, false);
 								if (shouldSyncPlayback) {
 									send({ paused: true, type: SyncTypes.PauseSync });
 								}
@@ -9404,7 +9294,6 @@ export function Player({
 								if (!isAudioSwitchPlaybackEvent) {
 									setCurrentlyWatching((value) => (value ? { ...value, paused: false } : null));
 								}
-								updateAutoPictureInPicturePreference(playerEl, true);
 								updateMediaSessionState();
 							}}
 							onVolumeChange={({ muted, volume }: { muted: boolean; volume: number }) => {

@@ -1741,6 +1741,9 @@ func TestMoveToBroadcastUpdatesRoomMedia(t *testing.T) {
 	sender := testPlayer("sender", "Sender", 4)
 	receiver := testPlayer("receiver", "Receiver", 4)
 	subscriber := testPlayer(MediaSubscriberPrefix+"subscriber", "", 4)
+	room.state = VideoState{Time: 84, Paused: false}
+	sender.state.VideoState = VideoState{Time: 84, Paused: false}
+	receiver.state.VideoState = VideoState{Time: 42, Paused: false}
 	room.players[sender.state.Id] = sender
 	room.players[receiver.state.Id] = receiver
 	room.mediaSubscribers[subscriber.state.Id] = subscriber
@@ -1752,6 +1755,14 @@ func TestMoveToBroadcastUpdatesRoomMedia(t *testing.T) {
 
 	if room.mediaID != "new_media" {
 		t.Fatalf("room mediaID = %q, want new_media", room.mediaID)
+	}
+	if room.state.Time != 0 || !room.state.Paused {
+		t.Fatalf("room playback state = %#v, want time 0 and paused", room.state)
+	}
+	for _, player := range []*Player{sender, receiver} {
+		if player.state.Time != 0 || !player.state.Paused {
+			t.Fatalf("player %q playback state = %#v, want time 0 and paused", player.state.Id, player.state.VideoState)
+		}
 	}
 	for _, player := range []*Player{sender, receiver, subscriber} {
 		payload := readQueuedPayload(t, player)
@@ -1872,7 +1883,11 @@ func TestNewPlayerBroadcastsJoinSystemMessage(t *testing.T) {
 
 func TestUpdateMediaIDNotifiesMediaSubscribers(t *testing.T) {
 	room := newRoom("room", "")
+	player := testPlayer("player", "Player", 1)
 	subscriber := testPlayer(MediaSubscriberPrefix+"subscriber", "", 4)
+	room.state = VideoState{Time: 84, Paused: false}
+	player.state.VideoState = VideoState{Time: 42, Paused: false}
+	room.players[player.state.Id] = player
 	room.mediaSubscribers[subscriber.state.Id] = subscriber
 
 	room.updateMediaID("new_media", nil)
@@ -1883,6 +1898,12 @@ func TestUpdateMediaIDNotifiesMediaSubscribers(t *testing.T) {
 	}
 	if payload.Broadcast["moveTo"] != "new_media" {
 		t.Fatalf("subscriber target = %#v, want new_media", payload.Broadcast["moveTo"])
+	}
+	if room.state.Time != 0 || !room.state.Paused {
+		t.Fatalf("room playback state = %#v, want time 0 and paused", room.state)
+	}
+	if player.state.Time != 0 || !player.state.Paused {
+		t.Fatalf("player playback state = %#v, want time 0 and paused", player.state.VideoState)
 	}
 }
 
