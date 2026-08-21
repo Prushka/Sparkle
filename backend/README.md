@@ -10,8 +10,16 @@ This directory contains only the backend pieces used by the frontend:
 
 ## Run
 
+macOS/Linux:
+
 ```sh
 ../start-backend.sh
+```
+
+Windows PowerShell:
+
+```powershell
+..\start-backend.ps1
 ```
 
 The API listens on `:1323` and exposes:
