@@ -4809,15 +4809,6 @@ function SubtitlesMenuSection({
 		const submenuItems = group.closest<HTMLElement>('.vds-menu-items[data-submenu]');
 		const rootItems = group.closest<HTMLElement>('.vds-settings-menu-items[data-root]');
 
-		const resetSubtitleMenuScroll = () => {
-			if (submenuItems) {
-				submenuItems.scrollTop = 0;
-			}
-			if (rootItems) {
-				rootItems.scrollTop = 0;
-			}
-		};
-
 		const dispatchResize = () => {
 			const targets = new Set<HTMLElement>([group]);
 			if (submenuItems) {
@@ -4847,21 +4838,12 @@ function SubtitlesMenuSection({
 			timeout = 0;
 		};
 
-		const refreshSubtitleMenuLayout = (options: { resetScroll?: boolean } = {}) => {
+		const refreshSubtitleMenuLayout = () => {
 			cancelScheduledRefresh();
-			if (options.resetScroll) {
-				resetSubtitleMenuScroll();
-			}
 			dispatchResize();
 			firstFrame = window.requestAnimationFrame(() => {
-				if (options.resetScroll) {
-					resetSubtitleMenuScroll();
-				}
 				dispatchResize();
 				secondFrame = window.requestAnimationFrame(() => {
-					if (options.resetScroll) {
-						resetSubtitleMenuScroll();
-					}
 					dispatchResize();
 					thirdFrame = window.requestAnimationFrame(dispatchResize);
 				});
@@ -4869,7 +4851,7 @@ function SubtitlesMenuSection({
 			timeout = window.setTimeout(dispatchResize, 120);
 		};
 
-		refreshSubtitleMenuLayout({ resetScroll: true });
+		refreshSubtitleMenuLayout();
 
 		let resizeObserver: ResizeObserver | null = null;
 		if (typeof ResizeObserver !== 'undefined') {
@@ -4893,7 +4875,7 @@ function SubtitlesMenuSection({
 			mutationObserver?.disconnect();
 			cancelScheduledRefresh();
 		};
-	}, [activeFormat, formatTracks.length]);
+	}, [formatTracks.length]);
 
 	if (formats.length === 0) {
 		return null;
