@@ -912,7 +912,7 @@ function buildShowEntry(titleId: string, title: string, episodes: EpisodeEntry[]
 		titleId,
 		episodes: sortedEpisodes,
 		seasons: Array.from(seasonsByNumber.entries())
-			.sort(([a], [b]) => a - b)
+			.sort(([a], [b]) => b - a)
 			.map(([number, seasonEpisodes]) => ({
 				number,
 				episodes: seasonEpisodes
