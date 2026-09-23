@@ -2,8 +2,10 @@
 
 Sparkle keeps processed media and adds a paged, read-only Plex catalog. `/all`
 continues to return processed items only. Raw media uses original-file range
-requests; there is no Plex transcoding session, server decoder, derivative job,
-or full-file cache. Audio output is decoded PCM: TrueHD decoding does not imply
+requests with client-side decoding. Optional [server encoding](server-encoding.md)
+provides shared NVENC derivatives; Plex access and original files stay read-only.
+There is no Plex transcoding session or full-original-file cache.
+Audio output is decoded PCM: TrueHD decoding does not imply
 Atmos bitstream passthrough.
 
 ## Configuration
@@ -75,7 +77,8 @@ and coalesces concurrent lookups. Processed IDs and playback assets remain uncha
 Metadata memory cache: at most 256 entries / 32 MiB, one-minute TTL. Plex
 responses: at most 8 MiB, eight concurrent metadata/artwork requests per backend.
 Artwork: at most 12 MiB per item, 512 MiB disk budget, 24-hour TTL with oldest
-entry eviction. Only requested metadata/artwork is cached. File writes renew a
+entry eviction. Raw mode caches only requested metadata/artwork; optional encoded
+segments use a separate bounded cache under `MEDIA_CACHE_DIR/encoded`. File writes renew a
 60-second idle deadline and stop on request cancellation. File responses bypass
 compression. Browser range reads use 4 MiB chunks and decoder preload is four
 seconds; the browser and demuxer may require additional index/probe reads.

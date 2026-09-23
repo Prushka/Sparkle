@@ -45,13 +45,16 @@ export type HDROutput =
 	| 'SDR tone mapping'
 	| 'Native dynamic HDR (unverified)'
 	| 'unsupported';
-export type HDRPreference = 'auto' | 'compatible' | 'sdr';
+export type EncodedCodec = 'av1' | 'hevc';
+export type HDRPreference = 'auto' | 'compatible' | 'sdr' | EncodedCodec;
 export interface RawPlaybackStatus {
 	ready: boolean;
 	changing: boolean;
 	sourceHDR: string;
 	output: HDROutput;
 	hdrPreference?: HDRPreference;
+	encodedCodec?: EncodedCodec;
+	encodedAvailable?: EncodedCodec[];
 	renderer?: 'native' | 'software';
 	reason?: string;
 	audioTracks: { id: number; title: string }[];

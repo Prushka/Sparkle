@@ -2,7 +2,7 @@
 
 Sparkle is a self-hosted watch-party app: a Next.js/React frontend and a Go HTTP/WebSocket
 backend. It serves existing processed media and reads Plex catalogs and mapped original
-files. This repository does not contain a server-side transcoding pipeline.
+files. Optional on-demand NVENC encoding serves cached derivatives of Plex media.
 
 ## Working in this repository
 
@@ -27,6 +27,7 @@ files. This repository does not contain a server-side transcoding pipeline.
 | `components/player/`, `lib/player/`, `lib/suptitles/`  | Vidstack UI, raw provider, subtitles, synchronization, room features                     |
 | `backend/cmd/api/`, `backend/internal/config/`         | Go entry point, HTTP routing/middleware, environment configuration                       |
 | `backend/internal/catalog/`, `backend/internal/plex/`  | Catalog normalization, read-only Plex access, confined streaming and artwork             |
+| `backend/internal/encode/`                             | Optional shared NVENC segments, confined inputs, bounded cache and GPU concurrency       |
 | `backend/internal/jobs/`, `backend/internal/realtime/` | Existing processed jobs; room/WebSocket state, profiles, chat, games and voice signaling |
 | `scripts/libmedia/`, `vendor/libmedia/`                | Reproducible player patches, pinned binaries, manifest and notices                       |
 | `tests/e2e/`, `scripts/tests/`, `docs/`                | Browser/codec checks, setup reference and qualification evidence                         |
@@ -70,7 +71,8 @@ resolve output/cache/profile paths relative to the repository; direct `go run` d
 ## Contracts to preserve
 
 - Plex access is read-only and endpoint-allowlisted. Do not add watched-state updates,
-  scans, Plex transcoding, media modifications, server decoding, or whole-file caching.
+  scans, Plex transcoding, media modifications, or whole-original-file caching.
+  Server decoding is confined to the explicit optional encoded mode; raw playback remains client-side.
 - Resolve the longest matching mapping prefix and use root-confined file access. Retain
   traversal, symlink/junction, alternate-stream, and allowed-section protections. Keep
   `PFP_DIR` and `MEDIA_CACHE_DIR` outside mapped media roots; legacy avatars remain readable.
@@ -91,6 +93,11 @@ resolve output/cache/profile paths relative to the repository; direct `go run` d
   byte ranges, HEAD, validators, cancellation, streaming deadlines, and compression bypass.
 - Raw demuxing/decoding stays client-side. Keep audio, subtitles, HDR choices, and versions
   inside Vidstack settings. Audio/subtitle preferences are local; version changes are shared.
+- Server encodes share cache keys by source fingerprint, codec, profile and time segment,
+  never by participant. Preserve cancellation, GPU limits, byte/count cache bounds, original
+  read-only handles and timestamp continuity. Match the documented Sparkle-Transcoder CQ
+  profile. Keep encoded output labeled HDR10/HLG/SDR; do not claim preserved dynamic HDR.
+  NVENC tests need a GPU; CI exercises the scheduling/cache contracts with temporary fixtures.
 - Room time is seconds; libmedia time is milliseconds. Preserve serialized provider commands,
   media-generation checks, stale-message rejection, and remote-event suppression through
   readiness, seeks, buffering, track changes, recovery, and teardown. Loading must not emit

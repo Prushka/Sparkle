@@ -17,6 +17,8 @@ library from the same Library view.
   Large Plex libraries load on demand; confidently matched processed titles reuse Plex
   covers and descriptions.
 - Vidstack controls for playback, audio selection, subtitles, HDR options, and media versions.
+- Optional shared NVENC AV1/HEVC playback for Plex, with on-demand cached segments and a
+  saved output preference. Automatic selects a compatible encode on a measured slow connection.
 - Embedded ASS/SSA with fonts, text subtitles, and PGS/SUP bitmap subtitles; local subtitle
   layers and audio preferences stay independent for each participant.
 - Raw caption toggle and supported-browser picture-in-picture. Chrome Document PiP keeps
@@ -34,11 +36,12 @@ library from the same Library view.
 | Encoded  | Existing `OUTPUT/<id>/job.json` directories and their prepared assets | Existing encoded video/audio, extracted subtitles, posters, chapters, and storyboards                  |
 | Plex raw | Plex metadata plus the original files through local folder mappings   | Original-file range requests; client-side demuxing and decoding through pinned libmedia AVPlayer 1.3.1 |
 
-The backend serves prepared media; it does **not** create encodes, extract tracks,
-or generate derivatives. For raw playback, it only reads Plex metadata/artwork
-and mapped files. It never starts a Plex transcoding session or updates Plex
-watched state. No complete raw file is cached. Requested metadata and artwork
-use bounded caches, with a 512 MiB disk artwork budget.
+Raw playback reads original files and decodes in the browser. With `ENCODE_ENABLED=true`,
+the backend can also create NVENC AV1/HEVC segments on demand for Plex media. Identical
+requests share one GPU job and cache, including across rooms. Original media stays read-only;
+Sparkle never starts a Plex transcoding session or changes Plex watched state. No complete
+original file is cached. Artwork has a 512 MiB budget; encoded segments default to 20 GiB.
+See [server encoding](docs/server-encoding.md) for GPU setup, settings and limits.
 
 Raw playback supports client WASM fallbacks, including TrueHD audio and embedded
 subtitles. TrueHD output is decoded PCM, not Atmos bitstream passthrough. Raw
@@ -60,7 +63,8 @@ Windows Chrome/Edge combinations and pending Safari, mobile, Firefox, and Activi
 
 Prerequisites: Node.js LTS with npm, Go 1.25 or newer, and either existing
 processed output or a reachable Plex server with readable local media mappings.
-Plex is optional. Normal builds do not require a server FFmpeg installation.
+Plex is optional. Raw playback does not require server FFmpeg. Optional encoded playback
+requires FFmpeg/ffprobe and an NVIDIA GPU with the selected 10-bit NVENC encoder.
 
 1. Install dependencies from the repository root:
 
@@ -133,7 +137,7 @@ credentials out of browser configuration.
 | `JOBS_CACHE_TTL`     | Processed catalog refresh interval; `15m` in the example/startup scripts  |
 | `PFP_DIR`            | Writable directory for new avatars; `./data/pfp`                          |
 | `MAX_PFP_BYTES`      | Avatar upload limit; `12000000` bytes                                     |
-| `MEDIA_CACHE_DIR`    | Writable artwork cache; `./cache/media`                                   |
+| `MEDIA_CACHE_DIR`    | Writable artwork and optional encoded-segment cache; `./cache/media`      |
 | `PLEX_URL`           | Plex server base URL, without a token or credentials in the URL           |
 | `PLEX_TOKEN`         | Server-only Plex token                                                    |
 | `PLEX_LIBRARY_IDS`   | Comma-separated allowed section IDs; empty allows all movie/show sections |

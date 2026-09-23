@@ -49,6 +49,46 @@ RSS from 55.09 MiB to a measured peak of 55.38 MiB. This is a bounded-memory
 range test, not a complete 74 GB transfer. No raw-file copy or derivative was
 created. Test evidence and build artifacts are under ignored `cache/`.
 
+## Optional server encoding
+
+NVENC validation on September 23, 2026 used Windows, an RTX 5090, driver 616.92,
+and FFmpeg `2026-05-28-git-7b46c6a2a3` with the documented CQ 22 / p7 / 10-bit /
+144 kbps stereo Opus profile. Test services and generated segments used an isolated
+cache; the existing running backend and its rooms were not replaced during testing.
+
+- AV1 and HEVC output passed 10-bit/color/timestamp probes for 4K PQ and HLG,
+  the approximately 74 GB Profile 7/HDR10+ source with TrueHD and PGS, H.264 with
+  TrueHD/SRT/ASS/PGS, and H.264 High 10 with AAC/ASS and 15 embedded fonts.
+- Three-second reference conversions passed for Dolby Vision Profiles 5, 8.1 and
+  8.4 with both encoders. Profile 5 applies libplacebo RPU conversion; output is
+  compatible PQ/HLG without Dolby configuration. Profile 7 uses its base layer.
+- Chrome tests passed automatic slow-network selection, native AV1/HEVC frames,
+  segment boundaries, pause/resume, and a seek to about 4,998 seconds in the large
+  source. Decoded frames reported limited-range BT.2020/PQ; HLG fixtures reported
+  BT.2020/HLG. HEVC output retained mastering and content-light SEI in the sampled
+  Profile 7 segment (1,000 nit maximum, MaxCLL 1,000 / MaxFALL 168).
+- Two-client AV1 and HEVC tests passed delayed join, reconnect, pause/play, seeking,
+  local track changes, encoded/original mode changes and room event suppression.
+  The AV1 run also covered rapid processed/raw transitions. Switching stereo
+  encoded audio to surround original audio exposed a pooled-resampler allocation
+  bug; the reproducible client patch and the same regression now pass.
+- An ASS fixture passed lazy font loading, caption renderer initialization,
+  mobile output-menu bounds at 390×844, codec selection and reload persistence.
+  Cache unit tests cover shared jobs, cancellation, reservations, pinned eviction,
+  confined handles, validators and font separation. Go race/vet checks pass.
+- Fresh six-second 4K Profile 7 segments at 120 seconds took approximately 2.6 seconds
+  for AV1 and 3.7 seconds for HEVC; the High 10 SDR sample took 1.1–1.4 seconds.
+  These are local segment measurements, not a guarantee for every GPU or source.
+  Constant-quality output can still exceed a very slow connection's bandwidth.
+
+No physical display or dynamic-HDR qualification is implied by these checks.
+Server encodes deliberately produce compatible HDR10, HLG or SDR, and do not
+preserve full Dolby Vision/HDR10+. NVIDIA Docker runtime validation remains pending
+on a host with Docker and the NVIDIA Container Toolkit. Safari, Firefox and mobile
+hardware encoding playback have not been qualified by this record.
+
+See [server encoding](server-encoding.md) for opt-in configuration and reproduction.
+
 ## Native HDR and dynamic HDR
 
 Native AV1 MP4 **PQ and HLG** samples played at 3840×2160. MSE initialization

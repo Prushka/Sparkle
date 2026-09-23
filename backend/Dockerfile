@@ -21,7 +21,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
     -ldflags "-s -w" \
     -trimpath -a -installsuffix cgo -o main ./cmd/api
 
-FROM alpine:3.22
+FROM debian:trixie-slim
 
 ARG GIT_COMMIT=unknown
 ARG GIT_VERSION=unknown
@@ -29,7 +29,8 @@ LABEL org.opencontainers.image.title="Sparkle API" \
     org.opencontainers.image.revision=$GIT_COMMIT \
     org.opencontainers.image.version=$GIT_VERSION
 
-RUN apk --no-cache add ca-certificates tzdata
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tzdata ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 ENV ADDR=:1323
 ENV OUTPUT=/data/output

@@ -99,6 +99,11 @@ test('two raw clients synchronize playback, pause, seek and delayed join', async
 	const messages: any[][] = [[], []];
 	const errors: string[] = [];
 	for (const [index, page] of pages.entries()) {
+		if (process.env.SPARKLE_RAW_ENCODE_MODE)
+			await page.addInitScript(
+				(mode) => localStorage.setItem('sparkle.raw.hdr', mode),
+				process.env.SPARKLE_RAW_ENCODE_MODE
+			);
 		await page.addInitScript(() => {
 			const sockets: WebSocket[] = [];
 			(window as any).testSockets = sockets;
@@ -251,7 +256,7 @@ test('two raw clients synchronize playback, pause, seek and delayed join', async
 	const audioOptions = pages[0]
 		.locator('.vds-video-settings-menu')
 		.getByRole('menuitemradio')
-		.filter({ hasNotText: /Automatic|Compatible|SDR tone mapping/ });
+		.filter({ hasNotText: /Automatic|Compatible|Tone mapping|Encoded AV1|Encoded HEVC/ });
 	if ((await audioOptions.count()) > 1) {
 		const pauseCount = messages[0].filter((m) => m.type === 'pause').length;
 		await audioOptions.nth(1).click();
@@ -262,7 +267,7 @@ test('two raw clients synchronize playback, pause, seek and delayed join', async
 	if (process.env.SPARKLE_RAW_EXPECTED_HDR) {
 		const pauseCount = messages[0].filter((m) => m.type === 'pause').length;
 		const time = messages[0].filter((m) => m.type === 'time').at(-1)?.time || 0;
-		await pages[0].getByRole('menuitemradio', { name: 'SDR tone mapping', exact: true }).click();
+		await pages[0].getByRole('menuitemradio', { name: 'Tone mapping', exact: true }).click();
 		await expect(player).toHaveAttribute('data-raw-renderer', 'software', { timeout: 30_000 });
 		await expect
 			.poll(() => messages[0].filter((m) => m.type === 'time').at(-1)?.time || 0, {
@@ -289,6 +294,27 @@ test('two raw clients synchronize playback, pause, seek and delayed join', async
 		await player.focus();
 		await pages[0].keyboard.press('k');
 		await expect(pages[1].locator('[data-media-player]')).not.toHaveAttribute('data-paused', '');
+	}
+	if (process.env.SPARKLE_RAW_ENCODE_MODE) {
+		const pauses = messages[0].filter((m) => m.type === 'pause').length;
+		await pages[0].getByRole('menuitemradio', { name: 'Compatible', exact: true }).click();
+		await expect(player).toHaveAttribute('data-raw-encoding', '', { timeout: 30_000 });
+		await expect(player).toHaveAttribute('data-raw-ready', 'true', { timeout: 30_000 });
+		expect(await pages[0].evaluate(() => localStorage.getItem('sparkle.raw.hdr'))).toBe(
+			'compatible'
+		);
+		await pages[0]
+			.getByRole('menuitemradio', {
+				name: `Encoded ${process.env.SPARKLE_RAW_ENCODE_MODE.toUpperCase()}`,
+				exact: true
+			})
+			.click();
+		await expect(player).toHaveAttribute('data-raw-encoding', process.env.SPARKLE_RAW_ENCODE_MODE, {
+			timeout: 30_000
+		});
+		await expect(player).toHaveAttribute('data-raw-ready', 'true', { timeout: 30_000 });
+		await expect(pages[1].locator('[data-media-player]')).not.toHaveAttribute('data-paused', '');
+		expect(messages[0].filter((m) => m.type === 'pause').length).toBe(pauses);
 	}
 	await pages[0].keyboard.press('Escape');
 	await pages[0].keyboard.press('Escape');

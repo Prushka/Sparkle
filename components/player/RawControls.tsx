@@ -72,6 +72,7 @@ export function RawPlaybackObserver({
 		player.el.dataset.rawOutput = status.output;
 		player.el.dataset.rawHdr = status.sourceHDR;
 		player.el.dataset.rawRenderer = status.renderer ?? '';
+		player.el.dataset.rawEncoding = status.encodedCodec ?? '';
 		player.el.dataset.rawBlocked = String(
 			!status.changing && !status.ready && status.output === 'unsupported'
 		);
@@ -144,8 +145,9 @@ export function RawVideoSettings({
 }) {
 	const { status, provider } = useRawPlayback();
 	const audio = status?.audioTracks.find((t) => t.id === status.audio)?.title ?? 'Default';
-	const output =
-		status?.output === 'Native dynamic HDR (unverified)'
+	const output = status?.changing
+		? 'Preparing…'
+		: status?.output === 'Native dynamic HDR (unverified)'
 			? 'Native HDR'
 			: status?.output === 'SDR tone mapping'
 				? 'SDR · tone mapped'
@@ -172,19 +174,23 @@ export function RawVideoSettings({
 					</DefaultMenuSection>
 				) : null}
 				<DefaultMenuSection label="HDR output" value={output}>
-					{status?.sourceHDR !== 'SDR' && (
-						<DefaultMenuRadioGroup
-							value={status?.hdrPreference ?? 'auto'}
-							options={[
-								{ value: 'auto', label: 'Automatic' },
-								...(provider?.compatibleHDR
-									? [{ value: 'compatible', label: `Compatible ${provider.compatibleHDR}` }]
-									: []),
-								{ value: 'sdr', label: 'SDR tone mapping' }
-							]}
-							onChange={(value) => void provider?.chooseHDR(value as HDRPreference).catch(() => {})}
-						/>
-					)}
+					<DefaultMenuRadioGroup
+						value={status?.hdrPreference ?? 'auto'}
+						options={[
+							{ value: 'auto', label: 'Automatic' },
+							{ value: 'compatible', label: 'Compatible' },
+							{ value: 'sdr', label: 'Tone mapping' },
+							{
+								value: 'av1',
+								label: `Encoded AV1${status?.encodedAvailable?.includes('av1') ? '' : ' · unavailable'}`
+							},
+							{
+								value: 'hevc',
+								label: `Encoded HEVC${status?.encodedAvailable?.includes('hevc') ? '' : ' · unavailable'}`
+							}
+						]}
+						onChange={(value) => void provider?.chooseHDR(value as HDRPreference).catch(() => {})}
+					/>
 					<div className="sparkle-hdr-status px-3 py-3 text-xs leading-relaxed" data-raw-hdr-status>
 						<dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5">
 							<dt className="text-white/55">Source</dt>
@@ -197,13 +203,17 @@ export function RawVideoSettings({
 							<dd className="m-0 text-right font-medium text-white">{output}</dd>
 							<dt className="text-white/55">Renderer</dt>
 							<dd className="m-0 text-right text-white/90">
-								{status?.renderer === 'native'
-									? 'Native video'
-									: status?.renderer === 'software'
-										? 'Client tone mapper'
-										: status?.ready
-											? 'Client player'
-											: 'Checking…'}
+								{status?.changing
+									? 'Preparing playback…'
+									: status?.encodedCodec
+										? `NVENC ${status.encodedCodec.toUpperCase()} · ${status.renderer === 'native' ? 'native video' : 'client tone mapping'}`
+										: status?.renderer === 'native'
+											? 'Native video'
+											: status?.renderer === 'software'
+												? 'Client tone mapper'
+												: status?.ready
+													? 'Client player'
+													: 'Checking…'}
 							</dd>
 						</dl>
 						{status?.reason && (

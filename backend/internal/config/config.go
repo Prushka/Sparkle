@@ -8,6 +8,15 @@ import (
 )
 
 type Config struct {
+	EncodeEnabled     bool
+	FFmpeg            string
+	FFprobe           string
+	EncodeCacheBytes  int64
+	EncodeCacheTTL    time.Duration
+	EncodeConcurrency int64
+	EncodeQuality     int64
+	EncodePreset      string
+	EncodeAudioKbps   int64
 	PlexURL           string
 	PlexToken         string
 	PlexMappings      string
@@ -27,6 +36,14 @@ type Config struct {
 
 func Load() (Config, error) {
 	cfg := Config{
+		FFmpeg:            getenv("FFMPEG", "ffmpeg"),
+		FFprobe:           getenv("FFPROBE", "ffprobe"),
+		EncodeCacheBytes:  20 << 30,
+		EncodeCacheTTL:    24 * time.Hour,
+		EncodeConcurrency: 2,
+		EncodeQuality:     22,
+		EncodePreset:      getenv("ENCODE_PRESET", "p7"),
+		EncodeAudioKbps:   144,
 		PlexURL:           os.Getenv("PLEX_URL"),
 		PlexToken:         os.Getenv("PLEX_TOKEN"),
 		PlexMappings:      os.Getenv("PLEX_PATH_MAPPINGS"),
@@ -51,6 +68,24 @@ func Load() (Config, error) {
 	}
 
 	var err error
+	if value := os.Getenv("ENCODE_ENABLED"); value != "" {
+		cfg.EncodeEnabled, err = strconv.ParseBool(value)
+		if err != nil {
+			return Config{}, fmt.Errorf("ENCODE_ENABLED must be true or false")
+		}
+	}
+	for name, target := range map[string]*int64{"ENCODE_CACHE_BYTES": &cfg.EncodeCacheBytes, "ENCODE_CONCURRENCY": &cfg.EncodeConcurrency, "ENCODE_QUALITY": &cfg.EncodeQuality, "ENCODE_AUDIO_KBPS": &cfg.EncodeAudioKbps} {
+		*target, err = int64Env(name, *target)
+		if err != nil {
+			return Config{}, err
+		}
+	}
+	if cfg.EncodeCacheTTL, err = durationEnv("ENCODE_CACHE_TTL", cfg.EncodeCacheTTL); err != nil {
+		return Config{}, err
+	}
+	if cfg.EncodeCacheBytes < 512<<20 || cfg.EncodeConcurrency < 1 || cfg.EncodeConcurrency > 8 || cfg.EncodeQuality < 0 || cfg.EncodeQuality > 51 || cfg.EncodeAudioKbps < 32 || cfg.EncodeAudioKbps > 512 || len(cfg.EncodePreset) != 2 || cfg.EncodePreset[0] != 'p' || cfg.EncodePreset[1] < '1' || cfg.EncodePreset[1] > '7' {
+		return Config{}, fmt.Errorf("invalid encoder settings")
+	}
 	if cfg.JobsCacheTTL, err = durationEnv("JOBS_CACHE_TTL", cfg.JobsCacheTTL); err != nil {
 		return Config{}, err
 	}

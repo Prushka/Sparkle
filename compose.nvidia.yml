@@ -1,0 +1,21 @@
+# Requires NVIDIA Container Toolkit on the Docker host.
+# docker compose -f compose.example.yml -f compose.nvidia.yml up -d
+services:
+  sparkle-api:
+    environment:
+      ENCODE_ENABLED: 'true'
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,video,utility,graphics
+      ENCODE_QUALITY: ${ENCODE_QUALITY:-22}
+      ENCODE_PRESET: ${ENCODE_PRESET:-p7}
+      ENCODE_AUDIO_KBPS: ${ENCODE_AUDIO_KBPS:-144}
+      ENCODE_CONCURRENCY: ${ENCODE_CONCURRENCY:-2}
+      ENCODE_CACHE_BYTES: ${ENCODE_CACHE_BYTES:-21474836480}
+      ENCODE_CACHE_TTL: ${ENCODE_CACHE_TTL:-24h}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

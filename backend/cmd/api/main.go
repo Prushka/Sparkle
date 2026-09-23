@@ -3,6 +3,7 @@ package main
 import (
 	"Sparkle/internal/catalog"
 	"Sparkle/internal/config"
+	"Sparkle/internal/encode"
 	"Sparkle/internal/jobs"
 	"Sparkle/internal/plex"
 	"Sparkle/internal/realtime"
@@ -59,11 +60,17 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	encoder, err := encode.New(ctx, plexClient, encode.Options{Enabled: cfg.EncodeEnabled, FFmpeg: cfg.FFmpeg, FFprobe: cfg.FFprobe, Dir: filepath.Join(cfg.MediaCacheDir, "encoded"), MaxBytes: cfg.EncodeCacheBytes, TTL: cfg.EncodeCacheTTL, Concurrency: int(cfg.EncodeConcurrency), Profile: encode.Profile{Quality: int(cfg.EncodeQuality), Preset: cfg.EncodePreset, AudioKbps: int(cfg.EncodeAudioKbps)}})
+	if err != nil {
+		log.Fatalf("encoder configuration error: %v", err)
+	}
+	defer encoder.Close()
 	jobStore.RefreshAsync(ctx)
 	go hub.Run(ctx)
 
 	mux := http.NewServeMux()
 	mediaCatalog.Register(mux)
+	encoder.Register(mux)
 	mux.Handle("GET /static/pfp/", profileFiles(cfg.PFPDir, cfg.OutputDir))
 	mux.Handle("GET /static/", staticFiles(cfg.OutputDir))
 	mux.HandleFunc("GET /all", handleAll(jobStore))

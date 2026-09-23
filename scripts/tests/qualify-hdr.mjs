@@ -145,7 +145,7 @@ try {
 	await page.getByRole('button', { name: 'Settings', exact: true }).click();
 	await page.getByRole('menuitem', { name: /^Video Settings/ }).click();
 	if (process.env.SPARKLE_HDR_MODE === 'sdr') {
-		await page.getByRole('menuitemradio', { name: 'SDR tone mapping' }).click();
+		await page.getByRole('menuitemradio', { name: 'Tone mapping' }).click();
 	}
 	const fallback = page.getByRole('menuitem', { name: /Try compatible/ });
 	if ((await page.locator('[data-media-player]').getAttribute('data-raw-blocked')) === 'true') {

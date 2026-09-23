@@ -32,6 +32,18 @@ function patch(file, before, after, all = false) {
 	writeFileSync(path, all ? original.replaceAll(before, after) : original.replace(before, after));
 }
 const player = 'packages/avplayer/src/AVPlayer.ts';
+// AudioRenderPipeline pools PCM buffers across players/tracks. The stock
+// resampler only reallocates for a larger sample count, even when a stereo
+// buffer is reused for 5.1/7.1 or the sample format changes. Invalidate that
+// capacity before entering WASM so its normal allocator releases/rebuilds it.
+patch(
+	'packages/audioresample/src/Resampler.ts',
+	"    return this.resampler.invoke<int32>('resample_process', input, output, numberOfFrames)",
+	`    if (output.channels !== this.outputParameters.channels || output.format !== this.outputParameters.format) {
+      output.maxnbSamples = 0
+    }
+    return this.resampler.invoke<int32>('resample_process', input, output, numberOfFrames)`
+);
 patch(
 	player,
 	'export interface AVPlayerOptions {',

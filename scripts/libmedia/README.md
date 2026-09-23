@@ -63,8 +63,9 @@ node scripts/prepare-player-assets.mjs
 `build-truehd.sh` creates a separate FFmpeg configuration under
 `cache/truehd-pic-build`, enables only the TrueHD decoder, and links against the
 pinned libmedia FFmpeg utility/resampling archives. It produces a baseline WASM
-module for non-isolated browsers. No server FFmpeg executable is installed or
-invoked for media processing. For another configure profile use a new build
+module for non-isolated browsers. This build does not install or invoke the
+separate optional server encoder; see [server encoding](../../docs/server-encoding.md).
+For another configure profile use a new build
 directory instead of reusing `config.h` from an incompatible build.
 
 The patches add TrueHD/PGS admission, non-isolated subtitle packet transfer,
@@ -91,6 +92,9 @@ then run the generated JavaScript with Node. The wasm32 record sizes are
 all printed offsets before changing FFmpeg or enabling wasm64 assets.
 Pending subtitle/decoder pulls are cancelled during teardown; native play
 promises are observed across pause and source changes.
+The resampler invalidates pooled PCM capacity when channels or sample format
+change. This prevents stereo encoded audio from corrupting a later surround
+buffer when switching back to an original track.
 `export-build.mjs` records source revisions and stock
 codec hashes. After changing patches, rebuild and run the browser qualification
 script; successful compilation alone does not establish decoder compatibility.

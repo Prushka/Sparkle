@@ -7,7 +7,17 @@ import {
 	type Src
 } from '@vidstack/react';
 import type { Job } from './t';
-import type { HDRPreference, RawMedia, RawPlaybackStatus } from './raw-types';
+import type { EncodedCodec, HDRPreference, RawMedia, RawPlaybackStatus } from './raw-types';
+import {
+	encodedCapabilities,
+	encodedURL,
+	loadEncodedPart,
+	readHDRPreference,
+	saveHDRPreference,
+	slowNetwork,
+	type EncodedPart
+} from './raw-encoded';
+import { EncodedSubtitles } from './encoded-subtitles';
 import { compatibleHDR, planHDR, sourceHDR, supportsNativeHDR } from './raw-hdr';
 import { RawSubtitles } from './raw-subtitles';
 import { RawPictureInPicture } from './raw-pip';
@@ -135,6 +145,12 @@ export class RawProvider implements MediaProviderAdapter {
 	private audioRate = NaN;
 	private remoteOperations = 0;
 	private hdrPreference: HDRPreference = 'auto';
+	private encoded?: EncodedPart;
+	private encodedCaptions?: EncodedSubtitles;
+	private availableEncoders: EncodedCodec[] = [];
+	private autoEncoded?: EncodedCodec;
+	private networkCheck = false;
+	private lastNetworkCheck = 0;
 	private destroyed = false;
 	private driftCorrection = false;
 	private buffering = false;
@@ -211,7 +227,9 @@ export class RawProvider implements MediaProviderAdapter {
 		this.abort.abort();
 		this.abort = new AbortController();
 		this.currentSrc = src as Src<string>;
-		this.hdrPreference = 'auto';
+		this.hdrPreference = readHDRPreference();
+		this.autoEncoded = undefined;
+		this.availableEncoders = [];
 		this.desiredTime = 0;
 		this.part = 0;
 		this.captionRestore = undefined;
@@ -231,6 +249,20 @@ export class RawProvider implements MediaProviderAdapter {
 				if (!job.Raw?.parts.length) throw new Error('No mapped media parts are available.');
 				this.raw = job.Raw;
 				this.duration = job.Duration;
+				this.availableEncoders = await encodedCapabilities(
+					this.baseURL,
+					job.width ?? 0,
+					job.height ?? 0,
+					this.abort.signal
+				);
+				if (generation !== this.generation) return;
+				this.publish({ encodedAvailable: this.availableEncoders });
+				if (
+					this.hdrPreference === 'auto' &&
+					this.availableEncoders.length &&
+					(await slowNetwork(this.baseURL, job.Raw.parts[0], this.abort.signal))
+				)
+					this.autoEncoded = this.availableEncoders[0];
 				await this.loadPart(0, generation);
 			} catch (e) {
 				if (generation === this.generation && !this.abort.signal.aborted) this.fail(e);
@@ -247,14 +279,17 @@ export class RawProvider implements MediaProviderAdapter {
 		this.buffering = false;
 		this.lastTime = -1;
 		this.lastProgress = performance.now();
-		const part = this.raw!.parts[index],
-			video = part.streams.find((s) => s.streamType === 1);
+		const part = this.raw!.parts[index];
+		let video = part.streams.find((s) => s.streamType === 1);
+		const originalHDR = sourceHDR(video);
 		this.publish({
 			part: index,
 			sourceHDR: sourceHDR(video),
 			hdrPreference: this.hdrPreference,
 			ready: false,
 			changing: true,
+			encodedCodec: undefined,
+			renderer: undefined,
 			reason: undefined,
 			audio: undefined,
 			subtitle: undefined,
@@ -262,6 +297,39 @@ export class RawProvider implements MediaProviderAdapter {
 			audioTracks: [],
 			subtitleTracks: []
 		});
+		const encode =
+			this.hdrPreference === 'av1' || this.hdrPreference === 'hevc'
+				? this.hdrPreference
+				: this.hdrPreference === 'auto'
+					? this.autoEncoded
+					: undefined;
+		this.encoded = undefined;
+		if (encode) {
+			if (!this.availableEncoders.includes(encode))
+				throw new Error(
+					`Encoded ${encode.toUpperCase()} is unavailable on this server or browser. Choose Automatic or Compatible.`
+				);
+			this.encoded = await loadEncodedPart(this.baseURL, part, encode, this.abort.signal);
+			if (generation !== this.generation || this.destroyed) return;
+			if (video)
+				video = {
+					...video,
+					codec: encode,
+					bitDepth: 10,
+					DOVIPresent: false,
+					DOVIProfile: 0,
+					DOVIELPresent: false,
+					HDR10PlusPresent: false,
+					colorTrc:
+						this.encoded.output === 'HDR10'
+							? 'smpte2084'
+							: this.encoded.output === 'HLG'
+								? 'arib-std-b67'
+								: 'bt709'
+				};
+			this.encodedCaptions = new EncodedSubtitles(this.container, this.encoded);
+			this.publish({ encodedCodec: encode });
+		}
 		const Constructor = await loadEngine();
 		if (generation !== this.generation || this.destroyed) return;
 		this.subtitles = new RawSubtitles(this.container);
@@ -273,7 +341,7 @@ export class RawProvider implements MediaProviderAdapter {
 			enableWebCodecs: true,
 			enableWebGPU: false,
 			enableAudioWorklet: true,
-			preLoadTime: 4,
+			preLoadTime: this.encoded ? 12 : 4,
 			subtitleSink: this.subtitles.sink
 		});
 		const engine = this.engine!;
@@ -301,14 +369,18 @@ export class RawProvider implements MediaProviderAdapter {
 			}
 		});
 		const options = {
-			ext:
-				({ mpegts: 'ts', matroska: 'mkv' } as Record<string, string>)[this.raw!.container] ||
-				this.raw!.container ||
-				'mkv',
+			ext: this.encoded
+				? 'm3u8'
+				: ({ mpegts: 'ts', matroska: 'mkv' } as Record<string, string>)[this.raw!.container] ||
+					this.raw!.container ||
+					'mkv',
 			maxProbeDuration: 3,
 			ioLoaderOptions: { retryCount: 2, preload: 4 * 1024 * 1024 }
 		};
-		await engine.load(`${this.baseURL}${part.url}`, options);
+		await engine.load(
+			this.encoded ? encodedURL(this.encoded, 'video.m3u8') : `${this.baseURL}${part.url}`,
+			options
+		);
 		if (!active()) return;
 		const demuxVideo = engine.getStreams().find((s) => s.mediaType.toLowerCase() === 'video');
 		if (!demuxVideo)
@@ -332,7 +404,7 @@ export class RawProvider implements MediaProviderAdapter {
 				'Video track metadata is missing. Refresh the library metadata before playback.'
 			);
 		const hdr = sourceHDR(video);
-		this.publish({ sourceHDR: hdr });
+		this.publish({ sourceHDR: this.encoded ? originalHDR : hdr });
 		const codec = demuxVideo?.codecparProxy;
 		const plan =
 			video && hdr !== 'SDR' && hdr !== 'Unknown'
@@ -340,7 +412,7 @@ export class RawProvider implements MediaProviderAdapter {
 						video,
 						engine.getVideoMimeType(),
 						dovi?.data,
-						this.hdrPreference,
+						this.encoded ? 'compatible' : this.hdrPreference,
 						matchMedia('(dynamic-range: high)').matches,
 						(mime, mode) =>
 							supportsNativeHDR(
@@ -359,10 +431,15 @@ export class RawProvider implements MediaProviderAdapter {
 		if (plan) {
 			engine.setBaseHDROnly(plan.baseOnly);
 			engine.setHDRPlayback(plan.renderer, plan.mime, video?.DOVIProfile === 5);
+		} else if (this.encoded) {
+			engine.setHDRPlayback('native', engine.getVideoMimeType());
 		}
 		this.subtitles.setFonts(engine.getEmbeddedFonts());
 		// Keep HDR video on native MSE while embedded audio decodes client-side.
-		if (plan?.renderer === 'native' && part.streams.some((s) => s.streamType === 2)) {
+		if (
+			(this.encoded || plan?.renderer === 'native') &&
+			part.streams.some((s) => s.streamType === 2)
+		) {
 			this.audioEngine = new Constructor({
 				container: this.audioContainer,
 				wasmBaseUrl: '/vendor/libmedia/1.3.1',
@@ -370,27 +447,34 @@ export class RawProvider implements MediaProviderAdapter {
 				enableHardware: true,
 				enableAudioWorklet: true,
 				checkUseMSE: () => false,
-				preLoadTime: 4
+				preLoadTime: this.encoded ? 12 : 4
 			});
-			await this.audioEngine!.load(`${this.baseURL}${part.url}`, options);
+			await this.audioEngine!.load(
+				this.encoded ? encodedURL(this.encoded, 'audio.m3u8') : `${this.baseURL}${part.url}`,
+				options
+			);
 		}
 		if (!active()) return;
 		const list = (type: string) =>
 			(type === 'audio' ? (this.audioEngine ?? engine) : engine)
 				.getStreams()
 				.filter((s) => s.mediaType.toLowerCase() === type)
-				.map((s) => ({
+				.map((s, index) => ({
 					id: s.id,
 					title:
-						part.streams.find((p) => p.index === s.index)?.displayTitle ||
+						(this.encoded && type === 'audio'
+							? part.streams.filter((p) => p.streamType === 2)[index]?.displayTitle
+							: part.streams.find((p) => p.index === s.index)?.displayTitle) ||
 						String(s.metadata.title || s.metadata.language || `${type} ${s.index + 1}`)
 				}));
 		this.publish({
 			output: plan?.output ?? 'SDR',
-			renderer: plan?.renderer,
-			reason: plan?.reason,
+			renderer: plan?.renderer ?? (this.encoded ? 'native' : undefined),
+			reason: this.encoded
+				? `${this.hdrPreference === 'auto' ? 'Slow connection · ' : ''}Shared NVENC ${this.encoded.codec.toUpperCase()}${/Dolby|HDR10\+/.test(originalHDR) ? ` · ${this.encoded.output} conversion` : ''}.`
+				: plan?.reason,
 			audioTracks: list('audio'),
-			subtitleTracks: list('subtitle'),
+			subtitleTracks: this.encoded?.subtitleTracks ?? list('subtitle'),
 			ready: true,
 			changing: false
 		});
@@ -420,12 +504,21 @@ export class RawProvider implements MediaProviderAdapter {
 			const audio = this.status.audioTracks.find((t) => t.title === audioPreference);
 			const subtitle = this.status.subtitleTracks.find((t) => t.title === subtitlePreference);
 			if (audio) await (this.audioEngine ?? engine).selectAudio(audio.id);
-			if (subtitle) await engine.selectSubtitle(subtitle.id);
+			if (subtitle && !this.encoded) await engine.selectSubtitle(subtitle.id);
 			engine.setSubtitleEnable(subtitlePreference !== 'off');
 			this.publish({
 				audio: (this.audioEngine ?? engine).getSelectedAudioStreamId(),
-				subtitle: subtitlePreference === 'off' ? -1 : engine.getSelectedSubtitleStreamId()
+				subtitle:
+					subtitlePreference === 'off'
+						? -1
+						: this.encoded
+							? (subtitle?.id ??
+								this.encoded.subtitleTracks.find((track) => track.default)?.id ??
+								this.status.subtitleTracks[0]?.id ??
+								-1)
+							: engine.getSelectedSubtitleStreamId()
 			});
+			this.encodedCaptions?.select([this.status.subtitle ?? -1]);
 			try {
 				const names: unknown = JSON.parse(
 					localStorage.getItem('sparkle.raw.subtitleLayers') || '[]'
@@ -436,7 +529,7 @@ export class RawProvider implements MediaProviderAdapter {
 						.map((name) => this.status.subtitleTracks.find((t) => t.title === name)?.id ?? -1);
 					if (ids.length) {
 						await this.applySubtitleLayers(ids);
-						await engine.seek(engine.currentTime);
+						if (!this.encoded) await engine.seek(engine.currentTime);
 					}
 				}
 			} catch {
@@ -507,6 +600,7 @@ export class RawProvider implements MediaProviderAdapter {
 			// Start both indexed seeks together; do not let video finish before the
 			// audio decoder even starts moving to the requested position.
 			await Promise.all([this.engine?.seek(ms), this.audioEngine?.seek(ms)]);
+			this.encodedCaptions?.update(Number(ms), true);
 			if (sequence !== this.seekSequence) return;
 			this.lastTime = -1;
 			this.lastProgress = performance.now();
@@ -548,6 +642,16 @@ export class RawProvider implements MediaProviderAdapter {
 				this.status[kind] === id
 			)
 				return;
+			if (kind === 'subtitle' && this.encodedCaptions) {
+				this.publish({ subtitle: id, subtitleLayers: [] });
+				this.encodedCaptions.select([id]);
+				localStorage.setItem(
+					'sparkle.raw.subtitle',
+					id < 0 ? 'off' : (tracks.find((t) => t.id === id)?.title ?? '')
+				);
+				localStorage.setItem('sparkle.raw.subtitleLayers', '[]');
+				return;
+			}
 			this.publish({ changing: true });
 			const wasPaused = this.paused,
 				time = this.timeline;
@@ -590,6 +694,20 @@ export class RawProvider implements MediaProviderAdapter {
 	}
 	private async applySubtitleLayers(ids: number[]) {
 		if (!this.engine) return;
+		if (this.encodedCaptions) {
+			const selected = ids
+				.slice(0, 2)
+				.map((id, index) =>
+					id !== this.status.subtitle &&
+					ids.indexOf(id) === index &&
+					this.status.subtitleTracks.some((track) => track.id === id)
+						? id
+						: -1
+				);
+			this.encodedCaptions.select([this.status.subtitle ?? -1, ...selected]);
+			this.publish({ subtitleLayers: selected });
+			return;
+		}
 		await this.engine.setSubtitleLayers([]);
 		this.subtitleLayers.forEach((layer) => layer.destroy());
 		this.subtitleLayers = [];
@@ -617,6 +735,18 @@ export class RawProvider implements MediaProviderAdapter {
 		if (!this.status.ready || this.status.changing || !this.initialized) return Promise.resolve();
 		return this.enqueue(async () => {
 			if (!this.engine || this.engine !== expectedEngine || !this.initialized) return;
+			if (this.encodedCaptions) {
+				await this.applySubtitleLayers(ids);
+				localStorage.setItem(
+					'sparkle.raw.subtitleLayers',
+					JSON.stringify(
+						this.status.subtitleLayers?.map(
+							(id) => this.status.subtitleTracks.find((track) => track.id === id)?.title ?? null
+						)
+					)
+				);
+				return;
+			}
 			const time = this.engine.currentTime,
 				wasPaused = this.paused;
 			this.publish({ changing: true });
@@ -640,9 +770,18 @@ export class RawProvider implements MediaProviderAdapter {
 	async chooseCompatibleHDR() {
 		return this.chooseHDR('compatible');
 	}
-	async chooseHDR(preference: HDRPreference) {
+	async chooseHDR(preference: HDRPreference, networkChange = false) {
+		if (
+			(preference === 'av1' || preference === 'hevc') &&
+			!this.availableEncoders.includes(preference)
+		) {
+			this.publish({
+				reason: `Encoded ${preference.toUpperCase()} is unavailable on this server or browser.`
+			});
+			return;
+		}
 		return this.enqueue(async () => {
-			if (preference === this.hdrPreference && this.status.ready) return;
+			if (preference === this.hdrPreference && this.status.ready && !networkChange) return;
 			const time = this.initialized ? this.timeline : this.desiredTime;
 			const wasPaused = this.paused;
 			const generation = this.generation;
@@ -650,6 +789,14 @@ export class RawProvider implements MediaProviderAdapter {
 			this.publish({ changing: true });
 			try {
 				this.hdrPreference = preference;
+				saveHDRPreference(preference);
+				if (preference === 'auto' && !networkChange) {
+					this.autoEncoded =
+						this.availableEncoders.length &&
+						(await slowNetwork(this.baseURL, this.raw!.parts[this.part], this.abort.signal))
+							? this.availableEncoders[0]
+							: undefined;
+				}
 				await this.loadPart(this.part, generation);
 				if (generation !== this.generation || this.destroyed) return;
 				// Warm the replacement renderer before seeking, then restore the local
@@ -707,7 +854,38 @@ export class RawProvider implements MediaProviderAdapter {
 				if (this.buffering) await this.audioEngine?.pause();
 			}).catch(() => {});
 		}
-		if (this.buffering) return;
+		if (this.buffering) {
+			if (
+				this.hdrPreference === 'auto' &&
+				!this.encoded &&
+				this.availableEncoders.length &&
+				!this.networkCheck &&
+				performance.now() - this.lastProgress > 6000 &&
+				performance.now() - this.lastNetworkCheck > 30000
+			) {
+				this.networkCheck = true;
+				this.lastNetworkCheck = performance.now();
+				const generation = this.generation;
+				void slowNetwork(this.baseURL, this.raw!.parts[this.part], this.abort.signal)
+					.then(async (slow) => {
+						if (
+							slow &&
+							generation === this.generation &&
+							this.hdrPreference === 'auto' &&
+							!this.destroyed
+						) {
+							this.autoEncoded = this.availableEncoders[0];
+							await this.chooseHDR('auto', true);
+						}
+					})
+					.catch(() => {})
+					.finally(() => {
+						this.networkCheck = false;
+					});
+			}
+			return;
+		}
+		this.encodedCaptions?.update(Number(this.engine.currentTime));
 		this.notify('time-change', time);
 		if (this.audioEngine && !this.paused && !this.driftCorrection) {
 			const drift = Number(this.audioEngine.currentTime - this.engine.currentTime);
@@ -742,6 +920,8 @@ export class RawProvider implements MediaProviderAdapter {
 		}
 	}
 	private async releaseEngines() {
+		this.encodedCaptions?.destroy();
+		this.encodedCaptions = undefined;
 		await this.pictureInPicture.exit().catch(() => {});
 		const engine = this.engine,
 			audio = this.audioEngine;
