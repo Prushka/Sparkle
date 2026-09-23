@@ -23,7 +23,9 @@ trap cleanup EXIT
 
 mkdir -p "$fixture_dir/output"
 printf 'sparkle-container-range-fixture\n' > "$fixture_dir/output/ci-probe.txt"
-docker network create --internal "$network" >/dev/null
+# A user-defined bridge permits the host browser to reach the published frontend port.
+# Docker's internal-only networks disable port publishing on current engines.
+docker network create "$network" >/dev/null
 docker run -d --name "$api" --network "$network" --network-alias sparkle-api \
   --read-only --tmpfs /data/pfp --tmpfs /cache/media \
   --mount "type=bind,source=$fixture_dir/output,target=/data/output,readonly" \

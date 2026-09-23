@@ -12,9 +12,6 @@ RUN npm ci
 FROM node:lts-bookworm-slim AS build
 WORKDIR /app
 
-ARG GIT_COMMIT=unknown
-ARG GIT_VERSION=unknown
-
 ENV NODE_OPTIONS="--max_old_space_size=4096"
 ENV NEXT_TELEMETRY_DISABLED=1
 

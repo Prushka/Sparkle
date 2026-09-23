@@ -3,6 +3,13 @@
 .env.*
 !.env.example
 .git
+.github
+AGENTS.md
+CLAUDE.md
+README.md
+docs
+tests
+scripts/ci
 .idea
 .next
 .next-raw-validation
