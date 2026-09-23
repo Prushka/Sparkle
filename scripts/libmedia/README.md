@@ -11,13 +11,13 @@ that checkout's committed versions before applying the complete patch series.
 
 ## Source pins
 
-| Component | Revision |
-| --- | --- |
+| Component         | Revision                                            |
+| ----------------- | --------------------------------------------------- |
 | libmedia AVPlayer | v1.3.1 / `152f629d3021fd8013efa464fcb7b55f9fbe7753` |
-| common submodule | `00c9c3c481cf7c53ed252cec6ca2dc6e9732ea28` |
-| cheap submodule | `85cc79e032cbd417e3bb4a218bdf26da537b970b` |
-| zhaohappy FFmpeg | `3a14ab29692763e561610412cdeb1985da4e3cd8` |
-| Emscripten SDK | 4.0.10 / `62a853cd3b3134398ce85cde8bb5cbb2ef0194cb` |
+| common submodule  | `00c9c3c481cf7c53ed252cec6ca2dc6e9732ea28`          |
+| cheap submodule   | `85cc79e032cbd417e3bb4a218bdf26da537b970b`          |
+| zhaohappy FFmpeg  | `3a14ab29692763e561610412cdeb1985da4e3cd8`          |
+| Emscripten SDK    | 4.0.10 / `62a853cd3b3134398ce85cde8bb5cbb2ef0194cb` |
 
 Sources: <https://github.com/zhaohappy/libmedia>,
 <https://github.com/zhaohappy/FFmpeg>, <https://github.com/emscripten-core/emsdk>.
@@ -69,8 +69,21 @@ directory instead of reusing `config.h` from an incompatible build.
 
 The patches add TrueHD/PGS admission, non-isolated subtitle packet transfer,
 embedded font access, bounded subtitle sinks/layers, zlib-compressed Matroska
-subtitle packets, native-only HDR guards, exact High 10 and AV1 color probes,
+subtitle packets, native HDR guards, exact High 10/HEVC/AV1 color probes,
 Matroska Dolby configuration signaling, and MP4 static/Dolby HDR box preservation.
+Native Dolby playback uses the selected Dolby codec in both MSE and the MP4
+sample entry. `hdr-sdr.ts` supplies the tested integer-frame PQ/HLG → sRGB shader;
+`dovi-sdr.ts` adds bounded per-frame Profile 5 RPU polynomial/MMR and color transforms.
+Both source files are copied by the patch script and hashed in the manifest.
+Software HDR explicitly disables WebCodecs to avoid implicit 8-bit conversion.
+It produces SDR, never an HDR canvas signal. Profile 7 enhancement layers remain
+outside this decoder; HDR10+ software playback uses the compatible PQ representation.
+
+`dovi-layout.c` checks the FFmpeg metadata ABI used by `readDovi`. Compile it with
+the pinned Emscripten compiler and `-Icache/FFmpeg -sWASM_ASYNC_COMPILATION=0`,
+then run the generated JavaScript with Node. The wasm32 record sizes are
+12 / 18 / 1672 / 5136 / 196 bytes (metadata/header/curve/mapping/color). Reverify
+all printed offsets before changing FFmpeg or enabling wasm64 assets.
 Pending subtitle/decoder pulls are cancelled during teardown; native play
 promises are observed across pause and source changes.
 `export-build.mjs` records source revisions and stock

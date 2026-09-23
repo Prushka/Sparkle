@@ -10,6 +10,12 @@ if (
 	manifest.patchHash
 )
 	throw new Error('Player patches changed; rebuild and export the pinned player');
+for (const [file, hash] of Object.entries(manifest.sources || {})) {
+	if (
+		digest((await readFile(`scripts/libmedia/${file}`, 'utf8')).replaceAll('\r\n', '\n')) !== hash
+	)
+		throw new Error(`Player source changed; rebuild and export: ${file}`);
+}
 for (const [file, hash] of Object.entries(manifest.artifacts)) {
 	if (digest(await readFile(`${vendor}/${file}`)) !== hash)
 		throw new Error(`Patched player integrity check failed: ${file}`);

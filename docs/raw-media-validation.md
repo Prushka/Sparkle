@@ -61,7 +61,7 @@ These are pipeline and UI checks; screenshots cannot certify physical luminance
 or color accuracy.
 
 The sampled HEVC 10-bit **Dolby Vision Profile 7 / HDR10+** file was tested
-separately. After explicitly selecting its compatible HDR10 representation,
+separately. Automatic mode selected its explicitly labeled compatible HDR10 representation;
 Chrome displayed native MSE video at 3840×2160 while a separate client instance
 decoded TrueHD. On the test's SDR display, the UI reported **SDR tone mapping**.
 The native clock advanced beyond 13 seconds without a page error.
@@ -75,13 +75,13 @@ writing uses the specified G/B/R primary order, following the
 The MP4-to-MP4 mastering-box path passes byte preservation checks; Matroska
 mastering conversion still needs a reference fixture with container metadata.
 
-Another HEVC/PQ sample failed the exact native capability probe on this machine
-and was explicitly rejected; room participation remained available. Codec,
-profile and device differences matter even within the same browser.
+The updated HEVC codec-string builder uses the hvcC profile/tier/level, complete
+constraint bytes and bit-reversed RFC compatibility flags. Unsupported native
+PQ/HLG combinations can use client-side SDR rendering instead of being blocked.
 
 **No full dynamic-HDR combination is certified by this change.** The qualification
 registry remains empty. In particular, Profile 7 enhancement-layer rendering,
-RPU application, HDR10+ per-scene output, HLG reference rendering,
+native Dolby/HDR10+ per-scene display output, HLG physical reference rendering,
 and physical HDR-versus-SDR color accuracy still require appropriate
 reference files and hardware. Generic HEVC/AV1 support is insufficient evidence.
 The user's existing native Chrome AV1 HDR playback is the basis for preferring
@@ -90,8 +90,44 @@ native video; it is not recorded as a new physical test performed here.
 Use [Dolby's browser test kit](https://ott.dolby.com/browser_test_kit/index.html)
 and appropriate HDR10+/HLG reference material when qualifying exact browser,
 OS, GPU, display and codec/profile combinations. Never mark base-layer output
-as full Dolby Vision. A client without a compatible native path remains in the
+as full Dolby Vision. A client without a compatible decoder remains in the
 party and receives an explicit playback limitation.
+
+### Client SDR renderer (September 2026)
+
+- Chrome rendered the 3840×2160 AV1/PQ fixture through the software SDR path;
+  native → software switching continued past 11 seconds with no page error.
+- Edge rendered the 3840×2160 AV1/HLG fixture through software SDR. This heavy
+  fixture advanced about four seconds in fourteen seconds on the test machine;
+  native decoding remains the preferred path for smooth 4K playback.
+- Dolby's public `dolby-vision-contents` **Sol Levante Profile 5 1080p24** file
+  decoded and sought to 30 seconds in Chrome and Edge using RPU reshaping and
+  SDR output. Its SHA-256 is
+  `87fe0115f3002a621d2380a9f91852ef91a15854a446efe26de8744f77ef5346`.
+  Four ranges read approximately 16 MiB from the 142 MB reference file. Frames
+  were visually inspected; this is not a physical display/color certification.
+- WebGL pixel tests cover 10/12-bit full/limited-range PQ and HLG, neutral black,
+  published PQ code values, highlight separation through 10,000 nits, and gamut
+  compression. Dolby tests cover polynomial/MMR identity reshaping, matrix
+  updates and malformed/truncated RPU metadata rejection.
+- Dolby Profile 8.1 and 8.4 1080p24 reference files also passed software SDR
+  playback and 30-second seeking in Chrome. The HEVC/PQ MPEG-TS sample played
+  at 3840×2160 in Edge after normalizing Plex's container name.
+- The large Profile 7/HDR10+ file played in Edge using its labeled HDR10 base
+  layer. Inspection of MSE packets observed **384 Dolby RPU NAL units and 384
+  HDR10+ SEI messages**, with a largest append of 1,400,768 bytes. Metadata
+  reached MSE; this does not prove dynamic metadata processing by the display.
+- Updated Chrome two-client tests passed native → software conversion during
+  playback and software → native conversion while paused, with no accidental
+  room pause. Edge passed all eight browser regression tests, including local
+  captions/audio, PiP, rapid processed/raw transitions and multipart recovery.
+- Real-media regression runs passed H.264 High 10/AAC/ASS with 15 embedded fonts,
+  FLAC/PGS, HE-AAC/SRT and DTS. No unbounded raw-file GET requests were observed.
+
+Reference source: [Dolby Laboratories test contents](https://github.com/DolbyLaboratories/dolby-vision-contents).
+The separate OTT browser test kit returned HTTP 403 during this run; it was not
+recorded as successfully tested. Reference files live only in the ignored test
+cache and are not distributed with the application.
 
 ## Browser and party matrix
 
@@ -157,6 +193,13 @@ and `npm run build` at the root. Browser tests use `SPARKLE_TEST_URL` (default
   `node scripts/tests/qualify-media.mjs`.
 - `SPARKLE_HDR_TEST_ID`: HDR item for `node scripts/tests/qualify-hdr.mjs`.
   It captures native pipeline evidence, not physical HDR certification.
+- `SPARKLE_HDR_MODE=sdr`: exercise local software tone mapping in that script.
+- `SPARKLE_DOLBY_FIXTURE`: local official reference file for
+  `node scripts/tests/qualify-dolby.mjs` (default
+  `cache/hdr-fixtures/dolby-profile5.mp4`). This test-only range server binds to
+  loopback and closes after the run; it does not modify the app catalog or Plex.
+- `npx playwright test tests/e2e/hdr-color.spec.ts`: synthetic GPU reference tests
+  without Plex credentials or media fixtures.
 
 `SPARKLE_BUILD_DIR=.next-raw-validation` isolates a validation build from an
 existing development checkout. The ordinary build still uses `.next`.

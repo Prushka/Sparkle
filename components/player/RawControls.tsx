@@ -10,6 +10,7 @@ import {
 } from '@vidstack/react/player/layouts/default';
 import { RAW_STATUS_EVENT, RawProvider } from '@/lib/player/raw-provider';
 import type { RawMedia, RawPlaybackStatus } from '@/lib/player/raw-types';
+import type { HDRPreference } from '@/lib/player/raw-types';
 
 function useRawPlayback(onTracks?: (status: RawPlaybackStatus) => void) {
 	const player = useMediaPlayer();
@@ -70,6 +71,7 @@ export function RawPlaybackObserver({
 		player.el.dataset.rawReady = String(status.ready);
 		player.el.dataset.rawOutput = status.output;
 		player.el.dataset.rawHdr = status.sourceHDR;
+		player.el.dataset.rawRenderer = status.renderer ?? '';
 		player.el.dataset.rawBlocked = String(
 			!status.changing && !status.ready && status.output === 'unsupported'
 		);
@@ -162,6 +164,19 @@ export function RawVideoSettings({
 					</DefaultMenuSection>
 				) : null}
 				<DefaultMenuSection label="HDR output" value={status?.output ?? 'Checking playback'}>
+					{status?.sourceHDR !== 'SDR' && (
+						<DefaultMenuRadioGroup
+							value={status?.hdrPreference ?? 'auto'}
+							options={[
+								{ value: 'auto', label: 'Automatic · prefer native HDR' },
+								...(provider?.compatibleHDR
+									? [{ value: 'compatible', label: `Compatible ${provider.compatibleHDR}` }]
+									: []),
+								{ value: 'sdr', label: 'SDR · client tone mapping' }
+							]}
+							onChange={(value) => void provider?.chooseHDR(value as HDRPreference).catch(() => {})}
+						/>
+					)}
 					<div className="px-3 py-2 text-sm leading-relaxed" data-raw-hdr-status>
 						<p>
 							Raw · {status?.sourceHDR ?? 'Loading…'} → {status?.output ?? 'Checking playback'}

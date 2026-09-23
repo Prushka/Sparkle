@@ -93,8 +93,9 @@ resolve output/cache/profile paths relative to the repository; direct `go run` d
   media-generation checks, stale-message rejection, and remote-event suppression through
   readiness, seeks, buffering, track changes, recovery, and teardown. Loading must not emit
   accidental pauses or stale positions.
-- Prefer native video/MSE for HDR. Keep source format separate from output mode, reject
-  unqualified canvas HDR, and require explicit compatible fallbacks. Generic codec support
+- Prefer native video/MSE for HDR. Keep source format separate from output mode; the
+  canvas renderer produces explicitly labeled SDR, with reference-pixel tests. Label
+  automatically selected compatible representations. Generic codec support
   does not verify Dolby Vision/HDR10+; Profile 7 enhancement-layer playback remains unverified.
   Read [HDR requirements and limits](docs/plex-raw-media.md#playback-and-hdr) before changing
   capability detection or the qualification registry.

@@ -4,6 +4,10 @@ import { chromium, firefox } from '@playwright/test';
 import { build } from 'esbuild';
 import { mkdir, writeFile } from 'node:fs/promises';
 const base = process.env.SPARKLE_TEST_URL || 'http://127.0.0.1:3002';
+const backend = new URL(process.env.SPARKLE_TEST_BACKEND_URL || '/be', base).href.replace(
+	/\/$/,
+	''
+);
 const fixtures = JSON.parse(process.env.SPARKLE_MEDIA_FIXTURES || '[]');
 if (!fixtures.length)
 	throw new Error('Set SPARKLE_MEDIA_FIXTURES to [{id, seekSeconds, subtitleCodec}]');
@@ -44,7 +48,7 @@ for (const fixture of fixtures) {
 	try {
 		await page.goto(`${base}/vendor/libmedia/1.3.1/avplayer.js`);
 		await page.addScriptTag({ content: bundle.outputFiles[0].text });
-		const metadata = await (await page.request.get(`${base}/be/media/${fixture.id}`)).json();
+		const metadata = await (await page.request.get(`${backend}/media/${fixture.id}`)).json();
 		const part = metadata.Raw.parts[0];
 		const result = await page.evaluate(
 			async ({ url, fixture }) => {
@@ -96,14 +100,12 @@ for (const fixture of fixtures) {
 				});
 				const fonts = player.getEmbeddedFonts();
 				renderer.setFonts(fonts);
-				const streams = player
-					.getStreams()
-					.map((s) => ({
-						id: s.id,
-						type: s.mediaType,
-						codec: s.codecparProxy.codecId,
-						transfer: s.codecparProxy.colorTrc
-					}));
+				const streams = player.getStreams().map((s) => ({
+					id: s.id,
+					type: s.mediaType,
+					codec: s.codecparProxy.codecId,
+					transfer: s.codecparProxy.colorTrc
+				}));
 				if (streams.some((s) => s.type === 'Video' && [16, 18].includes(s.transfer)))
 					throw new Error('HDR fixture requires the native-path qualification test');
 				await player.play();
@@ -167,7 +169,7 @@ for (const fixture of fixtures) {
 					}))
 				};
 			},
-			{ url: `${base}/be${part.url}`, fixture }
+			{ url: `${backend}${part.url}`, fixture }
 		);
 		await page.screenshot({ path: `cache/qualification-${results.length}.png` });
 		results.push({ fixture: fixture.id, ...result, rawBytes, unboundedReads, errors });

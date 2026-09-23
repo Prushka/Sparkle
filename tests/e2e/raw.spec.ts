@@ -83,6 +83,7 @@ test('two raw clients synchronize playback, pause, seek and delayed join', async
 	baseURL
 }) => {
 	const media = process.env.SPARKLE_RAW_TEST_ID;
+	if (process.env.SPARKLE_RAW_EXPECTED_HDR) test.setTimeout(180_000);
 	test.skip(!media, 'Set SPARKLE_RAW_TEST_ID to a mapped real-media fixture');
 	const metadata = await (await request.get(`${backend}/media/${media}`)).json();
 	const hasSubtitles = metadata.Raw.parts[0].streams.some(
@@ -245,13 +246,49 @@ test('two raw clients synchronize playback, pause, seek and delayed join', async
 	await expect(pages[0].locator('[data-raw-hdr-status]')).toContainText(
 		`Raw · ${process.env.SPARKLE_RAW_EXPECTED_HDR || 'SDR'} →`
 	);
-	const audioOptions = pages[0].locator('.vds-video-settings-menu').getByRole('menuitemradio');
+	const audioOptions = pages[0]
+		.locator('.vds-video-settings-menu')
+		.getByRole('menuitemradio')
+		.filter({ hasNotText: /Automatic|Compatible|client tone mapping/ });
 	if ((await audioOptions.count()) > 1) {
 		const pauseCount = messages[0].filter((m) => m.type === 'pause').length;
 		await audioOptions.nth(1).click();
 		await expect(audioOptions.nth(1)).toHaveAttribute('aria-checked', 'true', { timeout: 15_000 });
 		await expect(pages[1].locator('[data-media-player]')).not.toHaveAttribute('data-paused', '');
 		expect(messages[0].filter((m) => m.type === 'pause').length).toBe(pauseCount);
+	}
+	if (process.env.SPARKLE_RAW_EXPECTED_HDR) {
+		const pauseCount = messages[0].filter((m) => m.type === 'pause').length;
+		const time = messages[0].filter((m) => m.type === 'time').at(-1)?.time || 0;
+		await pages[0]
+			.getByRole('menuitemradio', { name: 'SDR · client tone mapping', exact: true })
+			.click();
+		await expect(player).toHaveAttribute('data-raw-renderer', 'software', { timeout: 30_000 });
+		await expect
+			.poll(() => messages[0].filter((m) => m.type === 'time').at(-1)?.time || 0, {
+				timeout: 30_000
+			})
+			.toBeGreaterThan(time + 1);
+		expect(messages[0].filter((m) => m.type === 'pause').length).toBe(pauseCount);
+		await expect(pages[1].locator('[data-media-player]')).not.toHaveAttribute('data-paused', '');
+		await pages[0].keyboard.press('Escape');
+		await pages[0].keyboard.press('Escape');
+		await player.focus();
+		await pages[0].keyboard.press('k');
+		await expect(pages[1].locator('[data-media-player]')).toHaveAttribute('data-paused', '');
+		const pausedCount = messages[0].filter((m) => m.type === 'pause').length;
+		await player.hover();
+		await pages[0].getByRole('button', { name: 'Settings', exact: true }).click();
+		await pages[0].getByRole('menuitem', { name: /^Video Settings/ }).click();
+		await pages[0].getByRole('menuitemradio', { name: /^Compatible/ }).click();
+		await expect(player).toHaveAttribute('data-raw-renderer', 'native', { timeout: 30_000 });
+		await expect(player).toHaveAttribute('data-paused', '');
+		expect(messages[0].filter((m) => m.type === 'pause').length).toBe(pausedCount);
+		await pages[0].keyboard.press('Escape');
+		await pages[0].keyboard.press('Escape');
+		await player.focus();
+		await pages[0].keyboard.press('k');
+		await expect(pages[1].locator('[data-media-player]')).not.toHaveAttribute('data-paused', '');
 	}
 	await pages[0].keyboard.press('Escape');
 	await pages[0].keyboard.press('Escape');

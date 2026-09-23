@@ -37,12 +37,22 @@ export interface RawMedia {
 	versions: { id: string; label: string }[];
 }
 export type HDROutput =
-	'SDR' | 'HDR10' | 'HLG' | 'Dolby Vision' | 'HDR10+' | 'SDR tone mapping' | 'unsupported';
+	| 'SDR'
+	| 'HDR10'
+	| 'HLG'
+	| 'Dolby Vision'
+	| 'HDR10+'
+	| 'SDR tone mapping'
+	| 'Native dynamic HDR (unverified)'
+	| 'unsupported';
+export type HDRPreference = 'auto' | 'compatible' | 'sdr';
 export interface RawPlaybackStatus {
 	ready: boolean;
 	changing: boolean;
 	sourceHDR: string;
 	output: HDROutput;
+	hdrPreference?: HDRPreference;
+	renderer?: 'native' | 'software';
 	reason?: string;
 	audioTracks: { id: number; title: string }[];
 	subtitleTracks: { id: number; title: string }[];

@@ -42,11 +42,13 @@ Raw playback supports client WASM fallbacks, including TrueHD audio and embedded
 subtitles. TrueHD output is decoded PCM, not Atmos bitstream passthrough. Raw
 storyboards are currently omitted; processed storyboards remain available.
 
-HDR uses the browser's native video/MSE path and exact codec capability checks.
-Source HDR and output mode are shown separately, including native SDR conversion
-on an SDR display. **Full Dolby Vision and HDR10+ output is not yet qualified**;
-compatible HDR10/HLG fallback must be selected explicitly. Profile 7 enhancement-layer
-playback is unverified. Unsupported playback does not prevent participation in
+HDR prefers native video/MSE with exact codec/profile checks. Automatic mode tries
+native Dolby Vision or HDR10+ and then a labeled compatible HDR10/HLG representation.
+Vidstack → Video Settings also offers client-side SDR tone mapping for PQ/HLG and
+Dolby Vision Profile 5 (including RPU reshaping). Source format, renderer and output
+are reported separately. **Full dynamic-HDR display output is not yet qualified**;
+native runtime admission is labeled unverified. Profile 7 enhancement layers are
+not decoded; its compatible base layer remains playable. Unsupported playback does not prevent participation in
 the room. See the [qualification record](docs/raw-media-validation.md) for tested
 Windows Chrome/Edge combinations and pending Safari, mobile, Firefox, and Activity checks.
 

@@ -32,6 +32,11 @@ for (const path of [
 const patchHash = createHash('sha256')
 	.update((await readFile('scripts/libmedia/patch.mjs', 'utf8')).replaceAll('\r\n', '\n'))
 	.digest('hex');
+const sources = {};
+for (const file of ['hdr-sdr.ts', 'dovi-sdr.ts'])
+	sources[file] = createHash('sha256')
+		.update((await readFile(`scripts/libmedia/${file}`, 'utf8')).replaceAll('\r\n', '\n'))
+		.digest('hex');
 await writeFile(
 	`${target}/manifest.json`,
 	JSON.stringify(
@@ -41,6 +46,7 @@ await writeFile(
 			ffmpeg: '3a14ab29692763e561610412cdeb1985da4e3cd8',
 			emscripten: '4.0.10',
 			patchHash,
+			sources,
 			artifacts,
 			codecs
 		},

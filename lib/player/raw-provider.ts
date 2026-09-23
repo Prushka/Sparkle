@@ -7,8 +7,8 @@ import {
 	type Src
 } from '@vidstack/react';
 import type { Job } from './t';
-import type { RawMedia, RawPlaybackStatus } from './raw-types';
-import { compatibleHDR, sourceHDR, supportsNativeHDR } from './raw-hdr';
+import type { HDRPreference, RawMedia, RawPlaybackStatus } from './raw-types';
+import { compatibleHDR, planHDR, sourceHDR, supportsNativeHDR } from './raw-hdr';
 import { RawSubtitles } from './raw-subtitles';
 import { RawPictureInPicture } from './raw-pip';
 
@@ -26,6 +26,8 @@ type Stream = {
 		width: number;
 		height: number;
 		colorTrc: number;
+		bitRate?: bigint;
+		framerate?: { num: number; den: number };
 	};
 };
 interface Engine {
@@ -43,6 +45,7 @@ interface Engine {
 	getSelectedAudioStreamId(): number;
 	getSelectedSubtitleStreamId(): number;
 	setBaseHDROnly(value: boolean): void;
+	setHDRPlayback(path: 'native' | 'software', mime: string, dolbyVision?: boolean): void;
 	setSubtitleLayers(layers: { id: number; sink: RawSubtitles['sink'] }[]): Promise<void>;
 	selectAudio(id: number): Promise<void>;
 	selectSubtitle(id: number): Promise<void>;
@@ -129,7 +132,7 @@ export class RawProvider implements MediaProviderAdapter {
 	private audioWaiting = false;
 	private driftSince = 0;
 	private remoteOperations = 0;
-	private compatibleMode = false;
+	private hdrPreference: HDRPreference = 'auto';
 	private destroyed = false;
 	private driftCorrection = false;
 	private buffering = false;
@@ -206,7 +209,7 @@ export class RawProvider implements MediaProviderAdapter {
 		this.abort.abort();
 		this.abort = new AbortController();
 		this.currentSrc = src as Src<string>;
-		this.compatibleMode = false;
+		this.hdrPreference = 'auto';
 		this.desiredTime = 0;
 		this.part = 0;
 		this.captionRestore = undefined;
@@ -244,25 +247,19 @@ export class RawProvider implements MediaProviderAdapter {
 		this.lastProgress = performance.now();
 		const part = this.raw!.parts[index],
 			video = part.streams.find((s) => s.streamType === 1);
-		const hdr = sourceHDR(video),
-			dynamic = !!(video?.DOVIPresent || video?.HDR10PlusPresent);
-		this.publish({ part: index, sourceHDR: hdr, ready: false, changing: true, reason: undefined });
-		if (dynamic && !this.compatibleMode) {
-			this.publish({
-				changing: false,
-				output: 'unsupported',
-				reason:
-					video?.DOVIProfile === 7
-						? 'Dolby Vision Profile 7 enhancement-layer playback is not verified. Full Dolby Vision is unavailable on this client.'
-						: 'Full dynamic HDR is not verified for this browser, device, and profile.'
-			});
-			return;
-		}
-		const mode = compatibleHDR(video);
-		if (hdr !== 'SDR' && hdr !== 'Unknown' && !mode)
-			throw new Error(
-				'This HDR representation has no verified compatible rendering path. Choose another media version.'
-			);
+		this.publish({
+			part: index,
+			sourceHDR: sourceHDR(video),
+			hdrPreference: this.hdrPreference,
+			ready: false,
+			changing: true,
+			reason: undefined,
+			audio: undefined,
+			subtitle: undefined,
+			subtitleLayers: [],
+			audioTracks: [],
+			subtitleTracks: []
+		});
 		const Constructor = await loadEngine();
 		if (generation !== this.generation || this.destroyed) return;
 		this.subtitles = new RawSubtitles(this.container);
@@ -275,9 +272,7 @@ export class RawProvider implements MediaProviderAdapter {
 			enableWebGPU: false,
 			enableAudioWorklet: true,
 			preLoadTime: 4,
-			requireNativeVideo: !!mode,
-			subtitleSink: this.subtitles.sink,
-			...(mode ? { checkUseMSE: () => true } : {})
+			subtitleSink: this.subtitles.sink
 		});
 		const engine = this.engine!;
 		const active = () =>
@@ -304,52 +299,69 @@ export class RawProvider implements MediaProviderAdapter {
 			}
 		});
 		const options = {
-			ext: this.raw!.container || 'mkv',
+			ext:
+				({ mpegts: 'ts', matroska: 'mkv' } as Record<string, string>)[this.raw!.container] ||
+				this.raw!.container ||
+				'mkv',
 			maxProbeDuration: 3,
 			ioLoaderOptions: { retryCount: 2, preload: 4 * 1024 * 1024 }
 		};
 		await engine.load(`${this.baseURL}${part.url}`, options);
 		if (!active()) return;
-		engine.setBaseHDROnly(this.compatibleMode);
 		const demuxVideo = engine.getStreams().find((s) => s.mediaType.toLowerCase() === 'video');
-		if (
-			!mode &&
-			(demuxVideo?.codecparProxy.colorTrc === 16 ||
-				demuxVideo?.codecparProxy.colorTrc === 18 ||
-				demuxVideo?.metadata.sparkleDovi)
-		) {
-			if (!video)
-				throw new Error(
-					'Video track metadata is missing. Refresh the library metadata before playback.'
-				);
-			video.colorTrc = demuxVideo.codecparProxy.colorTrc === 18 ? 'arib-std-b67' : 'smpte2084';
-			const dovi = demuxVideo.metadata.sparkleDovi as { data?: Uint8Array } | undefined;
-			if (dovi?.data) {
+		if (!demuxVideo)
+			throw new Error(
+				'This container or video stream could not be opened on this client. Choose another media version.'
+			);
+		const dovi = demuxVideo?.metadata.sparkleDovi as { data?: Uint8Array } | undefined;
+		if (video && demuxVideo) {
+			if (demuxVideo.codecparProxy.colorTrc === 16) video.colorTrc = 'smpte2084';
+			if (demuxVideo.codecparProxy.colorTrc === 18) video.colorTrc = 'arib-std-b67';
+			if (dovi?.data && dovi.data.length >= 5) {
 				video.DOVIPresent = true;
 				video.DOVIProfile = dovi.data[2] >> 1;
+				video.DOVILevel = ((dovi.data[2] & 1) << 5) | (dovi.data[3] >> 3);
 				video.DOVIBLCompatID = dovi.data[4] >> 4;
+				video.DOVIELPresent = !!(dovi.data[3] & 2);
 			}
-			// No frame has played. Recreate the provider on the native video path
-			// using the file's metadata when Plex omitted its HDR characteristics.
-			return this.loadPart(index, generation);
+		}
+		if (!video && (dovi || [16, 18].includes(demuxVideo?.codecparProxy.colorTrc ?? 0)))
+			throw new Error(
+				'Video track metadata is missing. Refresh the library metadata before playback.'
+			);
+		const hdr = sourceHDR(video);
+		this.publish({ sourceHDR: hdr });
+		const codec = demuxVideo?.codecparProxy;
+		const plan =
+			video && hdr !== 'SDR' && hdr !== 'Unknown'
+				? await planHDR(
+						video,
+						engine.getVideoMimeType(),
+						dovi?.data,
+						this.hdrPreference,
+						matchMedia('(dynamic-range: high)').matches,
+						(mime, mode) =>
+							supportsNativeHDR(
+								mime,
+								mode,
+								codec?.width || 1920,
+								codec?.height || 1080,
+								codec?.framerate?.num && codec.framerate.den
+									? codec.framerate.num / codec.framerate.den
+									: 24,
+								Number(codec?.bitRate || 0) || 40_000_000
+							)
+					)
+				: undefined;
+		if (!active()) return;
+		if (plan) {
+			engine.setBaseHDROnly(plan.baseOnly);
+			engine.setHDRPlayback(plan.renderer, plan.mime, video?.DOVIProfile === 5);
 		}
 		this.subtitles.setFonts(engine.getEmbeddedFonts());
-		if (
-			mode &&
-			!(await supportsNativeHDR(
-				engine.getVideoMimeType(),
-				mode,
-				demuxVideo?.codecparProxy.width || 1920,
-				demuxVideo?.codecparProxy.height || 1080
-			))
-		) {
-			throw new Error(
-				`${mode} requires a supported native decoder and color-managed video output. Choose a compatible media version.`
-			);
-		}
 		// HDR video stays unchanged through native MSE. The second instance decodes
 		// audio client-side, including codecs that would force stock AVPlayer to canvas.
-		if (mode && part.streams.some((s) => s.streamType === 2)) {
+		if (plan?.renderer === 'native' && part.streams.some((s) => s.streamType === 2)) {
 			this.audioEngine = new Constructor({
 				container: this.audioContainer,
 				wasmBaseUrl: '/vendor/libmedia/1.3.1',
@@ -373,15 +385,9 @@ export class RawProvider implements MediaProviderAdapter {
 						String(s.metadata.title || s.metadata.language || `${type} ${s.index + 1}`)
 				}));
 		this.publish({
-			output: mode
-				? matchMedia('(dynamic-range: high)').matches
-					? mode
-					: 'SDR tone mapping'
-				: 'SDR',
-			reason:
-				mode && !matchMedia('(dynamic-range: high)').matches
-					? 'Native browser video handles HDR conversion for this SDR display.'
-					: undefined,
+			output: plan?.output ?? 'SDR',
+			renderer: plan?.renderer,
+			reason: plan?.reason,
 			audioTracks: list('audio'),
 			subtitleTracks: list('subtitle'),
 			ready: true,
@@ -522,8 +528,17 @@ export class RawProvider implements MediaProviderAdapter {
 		this.notify('rate-change', rate);
 	}
 	async selectTrack(kind: 'audio' | 'subtitle', id: number) {
+		const expectedEngine = this.engine;
+		if (!this.status.ready || this.status.changing || !this.initialized) return;
 		return this.enqueue(async () => {
-			if (!this.engine || !this.initialized) return;
+			if (!this.engine || this.engine !== expectedEngine || !this.initialized) return;
+			const tracks = kind === 'audio' ? this.status.audioTracks : this.status.subtitleTracks;
+			if (
+				(id < 0 && kind === 'audio') ||
+				(id >= 0 && !tracks.some((t) => t.id === id)) ||
+				this.status[kind] === id
+			)
+				return;
 			this.publish({ changing: true });
 			const wasPaused = this.paused,
 				time = this.timeline;
@@ -553,7 +568,8 @@ export class RawProvider implements MediaProviderAdapter {
 			layers = this.status.subtitleLayers ?? [];
 		if (subtitle >= 0 || layers.some((id) => id >= 0)) {
 			this.captionRestore = { subtitle, layers: [...layers] };
-			await this.selectTrack('subtitle', -1);
+			if (subtitle >= 0) await this.selectTrack('subtitle', -1);
+			else await this.selectSubtitleLayers([]);
 		} else {
 			const restore = this.captionRestore;
 			await this.selectTrack(
@@ -588,8 +604,10 @@ export class RawProvider implements MediaProviderAdapter {
 		this.publish({ subtitleLayers: selected });
 	}
 	selectSubtitleLayers(ids: number[]) {
+		const expectedEngine = this.engine;
+		if (!this.status.ready || this.status.changing || !this.initialized) return Promise.resolve();
 		return this.enqueue(async () => {
-			if (!this.engine || !this.initialized) return;
+			if (!this.engine || this.engine !== expectedEngine || !this.initialized) return;
 			const time = this.engine.currentTime,
 				wasPaused = this.paused;
 			this.publish({ changing: true });
@@ -611,10 +629,40 @@ export class RawProvider implements MediaProviderAdapter {
 		});
 	}
 	async chooseCompatibleHDR() {
-		this.compatibleMode = true;
+		return this.chooseHDR('compatible');
+	}
+	async chooseHDR(preference: HDRPreference) {
 		return this.enqueue(async () => {
-			this.notify('load-start');
-			await this.loadPart(this.part, this.generation);
+			if (preference === this.hdrPreference && this.status.ready) return;
+			const time = this.initialized ? this.timeline : this.desiredTime;
+			const wasPaused = this.paused;
+			const generation = this.generation;
+			this.remoteOperations++;
+			this.publish({ changing: true });
+			try {
+				this.hdrPreference = preference;
+				await this.loadPart(this.part, generation);
+				if (generation !== this.generation || this.destroyed) return;
+				// Warm the replacement renderer before seeking, then restore the local
+				// pause state. None of these internal operations emit room commands.
+				this.starting = true;
+				await this.start();
+				const ms = BigInt(Math.round((time - this.raw!.parts[this.part].start) * 1000));
+				await this.engine?.seek(ms);
+				await this.audioEngine?.seek(ms);
+				if (wasPaused) {
+					await this.engine?.pause();
+					await this.audioEngine?.pause();
+				}
+				this.desiredTime = time;
+			} finally {
+				this.starting = false;
+				this.remoteOperations--;
+				if (generation === this.generation) {
+					this.paused = wasPaused;
+					this.publish({ changing: false });
+				}
+			}
 		});
 	}
 	get compatibleHDR() {

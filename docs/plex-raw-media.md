@@ -128,19 +128,32 @@ without reliable durations are explicitly rejected rather than synchronized to
 an invented timeline. Raw storyboards are optional and currently omitted;
 processed storyboards remain available.
 
-Native video/MSE is mandatory for HDR. Exact codec support and MediaCapabilities
-are checked; browser video performs color-managed display conversion, including
-native SDR tone mapping on an SDR display. The source HDR format and selected
-output mode are displayed separately. HDR is never silently sent to the
-unqualified SDR canvas decoder. If no native path is available, choose another
-media version; chat and other room features remain available.
+Native video/MSE is preferred for HDR, with color-managed browser conversion on
+SDR displays. Automatic mode first probes the exact Dolby codec/profile/level or
+HDR10+ ST2094-40 capability. The MSE MIME and MP4 sample entry agree with the Dolby
+configuration; generic HEVC support is never treated as Dolby support. Compatible
+HDR10/HLG playback is selected when necessary and identified in Video Settings.
 
-Dolby Vision and HDR10+ are **not advertised as verified full dynamic HDR**.
-`dynamicHDRQualifications` starts empty. Profile 7 enhancement-layer output is
-unverified. Compatible PQ/HLG base-layer playback requires the explicit fallback
-button and is labeled HDR10/HLG (or native SDR conversion). Profile 5 has no
-compatible HDR10 base-layer fallback. Merely supporting HEVC or owning an HDR
-display does not verify RPU, enhancement-layer, or HDR10+ metadata processing.
+Video Settings also offers **SDR · client tone mapping**. PQ and HLG are decoded
+to integer high-bit-depth frames, converted to linear BT.2020, tone mapped with a
+monotonic highlight shoulder, gamut compressed, and encoded to full-range sRGB.
+This WebGL2 path produces SDR on either SDR or HDR displays; it does not claim
+native HDR brightness. Software decoding can be CPU-limited at high resolutions.
+It currently requires BT.2020 non-constant-luminance source color, except for the
+separate Dolby Profile 5 path. Unsupported color matrices are rejected.
+
+Profile 5 has no HDR10-compatible base layer. Its client SDR path uses FFmpeg's
+per-frame RPU metadata, polynomial/MMR reshaping and IPT-PQ/LMS color transforms.
+Missing/malformed metadata and residual enhancement-layer formats are rejected.
+No Dolby display signal is produced by SDR rendering. Profile 7 uses its compatible
+HDR10 base layer; full enhancement-layer composition is not implemented.
+
+Dolby Vision and HDR10+ native playback is **not advertised as verified full dynamic
+HDR**. The physical qualification registry remains empty. Browser-reported native
+dynamic HDR is labeled unverified; metadata preservation and runtime admission do
+not prove RPU/EL or per-scene output on an external display. Unsupported clients
+remain in the room. Output-mode changes are local, preserve time/pause/track
+preferences, and reject callbacks carrying a previous decoder's track IDs.
 
 The integration carries Matroska color/mastering/light-level metadata into MP4
 `colr`, `mdcv`, and `clli`, preserves Dolby configuration signaling, and retains
