@@ -181,7 +181,33 @@ Plex credentials are passed only to the backend. The API needs network access
 to Plex and read access to the mounted media. Docker runtime validation is
 still pending; the Linux backend cross-build is recorded in the validation guide.
 
-For publishing images, `bash ./scripts/docker-build-all.sh` builds **and pushes**
+### Automatic image publishing
+
+[GitHub Actions](https://github.com/Prushka/Sparkle/actions/workflows/docker.yml) builds
+and tests both `linux/amd64` images on branch pushes, pull requests, and manual runs.
+It runs Go race tests/vet, TypeScript and player tests, then starts both built images
+with disposable fixtures and checks HTTP APIs, frontend proxying, byte ranges, pinned
+player assets, and synthetic Chrome Library/room regressions. These checks need no
+Plex credentials or personal media; real-media and physical HDR qualification remain
+separate.
+
+- Branch pushes and manual runs publish `meinya/sparkle-api:<short-commit>` and
+  `meinya/sparkle-next:<short-commit>` only after both images pass.
+- The current `main` commit also updates both `:latest` tags. Promotions are serialized
+  and recheck the branch head so an older, slower run cannot replace a newer release.
+- Pull requests build and test without signing in to Docker Hub or publishing images.
+- Repository Actions secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` authorize
+  publishing. The token must have write access to both Docker Hub repositories.
+
+Use the Actions page's **Run workflow** button to retry manually. Publishing does not
+restart running deployments; pull the new images and recreate your services when ready:
+
+```sh
+docker compose -f compose.example.yml pull
+docker compose -f compose.example.yml up -d
+```
+
+For manual publishing, `bash ./scripts/docker-build-all.sh` builds **and pushes**
 both images; `build.sh` delegates to it. The scripts accept `SPARKLE_API_IMAGE`,
 `SPARKLE_NEXT_IMAGE`, and `PLATFORM` (default `linux/amd64`).
 

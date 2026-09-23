@@ -121,6 +121,11 @@ resolve output/cache/profile paths relative to the repository; direct `go run` d
   shared instructions here rather than maintaining a duplicate guide.
 - `build.sh` and `scripts/docker-build-*.sh` publish images with `--push`; they are not local
   validation commands. Use the README's local Docker build commands for local images.
+- `.github/workflows/docker.yml` tests both Linux images before publishing commit tags.
+  Pull requests never publish; only the current default-branch head can promote `latest`.
+  Keep Actions pinned to verified commit SHAs and Docker Hub credentials in Actions secrets.
+  `scripts/ci/docker-smoke.sh` uses disposable fixtures and containers; never substitute the
+  developer's `.env`, real Plex credentials, media mounts, or running backend for CI fixtures.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
