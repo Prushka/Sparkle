@@ -22,7 +22,7 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$fixture_dir/output"
-printf 'sparkle-container-range-fixture\n' > "$fixture_dir/output/ci-probe.txt"
+printf 'WEBVTT\n\nNOTE Sparkle range test\n' > "$fixture_dir/output/ci-probe.vtt"
 # A user-defined bridge permits the host browser to reach the published frontend port.
 # Docker's internal-only networks disable port publishing on current engines.
 docker network create "$network" >/dev/null

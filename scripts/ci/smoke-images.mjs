@@ -34,12 +34,13 @@ assert.equal(room.roomId, 'container-smoke');
 assert.equal((await (await get('/be/rooms/container-smoke')).json()).roomId, room.roomId);
 await get('/');
 
-const head = await get('/static/ci-probe.txt', { method: 'HEAD' });
-assert.equal(Number(head.headers.get('content-length')), 32);
-const range = await get('/static/ci-probe.txt', { headers: { Range: 'bytes=0-6' } });
+const fixtureLength = Buffer.byteLength('WEBVTT\n\nNOTE Sparkle range test\n');
+const head = await get('/static/ci-probe.vtt', { method: 'HEAD' });
+assert.equal(Number(head.headers.get('content-length')), fixtureLength);
+const range = await get('/static/ci-probe.vtt', { headers: { Range: 'bytes=0-5' } });
 assert.equal(range.status, 206);
-assert.equal(range.headers.get('content-range'), 'bytes 0-6/32');
-assert.equal(await range.text(), 'sparkle');
+assert.equal(range.headers.get('content-range'), `bytes 0-5/${fixtureLength}`);
+assert.equal(await range.text(), 'WEBVTT');
 
 const manifest = JSON.parse(await readFile('vendor/libmedia/manifest.json', 'utf8'));
 for (const file of ['avplayer/avplayer.js', 'truehd.wasm']) {
