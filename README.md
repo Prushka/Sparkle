@@ -11,7 +11,7 @@ library from the same Library view.
 
 - Shared play/pause, seeking, media changes, reconnects, profiles, chat, and notifications.
 - A paged, searchable poster Library with source filters, seasons, episodes, and **Raw**
-  and **Processed** badges. Back/Forward preserves the room, hierarchy, and filters.
+  and **Encoded** badges. Back/Forward preserves the room, hierarchy, and filters.
   Large Plex libraries load on demand; confidently matched processed titles reuse Plex
   covers and descriptions.
 - Vidstack controls for playback, audio selection, subtitles, HDR options, and media versions.
@@ -27,10 +27,10 @@ library from the same Library view.
 
 ## Media sources and playback
 
-| Source    | What Sparkle reads                                                    | Playback                                                                                               |
-| --------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| Processed | Existing `OUTPUT/<id>/job.json` directories and their prepared assets | Existing encoded video/audio, extracted subtitles, posters, chapters, and storyboards                  |
-| Plex raw  | Plex metadata plus the original files through local folder mappings   | Original-file range requests; client-side demuxing and decoding through pinned libmedia AVPlayer 1.3.1 |
+| Source   | What Sparkle reads                                                    | Playback                                                                                               |
+| -------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Encoded  | Existing `OUTPUT/<id>/job.json` directories and their prepared assets | Existing encoded video/audio, extracted subtitles, posters, chapters, and storyboards                  |
+| Plex raw | Plex metadata plus the original files through local folder mappings   | Original-file range requests; client-side demuxing and decoding through pinned libmedia AVPlayer 1.3.1 |
 
 The backend serves prepared media; it does **not** create encodes, extract tracks,
 or generate derivatives. For raw playback, it only reads Plex metadata/artwork

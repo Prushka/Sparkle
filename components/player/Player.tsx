@@ -150,6 +150,7 @@ import { Slider } from '@/components/ui/slider';
 import { Chatbox } from '@/components/player/Chatbox';
 import { Pfp } from '@/components/player/Pfp';
 import { ConnectButton } from '@/components/player/ConnectButton';
+import { CurrentMedia } from '@/components/player/CurrentMedia';
 import { MediaSelection, type MediaSelectionHandle } from '@/components/player/MediaSelection';
 import { MoveToast } from '@/components/player/MoveToast';
 import { Chats } from '@/components/player/Chats';
@@ -9471,7 +9472,7 @@ export function Player({
 								interacted={interacted}
 								exited={exited}
 								disabled={!playerEl}
-								className="border-white/35 !bg-white/10 px-5 py-5 !text-white shadow-xl shadow-black/20 backdrop-blur-md hover:!bg-white/15 hover:!text-white"
+								className="!bg-white/10 px-5 py-5 !text-white shadow-xl shadow-black/20 backdrop-blur-md hover:!bg-white/15 hover:!text-white"
 								onClick={handleJoinWatchRoom}
 							/>
 						</motion.div>
@@ -9592,7 +9593,7 @@ export function Player({
 								aria-label={
 									isCurrentUser ? 'Open profile settings' : `Open user actions for ${player.name}`
 								}
-								className={`group relative flex h-auto gap-2 overflow-visible rounded-full rounded-l-full rounded-r-full border-2 py-0 pl-0 pr-4 transition-[background-color,border-color,box-shadow] duration-200 ${
+								className={`group relative flex h-auto gap-2 overflow-visible rounded-full border-2 py-0 pl-0 pr-4 has-[>svg]:pl-0 has-[>svg]:pr-4 transition-[background-color,border-color,box-shadow] duration-200 ${
 									isSpeaking
 										? 'border-emerald-500 bg-emerald-500/10 shadow-[0_0_18px_rgba(16,185,129,0.28)]'
 										: isUsingSoundEffect
@@ -9600,7 +9601,7 @@ export function Player({
 											: 'border-input'
 								}`}
 							>
-								<span className="relative mr-0.5 shrink-0">
+								<span className="relative mr-0.5 flex size-12 shrink-0">
 									<Pfp
 										className="h-12 w-12"
 										id={playerProfileId}
@@ -9616,9 +9617,9 @@ export function Player({
 											}`}
 										>
 											{playerMuted ? (
-												<IconMicrophoneOff size={12} stroke={2.15} />
+												<IconMicrophoneOff className="size-3" stroke={2.15} />
 											) : (
-												<IconMicrophone size={12} stroke={2.15} />
+												<IconMicrophone className="size-3" stroke={2.15} />
 											)}
 										</span>
 									) : null}
@@ -9635,25 +9636,25 @@ export function Player({
 										) : null}
 									</span>
 									{player.inBg ? (
-										<div className="flex items-center justify-center gap-1">
-											<IconTableExport size={14} stroke={2} />
+										<span className="flex items-center justify-center gap-1">
+											<IconTableExport className="size-3.5" stroke={2} />
 											<span>BG</span>
-										</div>
+										</span>
 									) : (
 										<span>{formatSeconds(player.time)}</span>
 									)}
 								</span>
 								{player.paused === false ? (
-									<IconPlayerPlayFilled size={18} stroke={2} />
+									<IconPlayerPlayFilled className="size-[18px]" stroke={2} />
 								) : (
-									<IconPlayerPauseFilled size={18} stroke={2} />
+									<IconPlayerPauseFilled className="size-[18px]" stroke={2} />
 								)}
 								{isCurrentUser || voiceSupported ? (
 									<span className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background/95 text-muted-foreground shadow-sm transition-transform duration-200 group-hover:scale-110 group-hover:rotate-45 group-focus-visible:scale-110 group-focus-visible:rotate-45">
 										{isCurrentUser ? (
-											<IconSettings2 size={13} stroke={2} />
+											<IconSettings2 className="size-[13px]" stroke={2} />
 										) : (
-											<IconVolume size={13} stroke={2} />
+											<IconVolume className="size-[13px]" stroke={2} />
 										)}
 									</span>
 								) : null}
@@ -9799,11 +9800,11 @@ export function Player({
 					})}
 				</div>
 
-				<Card className="order-3 mt-auto w-full max-w-[90rem] self-center">
-					<CardHeader className="max-sm:pb-0 max-sm:pl-4 max-sm:pr-4 max-sm:pt-4">
+				<Card className="order-3 mt-auto w-full max-w-[90rem] gap-4 self-center py-4 sm:py-5">
+					<CardHeader className="px-4 sm:px-5">
 						<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 							<div className="flex min-w-0 flex-1 flex-col gap-1">
-								<CardTitle>Media</CardTitle>
+								<CardTitle className="text-sm text-muted-foreground">Media</CardTitle>
 							</div>
 							<div className="flex flex-wrap items-center gap-2 sm:justify-end">
 								<Tooltip.Provider delayDuration={0}>
@@ -9866,14 +9867,21 @@ export function Player({
 							</div>
 						</div>
 					</CardHeader>
-					<CardContent className="max-sm:p-4">
-						<MediaSelection
-							ref={mediaSelectionRef}
-							data={data}
-							staticBaseUrl={staticBaseUrl}
-							backendBaseUrl={backendBaseUrl}
-							bounceToOverride={(id) => void switchRoomMedia(id)}
-						/>
+					<CardContent className="px-4 sm:px-5">
+						<CurrentMedia
+							key={job.Id}
+							job={job}
+							poster={posterSrc}
+							summary={data.plot || job.Summary || ''}
+						>
+							<MediaSelection
+								ref={mediaSelectionRef}
+								data={data}
+								staticBaseUrl={staticBaseUrl}
+								backendBaseUrl={backendBaseUrl}
+								bounceToOverride={(id) => void switchRoomMedia(id)}
+							/>
+						</CurrentMedia>
 					</CardContent>
 				</Card>
 			</div>

@@ -20,7 +20,7 @@ export function ConnectButton({
 }) {
 	return (
 		<Button
-			variant="outline"
+			variant="ghost"
 			disabled={disabled}
 			onClick={onClick}
 			className={`font-bold ${
@@ -35,12 +35,12 @@ export function ConnectButton({
 				<IconPlugConnected size={20} stroke={2} />
 			) : !interacted ? (
 				<>
-					<IconRocket className="mr-2 h-4 w-4 animate-bounce" />
+					<IconRocket className="size-4 animate-bounce" />
 					Join Watch Room
 				</>
 			) : !exited ? (
 				<>
-					<IconRefresh className="mr-2 h-4 w-4 animate-spin" />
+					<IconRefresh className="size-4 animate-spin" />
 					Connecting...
 				</>
 			) : (

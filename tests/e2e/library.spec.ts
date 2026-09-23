@@ -85,23 +85,23 @@ test('Library history preserves the room, filters and hierarchy on back, forward
 	const roomPath = new URL(page.url()).pathname;
 	await page.getByRole('combobox', { name: 'Sort library', exact: true }).click();
 	await page.getByRole('option', { name: 'Title A–Z', exact: true }).click();
-	await page.getByRole('button', { name: /Processed A long series title/ }).click();
-	await expect(page.getByRole('button', { name: /Processed Season 1/ })).toBeVisible();
-	await page.getByRole('button', { name: /Processed Season 1/ }).click();
-	await expect(page.getByRole('link', { name: /Processed.*First episode/ })).toHaveAttribute(
+	await page.getByRole('button', { name: /Encoded A long series title/ }).click();
+	await expect(page.getByRole('button', { name: /Encoded Season 1/ })).toBeVisible();
+	await page.getByRole('button', { name: /Encoded Season 1/ }).click();
+	await expect(page.getByRole('link', { name: /Encoded.*First episode/ })).toHaveAttribute(
 		'href',
 		new RegExp(`^${roomPath}/media/episode-fixture\\?`)
 	);
 	await page.reload();
-	await expect(page.getByRole('link', { name: /Processed.*First episode/ })).toBeVisible();
+	await expect(page.getByRole('link', { name: /Encoded.*First episode/ })).toBeVisible();
 	await page.goBack();
-	await expect(page.getByRole('button', { name: /Processed Season 1/ })).toBeVisible();
+	await expect(page.getByRole('button', { name: /Encoded Season 1/ })).toBeVisible();
 	await page.goBack();
-	await expect(page.getByRole('button', { name: /Processed A long series title/ })).toBeVisible();
+	await expect(page.getByRole('button', { name: /Encoded A long series title/ })).toBeVisible();
 	await page.goForward();
-	await expect(page.getByRole('button', { name: /Processed Season 1/ })).toBeVisible();
+	await expect(page.getByRole('button', { name: /Encoded Season 1/ })).toBeVisible();
 	await page.getByRole('button', { name: 'Back to parent', exact: true }).click();
-	await expect(page.getByRole('button', { name: /Processed A long series title/ })).toBeVisible();
+	await expect(page.getByRole('button', { name: /Encoded A long series title/ })).toBeVisible();
 	expect(new URL(page.url()).pathname).toBe(roomPath);
 	expect(new URL(page.url()).searchParams.get('keep')).toBe('room-context');
 	await expect(page.getByRole('combobox', { name: 'Sort library' })).toContainText('Title A–Z');

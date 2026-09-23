@@ -2,6 +2,7 @@
 import { forwardRef, useCallback, useImperativeHandle, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { IconLibrary } from '@tabler/icons-react';
 import * as Popover from '@/components/ui/popover';
 import { CatalogBrowser } from '@/components/catalog-browser';
 import { fetchJob } from '@/lib/player/data';
@@ -46,9 +47,9 @@ export const MediaSelection = forwardRef<
 	return (
 		<Popover.Root open={open} onOpenChange={setOpen}>
 			<Popover.Trigger asChild>
-				<Button variant="outline" className="max-w-full truncate">
-					{data.job?.Title.title || 'Choose media'}
-					{data.job?.Title.episode ? ` · ${data.job.Title.episode.se}` : ''}
+				<Button variant="outline" size="sm" className="max-w-full">
+					<IconLibrary className="size-4" />
+					{data.job ? 'Change media' : 'Choose media'}
 				</Button>
 			</Popover.Trigger>
 			<Popover.Content

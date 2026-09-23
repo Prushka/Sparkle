@@ -87,7 +87,7 @@ search, sort, and breadcrumbs. Shows open into seasons and then landscape episod
 cards. Scrolling loads the next page automatically; the grid virtualizes long lists.
 The compact toolbar uses shared shadcn Select/InputGroup components, keeps every
 search/filter control visible, and wraps on small screens. Every title has a **Raw**
-or **Processed** badge. The default view includes both sources. Library hierarchy and
+or **Encoded** badge. The default view includes both sources. Library hierarchy and
 filters live in the URL, preserving the room and unrelated parameters across browser
 Back/Forward and reload without remounting the room. The in-room picker keeps its own
 navigation. Mounted, overscanned cards load posters eagerly so scrolling does not depend

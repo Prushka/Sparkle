@@ -120,7 +120,7 @@ func fail(w http.ResponseWriter, status int, message string) {
 }
 
 func (s *Service) sources(w http.ResponseWriter, r *http.Request) {
-	sources := []map[string]string{{"id": "processed", "title": "Processed", "source": "processed"}}
+	sources := []map[string]string{{"id": "processed", "title": "Encoded", "source": "processed"}}
 	warnings := []string{}
 	if s.plex != nil {
 		sections, err := s.plex.Sections(r.Context())

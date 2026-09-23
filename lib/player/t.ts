@@ -449,6 +449,7 @@ export interface Job {
 	Source?: 'processed' | 'plex';
 	Poster?: string;
 	Summary?: string;
+	year?: number;
 	Raw?: RawMedia;
 	Id: string;
 	Input: string;

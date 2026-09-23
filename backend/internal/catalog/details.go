@@ -97,7 +97,7 @@ func (s *Service) Details(ctx context.Context, id string) (map[string]any, error
 		if match := episodeRE.FindStringSubmatch(title); match != nil {
 			details.Kind = "episode"
 		}
-		details.Versions = []any{map[string]any{"id": canonical, "label": "Processed", "codecs": job["EncodedCodecs"]}}
+		details.Versions = []any{map[string]any{"id": canonical, "label": "Encoded", "codecs": job["EncodedCodecs"]}}
 	}
 	b, _ := json.Marshal(details)
 	fields := map[string]any{}

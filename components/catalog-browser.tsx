@@ -227,7 +227,7 @@ export function CatalogBrowser({
 						</SelectTrigger>
 						<SelectContent>
 							<SelectItem value="all">Both sources</SelectItem>
-							<SelectItem value="processed">Processed</SelectItem>
+							<SelectItem value="processed">Encoded</SelectItem>
 							<SelectItem value="plex">Plex · Raw</SelectItem>
 						</SelectContent>
 					</Select>
@@ -427,7 +427,7 @@ export function CatalogBrowser({
 												/>
 											)}
 											<Badge className="absolute top-2 left-2 border-white/15 bg-black/75 px-2 py-0.5 text-[10px] font-bold text-white">
-												{item.source === 'plex' ? 'Raw' : 'Processed'}
+												{item.source === 'plex' ? 'Raw' : 'Encoded'}
 											</Badge>
 
 											<div className="absolute inset-0 flex items-center justify-center bg-black/25 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
