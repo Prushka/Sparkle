@@ -41,6 +41,10 @@ for attempt in {1..60}; do
   if curl --fail --silent "$SPARKLE_TEST_URL/api/runtime-env" >/dev/null; then
     break
   fi
+  if (( attempt == 60 )); then
+    echo 'Frontend did not become ready within 60 seconds.' >&2
+    exit 1
+  fi
   sleep 1
 done
 node scripts/ci/smoke-images.mjs

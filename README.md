@@ -178,8 +178,9 @@ docker compose -f compose.example.yml up -d
 
 The frontend listens on port `3000`; internal requests use `sparkle-api:1323`.
 Plex credentials are passed only to the backend. The API needs network access
-to Plex and read access to the mounted media. Docker runtime validation is
-still pending; the Linux backend cross-build is recorded in the validation guide.
+to Plex and read access to the mounted media. CI checks both containers together
+using disposable fixtures; deployment-specific Plex mounts and physical HDR output
+still need validation on the target installation.
 
 ### Automatic image publishing
 
