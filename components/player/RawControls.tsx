@@ -144,11 +144,19 @@ export function RawVideoSettings({
 }) {
 	const { status, provider } = useRawPlayback();
 	const audio = status?.audioTracks.find((t) => t.id === status.audio)?.title ?? 'Default';
+	const output =
+		status?.output === 'Native dynamic HDR (unverified)'
+			? 'Native HDR'
+			: status?.output === 'SDR tone mapping'
+				? 'SDR · tone mapped'
+				: status?.output === 'unsupported'
+					? 'Unavailable'
+					: (status?.output ?? 'Checking…');
 	return (
 		<Menu.Root className="vds-player-settings-menu vds-video-settings-menu vds-menu">
 			<DefaultMenuButton
 				label="Video Settings"
-				hint={status?.output ?? 'Loading…'}
+				hint={output}
 				Icon={defaultLayoutIcons.Menu.Settings}
 			/>
 			<Menu.Items className="vds-menu-items">
@@ -163,25 +171,44 @@ export function RawVideoSettings({
 						/>
 					</DefaultMenuSection>
 				) : null}
-				<DefaultMenuSection label="HDR output" value={status?.output ?? 'Checking playback'}>
+				<DefaultMenuSection label="HDR output" value={output}>
 					{status?.sourceHDR !== 'SDR' && (
 						<DefaultMenuRadioGroup
 							value={status?.hdrPreference ?? 'auto'}
 							options={[
-								{ value: 'auto', label: 'Automatic · prefer native HDR' },
+								{ value: 'auto', label: 'Automatic' },
 								...(provider?.compatibleHDR
 									? [{ value: 'compatible', label: `Compatible ${provider.compatibleHDR}` }]
 									: []),
-								{ value: 'sdr', label: 'SDR · client tone mapping' }
+								{ value: 'sdr', label: 'SDR tone mapping' }
 							]}
 							onChange={(value) => void provider?.chooseHDR(value as HDRPreference).catch(() => {})}
 						/>
 					)}
-					<div className="px-3 py-2 text-sm leading-relaxed" data-raw-hdr-status>
-						<p>
-							Raw · {status?.sourceHDR ?? 'Loading…'} → {status?.output ?? 'Checking playback'}
-						</p>
-						{status?.reason && <p className="mt-2 opacity-75">{status.reason}</p>}
+					<div className="sparkle-hdr-status px-3 py-3 text-xs leading-relaxed" data-raw-hdr-status>
+						<dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5">
+							<dt className="text-white/55">Source</dt>
+							<dd className="m-0 text-right text-white/90">
+								{status?.sourceHDR
+									.replaceAll('Dolby Vision Profile ', 'Dolby Vision P')
+									.replaceAll(' / ', ' · ') ?? 'Loading…'}
+							</dd>
+							<dt className="text-white/55">Output</dt>
+							<dd className="m-0 text-right font-medium text-white">{output}</dd>
+							<dt className="text-white/55">Renderer</dt>
+							<dd className="m-0 text-right text-white/90">
+								{status?.renderer === 'native'
+									? 'Native video'
+									: status?.renderer === 'software'
+										? 'Client tone mapper'
+										: status?.ready
+											? 'Client player'
+											: 'Checking…'}
+							</dd>
+						</dl>
+						{status?.reason && (
+							<p className="mt-3 border-t border-white/10 pt-2 text-white/60">{status.reason}</p>
+						)}
 					</div>
 					{status?.output === 'unsupported' && provider?.compatibleHDR && (
 						<button

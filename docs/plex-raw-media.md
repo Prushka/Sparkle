@@ -85,12 +85,16 @@ seconds; the browser and demuxer may require additional index/probe reads.
 The Library and room media picker share a poster grid, source/library filters,
 search, sort, and breadcrumbs. Shows open into seasons and then landscape episode
 cards. Scrolling loads the next page automatically; the grid virtualizes long lists.
-The compact toolbar uses shared shadcn Select/InputGroup components, keeps every
+The compact toolbar uses shared shadcn-style Select/InputGroup components, keeps every
 search/filter control visible, and wraps on small screens. Every title has a **Raw**
 or **Encoded** badge. The default view includes both sources. Library hierarchy and
 filters live in the URL, preserving the room and unrelated parameters across browser
 Back/Forward and reload without remounting the room. The in-room picker keeps its own
-navigation. Mounted, overscanned cards load posters eagerly so scrolling does not depend
+navigation. Search applies to the current level, resets on entering a show/season,
+and is restored when returning to its parent. Clearing cancels pending searches;
+history navigation never schedules a new search. Select uses Base UI's non-modal
+mode, and room dialogs/dropdowns use Radix's non-modal mode, so these controls do
+not lock page scrolling. Mounted, overscanned cards load posters eagerly so scrolling does not depend
 on image hover or native lazy-loading inside translated virtual rows.
 
 Raw playback uses the existing Vidstack control bar. **Settings → Video Settings**
@@ -134,7 +138,7 @@ HDR10+ ST2094-40 capability. The MSE MIME and MP4 sample entry agree with the Do
 configuration; generic HEVC support is never treated as Dolby support. Compatible
 HDR10/HLG playback is selected when necessary and identified in Video Settings.
 
-Video Settings also offers **SDR · client tone mapping**. PQ and HLG are decoded
+Video Settings also offers **SDR tone mapping**. PQ and HLG are decoded
 to integer high-bit-depth frames, converted to linear BT.2020, tone mapped with a
 monotonic highlight shoulder, gamut compressed, and encoded to full-range sRGB.
 This WebGL2 path produces SDR on either SDR or HDR displays; it does not claim
@@ -157,12 +161,20 @@ preferences, and reject callbacks carrying a previous decoder's track IDs.
 
 The integration carries Matroska color/mastering/light-level metadata into MP4
 `colr`, `mdcv`, and `clli`, preserves Dolby configuration signaling, and retains
-unchanged video packets. Existing MP4 HDR boxes are preserved when remuxing, and
+unchanged video packets. When HEVC mastering/light-level data exists only in
+bitstream SEI, the client also extracts it from hvcC or the first keyframe into
+the MSE initialization segment. Existing MP4 HDR boxes are preserved when remuxing, and
 AV1 codec strings include their full bit-depth and color characteristics.
 Preservation is distinct from proof of rendered
 output. Qualification must record exact OS/browser/GPU/display, codec/profile,
 reference signal, and observed output. Use Dolby's browser test kit and known
 HDR10+/PQ/HLG references on physical hardware before adding a qualification.
+
+Embedded audio uses a separate client decoder while HDR video stays on native
+MSE; both indexed seeks start together, and pause commands reach both decoders. Ordinary
+drift is corrected with small audio-rate adjustments instead of repeated seeks.
+Audio-only Matroska reads reuse video-indexed cluster positions, including the
+last cue, so a distant seek does not scan from the beginning of a large file.
 
 ## Validation
 

@@ -54,7 +54,16 @@ async function fixture(page: Page) {
 		});
 	});
 	await page.route(`**/library/items/${show.id}/children?*`, (route) =>
-		route.fulfill({ json: { items: [season], total: 1 } })
+		route.fulfill({
+			json: {
+				items: season.title
+					.toLowerCase()
+					.includes(new URL(route.request().url()).searchParams.get('query')?.toLowerCase() || '')
+					? [season]
+					: [],
+				total: 1
+			}
+		})
 	);
 	await page.route(`**/library/items/${season.id}/children?*`, (route) =>
 		route.fulfill({
@@ -105,6 +114,81 @@ test('Library history preserves the room, filters and hierarchy on back, forward
 	expect(new URL(page.url()).pathname).toBe(roomPath);
 	expect(new URL(page.url()).searchParams.get('keep')).toBe('room-context');
 	await expect(page.getByRole('combobox', { name: 'Sort library' })).toContainText('Title A–Z');
+});
+
+test('search stays within its level and restores parent searches without stale debounce navigation', async ({
+	page
+}) => {
+	await fixture(page);
+	await page.goto('/?keep=search-context');
+	const search = page.getByRole('searchbox', { name: 'Search library' });
+	const hierarchy = page.getByRole('navigation', { name: 'Library hierarchy' });
+	await expect(search).toBeVisible();
+	const roomPath = new URL(page.url()).pathname;
+	await search.fill('series');
+	await expect(page).toHaveURL(/query=series/);
+	await page.getByRole('button', { name: /Encoded A long series title/ }).click();
+	await expect(search).toHaveValue('');
+	await expect(search).toHaveAttribute('placeholder', 'Search seasons');
+	await expect(page.getByRole('button', { name: /Encoded Season 1/ })).toBeVisible();
+	await search.fill('Season');
+	await expect(page).toHaveURL(/query=Season/);
+	await expect(hierarchy.getByRole('button', { name: show.title, exact: true })).toBeVisible();
+	await page.getByRole('button', { name: /Encoded Season 1/ }).click();
+	await expect(search).toHaveValue('');
+	await expect(search).toHaveAttribute('placeholder', 'Search episodes');
+	await expect(page.getByRole('link', { name: /First episode/ })).toBeVisible();
+	await page.reload();
+	await expect(search).toHaveValue('');
+	await page.getByRole('button', { name: 'Back to parent' }).click();
+	await expect(search).toHaveValue('Season');
+	await expect(page.getByRole('button', { name: /Encoded Season 1/ })).toBeVisible();
+	await hierarchy.getByRole('button', { name: 'Library', exact: true }).click();
+	await expect(search).toHaveValue('series');
+	await page.getByRole('button', { name: 'Clear search' }).click();
+	await expect(search).toHaveValue('');
+	await expect(page).not.toHaveURL(/[?&]query=/);
+	// Clear before the debounce fires; it must never restore the text later.
+	await search.fill('pending');
+	await page.getByRole('button', { name: 'Clear search' }).click();
+	await page.waitForTimeout(600);
+	await expect(search).toHaveValue('');
+	await expect(page).not.toHaveURL(/[?&]query=/);
+	// Entering a hierarchy cancels an uncommitted search as well.
+	await search.fill('obsolete');
+	await page.getByRole('button', { name: /Encoded A long series title/ }).click();
+	await page.waitForTimeout(600);
+	await expect(search).toHaveValue('');
+	await expect(page.getByRole('button', { name: /Encoded Season 1/ })).toBeVisible();
+	await page.goBack();
+	await expect(page.getByRole('button', { name: /Encoded A long series title/ })).toBeVisible();
+	await expect(search).toHaveValue('');
+	await page.goForward();
+	await expect(page.getByRole('button', { name: /Encoded Season 1/ })).toBeVisible();
+	expect(new URL(page.url()).pathname).toBe(roomPath);
+	expect(new URL(page.url()).searchParams.get('keep')).toBe('search-context');
+});
+
+test('Library selects allow background scrolling and keyboard selection', async ({ page }) => {
+	await fixture(page);
+	await page.goto('/');
+	const source = page.getByRole('combobox', { name: 'Source', exact: true });
+	await source.click();
+	await expect(page.getByRole('listbox')).toBeVisible();
+	await expect(page.locator('body')).not.toHaveAttribute('data-scroll-locked');
+	await expect(page.locator('body')).not.toHaveCSS('overflow', 'hidden');
+	const grid = page.getByLabel('Library titles', { exact: true });
+	const bounds = (await grid.boundingBox())!;
+	await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+	await page.mouse.wheel(0, 500);
+	await expect.poll(() => grid.evaluate((el) => el.scrollTop)).toBeGreaterThan(100);
+	await page.keyboard.press('Escape');
+	await source.focus();
+	await page.keyboard.press('ArrowDown');
+	await expect(page.getByRole('listbox')).toBeVisible();
+	await page.keyboard.press('End');
+	await page.keyboard.press('Enter');
+	await expect(source).toContainText('Plex · Raw');
 });
 
 test('Library controls and popups fit narrow mobile, tablet and desktop layouts', async ({

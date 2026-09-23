@@ -71,6 +71,11 @@ The patches add TrueHD/PGS admission, non-isolated subtitle packet transfer,
 embedded font access, bounded subtitle sinks/layers, zlib-compressed Matroska
 subtitle packets, native HDR guards, exact High 10/HEVC/AV1 color probes,
 Matroska Dolby configuration signaling, and MP4 static/Dolby HDR box preservation.
+`hdr-metadata.ts` extracts bounded HEVC SEI from hvcC and the first video packet
+into native MSE `mdcv`/`clli` boxes without modifying samples. It is hash-pinned
+in the exported manifest and shares its parser with malformed-input/unit tests.
+The Matroska seek patch lets audio-only playback use interleaved video-cue
+clusters, including the final cue, instead of scanning forward through the file.
 Native Dolby playback uses the selected Dolby codec in both MSE and the MP4
 sample entry. `hdr-sdr.ts` supplies the tested integer-frame PQ/HLG → sRGB shader;
 `dovi-sdr.ts` adds bounded per-frame Profile 5 RPU polynomial/MMR and color transforms.

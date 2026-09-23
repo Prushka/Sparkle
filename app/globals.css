@@ -670,6 +670,13 @@ html::-webkit-scrollbar-thumb:hover,
 	) !important;
 }
 
+.sparkle-hdr-status {
+	width: min(22rem, calc(var(--player-width) - 4rem));
+	max-width: 100%;
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+
 .sparkle-subtitle-format-toggle {
 	display: inline-flex;
 	min-height: 2rem;

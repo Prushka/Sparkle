@@ -115,7 +115,7 @@ test('two raw clients synchronize playback, pause, seek and delayed join', async
 			console.error(e.stack || e.message);
 		});
 		page.on('websocket', (ws) => {
-			if (!ws.url().includes('cottage'))
+			if (!ws.url().includes('cottage') && !ws.url().includes('webpack'))
 				ws.on('framesent', (frame) => {
 					try {
 						messages[index].push(JSON.parse(String(frame.payload)));
@@ -244,12 +244,14 @@ test('two raw clients synchronize playback, pause, seek and delayed join', async
 		await pages[0].getByRole('button', { name: 'Settings', exact: true }).click();
 	await pages[0].getByRole('menuitem', { name: /^Video Settings/ }).click();
 	await expect(pages[0].locator('[data-raw-hdr-status]')).toContainText(
-		`Raw · ${process.env.SPARKLE_RAW_EXPECTED_HDR || 'SDR'} →`
+		(process.env.SPARKLE_RAW_EXPECTED_HDR || 'SDR')
+			.replaceAll('Dolby Vision Profile ', 'Dolby Vision P')
+			.replaceAll(' / ', ' · ')
 	);
 	const audioOptions = pages[0]
 		.locator('.vds-video-settings-menu')
 		.getByRole('menuitemradio')
-		.filter({ hasNotText: /Automatic|Compatible|client tone mapping/ });
+		.filter({ hasNotText: /Automatic|Compatible|SDR tone mapping/ });
 	if ((await audioOptions.count()) > 1) {
 		const pauseCount = messages[0].filter((m) => m.type === 'pause').length;
 		await audioOptions.nth(1).click();
@@ -260,9 +262,7 @@ test('two raw clients synchronize playback, pause, seek and delayed join', async
 	if (process.env.SPARKLE_RAW_EXPECTED_HDR) {
 		const pauseCount = messages[0].filter((m) => m.type === 'pause').length;
 		const time = messages[0].filter((m) => m.type === 'time').at(-1)?.time || 0;
-		await pages[0]
-			.getByRole('menuitemradio', { name: 'SDR · client tone mapping', exact: true })
-			.click();
+		await pages[0].getByRole('menuitemradio', { name: 'SDR tone mapping', exact: true }).click();
 		await expect(player).toHaveAttribute('data-raw-renderer', 'software', { timeout: 30_000 });
 		await expect
 			.poll(() => messages[0].filter((m) => m.type === 'time').at(-1)?.time || 0, {

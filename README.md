@@ -12,6 +12,8 @@ library from the same Library view.
 - Shared play/pause, seeking, media changes, reconnects, profiles, chat, and notifications.
 - A paged, searchable poster Library with source filters, seasons, episodes, and **Raw**
   and **Encoded** badges. Back/Forward preserves the room, hierarchy, and filters.
+  Search applies to the current level; opening a show or season clears it, and going
+  back restores the parent search. Menus and dialogs leave page scrolling enabled.
   Large Plex libraries load on demand; confidently matched processed titles reuse Plex
   covers and descriptions.
 - Vidstack controls for playback, audio selection, subtitles, HDR options, and media versions.
@@ -44,6 +46,8 @@ storyboards are currently omitted; processed storyboards remain available.
 
 HDR prefers native video/MSE with exact codec/profile checks. Automatic mode tries
 native Dolby Vision or HDR10+ and then a labeled compatible HDR10/HLG representation.
+The client preserves HDR color signaling and supplies HEVC mastering/light-level
+metadata to the native player even when it exists only in the encoded bitstream.
 Vidstack → Video Settings also offers client-side SDR tone mapping for PQ/HLG and
 Dolby Vision Profile 5 (including RPU reshaping). Source format, renderer and output
 are reported separately. **Full dynamic-HDR display output is not yet qualified**;

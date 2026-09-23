@@ -72,7 +72,7 @@ export async function planHDR(
 				mime: dolby,
 				baseOnly: false,
 				output: hdrDisplay ? 'Native dynamic HDR (unverified)' : 'SDR tone mapping',
-				reason: `Native Dolby Vision Profile ${track.DOVIProfile} decoding is reported by this browser. ${hdrDisplay ? 'Dynamic HDR output to this display has not been physically qualified.' : 'The browser manages conversion to the SDR display.'}`
+				reason: `Dolby Vision P${track.DOVIProfile} requested. ${hdrDisplay ? 'Dynamic display output is unverified.' : 'Browser tone mapping to SDR.'}`
 			};
 		if (track.HDR10PlusPresent && base === 'HDR10' && (await probe(mime, 'HDR10+')))
 			return {
@@ -81,7 +81,7 @@ export async function planHDR(
 				baseOnly: !!track.DOVIPresent,
 				output: hdrDisplay ? 'Native dynamic HDR (unverified)' : 'SDR tone mapping',
 				reason:
-					'Native HDR10+ decoding is reported by this browser. Dynamic HDR display output is unverified.' +
+					'HDR10+ requested; dynamic display output is unverified.' +
 					(track.DOVIProfile === 7 ? ' Dolby Vision enhancement layers are not used.' : '')
 			};
 	}
@@ -94,15 +94,14 @@ export async function planHDR(
 				mime,
 				baseOnly: false,
 				output: 'SDR tone mapping',
-				reason:
-					'Client-side Dolby Vision RPU reshaping and SDR tone mapping. No Dolby Vision display signal is produced. High-resolution decoding depends on this device’s CPU.'
+				reason: 'Dolby Vision P5 converted to SDR on this device. 4K playback may be CPU-limited.'
 			};
 		throw new Error(
 			`Dolby Vision Profile ${track.DOVIProfile ?? '?'} needs a supported Dolby-aware decoder on this device. Choose a compatible media version.`
 		);
 	}
 	const fallback = dynamic
-		? `Using the compatible ${base} representation; ${track.DOVIProfile === 7 ? 'Dolby Vision enhancement layers are not used' : 'dynamic HDR processing is unavailable'}. `
+		? `${base} base layer. ${track.DOVIProfile === 7 ? 'Dolby Vision enhancement layers are not used' : 'Dynamic HDR processing is not active'}.`
 		: '';
 	if (preference !== 'sdr' && (await probe(mime, base)))
 		return {
@@ -111,19 +110,17 @@ export async function planHDR(
 			baseOnly: !!track.DOVIPresent,
 			output: hdrDisplay ? base : 'SDR tone mapping',
 			reason:
-				fallback +
+				fallback ||
 				(hdrDisplay
-					? 'Native color-managed video output.'
-					: 'The browser manages HDR conversion to the SDR display.')
+					? 'Original HDR video, rendered by the browser.'
+					: 'Browser tone mapping for this SDR display.')
 		};
 	return {
 		renderer: 'software',
 		mime,
 		baseOnly: !!track.DOVIPresent,
 		output: 'SDR tone mapping',
-		reason:
-			fallback +
-			'Client-side 10-bit decoding and color-managed SDR tone mapping. High-resolution playback depends on this device’s CPU.'
+		reason: 'Client tone mapping to SDR. 4K playback may be CPU-limited.'
 	};
 }
 

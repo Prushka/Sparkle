@@ -3,10 +3,11 @@
   "commit": "152f629d3021fd8013efa464fcb7b55f9fbe7753",
   "ffmpeg": "3a14ab29692763e561610412cdeb1985da4e3cd8",
   "emscripten": "4.0.10",
-  "patchHash": "578a057f6400c4c9efcfd812145d800857e5826b1913b7c597b19e09e4916078",
+  "patchHash": "32c10388f265076243e51687f4cab620759b604a346141bf5f859f57d7455f5b",
   "sources": {
     "hdr-sdr.ts": "7145cc1cb27cf75cdae17ef1c6f4cc3121289dad6fbe7edecb9f3ef8db350c6b",
-    "dovi-sdr.ts": "d4a572d72c175bba9fff94adcf0ec72a2b306c341e87877876b4d5cbb68cdb74"
+    "dovi-sdr.ts": "d4a572d72c175bba9fff94adcf0ec72a2b306c341e87877876b4d5cbb68cdb74",
+    "hdr-metadata.ts": "aa6a67b3940d7a4bca2b91ff004bdd1bbc2467a146964726410c29a802057114"
   },
   "artifacts": {
     "truehd.wasm": "acc4d68e8af00b65c32e41ed0c48b39fcee96df38ccce74b39ca23c7fe93e45b",
@@ -21,7 +22,7 @@
     "avplayer/525.avplayer.js": "755c8f6e4700d38848031e4f384e62c985faca50f9aeffd8f3d599c19cdb8abc",
     "avplayer/600.avplayer.js": "0c34359cc72f09ce48f2dbdf7369cd3503644e6bb800205981902ee58e765a36",
     "avplayer/606.avplayer.js": "4c90eeedb7397723acd0d03c31315e49d48c0be597dc0cf54917203d0e4e9367",
-    "avplayer/625.avplayer.js": "474162e8fc152b510fd43e8eda64d0879da0edeb53e853028a2f2371ad97bccc",
+    "avplayer/625.avplayer.js": "89ceb59c7f1bf8a2002b64e1a30d1a01aad8cfd6c93a9583bb9ecbcf315cae58",
     "avplayer/652.avplayer.js": "07b72e26e3c4d1509a4180e7dd83d4e5bf275a796fd3cc6986217418edafe562",
     "avplayer/680.avplayer.js": "28fe7727818a935579589b346cd855b0c3335d2777f7298a3198345a96092bfc",
     "avplayer/700.avplayer.js": "6ee88f367d6230713c5f7c3abf9f7b12571280be9c1bd4538329cfd43df286c3",
@@ -31,7 +32,7 @@
     "avplayer/73.avplayer.js": "35258b144e329175e1238445a971afbd51d13632071ba719fcf60e8acdba7e03",
     "avplayer/74.avplayer.js": "8af3aea9c6556031a5cebe645d2b6d658c3647796fa675fc36f1d51a310737a2",
     "avplayer/757.avplayer.js": "38329167184e8c42bb837a5c430eae5be9afa66979e0ba033dfcd3793e37a810",
-    "avplayer/773.avplayer.js": "b378cc43c58de5caa2b7d74a639ca21098078aae643c39b5839b4a31ddc6d890",
+    "avplayer/773.avplayer.js": "e6cf32fa02314edf13b8a0aa20e4c4ffaacd73d66b5881ec92e0c6791a2af326",
     "avplayer/793.avplayer.js": "4b5acc63dffe3847a23919a4efa6751f29324867e57d36b0ed9b4f0cbaf502d3",
     "avplayer/809.avplayer.js": "e77cfaeb6031a833e00acf097123d2da2c9f0b4f916725451021f69322a79695",
     "avplayer/810.avplayer.js": "4546d904d7eac887f0448389cd6680822ec6e12d3a667da785be611cd913a347",

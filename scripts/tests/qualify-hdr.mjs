@@ -32,6 +32,7 @@ page.on('pageerror', (e) => errors.push(e.stack || e.message));
 function captureMSE() {
 	if (typeof SourceBuffer === 'undefined') return;
 	globalThis.hdrBoxes = {};
+	globalThis.hdrStaticSEI = {};
 	globalThis.hdrPackets = { rpu: 0, hdr10plus: 0, maxAppend: 0 };
 	const append = SourceBuffer.prototype.appendBuffer;
 	SourceBuffer.prototype.appendBuffer = function (buffer) {
@@ -84,6 +85,11 @@ function captureMSE() {
 									}
 									length += rbsp[p++] || 0;
 									if (p + length > rbsp.length) break;
+									if ((payload === 137 && length === 24) || (payload === 144 && length === 4))
+										globalThis.hdrStaticSEI[payload === 137 ? 'mdcv' : 'clli'] = rbsp.slice(
+											p,
+											p + length
+										);
 									if (
 										payload === 4 &&
 										length >= 7 &&
@@ -139,7 +145,7 @@ try {
 	await page.getByRole('button', { name: 'Settings', exact: true }).click();
 	await page.getByRole('menuitem', { name: /^Video Settings/ }).click();
 	if (process.env.SPARKLE_HDR_MODE === 'sdr') {
-		await page.getByRole('menuitemradio', { name: 'SDR · client tone mapping' }).click();
+		await page.getByRole('menuitemradio', { name: 'SDR tone mapping' }).click();
 	}
 	const fallback = page.getByRole('menuitem', { name: /Try compatible/ });
 	if ((await page.locator('[data-media-player]').getAttribute('data-raw-blocked')) === 'true') {
@@ -170,6 +176,7 @@ try {
 		})),
 		time: document.querySelector('[data-media-player]')?.currentTime,
 		boxes: window.hdrBoxes,
+		staticSEI: window.hdrStaticSEI,
 		packets: window.hdrPackets,
 		videos: [...document.querySelectorAll('.sparkle-raw-surface video')].map((v) => ({
 			time: v.currentTime,
@@ -184,6 +191,10 @@ try {
 		timeLabel: [...document.querySelectorAll('.vds-time')].map((el) => el.textContent)
 	}));
 	for (const worker of page.workers()) {
+		Object.assign(
+			result.staticSEI,
+			await worker.evaluate(() => globalThis.hdrStaticSEI || {}).catch(() => ({}))
+		);
 		Object.assign(
 			result.boxes,
 			await worker.evaluate(() => globalThis.hdrBoxes || {}).catch(() => ({}))
@@ -253,7 +264,12 @@ try {
 		? JSON.stringify(expected) === JSON.stringify(result.boxes.mdcv)
 		: result.source.boxes.mdcv
 			? JSON.stringify(result.source.boxes.mdcv) === JSON.stringify(result.boxes.mdcv)
-			: 'No container mastering metadata; encoded video SEI remains unchanged';
+			: result.staticSEI.mdcv
+				? JSON.stringify(result.staticSEI.mdcv) === JSON.stringify(result.boxes.mdcv)
+				: 'No mastering metadata present';
+	result.staticSEIPreserved = Object.entries(result.staticSEI).every(
+		([name, bytes]) => JSON.stringify(bytes) === JSON.stringify(result.boxes[name])
+	);
 	result.browser = browser.version();
 	result.id = id;
 	result.time = positions.at(-1) || 0;
@@ -266,6 +282,7 @@ try {
 	console.log(JSON.stringify(result));
 	if (
 		errors.length ||
+		(result.renderer === 'native' && !result.staticSEIPreserved) ||
 		(result.renderer === 'software'
 			? !(result.time > 2 && result.canvas.some((c) => c.width > 0))
 			: !result.videos.some((v) => v.time > 2 && v.width > 0) || !result.boxes.colr)

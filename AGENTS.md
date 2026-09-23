@@ -82,7 +82,9 @@ resolve output/cache/profile paths relative to the repository; direct `go run` d
 - Processed/Plex artwork matching must remain conservative and bounded: compare title/year
   or series/season/episode identity, reject ambiguity, and enrich only requested items.
   Library URL state must preserve room context without remounting or reconnecting the room.
-- Shared UI components follow current shadcn Radix/Tailwind 4 conventions. Preserve Tabler
+- Shared UI components follow shadcn/Tailwind 4 conventions. Select uses Base UI's
+  non-modal primitive; other controls use Radix. Menus, selects and room dialogs must
+  leave page scrolling enabled. Preserve Tabler
   icons, the local `cn` helper, fullscreen portal containers, and existing namespace exports
   when updating generated components. Check Select popups inside the room picker on mobile.
 - Keep metadata/artwork caches bounded and cache only requested entries. Preserve original
@@ -93,8 +95,10 @@ resolve output/cache/profile paths relative to the repository; direct `go run` d
   media-generation checks, stale-message rejection, and remote-event suppression through
   readiness, seeks, buffering, track changes, recovery, and teardown. Loading must not emit
   accidental pauses or stale positions.
-- Prefer native video/MSE for HDR. Keep source format separate from output mode; the
-  canvas renderer produces explicitly labeled SDR, with reference-pixel tests. Label
+- Prefer native video/MSE for HDR. Keep source format separate from output mode. The
+  MSE initialization segment must include HEVC mastering/light-level metadata even
+  when it exists only in bitstream SEI. Keep audio-only MKV seeks on the cluster index.
+  The canvas renderer produces explicitly labeled SDR, with reference-pixel tests. Label
   automatically selected compatible representations. Generic codec support
   does not verify Dolby Vision/HDR10+; Profile 7 enhancement-layer playback remains unverified.
   Read [HDR requirements and limits](docs/plex-raw-media.md#playback-and-hdr) before changing

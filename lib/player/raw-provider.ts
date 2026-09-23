@@ -131,6 +131,8 @@ export class RawProvider implements MediaProviderAdapter {
 	private desiredTime = 0;
 	private audioWaiting = false;
 	private driftSince = 0;
+	private lastAudioCorrection = 0;
+	private audioRate = NaN;
 	private remoteOperations = 0;
 	private hdrPreference: HDRPreference = 'auto';
 	private destroyed = false;
@@ -359,8 +361,7 @@ export class RawProvider implements MediaProviderAdapter {
 			engine.setHDRPlayback(plan.renderer, plan.mime, video?.DOVIProfile === 5);
 		}
 		this.subtitles.setFonts(engine.getEmbeddedFonts());
-		// HDR video stays unchanged through native MSE. The second instance decodes
-		// audio client-side, including codecs that would force stock AVPlayer to canvas.
+		// Keep HDR video on native MSE while embedded audio decodes client-side.
 		if (plan?.renderer === 'native' && part.streams.some((s) => s.streamType === 2)) {
 			this.audioEngine = new Constructor({
 				container: this.audioContainer,
@@ -444,7 +445,7 @@ export class RawProvider implements MediaProviderAdapter {
 		}
 		this.setVolume(this.volume);
 		engine.setPlaybackRate(this.rate);
-		this.audioEngine?.setPlaybackRate(this.rate);
+		this.setAudioRate(this.rate);
 		this.ctx.$state.canPictureInPicture.set(this.pictureInPicture.supported);
 	}
 	play() {
@@ -466,8 +467,7 @@ export class RawProvider implements MediaProviderAdapter {
 		return this.enqueue(async () => {
 			this.paused = true;
 			if (this.initialized) {
-				await this.engine?.pause();
-				await this.audioEngine?.pause();
+				await Promise.all([this.engine?.pause(), this.audioEngine?.pause()]);
 			}
 			this.notify('pause');
 		});
@@ -504,9 +504,13 @@ export class RawProvider implements MediaProviderAdapter {
 				if (!this.paused) await this.start();
 			}
 			const ms = BigInt(Math.round((target - this.raw.parts[index].start) * 1000));
-			await this.engine?.seek(ms);
-			await this.audioEngine?.seek(ms);
+			// Start both indexed seeks together; do not let video finish before the
+			// audio decoder even starts moving to the requested position.
+			await Promise.all([this.engine?.seek(ms), this.audioEngine?.seek(ms)]);
 			if (sequence !== this.seekSequence) return;
+			this.lastTime = -1;
+			this.lastProgress = performance.now();
+			this.driftSince = 0;
 			this.publish({ changing: false });
 			this.notify('time-change', target);
 			this.notify('seeked', target);
@@ -524,8 +528,13 @@ export class RawProvider implements MediaProviderAdapter {
 	setPlaybackRate(rate: number) {
 		this.rate = rate;
 		this.engine?.setPlaybackRate(rate);
-		this.audioEngine?.setPlaybackRate(rate);
+		this.setAudioRate(rate);
 		this.notify('rate-change', rate);
+	}
+	private setAudioRate(rate: number) {
+		if (!this.audioEngine || rate === this.audioRate) return;
+		this.audioEngine.setPlaybackRate(rate);
+		this.audioRate = rate;
 	}
 	async selectTrack(kind: 'audio' | 'subtitle', id: number) {
 		const expectedEngine = this.engine;
@@ -702,10 +711,18 @@ export class RawProvider implements MediaProviderAdapter {
 		this.notify('time-change', time);
 		if (this.audioEngine && !this.paused && !this.driftCorrection) {
 			const drift = Number(this.audioEngine.currentTime - this.engine.currentTime);
-			if (Math.abs(drift) > 400) {
+			// Correct ordinary clock drift smoothly. Repeated demux/decoder seeks
+			// are expensive for large MKVs and can starve an incoming pause command.
+			this.setAudioRate(this.rate * (Math.abs(drift) > 80 ? (drift > 0 ? 0.97 : 1.03) : 1));
+			if (Math.abs(drift) > 1500) {
 				this.driftSince ||= performance.now();
 			} else this.driftSince = 0;
-			if (this.audioWaiting || (this.driftSince && performance.now() - this.driftSince > 1000)) {
+			if (
+				this.audioWaiting ||
+				(this.driftSince &&
+					performance.now() - this.driftSince > 2000 &&
+					performance.now() - this.lastAudioCorrection > 5000)
+			) {
 				this.driftCorrection = true;
 				void this.enqueue(async () => {
 					if (!this.engine || !this.audioEngine || this.paused || this.buffering) return;
@@ -714,6 +731,8 @@ export class RawProvider implements MediaProviderAdapter {
 						await this.audioEngine.play({ video: false, audio: true, subtitle: false });
 					this.audioWaiting = false;
 					this.driftSince = 0;
+					this.lastAudioCorrection = performance.now();
+					this.setAudioRate(this.rate);
 				})
 					.finally(() => {
 						this.driftCorrection = false;
@@ -731,6 +750,7 @@ export class RawProvider implements MediaProviderAdapter {
 		this.subtitleLayers = [];
 		this.engine = undefined;
 		this.audioEngine = undefined;
+		this.audioRate = NaN;
 		this.subtitles = undefined;
 		this.initialized = false;
 		this.audioWaiting = false;

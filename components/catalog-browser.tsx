@@ -30,7 +30,17 @@ import {
 	SelectValue
 } from '@/components/ui/select';
 import { LibraryPoster } from '@/components/library-poster';
-import { useLibraryNavigation } from '@/lib/use-library-navigation';
+import { useLibraryNavigation, type LibraryTrailItem } from '@/lib/use-library-navigation';
+
+const sourceOptions = { all: 'Both sources', processed: 'Encoded', plex: 'Plex · Raw' };
+const sortOptions = {
+	'recent-desc': 'Recently added',
+	'recent-asc': 'Oldest first',
+	'title-asc': 'Title A–Z',
+	'title-desc': 'Title Z–A',
+	'duration-desc': 'Longest first',
+	'duration-asc': 'Shortest first'
+};
 
 function itemDescription(item: LibraryItem) {
 	const kind = {
@@ -66,6 +76,7 @@ export function CatalogBrowser({
 	const { state: navigation, update: navigate } = useLibraryNavigation(compact);
 	const { source, library, kind, sort, query, trail } = navigation;
 	const [search, setSearch] = useState(query);
+	const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 	const [items, setItems] = useState<LibraryItem[]>([]);
 	const [total, setTotal] = useState(0),
 		[cursor, setCursor] = useState<string>();
@@ -96,12 +107,19 @@ export function CatalogBrowser({
 			.catch(() => {});
 		return () => controller.abort();
 	}, [backendBaseUrl]);
-	useEffect(() => setSearch(query), [query]);
+	// Only user edits schedule a search. Mirroring URL/history state back into a
+	// debounce effect can resurrect a cleared query or undo hierarchy navigation.
 	useEffect(() => {
-		if (search.trim() === query) return;
-		const timer = setTimeout(() => navigate({ query: search.trim(), trail: [] }), 300);
-		return () => clearTimeout(timer);
-	}, [search, query, navigate]);
+		clearTimeout(searchTimer.current);
+		setSearch(query);
+		return () => clearTimeout(searchTimer.current);
+	}, [navigation, query]);
+	const changeSearch = (value: string) => {
+		setSearch(value);
+		clearTimeout(searchTimer.current);
+		if (!value.trim()) navigate({ query: '' });
+		else searchTimer.current = setTimeout(() => navigate({ query: value.trim() }), 300);
+	};
 	useEffect(() => {
 		const el = scrollRef.current;
 		if (!el) return;
@@ -176,10 +194,17 @@ export function CatalogBrowser({
 		if (cursor && !loading && !error && (lastRow + 2) * columns >= items.length) void load(cursor);
 	}, [cursor, loading, error, lastRow, columns, items.length, load]);
 	const reset = () => {
+		clearTimeout(searchTimer.current);
 		setSearch('');
 		navigate({ query: '', source: 'all', library: '', kind: 'all', trail: [] });
 	};
-	const setTrail = (next: LibraryItem[]) => navigate({ trail: next }, true);
+	const setTrail = (next: LibraryTrailItem[]) => {
+		clearTimeout(searchTimer.current);
+		const entering = next.length > trail.length;
+		const nextQuery = entering ? '' : (trail[next.length]?.parentQuery ?? query);
+		setSearch(nextQuery);
+		navigate({ trail: next, query: nextQuery }, true);
+	};
 	return (
 		<section
 			className={`@container/library flex min-h-0 min-w-0 flex-col gap-3 ${compact ? '' : 'flex-1 overflow-hidden'}`}
@@ -194,10 +219,16 @@ export function CatalogBrowser({
 						type="text"
 						role="searchbox"
 						aria-label="Search library"
-						placeholder="Search movies, shows, and more"
+						placeholder={
+							episodes
+								? 'Search episodes'
+								: current
+									? 'Search seasons'
+									: 'Search movies, shows, and more'
+						}
 						value={search}
 						maxLength={200}
-						onChange={(e) => setSearch(e.target.value)}
+						onChange={(e) => changeSearch(e.target.value)}
 					/>
 					<InputGroupAddon>
 						<IconSearch aria-hidden="true" />
@@ -207,7 +238,7 @@ export function CatalogBrowser({
 							<InputGroupButton
 								aria-label="Clear search"
 								size="icon-xs"
-								onClick={() => setSearch('')}
+								onClick={() => changeSearch('')}
 							>
 								<IconX />
 							</InputGroupButton>
@@ -217,6 +248,7 @@ export function CatalogBrowser({
 				<div className="col-span-12 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2.25rem] gap-2 @min-[720px]/library:col-span-6 @min-[1180px]/library:col-span-4">
 					<Select
 						value={source}
+						items={sourceOptions}
 						onValueChange={(value) => navigate({ source: value, library: '', trail: [] })}
 					>
 						<SelectTrigger
@@ -233,6 +265,12 @@ export function CatalogBrowser({
 					</Select>
 					<Select
 						value={library || 'all'}
+						items={{
+							all: 'All libraries',
+							...Object.fromEntries(
+								sources.filter((s) => s.source === 'plex').map((s) => [s.id, s.title])
+							)
+						}}
 						disabled={source === 'processed'}
 						onValueChange={(value) =>
 							navigate({
@@ -287,7 +325,11 @@ export function CatalogBrowser({
 							</Button>
 						))}
 					</div>
-					<Select value={sort} onValueChange={(value) => navigate({ sort: value })}>
+					<Select
+						value={sort}
+						items={sortOptions}
+						onValueChange={(value) => navigate({ sort: value })}
+					>
 						<SelectTrigger
 							aria-label="Sort library"
 							className="min-w-36 flex-1 text-xs @min-[1180px]/library:flex-none"
@@ -295,14 +337,7 @@ export function CatalogBrowser({
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
-							{[
-								['recent-desc', 'Recently added'],
-								['recent-asc', 'Oldest first'],
-								['title-asc', 'Title A–Z'],
-								['title-desc', 'Title Z–A'],
-								['duration-desc', 'Longest first'],
-								['duration-asc', 'Shortest first']
-							].map(([value, label]) => (
+							{Object.entries(sortOptions).map(([value, label]) => (
 								<SelectItem key={value} value={value}>
 									{label}
 								</SelectItem>
@@ -461,7 +496,11 @@ export function CatalogBrowser({
 										key={item.id}
 										className={className}
 										title={item.summary || item.title}
-										onClick={() => (children ? setTrail([...trail, item]) : onSelect?.(item.id))}
+										onClick={() =>
+											children
+												? setTrail([...trail, { ...item, parentQuery: query }])
+												: onSelect?.(item.id)
+										}
 									>
 										{body}
 									</button>

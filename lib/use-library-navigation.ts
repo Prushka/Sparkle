@@ -4,13 +4,15 @@ import { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { LibraryItem } from './library';
 
+export type LibraryTrailItem = LibraryItem & { parentQuery?: string };
+
 export type LibraryNavigation = {
 	source: string;
 	library: string;
 	kind: string;
 	sort: string;
 	query: string;
-	trail: LibraryItem[];
+	trail: LibraryTrailItem[];
 };
 const defaults: LibraryNavigation = {
 	source: 'all',
@@ -22,20 +24,25 @@ const defaults: LibraryNavigation = {
 };
 
 function read(params: URLSearchParams): LibraryNavigation {
-	let trail: LibraryItem[] = [];
+	let trail: LibraryTrailItem[] = [];
 	try {
 		const values: unknown = JSON.parse(params.get('libraryPath') || '[]');
 		if (Array.isArray(values) && values.length <= 2) {
-			trail = values.filter(
-				(item): item is LibraryItem =>
-					item &&
-					typeof item.id === 'string' &&
-					item.id.length < 200 &&
-					typeof item.title === 'string' &&
-					item.title.length < 500 &&
-					['show', 'season'].includes(item.kind) &&
-					['plex', 'processed'].includes(item.source)
-			);
+			trail = values
+				.filter(
+					(item): item is LibraryTrailItem =>
+						item &&
+						typeof item.id === 'string' &&
+						item.id.length < 200 &&
+						typeof item.title === 'string' &&
+						item.title.length < 500 &&
+						['show', 'season'].includes(item.kind) &&
+						['plex', 'processed'].includes(item.source)
+				)
+				.map((item) => ({
+					...item,
+					parentQuery: typeof item.parentQuery === 'string' ? item.parentQuery.slice(0, 200) : ''
+				}));
 		}
 	} catch {
 		/* Invalid links fall back to the Library root. */
@@ -93,7 +100,13 @@ export function useLibraryNavigation(local: boolean) {
 				url.searchParams.set(
 					'libraryPath',
 					JSON.stringify(
-						next.trail.map(({ id, title, kind, source }) => ({ id, title, kind, source }))
+						next.trail.map(({ id, title, kind, source, parentQuery }) => ({
+							id,
+							title,
+							kind,
+							source,
+							parentQuery
+						}))
 					)
 				);
 			else url.searchParams.delete('libraryPath');

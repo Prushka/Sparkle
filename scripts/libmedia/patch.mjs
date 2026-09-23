@@ -251,6 +251,21 @@ patch(
   public getVideoMimeType() {`
 );
 console.log('Applied Sparkle libmedia v1.3.1 patches');
+// MKV cues usually index only video, but point to interleaved cluster starts.
+// Audio-only decoding must use that cluster index too, otherwise a distant seek
+// scans from the last previously read cluster through gigabytes of video data.
+patch(
+	'packages/avformat/src/formats/IMatroskaFormat.ts',
+	`        if (time > pts) {
+          const poses = this.context.cues.entry[Math.max(i - 1, 0)].pos`,
+	`        if (time > pts || i === this.context.cues.entry.length - 1) {
+          const poses = this.context.cues.entry[time > pts ? Math.max(i - 1, 0) : i].pos`
+);
+patch(
+	'packages/avformat/src/formats/IMatroskaFormat.ts',
+	'const matchPos = poses.find((p) => p.track === track.number)',
+	'const matchPos = poses.find((p) => p.track === track.number) || poses[0]'
+);
 // Preserve a useful teardown stack for cancellation failures.
 patch(
 	'packages/common/src/network/IPCPort.ts',
@@ -706,6 +721,42 @@ patch(
 	"return s ? (s.metadata['sparkleNativeMime'] || getVideoMimeType(s.codecpar)) : ''"
 );
 const mse = 'packages/avplayer/src/mse/MSEPipeline.ts';
+writeFileSync(
+	resolve(root, 'packages/avplayer/src/mse/hdr-metadata.ts'),
+	readFileSync(new URL('./hdr-metadata.ts', import.meta.url))
+);
+patch(
+	mse,
+	'import {\n  errorType,',
+	"import { hevcHDRBoxes } from './hdr-metadata'\nimport {\n  errorType,"
+);
+patch(
+	mse,
+	'          mux.writeHeader(task.video.oformatContext)',
+	`          const stream = task.video.oformatContext.streams[0]
+          if (stream.codecpar.codecId === AVCodecID.AV_CODEC_ID_HEVC) {
+            const config = stream.codecpar.extradataSize
+              ? mapUint8Array(stream.codecpar.extradata, reinterpret_cast<size>(stream.codecpar.extradataSize)).slice()
+              : new Uint8Array()
+            const packet = task.video.backPacket > 0
+              ? mapUint8Array(task.video.backPacket.data, reinterpret_cast<size>(task.video.backPacket.size)).slice()
+              : undefined
+            stream.metadata['sparkleHDRBoxes'] = {
+              ...hevcHDRBoxes(config, packet, task.video.backPacket > 0 && !!(task.video.backPacket.flags & AVPacketFlags.AV_PKT_FLAG_H26X_ANNEXB)), ...stream.metadata['sparkleHDRBoxes']
+            }
+          }
+          mux.writeHeader(task.video.oformatContext)`
+);
+patch(
+	'packages/avformat/src/formats/isobmff/writing/stsd.ts',
+	'  if (color?.masteringMeta) {',
+	'  if (color?.masteringMeta && !boxes?.mdcv) {'
+);
+patch(
+	'packages/avformat/src/formats/isobmff/writing/stsd.ts',
+	"  if (typeof color?.maxCll === 'number' && typeof color?.maxFall === 'number') {",
+	"  if (!boxes?.clli && typeof color?.maxCll === 'number' && typeof color?.maxFall === 'number') {"
+);
 // Seeking an ended MediaSource fires sourceopen again. Reinitializing it adds
 // duplicate SourceBuffers (QuotaExceededError) and stalls subtitle/track changes.
 patch(

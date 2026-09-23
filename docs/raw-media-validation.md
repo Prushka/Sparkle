@@ -69,11 +69,30 @@ The native clock advanced beyond 13 seconds without a page error.
 The MSE initialization segment carried `nclx` primaries 9, transfer 16, matrix 9,
 limited range (BT.2020/PQ). Demuxing retained the file's Dolby configuration
 record. This sample did not provide container mastering metadata; its encoded
-video metadata remains in unchanged packets. Added container `mdcv`/`clli`
+video metadata remains in unchanged packets and its static HEVC SEI is now also
+copied into native MSE `mdcv`/`clli` boxes. Added container `mdcv`/`clli`
 writing uses the specified G/B/R primary order, following the
 [FFmpeg MP4 writer](https://github.com/FFmpeg/FFmpeg/blob/master/libavformat/movenc.c).
 The MP4-to-MP4 mastering-box path passes byte preservation checks; Matroska
 mastering conversion still needs a reference fixture with container metadata.
+
+The HEVC Profile 8 / HDR10+ / E-AC-3 regression sample originally supplied only
+`colr` to MSE despite containing mastering and light-level SEI. The repaired
+initialization segment preserves those SEI payloads byte for byte: mastering
+maximum 1,000 nits, minimum 0.005 nits, MaxCLL 1,087 and MaxFALL 355. The Profile 7
+sample also passes exact SEI-to-box comparison. Native decoding retains limited
+range, BT.2020 primaries/matrix and PQ transfer through distant seeks. These
+checks exercise Chrome 153 on Windows without cross-origin isolation; physical
+display luminance and full dynamic-HDR processing remain unqualified.
+
+The long-file regression checks a paused halfway seek, rapid subsequent seeks,
+resume/pause, bounded range requests, and desktop/mobile HDR menus. Audio-only
+MKV decoding now uses video-indexed interleaved clusters instead of scanning
+forward from previously visited positions. Timing evidence is specific to the
+local test machine and storage, not a network-performance guarantee.
+Chrome and Edge both pass this regression with BT.2020/PQ decoded frames:
+pause completes in about 20–40 ms and a halfway seek in about 0.4 seconds,
+requesting 44 MiB of bounded ranges for the two decoder readers.
 
 The updated HEVC codec-string builder uses the hvcC profile/tier/level, complete
 constraint bytes and bit-reversed RFC compatibility flags. Unsupported native
@@ -192,7 +211,10 @@ and `npm run build` at the root. Browser tests use `SPARKLE_TEST_URL` (default
   `audioCodec`, `subtitleCodec`, `subtitleId`, `subtitleLayers` for
   `node scripts/tests/qualify-media.mjs`.
 - `SPARKLE_HDR_TEST_ID`: HDR item for `node scripts/tests/qualify-hdr.mjs`.
-  It captures native pipeline evidence, not physical HDR certification.
+  It captures native pipeline evidence, including HEVC SEI-to-box preservation,
+  not physical HDR certification. Use a long HEVC PQ file with audio for
+  `npx playwright test tests/e2e/raw-native.spec.ts`, which also checks distant
+  seeks, decoded frame color, pause/resume and compact desktop/mobile settings.
 - `SPARKLE_HDR_MODE=sdr`: exercise local software tone mapping in that script.
 - `SPARKLE_DOLBY_FIXTURE`: local official reference file for
   `node scripts/tests/qualify-dolby.mjs` (default

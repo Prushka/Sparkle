@@ -6,7 +6,7 @@
 		"prebuild": "node scripts/prepare-player-assets.mjs",
 		"prepare:player": "node scripts/prepare-player-assets.mjs",
 		"test:e2e": "playwright test",
-		"test:player": "node scripts/tests/subtitle-bitmap.mjs && node scripts/tests/hdr-policy.mjs",
+		"test:player": "node scripts/tests/subtitle-bitmap.mjs && node scripts/tests/hdr-policy.mjs && node scripts/tests/hdr-metadata.mjs",
 		"dev": "next dev --webpack --hostname 0.0.0.0 -p 3001",
 		"build": "next build --webpack && node scripts/generate-sw.mjs",
 		"start": "next start",
@@ -17,6 +17,7 @@
 	},
 	"type": "module",
 	"dependencies": {
+		"@base-ui/react": "1.8.0",
 		"@discord/embedded-app-sdk": "^2.5.0",
 		"@libmedia/avplayer": "1.3.1",
 		"@radix-ui/react-dialog": "^1.1.23",
