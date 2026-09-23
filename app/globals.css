@@ -1,4 +1,5 @@
 @import 'tailwindcss/index.css';
+@import 'tw-animate-css';
 
 @config "../tailwind.config.js";
 

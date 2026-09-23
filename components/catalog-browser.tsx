@@ -15,6 +15,22 @@ import {
 import { libraryArtwork, libraryPage, type LibraryItem, type LibrarySource } from '@/lib/library';
 import { joinBackendPath } from '@/lib/player/data';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+	InputGroup,
+	InputGroupAddon,
+	InputGroupButton,
+	InputGroupInput
+} from '@/components/ui/input-group';
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue
+} from '@/components/ui/select';
+import { LibraryPoster } from '@/components/library-poster';
+import { useLibraryNavigation } from '@/lib/use-library-navigation';
 
 function itemDescription(item: LibraryItem) {
 	const kind = {
@@ -47,14 +63,10 @@ export function CatalogBrowser({
 	compact?: boolean;
 }) {
 	const [sources, setSources] = useState<LibrarySource[]>([]);
-	const [source, setSource] = useState('all'),
-		[library, setLibrary] = useState(''),
-		[kind, setKind] = useState('all');
-	const [sort, setSort] = useState('recent-desc'),
-		[search, setSearch] = useState(''),
-		[query, setQuery] = useState('');
-	const [trail, setTrail] = useState<LibraryItem[]>([]),
-		[items, setItems] = useState<LibraryItem[]>([]);
+	const { state: navigation, update: navigate } = useLibraryNavigation(compact);
+	const { source, library, kind, sort, query, trail } = navigation;
+	const [search, setSearch] = useState(query);
+	const [items, setItems] = useState<LibraryItem[]>([]);
 	const [total, setTotal] = useState(0),
 		[cursor, setCursor] = useState<string>();
 	const [error, setError] = useState(''),
@@ -84,14 +96,16 @@ export function CatalogBrowser({
 			.catch(() => {});
 		return () => controller.abort();
 	}, [backendBaseUrl]);
+	useEffect(() => setSearch(query), [query]);
 	useEffect(() => {
-		const timer = setTimeout(() => setQuery(search.trim()), 300);
+		if (search.trim() === query) return;
+		const timer = setTimeout(() => navigate({ query: search.trim(), trail: [] }), 300);
 		return () => clearTimeout(timer);
-	}, [search]);
+	}, [search, query, navigate]);
 	useEffect(() => {
 		const el = scrollRef.current;
 		if (!el) return;
-		const observer = new ResizeObserver(() => setWidth(Math.max(1, el.clientWidth - 12)));
+		const observer = new ResizeObserver(() => setWidth(Math.max(1, el.clientWidth - 24)));
 		observer.observe(el);
 		return () => observer.disconnect();
 	}, []);
@@ -149,6 +163,8 @@ export function CatalogBrowser({
 		count: Math.ceil(items.length / columns),
 		getScrollElement: () => scrollRef.current,
 		estimateSize: () => rowHeight,
+		paddingStart: 12,
+		paddingEnd: 12,
 		overscan: 2
 	});
 	useEffect(() => {
@@ -161,135 +177,149 @@ export function CatalogBrowser({
 	}, [cursor, loading, error, lastRow, columns, items.length, load]);
 	const reset = () => {
 		setSearch('');
-		setQuery('');
-		setSource('all');
-		setLibrary('');
-		setKind('all');
-		setTrail([]);
+		navigate({ query: '', source: 'all', library: '', kind: 'all', trail: [] });
 	};
-	const selectClass =
-		'h-10 min-w-0 rounded-lg border border-border/70 bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-primary';
-	const title =
-		current?.title ??
-		(query
-			? `Results for “${query}”`
-			: (sources.find((s) => s.id === library)?.title ?? 'Your library'));
+	const setTrail = (next: LibraryItem[]) => navigate({ trail: next }, true);
 	return (
 		<section
-			className={`flex min-h-0 flex-col gap-3 sm:gap-5 ${compact ? '' : 'flex-1 overflow-hidden'}`}
+			className={`@container/library flex min-h-0 min-w-0 flex-col gap-3 ${compact ? '' : 'flex-1 overflow-hidden'}`}
 			aria-label="Media library"
 		>
-			<div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border/60 bg-muted/25 p-3">
-				<div className="relative min-w-44 flex-1 basis-full sm:basis-0">
-					<IconSearch
-						size={18}
-						className="pointer-events-none absolute left-3 top-3 text-muted-foreground"
-					/>
-					<input
-						type="search"
+			<div
+				className="grid shrink-0 grid-cols-12 items-center gap-2 rounded-xl border border-border/60 bg-muted/25 p-2.5"
+				aria-label="Library filters"
+			>
+				<InputGroup className="col-span-12 bg-background/75 @min-[720px]/library:col-span-6 @min-[1180px]/library:col-span-4">
+					<InputGroupInput
+						type="text"
+						role="searchbox"
 						aria-label="Search library"
 						placeholder="Search movies, shows, and more"
 						value={search}
-						onChange={(e) => {
-							setSearch(e.target.value);
-							setTrail([]);
-						}}
-						className={`${selectClass} w-full border-transparent bg-background/75 pr-9 pl-10`}
+						maxLength={200}
+						onChange={(e) => setSearch(e.target.value)}
 					/>
+					<InputGroupAddon>
+						<IconSearch aria-hidden="true" />
+					</InputGroupAddon>
 					{search && (
-						<button
-							aria-label="Clear search"
-							className="absolute top-2.5 right-2 rounded text-muted-foreground hover:text-foreground"
-							onClick={() => setSearch('')}
-						>
-							<IconX size={20} />
-						</button>
+						<InputGroupAddon align="inline-end">
+							<InputGroupButton
+								aria-label="Clear search"
+								size="icon-xs"
+								onClick={() => setSearch('')}
+							>
+								<IconX />
+							</InputGroupButton>
+						</InputGroupAddon>
 					)}
-				</div>
-				<select
-					aria-label="Source"
-					value={source}
-					onChange={(e) => {
-						setSource(e.target.value);
-						setLibrary('');
-						setTrail([]);
-					}}
-					className={selectClass}
-				>
-					<option value="all">Both sources</option>
-					<option value="processed">Processed</option>
-					<option value="plex">Plex · Raw</option>
-				</select>
-				{source !== 'processed' && (
-					<select
-						aria-label="Plex library"
-						value={library}
-						onChange={(e) => {
-							setLibrary(e.target.value);
-							if (e.target.value) setSource('plex');
-							setTrail([]);
-						}}
-						className={`${selectClass} max-w-48`}
+				</InputGroup>
+				<div className="col-span-12 grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2.25rem] gap-2 @min-[720px]/library:col-span-6 @min-[1180px]/library:col-span-4">
+					<Select
+						value={source}
+						onValueChange={(value) => navigate({ source: value, library: '', trail: [] })}
 					>
-						<option value="">All libraries</option>
-						{sources
-							.filter((s) => s.source === 'plex')
-							.map((s) => (
-								<option key={s.id} value={s.id}>
-									{s.title}
-								</option>
-							))}
-					</select>
-				)}
-				<button
-					aria-label="Refresh library"
-					title="Refresh library"
-					className="rounded-lg p-2.5 text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary"
-					onClick={() => setRevision((r) => r + 1)}
-				>
-					<IconRefresh size={19} className={loading ? 'animate-spin' : ''} />
-				</button>
-			</div>
-			<div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 pb-3">
-				<div className="flex gap-1" role="group" aria-label="Media type">
-					{[
-						['all', 'All titles'],
-						['movies', 'Movies'],
-						['shows', 'TV Shows']
-					].map(([value, label]) => (
-						<button
-							key={value}
-							aria-pressed={kind === value}
-							onClick={() => {
-								setKind(value);
-								setTrail([]);
-							}}
-							className={`rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-primary ${kind === value ? 'bg-foreground text-background' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
+						<SelectTrigger
+							aria-label="Source"
+							className="w-full min-w-0 gap-1.5 px-2 text-xs @min-[480px]/library:text-sm"
 						>
-							{label}
-						</button>
-					))}
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="all">Both sources</SelectItem>
+							<SelectItem value="processed">Processed</SelectItem>
+							<SelectItem value="plex">Plex · Raw</SelectItem>
+						</SelectContent>
+					</Select>
+					<Select
+						value={library || 'all'}
+						disabled={source === 'processed'}
+						onValueChange={(value) =>
+							navigate({
+								library: value === 'all' ? '' : value,
+								...(value !== 'all' ? { source: 'plex' } : {}),
+								trail: []
+							})
+						}
+					>
+						<SelectTrigger
+							aria-label="Plex library"
+							className="w-full min-w-0 gap-1.5 px-2 text-xs @min-[480px]/library:text-sm"
+						>
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectItem value="all">All libraries</SelectItem>
+							{sources
+								.filter((s) => s.source === 'plex')
+								.map((s) => (
+									<SelectItem key={s.id} value={s.id}>
+										{s.title}
+									</SelectItem>
+								))}
+						</SelectContent>
+					</Select>
+					<Button
+						variant="ghost"
+						size="icon"
+						aria-label="Refresh library"
+						title="Refresh library"
+						onClick={() => setRevision((r) => r + 1)}
+					>
+						<IconRefresh className={loading ? 'animate-spin' : ''} />
+					</Button>
 				</div>
-				<select
-					aria-label="Sort library"
-					value={sort}
-					onChange={(e) => setSort(e.target.value)}
-					className={`${selectClass} border-transparent`}
-				>
-					<option value="recent-desc">Recently added</option>
-					<option value="recent-asc">Oldest first</option>
-					<option value="title-asc">Title A–Z</option>
-					<option value="title-desc">Title Z–A</option>
-					<option value="duration-desc">Longest first</option>
-					<option value="duration-asc">Shortest first</option>
-				</select>
+				<div className="col-span-12 flex min-w-0 flex-wrap items-center justify-between gap-2 @min-[1180px]/library:col-span-4">
+					<div className="flex gap-0.5" role="group" aria-label="Media type">
+						{[
+							['all', 'All titles'],
+							['movies', 'Movies'],
+							['shows', 'TV Shows']
+						].map(([value, label]) => (
+							<Button
+								key={value}
+								variant={kind === value ? 'secondary' : 'ghost'}
+								aria-pressed={kind === value}
+								className="h-9 px-2 text-xs"
+								onClick={() => navigate({ kind: value, trail: [] })}
+							>
+								{label}
+							</Button>
+						))}
+					</div>
+					<Select value={sort} onValueChange={(value) => navigate({ sort: value })}>
+						<SelectTrigger
+							aria-label="Sort library"
+							className="min-w-36 flex-1 text-xs @min-[1180px]/library:flex-none"
+						>
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							{[
+								['recent-desc', 'Recently added'],
+								['recent-asc', 'Oldest first'],
+								['title-asc', 'Title A–Z'],
+								['title-desc', 'Title Z–A'],
+								['duration-desc', 'Longest first'],
+								['duration-asc', 'Shortest first']
+							].map(([value, label]) => (
+								<SelectItem key={value} value={value}>
+									{label}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</div>
 			</div>
-			<nav className="flex flex-wrap items-center gap-1.5 text-sm" aria-label="Library hierarchy">
+			<nav
+				className="flex shrink-0 flex-wrap items-center gap-2 px-1 pt-1 text-sm"
+				aria-label="Library hierarchy"
+			>
 				{trail.length > 0 && (
 					<button
 						aria-label="Back to parent"
 						className="mr-1 rounded-full p-1.5 hover:bg-muted"
-						onClick={() => setTrail((t) => t.slice(0, -1))}
+						onClick={() => setTrail(trail.slice(0, -1))}
 					>
 						<IconArrowLeft size={17} />
 					</button>
@@ -306,7 +336,7 @@ export function CatalogBrowser({
 						<button
 							aria-current={i === trail.length - 1 ? 'page' : undefined}
 							className="max-w-60 truncate rounded px-1 py-1 hover:text-primary"
-							onClick={() => setTrail((t) => t.slice(0, i + 1))}
+							onClick={() => setTrail(trail.slice(0, i + 1))}
 						>
 							{item.title}
 						</button>
@@ -318,20 +348,6 @@ export function CatalogBrowser({
 						: `${total.toLocaleString()} ${episodes ? (total === 1 ? 'episode' : 'episodes') : total === 1 ? 'item' : 'items'}`}
 				</span>
 			</nav>
-			<div className="-mt-2 flex items-end gap-4">
-				<div className="min-w-0">
-					<h2
-						className={`${compact ? 'text-xl' : 'text-2xl sm:text-3xl'} font-semibold tracking-tight`}
-					>
-						{title}
-					</h2>
-					{current?.summary && (
-						<p className="mt-2 line-clamp-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
-							{current.summary}
-						</p>
-					)}
-				</div>
-			</div>
 			{warnings.map((w) => (
 				<p
 					key={w}
@@ -353,7 +369,7 @@ export function CatalogBrowser({
 				ref={scrollRef}
 				aria-label="Library titles"
 				aria-busy={loading}
-				className="overflow-auto overscroll-contain pb-2"
+				className="overflow-auto overscroll-contain px-3"
 				style={{
 					height: compact ? 'min(52vh, 560px)' : undefined,
 					flex: compact ? undefined : '1 1 0%',
@@ -363,7 +379,7 @@ export function CatalogBrowser({
 			>
 				{loading && !items.length ? (
 					<div
-						className="grid animate-pulse gap-5 pr-3"
+						className="grid animate-pulse gap-5 py-3"
 						style={{ gridTemplateColumns: `repeat(${columns}, minmax(0,1fr))` }}
 					>
 						{Array.from({ length: columns * 2 }, (_, i) => (
@@ -379,7 +395,7 @@ export function CatalogBrowser({
 					{rows.map((row) => (
 						<div
 							key={row.key}
-							className="absolute left-0 top-0 grid pr-3"
+							className="absolute left-0 top-0 grid"
 							style={{
 								width: '100%',
 								gap,
@@ -403,23 +419,17 @@ export function CatalogBrowser({
 												<IconMovie size={32} stroke={1.2} />
 												<span className="line-clamp-3 text-sm font-medium">{item.title}</span>
 											</div>
+
 											{item.poster && (
-												<img
-													alt=""
-													src={libraryArtwork(backendBaseUrl, staticBaseUrl, item.poster)}
-													loading="lazy"
-													decoding="async"
-													className="relative h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-													onError={(e) => {
-														e.currentTarget.style.visibility = 'hidden';
-													}}
+												<LibraryPoster
+													key={item.poster}
+													src={libraryArtwork(backendBaseUrl, staticBaseUrl, item.poster)!}
 												/>
 											)}
-											{item.source === 'plex' && (
-												<span className="absolute top-2 left-2 rounded-md bg-black/70 px-2 py-0.5 text-[10px] font-bold tracking-wider text-white backdrop-blur-md">
-													Raw
-												</span>
-											)}
+											<Badge className="absolute top-2 left-2 border-white/15 bg-black/75 px-2 py-0.5 text-[10px] font-bold text-white">
+												{item.source === 'plex' ? 'Raw' : 'Processed'}
+											</Badge>
+
 											<div className="absolute inset-0 flex items-center justify-center bg-black/25 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
 												<span className="rounded-full bg-white/95 p-3 text-black shadow-lg">
 													{children ? (
@@ -450,7 +460,8 @@ export function CatalogBrowser({
 									<button
 										key={item.id}
 										className={className}
-										onClick={() => (children ? setTrail((t) => [...t, item]) : onSelect?.(item.id))}
+										title={item.summary || item.title}
+										onClick={() => (children ? setTrail([...trail, item]) : onSelect?.(item.id))}
 									>
 										{body}
 									</button>
@@ -459,6 +470,7 @@ export function CatalogBrowser({
 										key={item.id}
 										prefetch={false}
 										className={className}
+										title={item.summary || item.title}
 										href={hrefFor?.(item.id) ?? `/?mediaId=${encodeURIComponent(item.id)}`}
 									>
 										{body}
@@ -481,16 +493,6 @@ export function CatalogBrowser({
 					</div>
 				)}
 			</div>
-			{cursor && (
-				<Button
-					disabled={loading}
-					variant="ghost"
-					className="mx-auto"
-					onClick={() => void load(cursor)}
-				>
-					{loading ? 'Loading…' : 'Load more'}
-				</Button>
-			)}
 		</section>
 	);
 }

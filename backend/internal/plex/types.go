@@ -19,6 +19,9 @@ func (m *Metadata) UnmarshalJSON(data []byte) error {
 	v := struct {
 		*plain
 		Section json.RawMessage `json:"librarySectionID"`
+		// Plex sends both guid (canonical string) and Guid (external ID array).
+		// Shadow the latter to prevent encoding/json's case-insensitive fallback.
+		ExternalGUIDs json.RawMessage `json:"Guid"`
 	}{plain: (*plain)(m)}
 	if err := json.Unmarshal(data, &v); err != nil {
 		return err
@@ -61,6 +64,8 @@ type Metadata struct {
 	SectionID        string    `json:"librarySectionID"`
 	Type             string    `json:"type"`
 	Title            string    `json:"title"`
+	OriginalTitle    string    `json:"originalTitle"`
+	GUID             string    `json:"guid"`
 	SortTitle        string    `json:"titleSort"`
 	Summary          string    `json:"summary"`
 	Thumb            string    `json:"thumb"`

@@ -1,10 +1,11 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { Menu, useMediaPlayer } from '@vidstack/react';
 import {
 	DefaultMenuButton,
 	DefaultMenuRadioGroup,
 	DefaultMenuSection,
+	DefaultTooltip,
 	defaultLayoutIcons
 } from '@vidstack/react/player/layouts/default';
 import { RAW_STATUS_EVENT, RawProvider } from '@/lib/player/raw-provider';
@@ -12,20 +13,27 @@ import type { RawMedia, RawPlaybackStatus } from '@/lib/player/raw-types';
 
 function useRawPlayback(onTracks?: (status: RawPlaybackStatus) => void) {
 	const player = useMediaPlayer();
-	const [status, setStatus] = useState<RawPlaybackStatus>();
+	const subscribe = useCallback(
+		(update: () => void) => {
+			player?.addEventListener(RAW_STATUS_EVENT as any, update);
+			player?.addEventListener('provider-change', update);
+			return () => {
+				player?.removeEventListener(RAW_STATUS_EVENT as any, update);
+				player?.removeEventListener('provider-change', update);
+			};
+		},
+		[player]
+	);
+	const snapshot = useCallback(() => {
+		const provider = player?.provider;
+		return provider instanceof RawProvider ? provider.status : undefined;
+	}, [player]);
+	// Vidstack measures lazily mounted menus during their first render. Reading
+	// the current snapshot synchronously avoids inserting a clipped entry later.
+	const status = useSyncExternalStore(subscribe, snapshot, () => undefined);
 	useEffect(() => {
-		const el = player?.el;
-		if (!el) return;
-		const update = (next: RawPlaybackStatus) => {
-			setStatus(next);
-			onTracks?.(next);
-		};
-		const provider = player.provider;
-		if (provider instanceof RawProvider) update(provider.status);
-		const listener = (event: Event) => update((event as CustomEvent<RawPlaybackStatus>).detail);
-		el.addEventListener(RAW_STATUS_EVENT, listener);
-		return () => el.removeEventListener(RAW_STATUS_EVENT, listener);
-	}, [player, onTracks]);
+		if (status) onTracks?.(status);
+	}, [status, onTracks]);
 	const provider = player?.provider;
 	return { status, provider: provider instanceof RawProvider ? provider : undefined, player };
 }
@@ -36,7 +44,27 @@ export function RawPlaybackObserver({
 }: {
 	onTracks: (status: RawPlaybackStatus) => void;
 }) {
-	const { status, player } = useRawPlayback(onTracks);
+	const { status, player, provider } = useRawPlayback(onTracks);
+	useEffect(() => {
+		const el = player?.el;
+		if (!el || !provider) return;
+		const keydown = (event: KeyboardEvent) => {
+			const target = event.target as HTMLElement;
+			if (
+				event.key.toLowerCase() !== 'c' ||
+				event.ctrlKey ||
+				event.metaKey ||
+				event.altKey ||
+				target.closest('input, textarea, select, [contenteditable="true"], [role="menu"]')
+			)
+				return;
+			event.preventDefault();
+			event.stopPropagation();
+			void provider.toggleSubtitles().catch(() => {});
+		};
+		el.addEventListener('keydown', keydown, true);
+		return () => el.removeEventListener('keydown', keydown, true);
+	}, [player, provider]);
 	useEffect(() => {
 		if (!player?.el || !status) return;
 		player.el.dataset.rawReady = String(status.ready);
@@ -58,6 +86,49 @@ export function RawPlaybackObserver({
 			</p>
 		</div>
 	) : null;
+}
+
+export function RawCaptionButton() {
+	const { status, provider } = useRawPlayback();
+	if (!status?.subtitleTracks.length) return null;
+	const enabled = (status.subtitle ?? -1) >= 0 || status.subtitleLayers?.some((id) => id >= 0);
+	const Icon = enabled ? defaultLayoutIcons.CaptionButton.On : defaultLayoutIcons.CaptionButton.Off;
+	return (
+		<DefaultTooltip content={enabled ? 'Disable captions' : 'Enable captions'} placement="top">
+			<button
+				type="button"
+				className="vds-button sparkle-raw-caption-button"
+				aria-label="Closed captions"
+				aria-pressed={!!enabled}
+				aria-keyshortcuts="c"
+				disabled={!status.ready || status.changing}
+				onClick={() => void provider?.toggleSubtitles().catch(() => {})}
+			>
+				<Icon className="vds-icon" />
+			</button>
+		</DefaultTooltip>
+	);
+}
+
+export function RawCastButton() {
+	return (
+		<Menu.Root className="vds-menu">
+			<DefaultTooltip content="Google Cast options" placement="top">
+				<Menu.Button className="vds-button" aria-label="Google Cast options">
+					<defaultLayoutIcons.GoogleCastButton.Default className="vds-icon" />
+				</Menu.Button>
+			</DefaultTooltip>
+			<Menu.Items className="vds-menu-items max-w-72" placement="top end" offset={26}>
+				<div className="p-3 text-sm leading-relaxed" role="note">
+					<p className="font-semibold">Direct casting unavailable</p>
+					<p className="mt-2">
+						Raw playback is decoded in this browser. To share it with a Cast device, use Chrome’s
+						menu → Cast → Sources → Cast tab, or choose a compatible processed version.
+					</p>
+				</div>
+			</Menu.Items>
+		</Menu.Root>
+	);
 }
 
 export function RawVideoSettings({

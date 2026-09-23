@@ -232,6 +232,17 @@ func (c *Client) permits(ctx context.Context, section string) bool {
 }
 
 func (c *Client) Page(ctx context.Context, section, parent, query, order string, offset, size int) ([]Metadata, int, error) {
+	return c.page(ctx, section, parent, query, order, offset, size, nil)
+}
+
+// ChildAt requests a single season/episode index without enumerating a show.
+// Callers still validate the returned index and reject truncated results from
+// servers which ignore the filter.
+func (c *Client) ChildAt(ctx context.Context, parent string, index int) ([]Metadata, int, error) {
+	return c.page(ctx, "", parent, "", "", 0, 100, &index)
+}
+
+func (c *Client) page(ctx context.Context, section, parent, query, order string, offset, size int, index *int) ([]Metadata, int, error) {
 	if offset < 0 || size < 1 || size > 100 {
 		return nil, 0, ErrNotFound
 	}
@@ -252,6 +263,9 @@ func (c *Client) Page(ctx context.Context, section, parent, query, order string,
 		return nil, 0, ErrNotFound
 	}
 	q := url.Values{"X-Plex-Container-Start": {strconv.Itoa(offset)}, "X-Plex-Container-Size": {strconv.Itoa(size)}}
+	if index != nil {
+		q.Set("index", strconv.Itoa(*index))
+	}
 	if query != "" {
 		q.Set("title", query)
 	}

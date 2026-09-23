@@ -38,6 +38,7 @@ type Item struct {
 	Index     int     `json:"index,omitempty"`
 	ParentID  string  `json:"parentId,omitempty"`
 	Children  int     `json:"children,omitempty"`
+	match     matchIdentity
 }
 type Page struct {
 	Items      []Item   `json:"items"`
@@ -50,6 +51,8 @@ type Service struct {
 	plex    *plex.Client
 	secret  []byte
 	artwork *artCache
+	matchMu sync.Mutex
+	matches map[matchIdentity]matchEntry
 }
 
 func New(j *jobs.Store, p *plex.Client, cacheDir string) *Service {
@@ -57,7 +60,7 @@ func New(j *jobs.Store, p *plex.Client, cacheDir string) *Service {
 	if _, err := rand.Read(secret); err != nil {
 		panic(err)
 	}
-	return &Service{jobs: j, plex: p, secret: secret, artwork: newArtCache(cacheDir)}
+	return &Service{jobs: j, plex: p, secret: secret, artwork: newArtCache(cacheDir), matches: map[matchIdentity]matchEntry{}}
 }
 
 type query struct {
@@ -292,6 +295,7 @@ func (s *Service) browse(w http.ResponseWriter, r *http.Request) {
 		fail(w, 503, page.Warnings[0])
 		return
 	}
+	s.enrichPage(r.Context(), page.Items)
 	jsonResponse(w, 200, page)
 }
 
@@ -378,6 +382,8 @@ func (s *Service) processed(ctx context.Context, q query) ([]Item, error) {
 		title = strings.TrimSuffix(title, ".mkv")
 		id := str(job, "Id")
 		item := Item{ID: id, Source: "processed", Kind: "movie", Title: title, SortTitle: title, AddedAt: int64(number(job, "JobModTime")), Duration: number(job, "Duration"), Poster: "/static/" + url.PathEscape(id) + "/poster.jpg"}
+		item.match = identityFromTitle(title)
+		item.Year = item.match.Year
 		match := episodeRE.FindStringSubmatch(title)
 		if match != nil {
 			season, _ := strconv.Atoi(match[2])
@@ -396,7 +402,7 @@ func (s *Service) processed(ctx context.Context, q query) ([]Item, error) {
 			}
 			if q.Parent == showID {
 				if _, ok := groups[seasonID]; !ok {
-					groups[seasonID] = Item{ID: seasonID, Source: "processed", Kind: "season", Title: fmt.Sprintf("Season %d", season), SortTitle: match[1], Index: season, Poster: item.Poster}
+					groups[seasonID] = Item{ID: seasonID, Source: "processed", Kind: "season", Title: fmt.Sprintf("Season %d", season), SortTitle: match[1], Index: season, Poster: item.Poster, match: matchIdentity{Kind: "season", Title: match[1], Season: season}}
 				}
 				continue
 			}
@@ -405,7 +411,7 @@ func (s *Service) processed(ctx context.Context, q query) ([]Item, error) {
 			}
 			g := groups[showID]
 			if g.ID == "" {
-				g = Item{ID: showID, Source: "processed", Kind: "show", Title: match[1], SortTitle: match[1], Poster: item.Poster}
+				g = Item{ID: showID, Source: "processed", Kind: "show", Title: match[1], SortTitle: match[1], Poster: item.Poster, match: matchIdentity{Kind: "show", Title: match[1]}}
 			}
 			g.Children++
 			g.Duration += item.Duration

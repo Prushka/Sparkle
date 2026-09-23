@@ -121,8 +121,20 @@ after guarding decoder and audio-renderer continuations during teardown.
 Interactive Chrome checks cover chat delivery, Wordle startup, Chess setup, and
 the paged in-room picker. Microphone permissions were not changed.
 
-Separate long-session buffering/recovery, casting/PiP and physical audio/video timing
-qualification remains necessary. Raw previews are currently
+Chrome UI regression checks cover first-open subtitle menu sizing, the raw CC toggle,
+and Document PiP entry/exit while playback advances without sending an accidental
+room pause. Desktop/mobile Library checks cover automatic paging, preserved filters,
+Back/Forward/reload with the room and hierarchy intact, a single search clear button,
+dropdown triggers/popups at 320/390/768/1366 pixels, and covers loading after scrolling
+without hover. Live Plex checks verify processed movie/show, season, and episode
+artwork/description matches; backend tests reject remakes, ambiguous identities,
+truncated results, and wrong episode ordering while bounding queries and cache entries.
+The raw Cast
+control presents its direct-casting limitation; no receiver playback is claimed.
+
+Separate long-session buffering/recovery, native video PiP on other browsers, casting
+to a physical receiver and physical audio/video timing qualification remain necessary.
+Raw previews are currently
 omitted; processed storyboards continue to work.
 
 ## Reproduce
@@ -133,6 +145,8 @@ and `npm run build` at the root. Browser tests use `SPARKLE_TEST_URL` (default
 `http://127.0.0.1:3002`) and `SPARKLE_TEST_CHANNEL` (`chrome`, `msedge`, `firefox`).
 
 - `SPARKLE_RAW_TEST_ID`: mapped SDR fixture for the two-client E2E test.
+- `SPARKLE_TEST_BACKEND_URL`: E2E room/metadata API base when the running frontend
+  uses a separate backend origin; defaults to `/be` relative to `SPARKLE_TEST_URL`.
 - `SPARKLE_RAW_EXPECTED_HDR`: source format label when running that same test
   with a native HDR fixture, for example `HDR10` for AV1 PQ.
 - `SPARKLE_RAW_SECOND_ID` and `SPARKLE_PROCESSED_TEST_ID`: enable rapid switching

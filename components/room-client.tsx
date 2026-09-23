@@ -189,6 +189,7 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 		() => (searchValues.redirectQuery ? `?${searchValues.redirectQuery}` : ''),
 		[searchValues.redirectQuery]
 	);
+	const redirectSuffixRef = useLatestRef(redirectSuffix);
 
 	useLayoutEffect(() => {
 		const previousRoute = previousRouteRef.current;
@@ -206,6 +207,7 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 
 	const loadRoom = useCallback(
 		async (generation: number) => {
+			const redirectSuffix = redirectSuffixRef.current;
 			setState({ status: 'loading' });
 			const previousRoute = previousRouteForLoadRef.current;
 			previousRouteForLoadRef.current = null;
@@ -314,7 +316,7 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 			lastMediaKeyRef.current = mediaKey;
 			setState({ status: 'player', data });
 		},
-		[redirectSuffix, route, router, searchValues.legacyMediaId, searchValues.legacyRoomId]
+		[redirectSuffixRef, route, router, searchValues.legacyMediaId, searchValues.legacyRoomId]
 	);
 
 	useEffect(() => {

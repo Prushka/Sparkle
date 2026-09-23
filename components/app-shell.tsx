@@ -24,7 +24,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
 	const { pageReloadCounter } = useAppState();
-	const key = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ''}${pageReloadCounter}`;
+	// Browsing the catalog must not remount the room or reconnect its socket.
+	const routeParams = new URLSearchParams(searchParams.toString());
+	for (const name of ['libraryPath', 'source', 'libraryId', 'kind', 'sort', 'query'])
+		routeParams.delete(name);
+	const key = `${pathname}?${routeParams}${pageReloadCounter}`;
 
 	return (
 		<AppShellFrame>

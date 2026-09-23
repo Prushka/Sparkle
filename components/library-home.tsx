@@ -17,30 +17,29 @@ export function LibraryHome({
 	const searchParams = useSearchParams();
 	const { theme, setTheme } = useTheme();
 	function hrefFor(id: string) {
-		if (roomId) return `/${encodeURIComponent(roomId)}/media/${encodeURIComponent(id)}`;
 		const params = new URLSearchParams(searchParams.toString());
+		if (roomId) {
+			params.delete('mediaId');
+			return `/${encodeURIComponent(roomId)}/media/${encodeURIComponent(id)}${params.size ? `?${params}` : ''}`;
+		}
 		params.set('mediaId', id);
 		return `/?${params}`;
 	}
 	return (
 		<main className="min-h-screen bg-background text-foreground">
-			<div className="mx-auto flex h-dvh min-h-[560px] max-w-[1600px] flex-col gap-4 overflow-hidden px-4 py-5 sm:gap-7 sm:px-8 lg:px-12">
-				<header className="flex shrink-0 flex-wrap items-center justify-between gap-5">
-					<div className="flex items-center gap-3">
-						<span className="rounded-xl bg-primary/10 p-2 text-primary">
-							<IconSparkles size={24} />
+			<div className="mx-auto flex h-dvh min-h-[420px] max-w-[1600px] flex-col gap-3 overflow-hidden px-3 py-3 sm:px-6 lg:px-8">
+				<header className="flex shrink-0 flex-wrap items-center justify-between gap-2 sm:gap-4">
+					<div className="flex items-center gap-2">
+						<span className="rounded-lg bg-primary/10 p-2 text-primary">
+							<IconSparkles size={20} />
 						</span>
-						<div>
-							<p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
-								Sparkle
-							</p>
-							<h1 className="text-xl font-semibold tracking-tight">Library</h1>
-						</div>
+						<h1 className="text-lg font-semibold tracking-tight">Library</h1>
 					</div>
-					<div className="flex w-full gap-2 sm:w-auto sm:max-w-xl sm:flex-1">
-						<RoomNavigationInput inputId="library-room-navigation-input" className="flex-1" />
+					<div className="flex min-w-0 flex-1 gap-2 sm:max-w-xl">
+						<RoomNavigationInput inputId="library-room-navigation-input" className="h-9 flex-1" />
 						<Button
 							variant="outline"
+							className="h-9 w-9 shrink-0 cursor-pointer px-0"
 							aria-label={theme === 'dark' ? 'Use light theme' : 'Use dark theme'}
 							onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
 						>

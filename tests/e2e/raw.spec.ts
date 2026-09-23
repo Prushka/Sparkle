@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 
+const backend = process.env.SPARKLE_TEST_BACKEND_URL || '/be';
+
 test('million-item library fetches bounded pages and virtualizes cards', async ({ page }) => {
 	const sizes: number[] = [];
 	const urls: string[] = [];
@@ -31,13 +33,34 @@ test('million-item library fetches bounded pages and virtualizes cards', async (
 		'1,000,000'
 	);
 	await expect(page.getByText('Raw', { exact: true }).first()).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Load more', exact: true })).toHaveCount(0);
+	await expect(page.getByRole('heading', { name: 'Your library', exact: true })).toHaveCount(0);
+	const grid = page.getByLabel('Library titles', { exact: true });
 	for (let i = 0; i < 4; i++) {
-		await page.getByRole('button', { name: 'Load more', exact: true }).click();
+		const previous = sizes.length;
+		await grid.evaluate((el) => {
+			el.scrollTop = el.scrollHeight;
+		});
+		await expect.poll(() => sizes.length).toBeGreaterThan(previous);
+		await expect(grid).toHaveAttribute('aria-busy', 'false');
 	}
 	expect(sizes.every((n) => n === 48)).toBeTruthy();
 	expect(sizes.length).toBeLessThan(10);
 	expect(await page.getByText('Raw', { exact: true }).count()).toBeLessThan(100);
 	expect(urls).not.toContain('/be/all');
+	expect(urls).not.toContain('/all');
+	for (const name of ['Source', 'Plex library', 'Sort library'])
+		await expect(page.getByRole('combobox', { name, exact: true })).toHaveCSS('cursor', 'pointer');
+	await grid.evaluate((el) => {
+		el.scrollTop = 0;
+	});
+	await expect
+		.poll(async () => {
+			const viewport = await grid.boundingBox();
+			const card = await grid.locator('a,button').first().boundingBox();
+			return !!viewport && !!card && card.x - viewport.x >= 10 && card.y - viewport.y >= 10;
+		})
+		.toBeTruthy();
 	await page.getByRole('searchbox', { name: 'Search library' }).fill('specific');
 	await page.waitForRequest((r) => r.url().includes('query=specific'));
 	await page.setViewportSize({ width: 390, height: 844 });
@@ -46,6 +69,12 @@ test('million-item library fetches bounded pages and virtualizes cards', async (
 		.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
 		.toBeTruthy();
 	await expect(page.getByRole('button', { name: 'Movies', exact: true })).toBeVisible();
+	for (const name of ['Source', 'Plex library', 'Sort library'])
+		await expect(page.getByRole('combobox', { name, exact: true })).toBeVisible();
+	for (const name of ['Source', 'Plex library'])
+		expect(
+			(await page.getByRole('combobox', { name, exact: true }).boundingBox())!.width
+		).toBeGreaterThan(110);
 });
 
 test('two raw clients synchronize playback, pause, seek and delayed join', async ({
@@ -55,8 +84,14 @@ test('two raw clients synchronize playback, pause, seek and delayed join', async
 }) => {
 	const media = process.env.SPARKLE_RAW_TEST_ID;
 	test.skip(!media, 'Set SPARKLE_RAW_TEST_ID to a mapped real-media fixture');
+	const metadata = await (await request.get(`${backend}/media/${media}`)).json();
+	const hasSubtitles = metadata.Raw.parts[0].streams.some(
+		(stream: { streamType: number }) => stream.streamType === 3
+	);
 	const room = `raw-e2e-${Date.now()}`;
-	const response = await request.post('/be/rooms', { data: { roomId: room, mediaId: media } });
+	const response = await request.post(`${backend}/rooms`, {
+		data: { roomId: room, mediaId: media }
+	});
 	expect(response.ok()).toBeTruthy();
 	const contexts = await Promise.all([browser.newContext(), browser.newContext()]);
 	const pages = await Promise.all(contexts.map((c) => c.newPage()));
@@ -121,16 +156,14 @@ test('two raw clients synchronize playback, pause, seek and delayed join', async
 						messages: messages.map((list) => list.slice(-25)),
 						players: await Promise.all(
 							pages.map((p) =>
-								p
-									.locator('[data-media-player]')
-									.evaluate((el) => ({
-										attributes: [...el.attributes].map((a) => [a.name, a.value]),
-										videos: [...el.querySelectorAll('video')].map((v) => ({
-											paused: v.paused,
-											time: v.currentTime,
-											ready: v.readyState
-										}))
+								p.locator('[data-media-player]').evaluate((el) => ({
+									attributes: [...el.attributes].map((a) => [a.name, a.value]),
+									videos: [...el.querySelectorAll('video')].map((v) => ({
+										paused: v.paused,
+										time: v.currentTime,
+										ready: v.readyState
 									}))
+								}))
 							)
 						)
 					},
@@ -163,7 +196,19 @@ test('two raw clients synchronize playback, pause, seek and delayed join', async
 	)
 		await pages[0].getByRole('button', { name: 'Settings', exact: true }).click();
 	const subtitles = pages[0].getByRole('menuitem', { name: /^Subtitles/ });
-	if (await subtitles.count()) {
+	if (hasSubtitles) {
+		await expect(subtitles).toBeVisible();
+		// First menu open must include subtitles inside the measured menu, without
+		// visiting Video Settings to force a second measurement.
+		await expect
+			.poll(async () => {
+				const menu = await pages[0]
+					.getByRole('menu', { name: 'Settings', exact: true })
+					.boundingBox();
+				const entry = await subtitles.boundingBox();
+				return !!menu && !!entry && entry.y + entry.height <= menu.y + menu.height;
+			})
+			.toBeTruthy();
 		const pauseCount = messages[0].filter((m) => m.type === 'pause').length;
 		await subtitles.click();
 		const off = pages[0].getByRole('menuitemradio', { name: 'Off', exact: true }).first();
@@ -174,6 +219,20 @@ test('two raw clients synchronize playback, pause, seek and delayed join', async
 	}
 	await pages[0].keyboard.press('Escape');
 	await pages[0].keyboard.press('Escape');
+	const captions = pages[0].locator('.sparkle-raw-caption-button');
+	if (hasSubtitles) {
+		await expect(captions).toBeAttached();
+		await player.hover();
+		const pauseCount = messages[0].filter((m) => m.type === 'pause').length;
+		await captions.click();
+		await expect(captions).toHaveAttribute('aria-pressed', 'true');
+		await expect(captions).toBeEnabled({ timeout: 15_000 });
+		await player.hover();
+		await captions.click();
+		await expect(captions).toHaveAttribute('aria-pressed', 'false', { timeout: 15_000 });
+		expect(messages[0].filter((m) => m.type === 'pause').length).toBe(pauseCount);
+		await expect(pages[1].locator('[data-media-player]')).not.toHaveAttribute('data-paused', '');
+	}
 	// Raw settings use Vidstack's existing nested menu, including local audio.
 	await player.hover();
 	if (
@@ -196,6 +255,39 @@ test('two raw clients synchronize playback, pause, seek and delayed join', async
 	}
 	await pages[0].keyboard.press('Escape');
 	await pages[0].keyboard.press('Escape');
+	// Document PiP keeps the same raw renderer/subtitles and the room timeline.
+	if (await pages[0].evaluate(() => 'documentPictureInPicture' in window)) {
+		await player.hover();
+		const pipButton = pages[0].getByRole('button', { name: 'PiP', exact: true });
+		const pauseCount = messages[0].filter((m) => m.type === 'pause').length;
+		const time = messages[0].filter((m) => m.type === 'time').at(-1)?.time || 0;
+		await pipButton.click();
+		await expect(pipButton).toHaveAttribute('aria-pressed', 'true');
+		await expect
+			.poll(() =>
+				pages[0].evaluate(() => {
+					const pip = (window as any).documentPictureInPicture.window as Window | null;
+					return (
+						!!pip?.document.querySelector('video,canvas') &&
+						pip.document.body.textContent?.includes('Back to tab')
+					);
+				})
+			)
+			.toBeTruthy();
+		await expect
+			.poll(() => messages[0].filter((m) => m.type === 'time').at(-1)?.time || 0)
+			.toBeGreaterThan(time + 1);
+		await player.hover();
+		await pipButton.click();
+		await expect(pipButton).toHaveAttribute('aria-pressed', 'false');
+		await expect(player.locator('video,canvas').first()).toBeAttached();
+		expect(messages[0].filter((m) => m.type === 'pause').length).toBe(pauseCount);
+		await expect(pages[1].locator('[data-media-player]')).not.toHaveAttribute('data-paused', '');
+	}
+	await player.hover();
+	await pages[0].getByRole('button', { name: 'Google Cast options', exact: true }).click();
+	await expect(pages[0].getByText('Direct casting unavailable', { exact: true })).toBeVisible();
+	await pages[0].keyboard.press('Escape');
 	expect(
 		messages
 			.flat()
@@ -206,21 +298,32 @@ test('two raw clients synchronize playback, pause, seek and delayed join', async
 	const processed = process.env.SPARKLE_PROCESSED_TEST_ID,
 		otherRaw = process.env.SPARKLE_RAW_SECOND_ID;
 	if (processed && otherRaw) {
+		if (await pages[0].evaluate(() => 'documentPictureInPicture' in window)) {
+			await player.hover();
+			await pages[0].getByRole('button', { name: 'PiP', exact: true }).click();
+			await expect(pages[0].getByRole('button', { name: 'PiP', exact: true })).toHaveAttribute(
+				'aria-pressed',
+				'true'
+			);
+		}
 		for (const page of pages)
-			await page.route(`**/media/${otherRaw}`, async (route) => {
+			await page.route(new URL(`${backend}/media/${otherRaw}`, baseURL).href, async (route) => {
 				await new Promise((r) => setTimeout(r, 1800));
 				await route.continue();
 			});
-		await request.put(`/be/rooms/${room}`, { data: { mediaId: otherRaw } });
-		await request.put(`/be/rooms/${room}`, { data: { mediaId: processed } });
+		await request.put(`${backend}/rooms/${room}`, { data: { mediaId: otherRaw } });
+		await request.put(`${backend}/rooms/${room}`, { data: { mediaId: processed } });
 		for (const page of pages) {
 			await expect(page).toHaveURL(new RegExp(`/media/${processed}`), { timeout: 30_000 });
 			await expect(page.locator('[data-media-player]')).not.toHaveAttribute(
 				'data-raw-ready',
 				'true'
 			);
+			await expect
+				.poll(() => page.evaluate(() => !!(window as any).documentPictureInPicture?.window))
+				.toBeFalsy();
 		}
-		await request.put(`/be/rooms/${room}`, { data: { mediaId: media } });
+		await request.put(`${backend}/rooms/${room}`, { data: { mediaId: media } });
 		for (const page of pages) {
 			await expect(page).toHaveURL(new RegExp(`/media/${media}`), { timeout: 30_000 });
 			await expect(page.locator('[data-media-player]')).toHaveAttribute('data-raw-ready', 'true', {
@@ -234,11 +337,12 @@ test('two raw clients synchronize playback, pause, seek and delayed join', async
 
 test('multipart raw timeline seeks across parts and recovers from delayed ranges', async ({
 	page,
-	request
+	request,
+	baseURL
 }) => {
 	const media = process.env.SPARKLE_RAW_SECOND_ID;
 	test.skip(!media, 'Set SPARKLE_RAW_SECOND_ID to a short real-media fixture');
-	const metadata = await (await request.get(`/be/media/${media}`)).json();
+	const metadata = await (await request.get(`${backend}/media/${media}`)).json();
 	const part = metadata.Raw.parts[0],
 		duration = metadata.Duration;
 	// Repeat a real fixture as two parts without writing or copying media files.
@@ -248,9 +352,11 @@ test('multipart raw timeline seeks across parts and recovers from delayed ranges
 		{ ...part, start: duration, duration }
 	];
 	metadata.parts = metadata.Raw.parts;
-	await page.route(`**/be/media/${media}`, (route) => route.fulfill({ json: metadata }));
+	await page.route(new URL(`${backend}/media/${media}`, baseURL).href, (route) =>
+		route.fulfill({ json: metadata })
+	);
 	const room = `multipart-e2e-${Date.now()}`;
-	await request.post('/be/rooms', { data: { roomId: room, mediaId: media } });
+	await request.post(`${backend}/rooms`, { data: { roomId: room, mediaId: media } });
 	const errors: string[] = [],
 		messages: any[] = [];
 	page.on('pageerror', (error) => errors.push(error.message));

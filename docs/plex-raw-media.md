@@ -60,6 +60,18 @@ joining a room uses direct metadata lookup. No startup Plex scan or complete
 Plex index exists. Virtualization bounds rendered cards; loaded page metadata
 remains in the current browser view until filters/navigation change.
 
+Processed artwork enrichment only looks up items on the requested page or a direct
+media lookup. Movies require a filename title and year; episodes require the exact
+series title, season/episode numbers, and episode title. Punctuation and recognized
+release suffixes are normalized. A year in a series title must also agree. Multiple
+Plex copies are accepted only when their canonical Plex GUID agrees. Ambiguous,
+truncated, or incomplete matches keep the original processed artwork and metadata.
+Matching searches each permitted section of the appropriate type with a maximum of
+32 candidates; season/episode queries filter by index and cap results at 100.
+It never enumerates a show or library to find a match. Four workers and a four-second
+request budget bound enrichment work; a 256-entry, five-minute cache includes misses
+and coalesces concurrent lookups. Processed IDs and playback assets remain unchanged.
+
 Metadata memory cache: at most 256 entries / 32 MiB, one-minute TTL. Plex
 responses: at most 8 MiB, eight concurrent metadata/artwork requests per backend.
 Artwork: at most 12 MiB per item, 512 MiB disk budget, 24-hour TTL with oldest
@@ -72,14 +84,35 @@ seconds; the browser and demuxer may require additional index/probe reads.
 
 The Library and room media picker share a poster grid, source/library filters,
 search, sort, and breadcrumbs. Shows open into seasons and then landscape episode
-cards. Pages load as needed; the grid virtualizes long lists. Every raw title has
-a **Raw** badge. The default view includes both processed and Plex sources.
+cards. Scrolling loads the next page automatically; the grid virtualizes long lists.
+The compact toolbar uses shared shadcn Select/InputGroup components, keeps every
+search/filter control visible, and wraps on small screens. Every title has a **Raw**
+or **Processed** badge. The default view includes both sources. Library hierarchy and
+filters live in the URL, preserving the room and unrelated parameters across browser
+Back/Forward and reload without remounting the room. The in-room picker keeps its own
+navigation. Mounted, overscanned cards load posters eagerly so scrolling does not depend
+on image hover or native lazy-loading inside translated virtual rows.
 
 Raw playback uses the existing Vidstack control bar. **Settings → Video Settings**
 contains embedded audio, source/output HDR information, explicit compatible HDR
 fallbacks, and shared media versions. **Settings → Subtitles** contains the primary
 track and up to two additional layers. These menus remain accessible when HDR
 playback is unsupported, so the user can select a compatible representation.
+
+The **CC** button (or **C** while the player is focused) toggles raw subtitles and
+restores the selected primary/additional layers. Subtitle entries are available
+on the first Settings open, without visiting Video Settings first. PiP is exposed
+when the active renderer and browser support it: Chrome Document PiP moves the
+original video/canvas and subtitle layers into the floating window, with playback
+still synchronized to the room. Native video PiP is a fallback where available;
+it does not carry the custom subtitle overlays. Document PiP requires a top-level
+page and is not enabled inside Discord Activity iframes.
+
+Raw **Google Cast options** explains Chrome tab casting and the option to choose
+a compatible processed version. It is not a direct receiver-casting implementation:
+the raw provider's browser demuxer, audio decoder, and subtitle renderer cannot
+be handed to a Cast receiver as a playable media URL. No server transcoding or
+capture/re-encoding is added for PiP or casting.
 
 Pinned libmedia AVPlayer 1.3.1 is adapted to Vidstack. Demuxing, WASM audio/video
 fallbacks, AudioWorklet output, text subtitles, JASSUB ASS/fonts, and incremental

@@ -135,6 +135,8 @@ import SUPtitles from '@/lib/suptitles/suptitles';
 import { RawProvider, RawProviderLoader, RAW_MEDIA_TYPE } from '@/lib/player/raw-provider';
 import {
 	RawPlaybackObserver,
+	RawCaptionButton,
+	RawCastButton,
 	RawVideoSettings,
 	RawSubtitleSettings
 } from '@/components/player/RawControls';
@@ -9431,6 +9433,8 @@ export function Player({
 								smallLayoutWhen={PLAYER_SMALL_LAYOUT_QUERY}
 								thumbnails={thumbnailVttSrc}
 								slots={{
+									captionButton: job.Raw ? <RawCaptionButton /> : undefined,
+									googleCastButton: job.Raw ? <RawCastButton /> : undefined,
 									timeSlider: <OptimizedTimeSlider thumbnails={thumbnailVttSrc} />,
 									settingsMenuItemsStart: job.Raw ? (
 										<RawVideoSettings raw={job.Raw} mediaId={job.Id} onVersion={switchRoomMedia} />

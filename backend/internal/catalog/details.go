@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"Sparkle/internal/plex"
 )
@@ -38,6 +39,21 @@ func (s *Service) Details(ctx context.Context, id string) (map[string]any, error
 		}
 		if err := json.Unmarshal(payload, &job); err != nil {
 			return nil, err
+		}
+		lookup, cancel := context.WithTimeout(ctx, 4*time.Second)
+		match := s.matchingArtwork(lookup, identityFromTitle(str(job, "Input")))
+		cancel()
+		if match.Poster != "" {
+			job["Poster"] = match.Poster
+		}
+		if match.Summary != "" {
+			job["Summary"] = match.Summary
+		}
+		if match.Year > 0 {
+			job["Year"] = match.Year
+		}
+		if match.Backdrop != "" {
+			job["Backdrop"] = match.Backdrop
 		}
 	}
 	canonical := str(job, "Id")
@@ -74,6 +90,10 @@ func (s *Service) Details(ctx context.Context, id string) (map[string]any, error
 		}
 		details.Tracks = tracks
 	} else {
+		details.Year = int(number(job, "Year"))
+		if backdrop := str(job, "Backdrop"); backdrop != "" {
+			details.Artwork["backdrop"] = backdrop
+		}
 		if match := episodeRE.FindStringSubmatch(title); match != nil {
 			details.Kind = "episode"
 		}

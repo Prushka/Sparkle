@@ -10,6 +10,7 @@ import type { Job } from './t';
 import type { RawMedia, RawPlaybackStatus } from './raw-types';
 import { compatibleHDR, sourceHDR, supportsNativeHDR } from './raw-hdr';
 import { RawSubtitles } from './raw-subtitles';
+import { RawPictureInPicture } from './raw-pip';
 
 export const RAW_MEDIA_TYPE = 'video/x-sparkle-raw';
 export const RAW_STATUS_EVENT = 'sparkle-raw-status';
@@ -92,6 +93,17 @@ export class RawProvider implements MediaProviderAdapter {
 		return 'sparkle-raw';
 	}
 	readonly container = document.createElement('div');
+	readonly pictureInPicture = new RawPictureInPicture(
+		this.container,
+		() => this.container.querySelector('video'),
+		() => this.initialized && this.status.ready,
+		(active) => this.notify('picture-in-picture-change', active),
+		() => {
+			if (this.paused) void this.ctx.player.play().catch(() => {});
+			else void this.ctx.player.pause().catch(() => {});
+		}
+	);
+	private captionRestore?: { subtitle: number; layers: number[] };
 	private audioContainer = document.createElement('div');
 	private engine?: Engine;
 	private audioEngine?: Engine;
@@ -168,6 +180,7 @@ export class RawProvider implements MediaProviderAdapter {
 	private publish(values: Partial<RawPlaybackStatus>) {
 		if (this.destroyed) return;
 		this.status = { ...this.status, ...values };
+		this.ctx.$state.canPictureInPicture.set(this.pictureInPicture.supported);
 		this.ctx.player.el?.dispatchEvent(new CustomEvent(RAW_STATUS_EVENT, { detail: this.status }));
 	}
 	private enqueue(operation: () => Promise<void>) {
@@ -196,6 +209,7 @@ export class RawProvider implements MediaProviderAdapter {
 		this.compatibleMode = false;
 		this.desiredTime = 0;
 		this.part = 0;
+		this.captionRestore = undefined;
 		this.paused = true;
 		this.publish({ ready: false, changing: true, reason: undefined });
 		this.notify('load-start');
@@ -425,6 +439,7 @@ export class RawProvider implements MediaProviderAdapter {
 		this.setVolume(this.volume);
 		engine.setPlaybackRate(this.rate);
 		this.audioEngine?.setPlaybackRate(this.rate);
+		this.ctx.$state.canPictureInPicture.set(this.pictureInPicture.supported);
 	}
 	play() {
 		return this.enqueue(async () => {
@@ -517,6 +532,7 @@ export class RawProvider implements MediaProviderAdapter {
 			if (kind === 'audio') await (this.audioEngine ?? this.engine).selectAudio(id);
 			else {
 				await this.applySubtitleLayers([]);
+				localStorage.setItem('sparkle.raw.subtitleLayers', '[]');
 				this.engine.setSubtitleEnable(id >= 0);
 				if (id >= 0) await this.engine.selectSubtitle(id);
 			}
@@ -530,6 +546,22 @@ export class RawProvider implements MediaProviderAdapter {
 			localStorage.setItem(`sparkle.raw.${kind}`, id < 0 ? 'off' : (title ?? ''));
 			this.publish({ [kind]: id, changing: false });
 		});
+	}
+	async toggleSubtitles() {
+		if (!this.status.ready || this.status.changing || !this.initialized) return;
+		const subtitle = this.status.subtitle ?? -1,
+			layers = this.status.subtitleLayers ?? [];
+		if (subtitle >= 0 || layers.some((id) => id >= 0)) {
+			this.captionRestore = { subtitle, layers: [...layers] };
+			await this.selectTrack('subtitle', -1);
+		} else {
+			const restore = this.captionRestore;
+			await this.selectTrack(
+				'subtitle',
+				restore?.subtitle ?? this.status.subtitleTracks[0]?.id ?? -1
+			);
+			if (restore?.layers.length) await this.selectSubtitleLayers(restore.layers);
+		}
 	}
 	private async applySubtitleLayers(ids: number[]) {
 		if (!this.engine) return;
@@ -643,6 +675,7 @@ export class RawProvider implements MediaProviderAdapter {
 		}
 	}
 	private async releaseEngines() {
+		await this.pictureInPicture.exit().catch(() => {});
 		const engine = this.engine,
 			audio = this.audioEngine;
 		const subtitles = this.subtitles;
@@ -663,6 +696,7 @@ export class RawProvider implements MediaProviderAdapter {
 		}
 	}
 	destroy() {
+		this.pictureInPicture.destroy();
 		this.destroyed = true;
 		++this.generation;
 		this.abort.abort();
