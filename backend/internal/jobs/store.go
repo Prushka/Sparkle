@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -170,12 +171,12 @@ func (s *Store) refresh(ctx context.Context) {
 			}
 		default:
 		}
-		log.Printf("job scan failed; serving stale cache: %v", err)
+		log.Print("job scan failed; serving stale cache")
 		return
 	}
 
 	if err := s.setPayload(jobs, time.Now()); err != nil {
-		log.Printf("job scan failed to update cache: %v", err)
+		log.Print("job scan failed to update cache")
 	}
 }
 
@@ -227,7 +228,7 @@ func (s *Store) scan(ctx context.Context) ([]map[string]any, error) {
 
 		job, err := s.loadJob(entry.Name())
 		if err != nil {
-			log.Printf("skipping job %q: %v", entry.Name(), err)
+			log.Print("skipping unreadable processed job")
 			continue
 		}
 		result = append(result, compactJob(job))
@@ -269,10 +270,26 @@ func compactJob(job map[string]any) map[string]any {
 }
 
 func (s *Store) loadJob(id string) (map[string]any, error) {
+	if id == "" || id == "." || id == ".." || strings.ContainsAny(id, `/\:`) {
+		return nil, ErrJobNotFound
+	}
 	dir := filepath.Join(s.outputDir, id)
-	content, err := os.ReadFile(filepath.Join(dir, jobFile))
+	root, err := os.OpenRoot(s.outputDir)
 	if err != nil {
 		return nil, err
+	}
+	defer root.Close()
+	f, err := root.Open(filepath.Join(id, jobFile))
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	content, err := io.ReadAll(io.LimitReader(f, 8*1024*1024+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(content) > 8*1024*1024 {
+		return nil, ErrJobNotFound
 	}
 
 	job := make(map[string]any)
@@ -280,6 +297,7 @@ func (s *Store) loadJob(id string) (map[string]any, error) {
 		return nil, err
 	}
 	normalizeJob(job)
+	sanitizePublicMetadata(job)
 	if stringField(job, "Id") == "" {
 		job["Id"] = id
 	}
@@ -300,6 +318,33 @@ func (s *Store) loadJob(id string) (map[string]any, error) {
 	ensureArray(job, "Chapters")
 	ensureArray(job, "DominantColors")
 	return job, nil
+}
+
+// Job files can contain source paths and encoder diagnostics. Only descriptive
+// names and relative asset names belong in browser metadata.
+func sanitizePublicMetadata(value any) {
+	switch v := value.(type) {
+	case map[string]any:
+		for key, child := range v {
+			lower := strings.ToLower(key)
+			if strings.Contains(lower, "token") || strings.Contains(lower, "password") || strings.HasSuffix(lower, "path") || strings.HasSuffix(lower, "dir") || lower == "inputparent" || lower == "command" || lower == "error" {
+				delete(v, key)
+				continue
+			}
+			if lower == "input" || lower == "filename" || lower == "location" {
+				if name, ok := child.(string); ok {
+					name = strings.ReplaceAll(name, "\\", "/")
+					v[key] = name[strings.LastIndex(name, "/")+1:]
+				}
+			} else {
+				sanitizePublicMetadata(child)
+			}
+		}
+	case []any:
+		for _, child := range v {
+			sanitizePublicMetadata(child)
+		}
+	}
 }
 
 func normalizeJob(job map[string]any) {
@@ -405,7 +450,7 @@ func fileSizes(dir string) (map[string]int64, int64, error) {
 	for _, entry := range entries {
 		info, err := entry.Info()
 		if err != nil {
-			log.Printf("skipping file %q: %v", filepath.Join(dir, entry.Name()), err)
+			log.Print("skipping unreadable processed file")
 			continue
 		}
 		if info.IsDir() {

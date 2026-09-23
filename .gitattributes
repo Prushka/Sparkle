@@ -1,1 +1,5 @@
 * text=auto eol=lf
+vendor/libmedia/** -text
+vendor/libmedia/LICENSE text eol=lf
+scripts/libmedia/patch.mjs text eol=lf
+scripts/libmedia/build-truehd.sh text eol=lf

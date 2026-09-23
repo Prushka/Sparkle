@@ -26,7 +26,7 @@ if (Test-Path -LiteralPath $envFile -PathType Leaf) {
 
         $separatorIndex = $trimmedLine.IndexOf('=')
         if ($separatorIndex -lt 1) {
-            throw "Invalid environment entry in '$envFile': $line"
+            throw "Invalid environment entry; check the local environment file."
         }
 
         $name = $trimmedLine.Substring(0, $separatorIndex).Trim()
@@ -66,7 +66,16 @@ if (-not [System.IO.Path]::IsPathRooted($env:OUTPUT)) {
 }
 $env:OUTPUT = [System.IO.Path]::GetFullPath($env:OUTPUT)
 
-New-Item -ItemType Directory -Path $env:OUTPUT -Force | Out-Null
+foreach ($directoryKey in @('PFP_DIR', 'MEDIA_CACHE_DIR')) {
+    $directoryValue = [Environment]::GetEnvironmentVariable($directoryKey, 'Process')
+    if ([string]::IsNullOrWhiteSpace($directoryValue)) {
+        $directoryValue = if ($directoryKey -eq 'PFP_DIR') { './data/pfp' } else { './cache/media' }
+    }
+    if (-not [System.IO.Path]::IsPathRooted($directoryValue)) {
+        $directoryValue = Join-Path $rootDir $directoryValue
+    }
+    [Environment]::SetEnvironmentVariable($directoryKey, [System.IO.Path]::GetFullPath($directoryValue), 'Process')
+}
 
 $goCommand = if ([string]::IsNullOrWhiteSpace($env:GO)) { 'go' } else { $env:GO }
 if (-not (Get-Command $goCommand -ErrorAction SilentlyContinue)) {

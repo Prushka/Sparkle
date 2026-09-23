@@ -29,6 +29,7 @@ import {
 	type MediaKeyShortcuts,
 	type MediaPlayerInstance,
 	type MediaPlayerQuery,
+	type PlayerSrc,
 	type MediaProviderInstance,
 	type TextRenderer,
 	type TextTrackInit,
@@ -131,6 +132,13 @@ import {
 	type YouTubeSyncState
 } from '@/lib/player/t';
 import SUPtitles from '@/lib/suptitles/suptitles';
+import { RawProvider, RawProviderLoader, RAW_MEDIA_TYPE } from '@/lib/player/raw-provider';
+import {
+	RawPlaybackObserver,
+	RawVideoSettings,
+	RawSubtitleSettings
+} from '@/components/player/RawControls';
+import type { RawPlaybackStatus } from '@/lib/player/raw-types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import * as Dialog from '@/components/ui/dialog';
@@ -146,12 +154,12 @@ import { Chats } from '@/components/player/Chats';
 import { useVoiceChat } from '@/components/player/useVoiceChat';
 import { CottageGamePlaceholder } from '@/components/player/CottageGamePlaceholder';
 import { RoomNavigationInput } from '@/components/room-navigation-input';
-import { fetchJobs, joinBackendPath, updateRoomRecord } from '@/lib/player/data';
+import { joinBackendPath, updateRoomRecord } from '@/lib/player/data';
 import type { ParsedCaptionsResult, VTTCue as MediaCaptionCue } from 'media-captions';
 
 type VideoSource = {
 	src: string;
-	type: 'video/mp4';
+	type: string;
 	codec: string;
 	sCodec: string;
 	audio: string;
@@ -5817,6 +5825,7 @@ export function Player({
 	const lastSentTimeRef = useRef(-100);
 	const suppressNextPlaybackSyncRef = useRef(false);
 	const awaitingInitialPlaybackSyncRef = useRef(false);
+	const mediaChangeSequenceRef = useRef(0);
 	const pendingRemotePlaybackSyncRef = useRef<PendingRemotePlaybackSync | null>(null);
 	const pendingAudioSwitchPlaybackRef = useRef<PendingAudioSwitchPlayback | null>(null);
 	const pendingMediaProgressResetRef = useRef<string | null>(null);
@@ -5929,6 +5938,7 @@ export function Player({
 		};
 	}, [BASE_STATIC, job.Streams]);
 	const thumbnailVttSrc = useMemo(() => {
+		if (job.Raw) return null;
 		if (typeof window === 'undefined') {
 			return null;
 		}
@@ -5943,6 +5953,7 @@ export function Player({
 	const room = data.roomId;
 	const currentRoomRef = useRef(room);
 	const currentMediaIdRef = useRef(job.Id);
+	const mediaRevisionRef = useRef(0);
 	const youtubeRoomId = room;
 	const youtubeSyncRoom = `youtube:${youtubeRoomId}`;
 	const youtubeStateStorageKey = `sparkle:youtube-sync-state:${youtubeRoomId}`;
@@ -5960,6 +5971,7 @@ export function Player({
 		const mediaChanged = currentMediaIdRef.current !== job.Id;
 		currentRoomRef.current = room;
 		currentMediaIdRef.current = job.Id;
+		if (mediaChanged) mediaRevisionRef.current = 0;
 		if (!mediaChanged) {
 			return;
 		}
@@ -5997,6 +6009,14 @@ export function Player({
 	const currentCottagePlayer = currentChessPlayer;
 	const currentWordlePlayer = currentChessPlayer;
 	const videoSrc = useMemo<VideoSource | null>(() => {
+		if (job.Raw)
+			return {
+				src: joinBackendPath(backendBaseUrl, `/media/${job.Id}`),
+				type: RAW_MEDIA_TYPE,
+				codec: job.Raw.videoCodec,
+				sCodec: 'raw',
+				audio: 'local'
+			};
 		const encodedCodecs = job.EncodedCodecs || [];
 		const autoCodec =
 			supportedCodecs.find((codec) => encodedCodecs.includes(codec)) || encodedCodecs[0];
@@ -6019,6 +6039,9 @@ export function Player({
 		};
 	}, [
 		BASE_STATIC,
+		backendBaseUrl,
+		job.Id,
+		job.Raw,
 		job.EncodedCodecs,
 		job.MappedAudio,
 		selectedAudio,
@@ -6161,7 +6184,7 @@ export function Player({
 					throw new Error(`Room media check failed: ${response.status}`);
 				}
 				const record = (await response.json()) as { mediaId?: string; mediaUpdated?: number };
-				if (record.mediaId && record.mediaId !== job.Id) {
+				if (typeof record.mediaId === 'string' && record.mediaId !== job.Id) {
 					await onRoomMediaChangedRef.current?.(record.mediaId, record.mediaUpdated);
 					return true;
 				}
@@ -6698,6 +6721,19 @@ export function Player({
 	}, []);
 
 	const send = useCallback((data: any) => {
+		if (data.type === SyncTypes.TimeSync || data.type === SyncTypes.PauseSync) {
+			const provider = playerElementRef.current?.provider as unknown;
+			if (
+				provider instanceof RawProvider &&
+				(!provider.canPublishPlayback || awaitingInitialPlaybackSyncRef.current)
+			)
+				return;
+			data = {
+				...data,
+				mediaId: currentMediaIdRef.current,
+				mediaUpdated: mediaRevisionRef.current
+			};
+		}
 		const socket = socketRef.current;
 		if (
 			playerElementRef.current &&
@@ -6708,6 +6744,26 @@ export function Player({
 			socket.send(JSON.stringify(data));
 		}
 	}, []);
+
+	const reportRawTracks = useCallback(
+		(status: RawPlaybackStatus) => {
+			if (status.changing || !status.ready) return;
+			send({
+				type: SyncTypes.AudioSwitch,
+				audio: status.audioTracks.find((t) => t.id === status.audio)?.title ?? ''
+			});
+			const subtitleIds = new Set([status.subtitle, ...(status.subtitleLayers ?? [])]);
+			send({
+				type: SyncTypes.SubtitleSwitch,
+				subtitle: status.subtitleTracks
+					.filter((t) => subtitleIds.has(t.id))
+					.map((t) => t.title)
+					.join(' + ')
+			});
+			send({ type: SyncTypes.CodecSwitch, codec: `${status.sourceHDR} → ${status.output}` });
+		},
+		[send]
+	);
 
 	const sendChessNotification = useCallback(
 		(soundId: ChessNotificationSoundId, chess?: ChessSoundEffectContext) => {
@@ -6740,6 +6796,11 @@ export function Player({
 
 	const sendSettings = useCallback(
 		(options: { includeAudio?: boolean } = {}) => {
+			if (job.Raw) {
+				const provider = playerElementRef.current?.provider;
+				if (provider instanceof RawProvider) reportRawTracks(provider.status);
+				return;
+			}
 			const selectedTrack = subtitlesManuallyDisabledRef.current
 				? null
 				: getSelectedSubtitleTrack(
@@ -6763,7 +6824,7 @@ export function Player({
 				codec: `${selectedCodec},${videoSrc?.sCodec}`
 			});
 		},
-		[effectiveAudio, playerEl, send, selectedCodec, videoSrc?.sCodec]
+		[effectiveAudio, playerEl, send, selectedCodec, videoSrc?.sCodec, job.Raw, reportRawTracks]
 	);
 
 	useEffect(() => {
@@ -7645,6 +7706,7 @@ export function Player({
 		};
 
 		const setupTracks = async () => {
+			if (job.Raw) return;
 			if (cancelled) {
 				return;
 			}
@@ -7759,6 +7821,9 @@ export function Player({
 	);
 
 	const updateTime = useCallback(() => {
+		if (awaitingInitialPlaybackSyncRef.current || suppressNextPlaybackSyncRef.current) return;
+		const provider = playerElementRef.current?.provider as unknown;
+		if (provider instanceof RawProvider && !provider.canPublishPlayback) return;
 		if (pendingAudioSwitchPlaybackRef.current || pendingMediaProgressResetRef.current) {
 			return;
 		}
@@ -7949,6 +8014,8 @@ export function Player({
 	}, [clearPlaybackSyncSuppression]);
 
 	const shouldSendPlaybackSync = useCallback(() => {
+		const provider = playerElementRef.current?.provider as unknown;
+		if (provider instanceof RawProvider && !provider.canPublishPlayback) return false;
 		if (awaitingInitialPlaybackSyncRef.current) {
 			return false;
 		}
@@ -8010,6 +8077,15 @@ export function Player({
 			}
 
 			let complete = true;
+			const rawProvider = player.provider as unknown;
+			if (rawProvider instanceof RawProvider) {
+				if (!rawProvider.status.ready) {
+					queueRemotePlaybackSync(sync);
+					return false;
+				}
+				void rawProvider.applyRoomState(sync).catch(() => queueRemotePlaybackSync(sync));
+				return true;
+			}
 			if (typeof sync.time === 'number') {
 				const currentTime = getSafePlayerCurrentTime(player);
 				if (currentTime === null) {
@@ -8119,6 +8195,7 @@ export function Player({
 	const sendProfileRef = useLatestRef(sendProfile);
 	const sendSettingsRef = useLatestRef(sendSettings);
 	const updateLastTickedRef = useLatestRef(updateLastTicked);
+	const refreshRoomMediaRef = useLatestRef(refreshRoomMedia);
 	const updateSelectedSubtitleTrackRef = useLatestRef(updateSelectedSubtitleTrack);
 
 	useEffect(() => {
@@ -8163,6 +8240,9 @@ export function Player({
 					return;
 				}
 				console.log(`Socket, connected to ${room}`);
+				// A media change may have happened while this socket was disconnected
+				// or while the replacement provider was mounting.
+				void refreshRoomMediaRef.current();
 				setSocketConnected(true);
 				profileSyncedRef.current = sendProfileRef.current();
 				awaitingInitialPlaybackSyncRef.current = true;
@@ -8191,6 +8271,14 @@ export function Player({
 					return;
 				}
 				const broadcast = state.broadcast;
+				if (state.type === SyncTypes.TimeSync || state.type === SyncTypes.PauseSync) {
+					if (state.mediaId && state.mediaId !== currentMediaIdRef.current) {
+						void refreshRoomMediaRef.current();
+						return;
+					}
+					if (state.mediaUpdated && state.mediaUpdated < mediaRevisionRef.current) return;
+					if (state.mediaUpdated) mediaRevisionRef.current = state.mediaUpdated;
+				}
 				const persistControlState = (payload: SendPayload) => {
 					const isOwnPlaybackControl =
 						(payload.type === SyncTypes.PauseSync || payload.type === SyncTypes.TimeSync) &&
@@ -8316,13 +8404,21 @@ export function Player({
 					case SyncTypes.BroadcastSync:
 						switch (broadcast?.type) {
 							case BroadcastTypes.MoveTo:
+								if (state.timestamp < mediaRevisionRef.current) break;
+								mediaRevisionRef.current = state.timestamp;
+								const moveSequence = ++mediaChangeSequenceRef.current;
+								setMoveToast(null);
 								if (broadcast.moveTo === '') {
 									void onRoomMediaChangedRef.current?.('', state.timestamp);
 									break;
 								}
-								mediaSelectionRef.current?.updateList(broadcast.moveTo, (jobs: LibraryJob[]) => {
-									initiateMoveTo(jobs);
-								});
+								void mediaSelectionRef.current
+									?.updateList(broadcast.moveTo, (jobs: LibraryJob[]) => {
+										if (moveSequence === mediaChangeSequenceRef.current) initiateMoveTo(jobs);
+									})
+									.catch(() => {
+										/* A removed/unavailable item cannot replace the current player. */
+									});
 								break;
 							case BroadcastTypes.VoiceSignal:
 								void handleVoiceBroadcastRef.current(state.firedBy?.id, broadcast);
@@ -8421,7 +8517,8 @@ export function Player({
 			pulseSoundEffectBadgeRef,
 			sendProfileRef,
 			sendSettingsRef,
-			updateLastTickedRef
+			updateLastTickedRef,
+			refreshRoomMediaRef
 		]
 	);
 
@@ -9237,11 +9334,11 @@ export function Player({
 						showJoinOverlay ? 'pointer-events-none blur-sm' : 'filter-none'
 					}`}
 				>
-					{mounted && thumbnailVttSrc && playerSrcUrl ? (
+					{mounted && playerSrcUrl ? (
 						<MediaPlayer
 							className={mediaPlayerClassName}
 							key={`${job.Id}:${playerSrcUrl}:${audioRemountKey}:${thumbnailVttSrc}`}
-							src={playerSrcUrl}
+							src={{ src: playerSrcUrl, type: videoSrc?.type ?? 'video/mp4' } as PlayerSrc}
 							style={mediaPlayerStyle}
 							title={job.Input}
 							artist="Let's watch anime!"
@@ -9253,6 +9350,8 @@ export function Player({
 							muted={playerMuted}
 							posterLoad="eager"
 							playsInline
+							viewType="video"
+							streamType="on-demand"
 							preload="auto"
 							volume={playerVolume}
 							onMediaPlayRequest={() => {
@@ -9311,7 +9410,11 @@ export function Player({
 								savePlayerVolume(volume, muted);
 							}}
 						>
-							<MediaProvider className="media-provider h-full w-full" ref={setMediaProviderEl}>
+							<MediaProvider
+								loaders={[RawProviderLoader]}
+								className="media-provider h-full w-full"
+								ref={setMediaProviderEl}
+							>
 								<source
 									key={playerSrcUrl}
 									src={playerSrcUrl}
@@ -9321,6 +9424,7 @@ export function Player({
 								<Poster className="vds-poster" src={posterSrc} alt="" />
 								<canvas ref={canvasRef} id="sub-canvas" className="pointer-events-none absolute" />
 							</MediaProvider>
+							{job.Raw && <RawPlaybackObserver onTracks={reportRawTracks} />}
 							<DefaultVideoLayout
 								colorScheme={theme}
 								icons={defaultLayoutIcons}
@@ -9328,8 +9432,12 @@ export function Player({
 								thumbnails={thumbnailVttSrc}
 								slots={{
 									timeSlider: <OptimizedTimeSlider thumbnails={thumbnailVttSrc} />,
-									settingsMenuItemsStart: videoSettingsMenu,
-									settingsMenuItemsEnd: subtitlesSettingsMenu,
+									settingsMenuItemsStart: job.Raw ? (
+										<RawVideoSettings raw={job.Raw} mediaId={job.Id} onVersion={switchRoomMedia} />
+									) : (
+										videoSettingsMenu
+									),
+									settingsMenuItemsEnd: job.Raw ? <RawSubtitleSettings /> : subtitlesSettingsMenu,
 									largeLayout: {
 										beforeCaptionButton: renderControlsChat(false, 'large')
 									},
@@ -9823,6 +9931,7 @@ export function Player({
 						firedBy={moveToast.firedBy}
 						job={moveToast.job}
 						onMove={handleMoveToastMove}
+						backendBaseUrl={backendBaseUrl}
 						staticBaseUrl={staticBaseUrl}
 					/>
 				</div>

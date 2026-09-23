@@ -44,6 +44,7 @@ const (
 )
 
 type Options struct {
+	PFPDir         string
 	OutputDir      string
 	MaxUploadBytes int64
 }
@@ -271,28 +272,32 @@ type ChatEmojiRef struct {
 }
 
 type ClientPayload struct {
-	Type        string         `json:"type"`
-	Time        *float64       `json:"time,omitempty"`
-	TargetID    string         `json:"targetId,omitempty"`
-	Name        string         `json:"name,omitempty"`
-	ProfileId   string         `json:"profileId,omitempty"`
-	DiscordUser *DiscordUser   `json:"discordUser,omitempty"`
-	Paused      *bool          `json:"paused,omitempty"`
-	Chat        string         `json:"chat,omitempty"`
-	Emojis      []string       `json:"emojis,omitempty"`
-	EmojiRefs   []ChatEmojiRef `json:"emojiRefs,omitempty"`
-	State       string         `json:"state,omitempty"`
-	Broadcast   map[string]any `json:"broadcast,omitempty"`
-	Codec       string         `json:"codec,omitempty"`
-	Audio       string         `json:"audio,omitempty"`
-	Subtitle    string         `json:"subtitle,omitempty"`
-	YouTube     *YouTubeState  `json:"youtube,omitempty"`
-	Chess       *ChessState    `json:"chess,omitempty"`
-	Wordle      *WordleState   `json:"wordle,omitempty"`
-	Cottage     *CottageState  `json:"cottage,omitempty"`
+	MediaID      string         `json:"mediaId,omitempty"`
+	MediaUpdated int64          `json:"mediaUpdated,omitempty"`
+	Type         string         `json:"type"`
+	Time         *float64       `json:"time,omitempty"`
+	TargetID     string         `json:"targetId,omitempty"`
+	Name         string         `json:"name,omitempty"`
+	ProfileId    string         `json:"profileId,omitempty"`
+	DiscordUser  *DiscordUser   `json:"discordUser,omitempty"`
+	Paused       *bool          `json:"paused,omitempty"`
+	Chat         string         `json:"chat,omitempty"`
+	Emojis       []string       `json:"emojis,omitempty"`
+	EmojiRefs    []ChatEmojiRef `json:"emojiRefs,omitempty"`
+	State        string         `json:"state,omitempty"`
+	Broadcast    map[string]any `json:"broadcast,omitempty"`
+	Codec        string         `json:"codec,omitempty"`
+	Audio        string         `json:"audio,omitempty"`
+	Subtitle     string         `json:"subtitle,omitempty"`
+	YouTube      *YouTubeState  `json:"youtube,omitempty"`
+	Chess        *ChessState    `json:"chess,omitempty"`
+	Wordle       *WordleState   `json:"wordle,omitempty"`
+	Cottage      *CottageState  `json:"cottage,omitempty"`
 }
 
 type SendPayload struct {
+	MediaID        string           `json:"mediaId,omitempty"`
+	MediaUpdated   int64            `json:"mediaUpdated,omitempty"`
 	Type           string           `json:"type"`
 	Time           *float64         `json:"time,omitempty"`
 	Paused         *bool            `json:"paused,omitempty"`

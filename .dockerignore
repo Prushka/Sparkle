@@ -5,10 +5,13 @@
 .git
 .idea
 .next
+.next-raw-validation
 .output
 .vercel
 backend
 node_modules
+cache
+data
 output
 tsconfig.tsbuildinfo
 next-env.d.ts

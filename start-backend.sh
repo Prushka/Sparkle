@@ -22,7 +22,10 @@ case "$OUTPUT" in
 esac
 export OUTPUT
 
-mkdir -p "$OUTPUT"
+export PFP_DIR="${PFP_DIR:-"$ROOT_DIR/data/pfp"}"
+export MEDIA_CACHE_DIR="${MEDIA_CACHE_DIR:-"$ROOT_DIR/cache/media"}"
+case "$PFP_DIR" in /*) ;; *) export PFP_DIR="$ROOT_DIR/$PFP_DIR" ;; esac
+case "$MEDIA_CACHE_DIR" in /*) ;; *) export MEDIA_CACHE_DIR="$ROOT_DIR/$MEDIA_CACHE_DIR" ;; esac
 
 cd "$ROOT_DIR/backend"
 exec "${GO:-go}" run ./cmd/api

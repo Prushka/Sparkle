@@ -6,7 +6,7 @@ import { AppEntryNoSsr } from '@/components/app-entry-no-ssr';
 import { notFound } from 'next/navigation';
 
 type RoomPageProps = {
-	params: Promise<{ id: string }> | { id: string };
+	params: Promise<{ id: string }>;
 };
 
 export const dynamic = 'force-dynamic';

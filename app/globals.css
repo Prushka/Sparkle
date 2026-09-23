@@ -551,6 +551,16 @@ html::-webkit-scrollbar-thumb:hover,
 	white-space: nowrap;
 }
 
+/* Keep the normal control-bar settings reachable before HDR readiness. */
+[data-media-player][data-raw-blocked='true'] .vds-controls {
+	opacity: 1;
+	visibility: visible;
+}
+
+[data-media-player][data-raw-blocked='true'] .vds-buffering-indicator {
+	display: none;
+}
+
 .vds-settings-menu-items > .vds-captions-menu {
 	display: none !important;
 }

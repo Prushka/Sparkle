@@ -6,7 +6,7 @@ import { AppEntryNoSsr } from '@/components/app-entry-no-ssr';
 import { notFound } from 'next/navigation';
 
 type LegacyMediaPageProps = {
-	params: Promise<{ room: string; mediaId: string }> | { room: string; mediaId: string };
+	params: Promise<{ room: string; mediaId: string }>;
 };
 
 export const dynamic = 'force-dynamic';

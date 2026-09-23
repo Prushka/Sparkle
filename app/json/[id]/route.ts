@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getJob } from '@/lib/server/jobs';
 import { getRoomRecord } from '@/lib/server/rooms';
-import { getBrowserStaticBaseUrl } from '@/lib/server/env';
+import { getBrowserStaticBaseUrl, getBrowserBackendBaseUrl } from '@/lib/server/env';
 import { getRequestOrigin, toAbsoluteUrl } from '@/lib/server/request';
 
 export const dynamic = 'force-dynamic';
@@ -9,7 +9,7 @@ export const runtime = 'nodejs';
 
 export async function GET(
 	request: Request,
-	{ params }: { params: Promise<{ id: string }> | { id: string } }
+	{ params }: { params: Promise<{ id: string }> }
 ) {
 	const resolvedParams = await Promise.resolve(params);
 	const url = new URL(request.url);
@@ -36,7 +36,7 @@ export async function GET(
 		const displayTitle = job.Title.episode
 			? `${job.Title.episode.se} - ${job.Title.episode.title}`
 			: job.Title.title.trim();
-		const thumbnailUrl = toAbsoluteUrl(`${getBrowserStaticBaseUrl()}/${job.Id}/poster.jpg`, origin);
+		const thumbnailUrl = toAbsoluteUrl(job.Poster ? `${getBrowserBackendBaseUrl()}${job.Poster}` : `${getBrowserStaticBaseUrl()}/${job.Id}/poster.jpg`, origin);
 		const res: Record<string, string | number> = {
 			version: '1.0',
 			type: 'link',

@@ -17,6 +17,7 @@ function getFallbackJobDescription(job: Job) {
 }
 
 export async function getJobDescription(fetchFn: typeof fetch, job: Job) {
+	if (job.Raw) return job.Summary || getFallbackJobDescription(job);
 	try {
 		const response = await fetchFn(`${getStaticBaseUrl()}/${encodeURIComponent(job.Id)}/info.nfo`, {
 			cache: 'no-store'

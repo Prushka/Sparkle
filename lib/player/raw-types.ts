@@ -1,0 +1,53 @@
+export interface RawTrack {
+	id: number;
+	index: number;
+	streamType: number;
+	codec: string;
+	language?: string;
+	languageCode?: string;
+	title?: string;
+	displayTitle?: string;
+	default?: boolean;
+	forced?: boolean;
+	channels?: number;
+	bitDepth?: number;
+	colorPrimaries?: string;
+	colorSpace?: string;
+	colorRange?: string;
+	colorTrc?: string;
+	DOVIPresent?: boolean;
+	DOVIProfile?: number;
+	DOVILevel?: number;
+	DOVIBLCompatID?: number;
+	DOVIELPresent?: boolean;
+	HDR10PlusPresent?: boolean;
+}
+export interface RawPart {
+	id: string;
+	url: string;
+	size: number;
+	duration: number;
+	start: number;
+	streams: RawTrack[];
+}
+export interface RawMedia {
+	container: string;
+	videoCodec: string;
+	parts: RawPart[];
+	versions: { id: string; label: string }[];
+}
+export type HDROutput =
+	'SDR' | 'HDR10' | 'HLG' | 'Dolby Vision' | 'HDR10+' | 'SDR tone mapping' | 'unsupported';
+export interface RawPlaybackStatus {
+	ready: boolean;
+	changing: boolean;
+	sourceHDR: string;
+	output: HDROutput;
+	reason?: string;
+	audioTracks: { id: number; title: string }[];
+	subtitleTracks: { id: number; title: string }[];
+	audio?: number;
+	subtitle?: number;
+	subtitleLayers?: number[];
+	part: number;
+}

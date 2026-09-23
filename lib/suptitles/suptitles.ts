@@ -4,12 +4,13 @@ import {
 	WindowDefinitionSegment,
 	PaletteDefinitionSegment,
 	ObjectDefinitionSegment,
+	assembleObjects,
 	a2h2i,
 	type Palette,
 	type WindowSeg
 } from './segments';
 
-import { getRgb, getPxAlpha } from './imageParser';
+import { decodeBitmap } from './bitmap';
 
 const STALE_SUBTITLE_TOLERANCE_MS = 1000;
 
@@ -199,44 +200,16 @@ export default class SUPtitles {
 	): void {
 		if (ODS.length > 0) {
 			this.clearCanvas();
-			let first: ObjectDefinitionSegment | null = null;
-			ODS.map((objectSegment) => {
-				if (objectSegment.type === 'First') {
-					first = objectSegment;
-				} else {
-					let imgData: Uint8Array = objectSegment.imgData;
-					if (first) {
-						imgData = Uint8Array.from([
-							...[].slice.call(first.imgData),
-							...[].slice.call(objectSegment.imgData)
-						]);
-					}
-					const width = first ? first.width : objectSegment.width;
-					const height = first ? first.height : objectSegment.height;
-					const object = PCS.getObjectById(first ? first.id : objectSegment.id);
-					if (!object) {
-						first = null;
-						return null;
-					}
-					const xOffset = object?.xOffset;
-					const yOffset = object?.yOffset;
-					const pixels = this.getPixels(
-						imgData,
-						PDS ? PDS.palette : this.lastPalette!,
-						width,
-						height
-					);
-					this.cv[0]
-						.getContext('2d')
-						?.putImageData(
-							new ImageData(new Uint8ClampedArray(pixels), width, height),
-							xOffset!,
-							yOffset!
-						);
-					first = null;
-				}
-				return null;
-			});
+			for (const bitmap of assembleObjects(ODS)) {
+				const object = PCS.getObjectById(bitmap.id);
+				if (!object) continue;
+				const pixels = this.getPixels(bitmap.imgData, PDS ? PDS.palette : this.lastPalette!, bitmap.width, bitmap.height);
+				const image = new ImageData(pixels as Uint8ClampedArray<ArrayBuffer>, bitmap.width, bitmap.height);
+				const ctx = this.cv[0].getContext('2d');
+				if (object.cropped) {
+					ctx?.putImageData(image, object.xOffset - object.xOffsetCrop, object.yOffset - object.yOffsetCrop, object.xOffsetCrop, object.yOffsetCrop, object.widthCrop, object.heightCrop);
+				} else ctx?.putImageData(image, object.xOffset, object.yOffset);
+			}
 		} else {
 			if (!WDS) {
 				return;
@@ -280,20 +253,6 @@ export default class SUPtitles {
 		width: number,
 		height: number
 	): Uint8ClampedArray {
-		const rgb = getRgb(palette);
-		const [pxMx1, alphaMx1] = getPxAlpha(imgData, palette);
-		const pxls = new Uint8ClampedArray(width * height * 4);
-
-		for (let h = 0; h < pxMx1.length; h++) {
-			for (let w = 0; w < pxMx1[h].length; w++) {
-				const i = h * pxMx1[h].length + w;
-				pxls[i * 4] = rgb[pxMx1[h][w]][0];
-				pxls[i * 4 + 1] = rgb[pxMx1[h][w]][1];
-				pxls[i * 4 + 2] = rgb[pxMx1[h][w]][2];
-				pxls[i * 4 + 3] = alphaMx1[h][w];
-			}
-		}
-
-		return pxls;
+		return decodeBitmap(imgData, palette, width, height);
 	}
 }

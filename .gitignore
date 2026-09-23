@@ -1,6 +1,7 @@
 .DS_Store
 node_modules
 /.next
+/.next-raw-validation/
 .env
 .env.*
 !.env.example
@@ -10,3 +11,6 @@ node_modules
 tsconfig.tsbuildinfo
 next-env.d.ts
 .idea
+/cache/
+/data/
+/public/vendor/libmedia/

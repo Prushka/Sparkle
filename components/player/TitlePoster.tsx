@@ -6,17 +6,19 @@ import { New } from '@/components/player/New';
 export function TitlePoster({
 	title,
 	isNew = false,
-	staticBaseUrl
+	staticBaseUrl,
+	poster
 }: {
 	title: Title | TitleEpisode;
 	isNew?: boolean;
 	staticBaseUrl: string;
+	poster?: string;
 }) {
 	return (
 		<div className="relative shrink-0 overflow-hidden">
 			{/* eslint-disable-next-line @next/next/no-img-element */}
 			<img
-				src={`${staticBaseUrl}/${title.id}/poster.jpg`}
+				src={poster ?? `${staticBaseUrl}/${title.id}/poster.jpg`}
 				alt={title.title}
 				loading="lazy"
 				decoding="async"

@@ -299,3 +299,22 @@ func assertStringSlice(t *testing.T, value any, want []string) {
 		}
 	}
 }
+
+func TestPublicJobMetadataDoesNotExposeSourcePaths(t *testing.T) {
+	output := t.TempDir()
+	dir := filepath.Join(output, "sample")
+	os.Mkdir(dir, 0700)
+	writeFile(t, dir, jobFile, `{"Id":"sample","Input":"O:\\Media\\Movie.mkv","InputParent":"O:\\Media","inputParent":"O:\\Media","Streams":[{"Location":"O:\\Media\\1.srt"}]}`)
+	payload, _, err := NewStore(output, time.Minute).Job(context.Background(), "sample")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var job map[string]any
+	json.Unmarshal(payload, &job)
+	if job["Input"] != "Movie.mkv" || job["InputParent"] != nil || job["inputParent"] != nil {
+		t.Fatal("source path exposed")
+	}
+	if _, _, err := NewStore(output, time.Minute).Job(context.Background(), "../sample"); err == nil {
+		t.Fatal("traversal accepted")
+	}
+}

@@ -7,10 +7,19 @@ services:
       OUTPUT: /data/output
       JOBS_CACHE_TTL: 15m
       MAX_PFP_BYTES: '12000000'
+      PFP_DIR: /data/pfp
+      MEDIA_CACHE_DIR: /cache/media
+      PLEX_URL: ${PLEX_URL}
+      PLEX_TOKEN: ${PLEX_TOKEN}
+      PLEX_LIBRARY_IDS: ${PLEX_LIBRARY_IDS}
+      PLEX_PATH_MAPPINGS: '[{"plex":"/data/Managed-Videos","local":"/media/Managed-Videos"}]'
     ports:
       - '1323:1323'
     volumes:
-      - ./output:/data/output
+      - ./output:/data/output:ro
+      - ${PLEX_MEDIA_HOST_ROOT:-/mnt/Managed-Videos}:/media/Managed-Videos:ro
+      - ./data/pfp:/data/pfp
+      - ./cache/media:/cache/media
 
   sparkle-next:
     image: meinya/sparkle-next:latest

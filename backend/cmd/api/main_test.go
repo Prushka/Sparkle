@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -49,5 +50,18 @@ func TestStaticFilesClearsWriteDeadlineAndSupportsRanges(t *testing.T) {
 	}
 	if got := response.Header().Get("Cache-Control"); got != "public, max-age=3600" {
 		t.Fatalf("Cache-Control = %q, want %q", got, "public, max-age=3600")
+	}
+}
+
+func TestStaticFilesHidePrivateMetadataAndConfineAssets(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "job.json"), []byte(`{"Input":"private-source"}`), 0600)
+	os.WriteFile(filepath.Join(dir, "error.log"), []byte("private-source"), 0600)
+	for _, name := range []string{"job.json", "error.log", "../secret.mp4", "file.mp4:private"} {
+		w := httptest.NewRecorder()
+		staticFiles(dir).ServeHTTP(w, httptest.NewRequest("GET", "/static/"+name, nil))
+		if w.Code != 404 || strings.Contains(w.Body.String(), "private-source") {
+			t.Fatalf("private asset exposed: %s", name)
+		}
 	}
 }

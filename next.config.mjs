@@ -1,12 +1,13 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+	distDir: process.env.SPARKLE_BUILD_DIR || '.next',
 	output: 'standalone',
 	reactStrictMode: true,
 	webpack(config, { dev }) {
 		if (dev) {
 			config.watchOptions = {
 				...config.watchOptions,
-				ignored: ['**/.playwright-mcp/**', '**/.agents/**', '**/.claude/**']
+				ignored: ['**/.playwright-mcp/**', '**/.agents/**', '**/.claude/**', '**/cache/**', '**/.next-raw-validation/**']
 			};
 		}
 		return config;

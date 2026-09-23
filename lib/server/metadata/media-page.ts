@@ -1,6 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
-import { getBrowserStaticBaseUrl } from '@/lib/server/env';
+import { getBrowserStaticBaseUrl, getBrowserBackendBaseUrl } from '@/lib/server/env';
 import { fallbackDescription, getJobDescription } from '@/lib/server/metadata/job';
 import { getJob } from '@/lib/server/jobs';
 import { getRequestOrigin, toAbsoluteUrl } from '@/lib/server/request';
@@ -117,7 +117,7 @@ export async function generateMediaPageMetadata(route: MediaPageRoute): Promise<
 	const displayTitle = getDisplayTitle(data.job);
 	const description = await getJobDescription(fetch, data.job);
 	const previewUrl = toAbsoluteUrl(
-		`${getBrowserStaticBaseUrl()}/${data.job.Id}/poster.jpg`,
+		data.job.Poster ? `${getBrowserBackendBaseUrl()}${data.job.Poster}` : `${getBrowserStaticBaseUrl()}/${data.job.Id}/poster.jpg`,
 		data.origin
 	);
 

@@ -6,7 +6,7 @@ import { AppEntryNoSsr } from '@/components/app-entry-no-ssr';
 import { notFound } from 'next/navigation';
 
 type MediaPageProps = {
-	params: Promise<{ id: string; mediaId: string }> | { id: string; mediaId: string };
+	params: Promise<{ id: string; mediaId: string }>;
 };
 
 export const dynamic = 'force-dynamic';

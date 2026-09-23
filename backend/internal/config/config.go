@@ -8,6 +8,12 @@ import (
 )
 
 type Config struct {
+	PlexURL           string
+	PlexToken         string
+	PlexMappings      string
+	PlexLibraryIDs    string
+	MediaCacheDir     string
+	PFPDir            string
 	Addr              string
 	OutputDir         string
 	JobsCacheTTL      time.Duration
@@ -21,6 +27,12 @@ type Config struct {
 
 func Load() (Config, error) {
 	cfg := Config{
+		PlexURL:           os.Getenv("PLEX_URL"),
+		PlexToken:         os.Getenv("PLEX_TOKEN"),
+		PlexMappings:      os.Getenv("PLEX_PATH_MAPPINGS"),
+		PlexLibraryIDs:    os.Getenv("PLEX_LIBRARY_IDS"),
+		MediaCacheDir:     getenv("MEDIA_CACHE_DIR", "./cache/media"),
+		PFPDir:            getenv("PFP_DIR", "./data/pfp"),
 		Addr:              getenv("ADDR", ":1323"),
 		OutputDir:         getenv("OUTPUT", "./output"),
 		JobsCacheTTL:      30 * time.Minute,

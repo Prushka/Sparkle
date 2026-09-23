@@ -5,10 +5,11 @@ import { fileURLToPath } from 'node:url';
 
 const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const publicDir = path.join(rootDir, 'public');
-const nextStaticDir = path.join(rootDir, '.next', 'static');
-const standalonePublicDir = path.join(rootDir, '.next', 'standalone', 'public');
+const buildDirectory = process.env.SPARKLE_BUILD_DIR || '.next';
+const nextStaticDir = path.join(rootDir, buildDirectory, 'static');
+const standalonePublicDir = path.join(rootDir, buildDirectory, 'standalone', 'public');
 const standaloneSwPath = path.join(standalonePublicDir, 'sw.js');
-const buildIdPath = path.join(rootDir, '.next', 'BUILD_ID');
+const buildIdPath = path.join(rootDir, buildDirectory, 'BUILD_ID');
 
 const cacheableExtensions = new Set([
 	'.css',
@@ -117,7 +118,7 @@ const PRECACHE_URLS = ${JSON.stringify(precacheUrls, null, '\t')};
 const CORE_PATHS = new Set(['/manifest.json', '/offline.html', '/favicon.ico']);
 const CORE_PREFIXES = ['/_next/static/', '/favicon/', '/fonts/'];
 const RUNTIME_PREFIXES = ['/icons/', '/media/', '/scripts/', '/sound/'];
-const NETWORK_ONLY_PREFIXES = ['/api/', '/_next/webpack-hmr', '/static/'];
+const NETWORK_ONLY_PREFIXES = ['/api/', '/be/', '/library/', '/media/plex-', '/_next/webpack-hmr', '/static/'];
 
 const isLocalDev = () =>
 \tself.location.hostname === 'localhost' ||

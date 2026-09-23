@@ -1,4 +1,5 @@
 import type { ChatEmojiRef } from '@/lib/player/emoji';
+import type { RawMedia } from '@/lib/player/raw-types';
 import {
 	cueForgeLanguageMetadataByName,
 	cueForgeLanguages,
@@ -397,6 +398,8 @@ export enum BroadcastTypes {
 }
 
 export interface SendPayload {
+	mediaId?: string;
+	mediaUpdated?: number;
 	type: string;
 	time?: number;
 	targetId?: string;
@@ -443,6 +446,10 @@ export interface VoiceSignalPayload {
 }
 
 export interface Job {
+	Source?: 'processed' | 'plex';
+	Poster?: string;
+	Summary?: string;
+	Raw?: RawMedia;
 	Id: string;
 	Input: string;
 	State: string;
@@ -462,6 +469,7 @@ export interface Job {
 
 export type LibraryJob = Pick<
 	Job,
+	| 'Poster'
 	| 'Id'
 	| 'Input'
 	| 'EncodedCodecs'
@@ -913,6 +921,7 @@ function getJobCodecs(job: Job) {
 }
 
 export function preprocessJob(job: Job) {
+	if (job.Raw) return job;
 	const i = job.Input.replace(/\.[^/.]+$/, '');
 	const ks = replaceKeywordsAtEnd(i, '');
 	job.Input = ks.result;

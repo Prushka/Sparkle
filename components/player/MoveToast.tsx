@@ -8,6 +8,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Button } from '@/components/ui/button';
 import { Pfp } from '@/components/player/Pfp';
 import { TitlePoster } from '@/components/player/TitlePoster';
+import { joinBackendPath } from '@/lib/player/data';
 
 export function MoveToast({
 	historicalPlayers,
@@ -16,7 +17,8 @@ export function MoveToast({
 	job,
 	moveToPath,
 	onMove,
-	staticBaseUrl
+	staticBaseUrl,
+	backendBaseUrl
 }: {
 	historicalPlayers: Record<string, Player>;
 	seconds: number;
@@ -25,6 +27,7 @@ export function MoveToast({
 	moveToPath?: (_id: string) => string;
 	onMove?: () => void | Promise<unknown>;
 	staticBaseUrl: string;
+	backendBaseUrl: string;
 }) {
 	const router = useRouter();
 	const [remaining, setRemaining] = useState(seconds);
@@ -77,7 +80,7 @@ export function MoveToast({
 			</CardHeader>
 			<CardContent>
 				<div className="flex w-full items-center gap-1 text-sm font-normal">
-					{job?.Title ? <TitlePoster title={job.Title} staticBaseUrl={staticBaseUrl} /> : null}
+					{job?.Title ? <TitlePoster title={job.Title} staticBaseUrl={staticBaseUrl} poster={job.Poster ? joinBackendPath(backendBaseUrl, job.Poster) : undefined} /> : null}
 					To: {job?.Input}
 				</div>
 			</CardContent>

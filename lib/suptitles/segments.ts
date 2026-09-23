@@ -165,6 +165,7 @@ class PaletteDefinitionSegment {
 
 class ObjectDefinitionSegment {
 	SEQUENCE: IDictionary<string> = {
+		' 00': 'Middle',
 		' 40': 'Last',
 		' 80': 'First',
 		' c0': 'First and last'
@@ -183,17 +184,39 @@ class ObjectDefinitionSegment {
 		this.id = a2h2i(base.data, 0, 2);
 		this.version = base.data[2];
 		this.type = this.SEQUENCE[' ' + intToHex(base.data[3])];
-		this.len = a2h2i(base.data, 4, 7);
-		this.width = a2h2i(base.data, 7, 9);
-		this.height = a2h2i(base.data, 9, 11);
-		this.imgData = base.data.slice(11);
-
-		if (this.type === 'Last') {
-			this.imgData = base.data.slice(4);
-		}
+		const first = !!(base.data[3] & 0x80);
+		this.len = first ? a2h2i(base.data, 4, 7) : 0;
+		this.width = first ? a2h2i(base.data, 7, 9) : 0;
+		this.height = first ? a2h2i(base.data, 9, 11) : 0;
+		this.imgData = base.data.slice(first ? 11 : 4);
 
 		this.base.data = new Uint8Array(0);
 	}
+}
+
+/** Assemble all fragments, including middle fragments and interleaved objects. */
+export function assembleObjects(segments: ObjectDefinitionSegment[]) {
+	const pending = new Map<number, { first: ObjectDefinitionSegment; chunks: Uint8Array[]; size: number }>();
+	const complete: { id: number; width: number; height: number; imgData: Uint8Array }[] = [];
+	for (const segment of segments) {
+		if (segment.type === 'First' || segment.type === 'First and last') {
+			if (segment.len < 4 || segment.len > 16 * 1024 * 1024 || segment.width * segment.height > 16 * 1024 * 1024) throw new Error('Invalid subtitle object size');
+			pending.set(segment.id, { first: segment, chunks: [], size: 0 });
+		}
+		const object = pending.get(segment.id);
+		if (!object || object.first.version !== segment.version) continue;
+		object.size += segment.imgData.length;
+		if (object.size > object.first.len - 4) throw new Error('Invalid subtitle fragment size');
+		object.chunks.push(segment.imgData);
+		if (segment.type === 'Last' || segment.type === 'First and last') {
+			if (object.size !== object.first.len - 4) throw new Error('Incomplete subtitle object');
+			const data = new Uint8Array(object.size); let offset = 0;
+			for (const chunk of object.chunks) { data.set(chunk, offset); offset += chunk.length; }
+			complete.push({ id: segment.id, width: object.first.width, height: object.first.height, imgData: data });
+			pending.delete(segment.id);
+		}
+	}
+	return complete;
 }
 
 class EndSegment {

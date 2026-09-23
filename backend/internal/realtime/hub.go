@@ -55,6 +55,7 @@ const (
 
 type Hub struct {
 	outputDir      string
+	pfpDir         string
 	maxUploadBytes int64
 	upgrader       websocket.Upgrader
 
@@ -97,6 +98,7 @@ type roomResponse struct {
 func NewHub(options Options) *Hub {
 	return &Hub{
 		outputDir:      options.OutputDir,
+		pfpDir:         options.PFPDir,
 		maxUploadBytes: options.MaxUploadBytes,
 		rooms:          make(map[string]*Room),
 		upgrader: websocket.Upgrader{
@@ -216,7 +218,7 @@ func (h *Hub) HandlePFP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.writeProfileImage(id, content); err != nil {
-		log.Printf("write profile image: %v", err)
+		log.Print("failed to store profile image")
 		http.Error(w, "failed to store profile image", http.StatusInternalServerError)
 		return
 	}
@@ -534,7 +536,10 @@ func (h *Hub) broadcastPFP(id string, timestamp int64) {
 }
 
 func (h *Hub) writeProfileImage(id string, content []byte) error {
-	dir := filepath.Join(h.outputDir, "pfp")
+	dir := h.pfpDir
+	if dir == "" {
+		return errors.New("profile storage is not configured")
+	}
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
@@ -626,7 +631,7 @@ func (r *Room) updateMediaID(mediaID string, firedBy *PlayerSnapshot) roomRespon
 
 func (r *Room) applyMediaIDLocked(mediaID string, timestamp int64) {
 	r.mediaID = mediaID
-	r.mediaUpdatedAt = timestamp
+	r.mediaUpdatedAt = max(timestamp, r.mediaUpdatedAt+1)
 	r.state = defaultVideoState()
 	r.youtube = defaultYouTubeState()
 	r.chess = defaultChessState()
@@ -703,9 +708,9 @@ func (r *Room) handlePayload(current *Player, payload ClientPayload) {
 	case ChatSync:
 		r.chat(current, payload.Chat, payload.EmojiRefs)
 	case TimeSync:
-		r.syncTime(current, payload.Time)
+		r.syncTime(current, payload.Time, payload)
 	case PauseSync:
-		r.syncPause(current, payload.Paused)
+		r.syncPause(current, payload.Paused, payload)
 	case PfpSync:
 		id := current.state.ProfileId
 		if id == "" {
@@ -2997,7 +3002,18 @@ func sanitizeEmojiURL(raw string, allowItemURL bool) string {
 	}
 }
 
-func (r *Room) syncTime(sender *Player, next *float64) {
+func (r *Room) playbackIdentityMatches(identity []ClientPayload) bool {
+	if len(identity) == 0 {
+		return true
+	} // In-process callers already hold the room identity.
+	p := identity[0]
+	if p.MediaID == "" {
+		return !strings.HasPrefix(r.mediaID, "plex-")
+	}
+	return p.MediaID == r.mediaID && p.MediaUpdated == r.mediaUpdatedAt
+}
+
+func (r *Room) syncTime(sender *Player, next *float64, identity ...ClientPayload) {
 	if next == nil || math.IsNaN(*next) || math.IsInf(*next, 0) || *next < 0 {
 		return
 	}
@@ -3005,12 +3021,15 @@ func (r *Room) syncTime(sender *Player, next *float64) {
 	var firedBy PlayerSnapshot
 	var targets []*Player
 	shouldBroadcast := false
+	var mediaID string
+	var mediaUpdated int64
 
 	r.mu.Lock()
-	if r.players[sender.state.Id] != sender {
+	if r.players[sender.state.Id] != sender || !r.playbackIdentityMatches(identity) {
 		r.mu.Unlock()
 		return
 	}
+	mediaID, mediaUpdated = r.mediaID, r.mediaUpdatedAt
 	sender.state.LastSeen = time.Now().Unix()
 	sender.state.Time = *next
 	if math.Abs(r.state.Time-sender.state.Time) > roomTimeSyncThresholdSeconds && r.lastSeek.Add(time.Second).Before(time.Now()) {
@@ -3030,23 +3049,26 @@ func (r *Room) syncTime(sender *Player, next *float64) {
 	if !shouldBroadcast {
 		return
 	}
-	payload := SendPayload{Type: TimeSync, Time: next, FiredBy: &firedBy, Timestamp: time.Now().UnixMilli()}
+	payload := SendPayload{Type: TimeSync, MediaID: mediaID, MediaUpdated: mediaUpdated, Time: next, FiredBy: &firedBy, Timestamp: time.Now().UnixMilli()}
 	sendPayloadToPlayers(targets, payload)
 }
 
-func (r *Room) syncPause(sender *Player, paused *bool) {
+func (r *Room) syncPause(sender *Player, paused *bool, identity ...ClientPayload) {
 	if paused == nil {
 		return
 	}
 
 	var firedBy PlayerSnapshot
 	var targets []*Player
+	var mediaID string
+	var mediaUpdated int64
 
 	r.mu.Lock()
-	if r.players[sender.state.Id] != sender {
+	if r.players[sender.state.Id] != sender || !r.playbackIdentityMatches(identity) {
 		r.mu.Unlock()
 		return
 	}
+	mediaID, mediaUpdated = r.mediaID, r.mediaUpdatedAt
 	sender.state.LastSeen = time.Now().Unix()
 	sender.state.Paused = *paused
 	r.state.Paused = *paused
@@ -3062,11 +3084,13 @@ func (r *Room) syncPause(sender *Player, paused *bool) {
 	if len(targets) == 0 {
 		return
 	}
-	payload := SendPayload{Type: PauseSync, Paused: paused, FiredBy: &firedBy, Timestamp: time.Now().UnixMilli()}
+	payload := SendPayload{Type: PauseSync, MediaID: mediaID, MediaUpdated: mediaUpdated, Paused: paused, FiredBy: &firedBy, Timestamp: time.Now().UnixMilli()}
 	sendPayloadToPlayers(targets, payload)
 }
 
 func (r *Room) newPlayer(sender *Player) {
+	var mediaID string
+	var mediaUpdated int64
 	var roomTime float64
 	var roomPaused bool
 	var youtube YouTubeState
@@ -3084,6 +3108,7 @@ func (r *Room) newPlayer(sender *Player) {
 	}
 	sender.state.LastSeen = time.Now().Unix()
 	roomTime = r.state.Time
+	mediaID, mediaUpdated = r.mediaID, r.mediaUpdatedAt
 	roomPaused = r.state.Paused
 	if len(r.players) == 1 {
 		roomPaused = false
@@ -3104,8 +3129,8 @@ func (r *Room) newPlayer(sender *Player) {
 	}
 	r.mu.Unlock()
 
-	sender.sendJSON(SendPayload{Type: TimeSync, Time: &roomTime, Timestamp: time.Now().UnixMilli()})
-	sender.sendJSON(SendPayload{Type: PauseSync, Paused: &roomPaused, Timestamp: time.Now().UnixMilli()})
+	sender.sendJSON(SendPayload{Type: TimeSync, MediaID: mediaID, MediaUpdated: mediaUpdated, Time: &roomTime, Timestamp: time.Now().UnixMilli()})
+	sender.sendJSON(SendPayload{Type: PauseSync, MediaID: mediaID, MediaUpdated: mediaUpdated, Paused: &roomPaused, Timestamp: time.Now().UnixMilli()})
 	sender.sendJSON(SendPayload{Type: YouTubeSync, YouTube: &youtube, Timestamp: time.Now().UnixMilli()})
 	sender.sendJSON(SendPayload{Type: ChessSync, Chess: &chess, Timestamp: time.Now().UnixMilli()})
 	sender.sendJSON(SendPayload{Type: WordleSync, Wordle: &wordle, Timestamp: time.Now().UnixMilli()})

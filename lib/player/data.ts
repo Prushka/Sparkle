@@ -161,9 +161,9 @@ export async function fetchMediaData(
 	return {
 		jobs: [job],
 		job,
-		video: `${base}/${codec}.mp4`,
-		preview: `${base}/poster.jpg`,
-		icon: `${base}/poster.jpg`,
+		video: job.Raw ? joinBackendPath(runtimeConfig.backendBaseUrl, `/media/${job.Id}`) : `${base}/${codec}.mp4`,
+		preview: job.Poster ? joinBackendPath(runtimeConfig.backendBaseUrl, job.Poster) : `${base}/poster.jpg`,
+		icon: job.Poster ? joinBackendPath(runtimeConfig.backendBaseUrl, job.Poster) : `${base}/poster.jpg`,
 		rating: -1,
 		title: job.Title.episode
 			? `${job.Title.title} - ${job.Title.episode.se} - ${job.Title.episode.title}`
@@ -171,7 +171,7 @@ export async function fetchMediaData(
 		displayTitle: job.Title.episode
 			? `${job.Title.episode.se} - ${job.Title.episode.title}`
 			: job.Title.title,
-		plot: '',
+		plot: job.Summary ?? '',
 		dominantColor: job.DominantColors?.[0] ?? '#EC275F',
 		oembedJson: `/json/${encodeURIComponent(roomId)}`,
 		staticBaseUrl: runtimeConfig.staticBaseUrl,

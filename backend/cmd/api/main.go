@@ -1,8 +1,10 @@
 package main
 
 import (
+	"Sparkle/internal/catalog"
 	"Sparkle/internal/config"
 	"Sparkle/internal/jobs"
+	"Sparkle/internal/plex"
 	"Sparkle/internal/realtime"
 	"compress/gzip"
 	"context"
@@ -12,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -37,8 +40,19 @@ func main() {
 	}
 
 	jobStore := jobs.NewStore(cfg.OutputDir, cfg.JobsCacheTTL)
+	plexClient, err := plex.New(plex.Options{URL: cfg.PlexURL, Token: cfg.PlexToken, Mappings: cfg.PlexMappings, LibraryIDs: cfg.PlexLibraryIDs})
+	if err != nil {
+		log.Fatalf("configuration error: %v", err)
+	}
+	for _, dir := range []string{cfg.PFPDir, cfg.MediaCacheDir} {
+		if err := plexClient.ValidateWritable(dir); err != nil {
+			log.Fatalf("configuration error: %v", err)
+		}
+	}
+	mediaCatalog := catalog.New(jobStore, plexClient, cfg.MediaCacheDir)
 	hub := realtime.NewHub(realtime.Options{
 		OutputDir:      cfg.OutputDir,
+		PFPDir:         cfg.PFPDir,
 		MaxUploadBytes: cfg.MaxPFPBytes,
 	})
 	pruner := &cachePruner{jobStore: jobStore}
@@ -49,9 +63,11 @@ func main() {
 	go hub.Run(ctx)
 
 	mux := http.NewServeMux()
+	mediaCatalog.Register(mux)
+	mux.Handle("GET /static/pfp/", profileFiles(cfg.PFPDir, cfg.OutputDir))
 	mux.Handle("GET /static/", staticFiles(cfg.OutputDir))
 	mux.HandleFunc("GET /all", handleAll(jobStore))
-	mux.HandleFunc("GET /media/{id}", handleMedia(jobStore))
+	mux.HandleFunc("GET /media/{id}", mediaCatalog.Media)
 	mux.HandleFunc("POST /cache/prune", pruner.Handle)
 	mux.HandleFunc("POST /rooms", hub.HandleCreateRoom)
 	mux.HandleFunc("GET /rooms/{room}", hub.HandleGetRoom)
@@ -70,7 +86,7 @@ func main() {
 
 	errs := make(chan error, 1)
 	go func() {
-		log.Printf("sparkle backend listening on %s; output=%s", cfg.Addr, cfg.OutputDir)
+		log.Printf("sparkle backend listening on %s", cfg.Addr)
 		errs <- server.ListenAndServe()
 	}()
 
@@ -209,6 +225,8 @@ func (w *gzipResponseWriter) Write(payload []byte) (int, error) {
 func withCompression(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Upgrade") != "" ||
+			strings.Contains(r.URL.Path, "/parts/") ||
+			strings.Contains(r.URL.Path, "/artwork/") ||
 			r.Header.Get("Range") != "" ||
 			strings.HasPrefix(r.URL.Path, "/static/") ||
 			!strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
@@ -237,9 +255,9 @@ func withCORS(next http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Add("Vary", "Origin")
 		}
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, If-None-Match")
-		w.Header().Set("Access-Control-Expose-Headers", "ETag, Retry-After")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, If-None-Match, Range, If-Range")
+		w.Header().Set("Access-Control-Expose-Headers", "ETag, Retry-After, Accept-Ranges, Content-Range, Content-Length, Last-Modified")
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -250,9 +268,30 @@ func withCORS(next http.Handler) http.Handler {
 }
 
 func staticFiles(outputDir string) http.Handler {
-	files := http.StripPrefix("/static/", http.FileServer(http.Dir(outputDir)))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/") {
+		name := strings.TrimPrefix(r.URL.Path, "/static/")
+		// Job JSON and processing logs may contain private source paths. Only
+		// playback assets are public; metadata is served by the sanitized API.
+		ext := strings.ToLower(filepath.Ext(name))
+		allowed := map[string]bool{".mp4": true, ".m4a": true, ".webm": true, ".jpg": true, ".jpeg": true, ".png": true, ".webp": true, ".vtt": true, ".ass": true, ".ssa": true, ".srt": true, ".sup": true, ".ttf": true, ".otf": true, ".woff": true, ".woff2": true}
+		if !allowed[ext] || !filepath.IsLocal(name) || strings.ContainsAny(name, "\\:") {
+			http.NotFound(w, r)
+			return
+		}
+		root, err := os.OpenRoot(outputDir)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		defer root.Close()
+		f, err := root.Open(name)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		defer f.Close()
+		info, err := f.Stat()
+		if err != nil || !info.Mode().IsRegular() {
 			http.NotFound(w, r)
 			return
 		}
@@ -267,7 +306,39 @@ func staticFiles(outputDir string) http.Handler {
 		} else {
 			w.Header().Set("Cache-Control", "public, max-age=3600")
 		}
-		files.ServeHTTP(w, r)
+		http.ServeContent(w, r, filepath.Base(name), info.ModTime(), f)
+	})
+}
+
+func profileFiles(pfpDir, outputDir string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		name := strings.TrimPrefix(r.URL.Path, "/static/pfp/")
+		if name == "" || filepath.Base(name) != name || !strings.HasSuffix(name, ".png") || strings.ContainsAny(name, "/\\:") {
+			http.NotFound(w, r)
+			return
+		}
+		for _, dir := range []string{pfpDir, filepath.Join(outputDir, "pfp")} {
+			root, err := os.OpenRoot(dir)
+			if err != nil {
+				continue
+			}
+			f, err := root.Open(name)
+			_ = root.Close()
+			if err != nil {
+				continue
+			}
+			info, err := f.Stat()
+			if err != nil || !info.Mode().IsRegular() {
+				_ = f.Close()
+				continue
+			}
+			w.Header().Set("Cache-Control", "no-store")
+			w.Header().Set("Content-Type", "image/png")
+			http.ServeContent(w, r, name, info.ModTime(), f)
+			_ = f.Close()
+			return
+		}
+		http.NotFound(w, r)
 	})
 }
 

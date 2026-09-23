@@ -15,7 +15,8 @@ A fully synced web-based watch party that supports (both on desktop & mobile):
 7. Media selection with season and episode support
 8. Auto Reconnect
 9. In-background (_i.e.,_ tabbed out) notifications
-10. **Automated video transcoding, stream extraction, and metadata generation** in [backend](backend)
+10. Read-only Plex browsing and original MKV playback with client-side decoding,
+    alongside existing processed media. See [Plex setup and playback limits](docs/plex-raw-media.md).
 
 ![Main Page](assets/main.png)
 

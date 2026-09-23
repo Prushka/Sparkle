@@ -420,6 +420,7 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 				: '';
 	const mediaSubscriberRoomId =
 		state.status === 'library' ? state.roomId : state.status === 'player' ? state.data.roomId : '';
+	const mediaSubscriberMediaId = state.status === 'player' ? state.data.job.Id : '';
 
 	useEffect(() => {
 		if (!mediaSubscriberStatus || !mediaSubscriberBackendBaseUrl || !mediaSubscriberRoomId) {
@@ -430,6 +431,7 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 		let socket: WebSocket | null = null;
 		let reconnectTimer: number | null = null;
 		const status = mediaSubscriberStatus;
+		const currentMediaId = mediaSubscriberMediaId;
 		const backendBaseUrl = mediaSubscriberBackendBaseUrl;
 		const roomId = mediaSubscriberRoomId;
 		const subscriberId = `media_${randomString(14)}`;
@@ -452,7 +454,7 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 					return;
 				}
 				if (room.mediaId) {
-					if (status === 'library') {
+					if (room.mediaId !== currentMediaId) {
 						await handleRoomMediaChangedRef.current(room.mediaId, room.mediaUpdated);
 					}
 					return;
@@ -518,6 +520,7 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 		handleRoomMediaChangedRef,
 		mediaSubscriberBackendBaseUrl,
 		mediaSubscriberRoomId,
+		mediaSubscriberMediaId,
 		mediaSubscriberStatus
 	]);
 

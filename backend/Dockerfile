@@ -33,7 +33,9 @@ RUN apk --no-cache add ca-certificates tzdata
 WORKDIR /app
 ENV ADDR=:1323
 ENV OUTPUT=/data/output
-RUN mkdir -p /data/output
+ENV PFP_DIR=/data/pfp
+ENV MEDIA_CACHE_DIR=/cache/media
+RUN mkdir -p /data/output /data/pfp /cache/media
 COPY --from=build /app/main ./
 EXPOSE 1323
 CMD [ "./main" ]
