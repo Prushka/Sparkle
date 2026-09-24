@@ -47,6 +47,7 @@ import {
 	useDefaultLayoutWord
 } from '@vidstack/react/player/layouts/default';
 import {
+	IconArrowLeft,
 	IconBrandYoutubeFilled,
 	IconCheck,
 	IconChess,
@@ -8565,7 +8566,9 @@ export function Player({
 			if (id === job.Id) {
 				return;
 			}
-			if (socketConnected && roomPlayersCountRef.current === 1) {
+			// Clearing media also works before joining playback or while reconnecting.
+			// The room update broadcasts the return to Library to every participant.
+			if (!id || (socketConnected && roomPlayersCountRef.current === 1)) {
 				try {
 					const record = await updateRoomRecord(backendBaseUrl, room, id);
 					await onRoomMediaChanged?.(id, record.mediaUpdated);
@@ -9874,13 +9877,24 @@ export function Player({
 							poster={posterSrc}
 							summary={data.plot || job.Summary || ''}
 						>
-							<MediaSelection
-								ref={mediaSelectionRef}
-								data={data}
-								staticBaseUrl={staticBaseUrl}
-								backendBaseUrl={backendBaseUrl}
-								bounceToOverride={(id) => void switchRoomMedia(id)}
-							/>
+							<div className="flex flex-wrap items-center gap-2">
+								<MediaSelection
+									ref={mediaSelectionRef}
+									data={data}
+									staticBaseUrl={staticBaseUrl}
+									backendBaseUrl={backendBaseUrl}
+									bounceToOverride={(id) => void switchRoomMedia(id)}
+								/>
+								<Button
+									variant="outline"
+									size="sm"
+									className="h-auto min-h-8 max-w-full whitespace-normal"
+									onClick={() => void switchRoomMedia('')}
+								>
+									<IconArrowLeft className="size-4" aria-hidden="true" />
+									<span>Go back to library</span>
+								</Button>
+							</div>
 						</CurrentMedia>
 					</CardContent>
 				</Card>

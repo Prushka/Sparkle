@@ -10,6 +10,8 @@ library from the same Library view.
 ## Features
 
 - Shared play/pause, seeking, media changes, reconnects, profiles, chat, and notifications.
+- **Go back to library** beside **Change media** clears the room's selected media and
+  returns everyone to Library while keeping the same room ID and library filters.
 - A paged, searchable poster Library with source filters, seasons, episodes, and **Raw**
   and **Encoded** badges. Back/Forward preserves the room, hierarchy, and filters.
   Search applies to the current level; opening a show or season clears it, and going
@@ -108,6 +110,27 @@ from `backend/` requires exporting configuration yourself.
 may download pinned decoder files with SHA-256 verification. They are served
 locally during playback. Use `npm run prepare:player` to prepare them separately;
 the [player build guide](scripts/libmedia/README.md) covers changing the pinned integration.
+
+### Windows tray backend
+
+To run the backend without a terminal and start it automatically at Windows sign-in,
+stop any existing terminal-launched backend, then run from the repository root:
+
+```powershell
+.\install-backend-startup.ps1 -Start
+```
+
+The installer builds a native **Sparkle Backend** tray app and a compiled Go backend,
+then adds current-user Startup and Start Menu shortcuts. No administrator access or
+.NET SDK is needed. Go is required to build/update, but not to run the installed app.
+It uses the existing `.env`; the frontend still runs separately.
+
+Double-click the tray icon or open **Sparkle Backend** from Start to see live logs
+in a dedicated window. Closing that window hides it. Right-click the tray for
+Start, Stop, Restart, or Quit. Restarting the backend clears in-memory rooms/chat.
+Logs are bounded and stored in `.sparkle-backend/logs/sparkle.log`; a fresh tray
+session replaces the previous session's log. Sparkle-Transcoder's shortcuts remain
+separate. See [Windows launcher setup, updates, and tests](docs/windows-backend.md).
 
 ## Configuration
 
@@ -307,14 +330,15 @@ artifacts go under ignored `cache/`.
 
 ## Repository guide
 
-| Path                                           | Contents                                                              |
-| ---------------------------------------------- | --------------------------------------------------------------------- |
-| `app/`, `lib/server/`, `proxy.ts`              | Next.js App Router, SSR/share metadata, runtime API/static proxy      |
-| `components/`, `lib/player/`, `lib/suptitles/` | Library, Vidstack playback, room UI, subtitles and synchronization    |
-| `backend/cmd/api/`, `backend/internal/`        | Go API, Plex/catalog, processed-job reader and realtime room service  |
-| `scripts/`, `vendor/libmedia/`                 | Build/validation scripts, pinned patched player and decoder artifacts |
-| `tests/e2e/`, `docs/`                          | Browser tests, Plex setup and playback qualification records          |
-| `public/media/`                                | Bundled emotes, sound effects and other room assets                   |
+| Path                                                  | Contents                                                              |
+| ----------------------------------------------------- | --------------------------------------------------------------------- |
+| `app/`, `lib/server/`, `proxy.ts`                     | Next.js App Router, SSR/share metadata, runtime API/static proxy      |
+| `components/`, `lib/player/`, `lib/suptitles/`        | Library, Vidstack playback, room UI, subtitles and synchronization    |
+| `backend/cmd/api/`, `backend/internal/`               | Go API, Plex/catalog, processed-job reader and realtime room service  |
+| `windows/`, `*-backend*.ps1`, `build-windows-app.ps1` | Windows tray host, launcher/installer and native lifecycle tests      |
+| `scripts/`, `vendor/libmedia/`                        | Build/validation scripts, pinned patched player and decoder artifacts |
+| `tests/e2e/`, `docs/`                                 | Browser tests, Plex setup and playback qualification records          |
+| `public/media/`                                       | Bundled emotes, sound effects and other room assets                   |
 
 Contributor and coding-agent instructions live in [AGENTS.md](AGENTS.md).
 Keep setup and behavior documentation aligned with code; record codec/device

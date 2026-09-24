@@ -13,4 +13,6 @@ next-env.d.ts
 .idea
 /cache/
 /data/
+/bin/
+/.sparkle-backend/
 /public/vendor/libmedia/

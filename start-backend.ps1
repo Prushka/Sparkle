@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param()
+param([string]$BackendExecutable)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -78,13 +78,29 @@ foreach ($directoryKey in @('PFP_DIR', 'MEDIA_CACHE_DIR')) {
 }
 
 $goCommand = if ([string]::IsNullOrWhiteSpace($env:GO)) { 'go' } else { $env:GO }
-if (-not (Get-Command $goCommand -ErrorAction SilentlyContinue)) {
+if (-not $BackendExecutable -and -not (Get-Command $goCommand -ErrorAction SilentlyContinue)) {
     throw "Go executable '$goCommand' was not found. Install Go or set GO to its path."
 }
 
 Push-Location (Join-Path $rootDir 'backend')
 try {
-    & $goCommand run ./cmd/api
+    if ($BackendExecutable) {
+        if (-not (Test-Path -LiteralPath $BackendExecutable -PathType Leaf)) {
+            throw 'Compiled backend not found. Run build-windows-app.ps1 first.'
+        }
+        # The tray assigns this launcher to a kill-on-close job before releasing
+        # the gate. Every backend/encoder child then belongs to that same job.
+        if ($env:SPARKLE_START_EVENT) {
+            $startGate = [Threading.EventWaitHandle]::OpenExisting($env:SPARKLE_START_EVENT)
+            try {
+                if (-not $startGate.WaitOne(30000)) { throw 'Tray startup timed out.' }
+            } finally { $startGate.Dispose() }
+        }
+        [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
+        & $BackendExecutable
+    } else {
+        & $goCommand run ./cmd/api
+    }
     exit $LASTEXITCODE
 } finally {
     Pop-Location

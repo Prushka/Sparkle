@@ -20,17 +20,18 @@ files. Optional on-demand NVENC encoding serves cached derivatives of Plex media
 
 ## Where to work
 
-| Path                                                   | Responsibility                                                                           |
-| ------------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| `app/`, `proxy.ts`, `lib/server/`                      | Next routes, SSR/share metadata, runtime configuration, backend/static proxy             |
-| `components/catalog-browser.tsx`, `lib/library.ts`     | Shared paged Library/picker and normalized catalog models                                |
-| `components/player/`, `lib/player/`, `lib/suptitles/`  | Vidstack UI, raw provider, subtitles, synchronization, room features                     |
-| `backend/cmd/api/`, `backend/internal/config/`         | Go entry point, HTTP routing/middleware, environment configuration                       |
-| `backend/internal/catalog/`, `backend/internal/plex/`  | Catalog normalization, read-only Plex access, confined streaming and artwork             |
-| `backend/internal/encode/`                             | Optional shared NVENC segments, confined inputs, bounded cache and GPU concurrency       |
-| `backend/internal/jobs/`, `backend/internal/realtime/` | Existing processed jobs; room/WebSocket state, profiles, chat, games and voice signaling |
-| `scripts/libmedia/`, `vendor/libmedia/`                | Reproducible player patches, pinned binaries, manifest and notices                       |
-| `tests/e2e/`, `scripts/tests/`, `docs/`                | Browser/codec checks, setup reference and qualification evidence                         |
+| Path                                                            | Responsibility                                                                           |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `app/`, `proxy.ts`, `lib/server/`                               | Next routes, SSR/share metadata, runtime configuration, backend/static proxy             |
+| `components/catalog-browser.tsx`, `lib/library.ts`              | Shared paged Library/picker and normalized catalog models                                |
+| `components/player/`, `lib/player/`, `lib/suptitles/`           | Vidstack UI, raw provider, subtitles, synchronization, room features                     |
+| `backend/cmd/api/`, `backend/internal/config/`                  | Go entry point, HTTP routing/middleware, environment configuration                       |
+| `backend/internal/catalog/`, `backend/internal/plex/`           | Catalog normalization, read-only Plex access, confined streaming and artwork             |
+| `backend/internal/encode/`                                      | Optional shared NVENC segments, confined inputs, bounded cache and GPU concurrency       |
+| `backend/internal/jobs/`, `backend/internal/realtime/`          | Existing processed jobs; room/WebSocket state, profiles, chat, games and voice signaling |
+| `windows/`, `backend/internal/lifecycle/`, root Windows scripts | Native tray host, compiled-backend installation and graceful shutdown                    |
+| `scripts/libmedia/`, `vendor/libmedia/`                         | Reproducible player patches, pinned binaries, manifest and notices                       |
+| `tests/e2e/`, `scripts/tests/`, `docs/`                         | Browser/codec checks, setup reference and qualification evidence                         |
 
 ## Setup and verification
 
@@ -38,18 +39,21 @@ Use npm with `package-lock.json`; the Go module lives in `backend/` and requires
 Follow the [local setup](README.md#local-development) for `.env` and separate frontend/backend
 terminals. Do not overwrite an existing `.env`. Startup scripts load the root `.env` and
 resolve output/cache/profile paths relative to the repository; direct `go run` does neither.
+Windows can use the [tray backend](docs/windows-backend.md) instead of a terminal.
 
-| Command                                            | Directory / purpose                                                    |
-| -------------------------------------------------- | ---------------------------------------------------------------------- |
-| `npm ci`                                           | Root; install locked frontend dependencies                             |
-| `npm run dev`                                      | Root; webpack dev server on port 3001, prepares player assets first    |
-| `./start-backend.ps1` or `bash ./start-backend.sh` | Root; API on port 1323 by default                                      |
-| `npm run check`                                    | Root; TypeScript check for frontend changes                            |
-| `npm run test:player`                              | Root; focused subtitle parser/bitmap checks                            |
-| `npm run build`                                    | Root; production webpack/Next build and service-worker generation      |
-| `go test ./...`                                    | `backend/`; backend tests, using temporary files and mock Plex servers |
-| `go vet ./...` / `go test -race ./...`             | `backend/`; static/concurrency checks when backend behavior changes    |
-| `npm run test:e2e`                                 | Root; Playwright against an already running app                        |
+| Command                                                   | Directory / purpose                                                              |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `npm ci`                                                  | Root; install locked frontend dependencies                                       |
+| `npm run dev`                                             | Root; webpack dev server on port 3001, prepares player assets first              |
+| `./start-backend.ps1` or `bash ./start-backend.sh`        | Root; API on port 1323 by default                                                |
+| `./install-backend-startup.ps1 -Start`                    | Windows; build/install current-user login and Start Menu shortcuts, start tray   |
+| `./windows/test-tray.ps1` / `./windows/test-launcher.ps1` | Windows; isolated native UI/process tests and compiled API lifecycle integration |
+| `npm run check`                                           | Root; TypeScript check for frontend changes                                      |
+| `npm run test:player`                                     | Root; focused subtitle parser/bitmap checks                                      |
+| `npm run build`                                           | Root; production webpack/Next build and service-worker generation                |
+| `go test ./...`                                           | `backend/`; backend tests, using temporary files and mock Plex servers           |
+| `go vet ./...` / `go test -race ./...`                    | `backend/`; static/concurrency checks when backend behavior changes              |
+| `npm run test:e2e`                                        | Root; Playwright against an already running app                                  |
 
 - Start with focused checks, then run the relevant checks above. Add regression coverage
   for changed contracts and bug fixes; documentation-only edits need link/command review,
@@ -131,6 +135,14 @@ resolve output/cache/profile paths relative to the repository; direct `go run` d
   result together. Do not hand-edit bundles or format hash-pinned artifacts. Preserve licenses.
 - Keep `.env`, `cache/`, `data/`, media files, and generated `public/vendor/libmedia/` out of
   commits. The checked-in `vendor/libmedia/` binaries and manifest are intentional.
+- Keep Windows binaries under ignored `bin/windows/` and logs under ignored
+  `.sparkle-backend/`. The tray owns its process tree through a kill-on-close Job Object;
+  release the startup gate only after assignment. Stop/Restart/Quit use a private event
+  for graceful Go shutdown before bounded forced cleanup. Closing logs only hides the
+  window. Preserve single-instance activation, bounded UTF-8 logs, and terminal-free
+  children. Shortcut names and instance IDs must stay distinct from Sparkle-Transcoder.
+  Run both Windows test scripts for launcher changes; they use disposable cache fixtures
+  and must never inherit real Plex credentials or stop the developer's backend.
 - Edit `scripts/generate-sw.mjs`, not generated `public/sw.js`. Regenerate Wordle dictionaries
   with `npm run generate:wordle-dictionary`, not manual edits to generated word lists.
 - Preserve the managed Next.js block below. `CLAUDE.md` already imports `@AGENTS.md`; keep

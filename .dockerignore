@@ -19,6 +19,9 @@ backend
 node_modules
 cache
 data
+bin
+.sparkle-backend
+windows
 output
 tsconfig.tsbuildinfo
 next-env.d.ts

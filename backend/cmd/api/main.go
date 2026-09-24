@@ -5,6 +5,7 @@ import (
 	"Sparkle/internal/config"
 	"Sparkle/internal/encode"
 	"Sparkle/internal/jobs"
+	"Sparkle/internal/lifecycle"
 	"Sparkle/internal/plex"
 	"Sparkle/internal/realtime"
 	"compress/gzip"
@@ -60,6 +61,9 @@ func main() {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if err := lifecycle.WatchShutdown(ctx, stop); err != nil {
+		log.Fatal("could not connect to Windows launcher shutdown event")
+	}
 	encoder, err := encode.New(ctx, plexClient, encode.Options{Enabled: cfg.EncodeEnabled, FFmpeg: cfg.FFmpeg, FFprobe: cfg.FFprobe, Dir: filepath.Join(cfg.MediaCacheDir, "encoded"), MaxBytes: cfg.EncodeCacheBytes, TTL: cfg.EncodeCacheTTL, Concurrency: int(cfg.EncodeConcurrency), Profile: encode.Profile{Quality: int(cfg.EncodeQuality), Preset: cfg.EncodePreset, AudioKbps: int(cfg.EncodeAudioKbps)}})
 	if err != nil {
 		log.Fatalf("encoder configuration error: %v", err)
@@ -112,6 +116,7 @@ func main() {
 		log.Printf("server shutdown error: %v", err)
 	}
 	hub.Close()
+	log.Print("sparkle backend stopped")
 }
 
 func (p *cachePruner) Handle(w http.ResponseWriter, _ *http.Request) {

@@ -59,6 +59,11 @@ test('room controls and current media fit desktop and mobile after the component
 		.toBeGreaterThan(0);
 	for (const width of [1280, 390, 320]) {
 		await page.setViewportSize({ width, height: 844 });
+		const returnButton = media.getByRole('button', { name: 'Go back to library', exact: true });
+		await expect(returnButton).toBeVisible();
+		const returnBounds = await returnButton.boundingBox();
+		expect(returnBounds!.x).toBeGreaterThanOrEqual(0);
+		expect(returnBounds!.x + returnBounds!.width).toBeLessThanOrEqual(width);
 		await expect
 			.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
 			.toBeTruthy();
