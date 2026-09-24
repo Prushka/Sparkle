@@ -106,7 +106,7 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
 - Server encodes share cache keys by source fingerprint, codec, profile and time segment,
   never by participant. Preserve cancellation, GPU limits, byte/count cache bounds, original
   read-only handles and timestamp continuity. Use NVENC exclusively for AV1/HEVC video
-  encoding, with fast p3 by default and the documented Sparkle-Transcoder CQ settings.
+  encoding, with fast p3 and CQ 24 by default, using the documented NVENC rate-control mapping.
   CPU source decoding must never substitute a software video encoder.
   Prefer one native clock for encoded video/Opus audio. Keep subtitle menu roots
   mounted during provider changes; Vidstack hides sibling menus when opening a submenu.

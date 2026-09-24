@@ -30,7 +30,7 @@ Windows, add these backend settings to the existing `.env`, adapting tool paths:
 ENCODE_ENABLED=true
 FFMPEG=C:/tools/ffmpeg/bin/ffmpeg.exe
 FFPROBE=C:/tools/ffmpeg/bin/ffprobe.exe
-ENCODE_QUALITY=22
+ENCODE_QUALITY=24
 ENCODE_PRESET=p3
 ENCODE_AUDIO_KBPS=144
 ENCODE_CONCURRENCY=2
@@ -59,17 +59,18 @@ is separate from a successful image build.
 
 ## Encoder profile and HDR
 
-The defaults match Sparkle-Transcoder's current quality **22**, **10-bit**, variable
-frame rate, source dimensions/color range, and **144 kbps stereo Opus** for all audio
-tracks. Both video outputs exclusively use **NVENC** (`av1_nvenc` / `hevc_nvenc`)
-with **p3 (fast)** by default. This speed choice overrides the reference
-Transcoder's slower presets. There is no software video encoding fallback: an
+The defaults use constant quality **24**, **10-bit**, variable frame rate, source
+dimensions/color range, and **144 kbps stereo Opus** for all audio tracks. Both video
+outputs exclusively use **NVENC** (`av1_nvenc` / `hevc_nvenc`) with **p3 (fast)** by
+default. Quality and speed override the reference Sparkle-Transcoder's quality 22
+and slower presets. There is no software video encoding fallback: an
 unavailable NVIDIA encoder makes that encoded mode unavailable. Source decoding
 may use the CPU when NVDEC cannot decode a source; output video is still encoded
 on the GPU. Audio continues to use stereo Opus.
 
 NVENC uses VBR constant quality with target bitrate zero and initial I/P/B
-quantizers 20/22/24. Streaming adds closed two-second keyframe intervals. These
+quantizers CQ-2/CQ/CQ+2 (22/24/26 by default). Streaming adds closed two-second
+keyframe intervals. These
 settings follow [HandBrake's NVENC mapping](https://github.com/HandBrake/HandBrake/blob/master/libhb/encavcodec.c).
 No resolution or frame-rate reduction is imposed. Audio is downmixed to stereo;
 Atmos/DTS:X bitstream passthrough is not provided.
