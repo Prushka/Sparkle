@@ -55,6 +55,7 @@ export interface RawPlaybackStatus {
 	hdrPreference?: HDRPreference;
 	encodedCodec?: EncodedCodec;
 	encodedAvailable?: EncodedCodec[];
+	bitrate?: { video?: number; audio?: number };
 	renderer?: 'native' | 'software';
 	reason?: string;
 	audioTracks: { id: number; title: string }[];

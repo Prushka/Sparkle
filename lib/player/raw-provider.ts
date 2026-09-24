@@ -15,6 +15,7 @@ import {
 	readHDRPreference,
 	saveHDRPreference,
 	slowNetwork,
+	supportsNativeVideo,
 	type EncodedPart
 } from './raw-encoded';
 import { EncodedSubtitles } from './encoded-subtitles';
@@ -57,7 +58,8 @@ interface Engine {
 	setBaseHDROnly(value: boolean): void;
 	setHDRPlayback(path: 'native' | 'software', mime: string, dolbyVision?: boolean): void;
 	setSubtitleLayers(layers: { id: number; sink: RawSubtitles['sink'] }[]): Promise<void>;
-	selectAudio(id: number): Promise<void>;
+	selectAudio(id: number, smooth?: boolean, embedded?: boolean): Promise<void>;
+	getPlaybackBitrate(): Promise<{ video?: number; audio?: number }>;
 	selectSubtitle(id: number): Promise<void>;
 	setSubtitleEnable(value: boolean): void;
 	setVolume(value: number): void;
@@ -156,6 +158,9 @@ export class RawProvider implements MediaProviderAdapter {
 	private buffering = false;
 	private lastProgress = performance.now();
 	private lastTime = -1;
+	private bitratePending = false;
+	private lastBitrateSample = 0;
+	private bitrateEpoch = 0;
 	status: RawPlaybackStatus = {
 		ready: false,
 		changing: true,
@@ -200,6 +205,11 @@ export class RawProvider implements MediaProviderAdapter {
 	}) as MediaContext['notify'];
 	private publish(values: Partial<RawPlaybackStatus>) {
 		if (this.destroyed) return;
+		if (values.changing) {
+			this.bitrateEpoch++;
+			this.lastBitrateSample = 0;
+			values.bitrate = undefined;
+		}
 		this.status = { ...this.status, ...values };
 		this.ctx.$state.canPictureInPicture.set(this.pictureInPicture.supported);
 		this.ctx.player.el?.dispatchEvent(new CustomEvent(RAW_STATUS_EVENT, { detail: this.status }));
@@ -289,6 +299,7 @@ export class RawProvider implements MediaProviderAdapter {
 			ready: false,
 			changing: true,
 			encodedCodec: undefined,
+			bitrate: undefined,
 			renderer: undefined,
 			reason: undefined,
 			audio: undefined,
@@ -378,7 +389,12 @@ export class RawProvider implements MediaProviderAdapter {
 			ioLoaderOptions: { retryCount: 2, preload: 4 * 1024 * 1024 }
 		};
 		await engine.load(
-			this.encoded ? encodedURL(this.encoded, 'video.m3u8') : `${this.baseURL}${part.url}`,
+			this.encoded
+				? encodedURL(
+						this.encoded,
+						this.encoded.playlist === 'master.m3u8' ? 'master.m3u8' : 'video.m3u8'
+					)
+				: `${this.baseURL}${part.url}`,
 			options
 		);
 		if (!active()) return;
@@ -435,9 +451,14 @@ export class RawProvider implements MediaProviderAdapter {
 			engine.setHDRPlayback('native', engine.getVideoMimeType());
 		}
 		this.subtitles.setFonts(engine.getEmbeddedFonts());
-		// Keep HDR video on native MSE while embedded audio decodes client-side.
+		// Encoded Opus and video share one native media clock when supported.
+		// Original unsupported audio still uses the independent WASM decoder.
+		const combinedAudio =
+			this.encoded?.playlist === 'master.m3u8' &&
+			(plan?.renderer === 'software' || supportsNativeVideo('audio/mp4; codecs="opus"'));
 		if (
 			(this.encoded || plan?.renderer === 'native') &&
+			!combinedAudio &&
 			part.streams.some((s) => s.streamType === 2)
 		) {
 			this.audioEngine = new Constructor({
@@ -503,7 +524,7 @@ export class RawProvider implements MediaProviderAdapter {
 			const subtitlePreference = localStorage.getItem('sparkle.raw.subtitle');
 			const audio = this.status.audioTracks.find((t) => t.title === audioPreference);
 			const subtitle = this.status.subtitleTracks.find((t) => t.title === subtitlePreference);
-			if (audio) await (this.audioEngine ?? engine).selectAudio(audio.id);
+			if (audio) await (this.audioEngine ?? engine).selectAudio(audio.id, false, !!this.encoded);
 			if (subtitle && !this.encoded) await engine.selectSubtitle(subtitle.id);
 			engine.setSubtitleEnable(subtitlePreference !== 'off');
 			this.publish({
@@ -657,7 +678,8 @@ export class RawProvider implements MediaProviderAdapter {
 				time = this.timeline;
 			await this.engine.pause();
 			await this.audioEngine?.pause();
-			if (kind === 'audio') await (this.audioEngine ?? this.engine).selectAudio(id);
+			if (kind === 'audio')
+				await (this.audioEngine ?? this.engine).selectAudio(id, false, !!this.encoded);
 			else {
 				await this.applySubtitleLayers([]);
 				localStorage.setItem('sparkle.raw.subtitleLayers', '[]');
@@ -834,6 +856,35 @@ export class RawProvider implements MediaProviderAdapter {
 		)
 			return;
 		const time = this.timeline;
+		if (
+			!this.paused &&
+			!this.buffering &&
+			!this.bitratePending &&
+			performance.now() - this.lastBitrateSample >= 1000
+		) {
+			const engine = this.engine,
+				audio = this.audioEngine,
+				epoch = this.bitrateEpoch;
+			this.bitratePending = true;
+			this.lastBitrateSample = performance.now();
+			void Promise.all([engine.getPlaybackBitrate(), audio?.getPlaybackBitrate()])
+				.then(([videoStats, audioStats]) => {
+					if (
+						engine !== this.engine ||
+						audio !== this.audioEngine ||
+						epoch !== this.bitrateEpoch ||
+						this.status.changing
+					)
+						return;
+					this.publish({
+						bitrate: { video: videoStats.video, audio: audioStats?.audio ?? videoStats.audio }
+					});
+				})
+				.catch(() => {})
+				.finally(() => {
+					this.bitratePending = false;
+				});
+		}
 		if (!this.paused) {
 			if (time !== this.lastTime) {
 				this.lastProgress = performance.now();

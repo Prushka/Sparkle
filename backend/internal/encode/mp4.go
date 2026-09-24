@@ -64,6 +64,63 @@ func version(f io.ReaderAt, b box) byte {
 	return v[0]
 }
 
+// The encoder lead-in is already removed before muxing. Reapplying dOps
+// pre-skip at native decoder startup/seek would discard real program samples.
+// This edits only our generated Opus cache file, never the original media.
+func clearOpusPreSkip(name string) error {
+	f, err := os.OpenFile(name, os.O_RDWR, 0)
+	if err != nil {
+		return errEncode
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return errEncode
+	}
+	moov, err := child(f, box{header: 0, size: info.Size()}, "moov")
+	if err != nil {
+		return err
+	}
+	tracks, err := boxes(f, moov.start+moov.header, moov.start+moov.size)
+	if err != nil {
+		return err
+	}
+	count := 0
+	for _, track := range tracks {
+		if track.kind != "trak" {
+			continue
+		}
+		entry := track
+		for _, kind := range []string{"mdia", "minf", "stbl", "stsd"} {
+			entry, err = child(f, entry, kind)
+			if err != nil {
+				return err
+			}
+		}
+		samples, err := boxes(f, entry.start+entry.header+8, entry.start+entry.size)
+		if err != nil {
+			return err
+		}
+		for _, sample := range samples {
+			if sample.kind != "Opus" {
+				return errEncode
+			}
+			dops, err := child(f, box{start: sample.start, header: sample.header + 28, size: sample.size}, "dOps")
+			if err != nil || dops.size < dops.header+11 {
+				return errEncode
+			}
+			if _, err = f.WriteAt([]byte{0, 0}, dops.start+dops.header+2); err != nil {
+				return errEncode
+			}
+			count++
+		}
+	}
+	if count == 0 {
+		return errEncode
+	}
+	return nil
+}
+
 // Independent NVENC invocations start their fragments at zero. Shift decode
 // times onto one HLS timeline without touching codec payloads or HDR boxes.
 func shiftFragments(name string, start float64) (int64, error) {

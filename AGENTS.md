@@ -95,8 +95,13 @@ resolve output/cache/profile paths relative to the repository; direct `go run` d
   inside Vidstack settings. Audio/subtitle preferences are local; version changes are shared.
 - Server encodes share cache keys by source fingerprint, codec, profile and time segment,
   never by participant. Preserve cancellation, GPU limits, byte/count cache bounds, original
-  read-only handles and timestamp continuity. Match the documented Sparkle-Transcoder CQ
-  profile. Keep encoded output labeled HDR10/HLG/SDR; do not claim preserved dynamic HDR.
+  read-only handles and timestamp continuity. Use NVENC exclusively for AV1/HEVC video
+  encoding, with fast p3 by default and the documented Sparkle-Transcoder CQ settings.
+  CPU source decoding must never substitute a software video encoder.
+  Prefer one native clock for encoded video/Opus audio. Keep subtitle menu roots
+  mounted during provider changes; Vidstack hides sibling menus when opening a submenu.
+  Bitrate means bounded compressed packet bytes over media time, not network throughput.
+  Keep encoded output labeled HDR10/HLG/SDR; do not claim preserved dynamic HDR.
   NVENC tests need a GPU; CI exercises the scheduling/cache contracts with temporary fixtures.
 - Room time is seconds; libmedia time is milliseconds. Preserve serialized provider commands,
   media-generation checks, stale-message rejection, and remote-event suppression through

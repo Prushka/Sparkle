@@ -43,7 +43,7 @@ func TestEncodingRequiresAllowedPlexSectionAndHidesPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := testCache(t)
-	s := &Service{plex: p, cache: c, codecs: []string{"av1"}, sources: map[string]*source{}, probes: make(chan struct{}, 2), options: Options{Profile: Profile{22, "p7", 144}}}
+	s := &Service{plex: p, cache: c, codecs: []string{"av1"}, sources: map[string]*source{}, probes: make(chan struct{}, 2), options: Options{Profile: Profile{22, "p3", 144}}}
 	id, err := p.ID(context.Background(), "1", 10)
 	if err != nil {
 		t.Fatal(err)
@@ -69,7 +69,18 @@ func TestEncodingRequiresAllowedPlexSectionAndHidesPaths(t *testing.T) {
 	if !strings.Contains(allowed.Body.String(), `"hasFonts":true`) || strings.Contains(allowed.Body.String(), `"fonts":`) {
 		t.Fatal("manifest must announce fonts without downloading attachments")
 	}
-	fontURL := "/media/" + id + "/parts/20/encoded/av1/fonts.json?v=" + fingerprint
+	encodedFingerprint := s.fingerprint(s.sources[fingerprint])
+	for _, audio := range []bool{false, true} {
+		if audio {
+			s.sources[fingerprint].probe.Streams = append(s.sources[fingerprint].probe.Streams, Stream{Type: "audio", Codec: "opus"})
+		}
+		master := httptest.NewRecorder()
+		mux.ServeHTTP(master, httptest.NewRequest("GET", "/media/"+id+"/parts/20/encoded/av1/master.m3u8?v="+encodedFingerprint, nil))
+		if master.Code != 200 || !strings.Contains(master.Body.String(), "video.m3u8?v="+encodedFingerprint) || strings.Contains(master.Body.String(), "audio.m3u8") != audio {
+			t.Fatalf("invalid combined playlist: %d %s", master.Code, master.Body)
+		}
+	}
+	fontURL := "/media/" + id + "/parts/20/encoded/av1/fonts.json?v=" + encodedFingerprint
 	fonts := httptest.NewRecorder()
 	mux.ServeHTTP(fonts, httptest.NewRequest("GET", fontURL, nil))
 	if fonts.Code != 200 || strings.TrimSpace(fonts.Body.String()) != `["Zm9udA=="]` {
@@ -95,5 +106,14 @@ func TestEncodingRequiresAllowedPlexSectionAndHidesPaths(t *testing.T) {
 	}
 	if len(requests) > 5 {
 		t.Fatalf("unbounded metadata work: %v", requests)
+	}
+	s.options.Profile.Preset = "p4"
+	if s.fingerprint(s.sources[fingerprint]) == encodedFingerprint {
+		t.Fatal("encoder settings reused immutable browser URLs")
+	}
+	changed := httptest.NewRecorder()
+	mux.ServeHTTP(changed, httptest.NewRequest("GET", fontURL, nil))
+	if changed.Code != http.StatusConflict {
+		t.Fatal("stale profile fingerprint accepted")
 	}
 }

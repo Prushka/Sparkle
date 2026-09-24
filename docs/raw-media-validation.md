@@ -52,9 +52,15 @@ created. Test evidence and build artifacts are under ignored `cache/`.
 ## Optional server encoding
 
 NVENC validation on September 23, 2026 used Windows, an RTX 5090, driver 616.92,
-and FFmpeg `2026-05-28-git-7b46c6a2a3` with the documented CQ 22 / p7 / 10-bit /
+and FFmpeg `2026-05-28-git-7b46c6a2a3` with the original CQ 22 / p7 / 10-bit /
 144 kbps stereo Opus profile. Test services and generated segments used an isolated
 cache; the existing running backend and its rooms were not replaced during testing.
+
+The current **p3 (fast)** default separately passed three-second GPU conversions
+with both AV1 and HEVC on SDR and Dolby Vision Profile 5, 8.1 and 8.4 reference
+clips. Output retained the expected SDR/PQ/HLG signaling. Backend tests verify
+that a software source-decoder retry still uses the selected NVENC video encoder.
+The broader browser checks and timing measurements below used p7.
 
 - AV1 and HEVC output passed 10-bit/color/timestamp probes for 4K PQ and HLG,
   the approximately 74 GB Profile 7/HDR10+ source with TrueHD and PGS, H.264 with
@@ -78,7 +84,8 @@ cache; the existing running backend and its rooms were not replaced during testi
   confined handles, validators and font separation. Go race/vet checks pass.
 - Fresh six-second 4K Profile 7 segments at 120 seconds took approximately 2.6 seconds
   for AV1 and 3.7 seconds for HEVC; the High 10 SDR sample took 1.1–1.4 seconds.
-  These are local segment measurements, not a guarantee for every GPU or source.
+  These p7 measurements are not benchmarks of the current fast p3 default, nor
+  a guarantee for every GPU or source.
   Constant-quality output can still exceed a very slow connection's bandwidth.
 
 No physical display or dynamic-HDR qualification is implied by these checks.
@@ -86,6 +93,28 @@ Server encodes deliberately produce compatible HDR10, HLG or SDR, and do not
 preserve full Dolby Vision/HDR10+. NVIDIA Docker runtime validation remains pending
 on a host with Docker and the NVIDIA Container Toolkit. Safari, Firefox and mobile
 hardware encoding playback have not been qualified by this record.
+
+The audio-continuity update was additionally tested with **CQ 22 / p3** on the
+same Windows/NVIDIA setup:
+
+- Both encoders produced five contiguous six-second fragments from a deterministic
+  two-track tone fixture. All Opus packets had 20 ms duration and contiguous PTS.
+  Chrome PCM sampling crossed four boundaries without a dropout; changing tracks
+  changed decoded output from 440 Hz to 880 Hz. Video and Opus used one native clock.
+- The reported anime episode (Opus/E-AC-3 with embedded captions) passed AV1 and
+  HEVC playback across five boundaries. All five HDR output choices reported measured
+  bitrate, and changing modes with Video Settings open kept Subtitles separate.
+  Mobile menu/readout bounds and ASS font loading passed at 390×844.
+- The 4K AV1/PQ sample passed both encoded modes, pause/resume and a seek to
+  108 seconds. Decoded frames retained limited-range BT.2020/PQ signaling.
+- The H.264/TrueHD fixture passed two-client AV1 synchronization, delayed join,
+  reconnect, local track changes, encoded/original switching, PiP and rapid
+  processed/raw transitions. A pending native packet-read teardown error found by
+  this test was fixed in the reproducible player patch.
+
+These are bounded playback regressions, not an hours-long listening test or
+physical audio/video timing certification. Reproduction includes the deterministic
+PCM check in the [server encoding guide](server-encoding.md#validation).
 
 See [server encoding](server-encoding.md) for opt-in configuration and reproduction.
 

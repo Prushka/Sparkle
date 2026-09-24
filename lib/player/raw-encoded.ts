@@ -22,6 +22,7 @@ export function saveHDRPreference(value: HDRPreference) {
 export interface EncodedPart {
 	base: string;
 	fingerprint: string;
+	playlist?: 'master.m3u8';
 	codec: EncodedCodec;
 	output: 'SDR' | 'HDR10' | 'HLG';
 	duration: number;

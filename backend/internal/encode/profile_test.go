@@ -8,17 +8,32 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
 
-func TestEncoderMatchesReferenceAndSeparatesOutputs(t *testing.T) {
-	p := Probe{Streams: []Stream{{Type: "video", Transfer: "smpte2084"}, {Type: "audio", Codec: "truehd"}, {Type: "subtitle", Codec: "hdmv_pgs_subtitle"}, {Type: "subtitle", Codec: "mov_text"}}}
-	args := strings.Join(encodeArgs("http://127.0.0.1/input", t.TempDir(), "hevc", 4, 100, Profile{22, "p7", 144}, p), " ")
-	for _, want := range []string{"-ss 24.000000", "-t 6.000000", "-c:v hevc_nvenc", "-preset p7", "-rc vbr -cq 22 -b:v 0", "-init_qpP 22 -init_qpI 20 -init_qpB 24", "-pix_fmt p010le", "-c:a libopus -b:a 144k -ac 2", "type=DOVI_METADATA", "type=DYNAMIC_HDR_PLUS"} {
-		if !strings.Contains(args, want) {
-			t.Errorf("missing %s", want)
-		}
+func TestEncoderUsesFastNVENCWithReferenceQualityOnEveryAttempt(t *testing.T) {
+	p := Probe{Streams: []Stream{{Type: "video", Codec: "av1", Transfer: "smpte2084"}, {Type: "audio", Codec: "truehd"}, {Type: "subtitle", Codec: "hdmv_pgs_subtitle"}, {Type: "subtitle", Codec: "mov_text"}}}
+	for _, codec := range []string{"av1", "hevc"} {
+		t.Run(codec, func(t *testing.T) {
+			args := encodeArgs("http://127.0.0.1:1234/input", t.TempDir(), codec, 4, 100, Profile{22, "p3", 144}, p)
+			retry := softwareDecodeInput(args)
+			if !slices.Equal(args[slices.Index(args, "-i"):], retry[slices.Index(retry, "-i"):]) {
+				t.Fatal("decoder fallback changed output encoding")
+			}
+			if slices.Contains(retry, "-hwaccel") || slices.Contains(retry, "av1") {
+				t.Fatal("decoder fallback retained hardware-specific input options")
+			}
+			for _, attempt := range [][]string{args, retry} {
+				command := strings.Join(attempt, " ")
+				for _, want := range []string{"-ss 23.926500", "-ss 0.073500", "-t 6.000000", "-t 6.073500", "noise=drop='lt(n,4)+gte(n,304)'", "-c:v " + codec + "_nvenc", "-preset p3", "-rc vbr -cq 22 -b:v 0", "-init_qpP 22 -init_qpI 20 -init_qpB 24", "-pix_fmt p010le", "-c:a libopus -b:a 144k -ac 2", "type=DOVI_METADATA", "type=DYNAMIC_HDR_PLUS"} {
+					if !strings.Contains(command, want) {
+						t.Errorf("missing %s", want)
+					}
+				}
+			}
+		})
 	}
 	if p.output() != "HDR10" {
 		t.Fatal("incorrect HDR labeling")
@@ -129,5 +144,44 @@ func TestFragmentTimelineShiftPreservesPayload(t *testing.T) {
 	}
 	if !bytes.HasSuffix(result, []byte("unchanged HDR payload")) {
 		t.Fatal("modified video payload")
+	}
+}
+
+func TestWarmedOpusHasNoRepeatedPreSkip(t *testing.T) {
+	dops := []byte{0, 2, 1, 56, 0, 0, 187, 128, 0, 0, 0}
+	entry := mp4box("Opus", make([]byte, 28), mp4box("dOps", dops))
+	stsd := mp4box("stsd", []byte{0, 0, 0, 0, 0, 0, 0, 1}, entry)
+	data := mp4box("moov", mp4box("trak", mp4box("mdia", mp4box("minf", mp4box("stbl", stsd)))))
+	name := filepath.Join(t.TempDir(), "audio.mp4")
+	if err := os.WriteFile(name, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := clearOpusPreSkip(name); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(name)
+	expected := bytes.Clone(data)
+	at := bytes.Index(expected, []byte("dOps")) + 6
+	expected[at], expected[at+1] = 0, 0
+	if !bytes.Equal(got, expected) {
+		t.Fatal("modified data outside Opus pre-skip")
+	}
+	if err := os.WriteFile(name, data[:len(data)-1], 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := clearOpusPreSkip(name); err == nil {
+		t.Fatal("accepted truncated Opus initialization")
+	}
+}
+
+func TestAudioLeadInAndFinalPartialSegment(t *testing.T) {
+	source := Probe{Streams: []Stream{{Type: "video"}, {Type: "audio"}}}
+	first := strings.Join(encodeArgs("fixture", t.TempDir(), "av1", 0, 6.45, Profile{22, "p3", 144}, source), " ")
+	if !strings.Contains(first, "-ss 0.000000 -i") || !strings.Contains(first, "adelay=3528S:all=1") {
+		t.Fatal("missing first-segment lead-in")
+	}
+	last := strings.Join(encodeArgs("fixture", t.TempDir(), "hevc", 1, 6.45, Profile{22, "p3", 144}, source), " ")
+	if !strings.Contains(last, "-t 0.523500") || !strings.Contains(last, "gte(n,27)") || strings.Contains(last, "adelay") {
+		t.Fatal("incorrect final-segment Opus packet window")
 	}
 }

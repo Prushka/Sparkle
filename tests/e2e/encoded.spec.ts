@@ -2,6 +2,151 @@ import { expect, test } from '@playwright/test';
 
 const backend = process.env.SPARKLE_TEST_BACKEND_URL || '/be';
 const fixture = process.env.SPARKLE_ENCODE_TEST_ID;
+
+test('every HDR output mode reports measured bitrate and keeps mobile menus separate', async ({
+	page,
+	request
+}) => {
+	test.skip(!fixture, 'Set SPARKLE_ENCODE_TEST_ID to a mapped media fixture; requires NVENC');
+	test.setTimeout(180_000);
+	const room = `bitrate-modes-${Date.now()}`;
+	await request.post(`${backend}/rooms`, { data: { roomId: room, mediaId: fixture } });
+	await page.addInitScript(() => {
+		localStorage.setItem('sparkle.raw.hdr', 'compatible');
+		document.addEventListener(
+			'provider-setup',
+			(event) => {
+				(window as any).testProvider = (event as CustomEvent).detail;
+			},
+			true
+		);
+	});
+	await page.goto(`/${room}/media/${fixture}`);
+	await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+	const player = page.locator('[data-media-player]');
+	await expect(player).toHaveAttribute('data-raw-ready', 'true', { timeout: 60_000 });
+	await page.setViewportSize({ width: 390, height: 844 });
+	await player.hover();
+	await page.getByRole('button', { name: 'Settings', exact: true }).click();
+	await page.getByRole('menuitem', { name: /^Video Settings/ }).click();
+	for (const [mode, label] of [
+		['compatible', 'Compatible'],
+		['sdr', 'Tone mapping'],
+		['auto', 'Automatic'],
+		['av1', 'Encoded AV1'],
+		['hevc', 'Encoded HEVC']
+	]) {
+		await page.getByRole('menuitemradio', { name: label, exact: true }).click();
+		await expect
+			.poll(() => page.evaluate(() => (window as any).testProvider.status.hdrPreference))
+			.toBe(mode);
+		await expect
+			.poll(() => page.evaluate(() => (window as any).testProvider.status.bitrate?.video ?? 0), {
+				timeout: 30000
+			})
+			.toBeGreaterThan(10_000);
+		const reading = page.locator('[data-raw-bitrate]');
+		await reading.scrollIntoViewIfNeeded();
+		await expect(reading).toHaveText(/^\d.*[Mk]bps$/);
+		const bounds = (await reading.boundingBox())!;
+		expect(bounds.x).toBeGreaterThanOrEqual(0);
+		expect(bounds.x + bounds.width).toBeLessThanOrEqual(391);
+		await expect(page.getByRole('menuitem', { name: /^Subtitles/ })).toHaveCount(0);
+	}
+});
+
+for (const codec of ['av1', 'hevc']) {
+	test(`encoded ${codec} keeps one audio clock, live bitrate and stable open submenus`, async ({
+		page,
+		request
+	}) => {
+		test.skip(
+			!fixture,
+			'Set SPARKLE_ENCODE_TEST_ID to a fixture with audio and subtitles; requires NVENC'
+		);
+		test.setTimeout(180_000);
+		const room = `encoded-audio-${codec}-${Date.now()}`;
+		await request.post(`${backend}/rooms`, { data: { roomId: room, mediaId: fixture } });
+		await page.addInitScript((mode) => {
+			localStorage.setItem('sparkle.raw.hdr', mode);
+			document.addEventListener(
+				'provider-setup',
+				(event) => {
+					(window as any).testProvider = (event as CustomEvent).detail;
+				},
+				true
+			);
+		}, codec);
+		const errors: string[] = [];
+		page.on('pageerror', (e) => errors.push(e.message));
+		await page.goto(`/${room}/media/${fixture}`);
+		await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+		const player = page.locator('[data-media-player]');
+		const video = page.locator('.sparkle-raw-surface video');
+		await expect
+			.poll(() => video.evaluate((v) => (v as HTMLVideoElement).currentTime), { timeout: 60_000 })
+			.toBeGreaterThan(3);
+		const clocks = await page.evaluate(() => {
+			const p = (window as any).testProvider;
+			return {
+				separateAudio: !!p.audioEngine,
+				native: p.engine.isMSE(),
+				audio: p.engine.getSelectedAudioStreamId()
+			};
+		});
+		expect(clocks.separateAudio).toBe(false);
+		expect(clocks.native).toBe(true);
+		expect(clocks.audio).toBeGreaterThanOrEqual(0);
+		await video.evaluate((v) => {
+			(v as any).testWaits = 0;
+			v.addEventListener('waiting', () => (v as any).testWaits++);
+		});
+		// Cross at least five six-second fragment boundaries with no audio-only
+		// rate adjustments or recovery seeks competing with the native clock.
+		await expect
+			.poll(() => video.evaluate((v) => (v as HTMLVideoElement).currentTime), { timeout: 55_000 })
+			.toBeGreaterThan(33);
+		expect(await video.evaluate((v) => (v as any).testWaits)).toBe(0);
+		await player.hover();
+		await page.getByRole('button', { name: 'Settings', exact: true }).click();
+		await page.getByRole('menuitem', { name: /^Video Settings/ }).click();
+		await expect(page.locator('[data-raw-bitrate]')).toHaveText(/^\d.*[Mk]bps$/, { timeout: 8000 });
+		const bitrate = await page.evaluate(() => (window as any).testProvider.status.bitrate);
+		expect(bitrate.video).toBeGreaterThan(10_000);
+		expect(bitrate.audio).toBeGreaterThan(1_000);
+		expect(bitrate.audio).toBeLessThan(1_000_000);
+		const audio = await page.evaluate(() => (window as any).testProvider.status.audioTracks);
+		if (audio.length > 1) {
+			await page.getByRole('menuitemradio', { name: audio[1].title, exact: true }).click();
+			await expect
+				.poll(() =>
+					page.evaluate(() => (window as any).testProvider.engine.getSelectedAudioStreamId())
+				)
+				.toBe(audio[1].id);
+			await expect(player).not.toHaveAttribute('data-paused', '');
+		}
+		const subtitleRoot = page.locator('.vds-subtitles-settings-menu');
+		const identity = await subtitleRoot.getAttribute('aria-hidden');
+		expect(identity).toBe('true');
+		await subtitleRoot.evaluate((el) => el.setAttribute('data-test-stable', 'yes'));
+		const other = codec === 'av1' ? 'hevc' : 'av1';
+		await page
+			.getByRole('menuitemradio', { name: `Encoded ${other.toUpperCase()}`, exact: true })
+			.click();
+		await expect(player).toHaveAttribute('data-raw-encoding', other, { timeout: 45_000 });
+		await expect(player).toHaveAttribute('data-raw-ready', 'true', { timeout: 45_000 });
+		await expect(subtitleRoot).toHaveAttribute('data-test-stable', 'yes');
+		await expect(subtitleRoot).toHaveAttribute('aria-hidden', 'true');
+		await expect(page.getByRole('menuitem', { name: /^Subtitles/ })).toHaveCount(0);
+		await expect(page.locator('[data-raw-bitrate]')).toHaveText(/^\d.*[Mk]bps$/, {
+			timeout: 12_000
+		});
+		await page.getByRole('menuitem', { name: /^Video Settings/ }).click();
+		await page.getByRole('menuitem', { name: /^Subtitles/ }).click();
+		await expect(page.getByText('Primary subtitles', { exact: true })).toBeVisible();
+		expect(errors).toEqual([]);
+	});
+}
 test('automatic chooses a shared encode on a slow connection without changing the saved preference', async ({
 	page,
 	request

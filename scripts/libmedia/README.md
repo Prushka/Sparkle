@@ -90,11 +90,18 @@ the pinned Emscripten compiler and `-Icache/FFmpeg -sWASM_ASYNC_COMPILATION=0`,
 then run the generated JavaScript with Node. The wasm32 record sizes are
 12 / 18 / 1672 / 5136 / 196 bytes (metadata/header/curve/mapping/color). Reverify
 all printed offsets before changing FFmpeg or enabling wasm64 assets.
-Pending subtitle/decoder pulls are cancelled during teardown; native play
+Pending subtitle/decoder pulls are cancelled during teardown; native MSE packet
+reads are cancelled and their loops drained before freeing muxer buffers. Native play
 promises are observed across pause and source changes.
 The resampler invalidates pooled PCM capacity when channels or sample format
 change. This prevents stereo encoded audio from corrupting a later surround
 buffer when switching back to an original track.
+Encoded HLS can explicitly select embedded audio tracks rather than treating their
+IDs as alternate HLS rendition indices, flushing the previous native audio buffer
+even when codec parameters match. `playback-bitrate.ts` stores at most 120
+one-second buckets per track (eight tracks per demux task), clears on seeks and
+reports the previous three seconds at the playhead. This works for native MSE and
+WASM without confusing buffered download bursts with media bitrate.
 `export-build.mjs` records source revisions and stock
 codec hashes. After changing patches, rebuild and run the browser qualification
 script; successful compilation alone does not establish decoder compatibility.

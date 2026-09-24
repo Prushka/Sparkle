@@ -37,11 +37,14 @@ library from the same Library view.
 | Plex raw | Plex metadata plus the original files through local folder mappings   | Original-file range requests; client-side demuxing and decoding through pinned libmedia AVPlayer 1.3.1 |
 
 Raw playback reads original files and decodes in the browser. With `ENCODE_ENABLED=true`,
-the backend can also create NVENC AV1/HEVC segments on demand for Plex media. Identical
+the backend can also create NVENC AV1/HEVC segments on demand for Plex media, using
+the fast `p3` preset by default with no software video encoding fallback. Identical
 requests share one GPU job and cache, including across rooms. Original media stays read-only;
 Sparkle never starts a Plex transcoding session or changes Plex watched state. No complete
 original file is cached. Artwork has a 512 MiB budget; encoded segments default to 20 GiB.
 See [server encoding](docs/server-encoding.md) for GPU setup, settings and limits.
+Encoded audio and video share a native playback clock on compatible browsers.
+HDR output settings show live bitrate for the active playback mode.
 
 Raw playback supports client WASM fallbacks, including TrueHD audio and embedded
 subtitles. TrueHD output is decoded PCM, not Atmos bitstream passthrough. Raw

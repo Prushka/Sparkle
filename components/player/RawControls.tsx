@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 import { Menu, useMediaPlayer } from '@vidstack/react';
 import {
 	DefaultMenuButton,
@@ -11,6 +11,13 @@ import {
 import { RAW_STATUS_EVENT, RawProvider } from '@/lib/player/raw-provider';
 import type { RawMedia, RawPlaybackStatus } from '@/lib/player/raw-types';
 import type { HDRPreference } from '@/lib/player/raw-types';
+
+function formatBitrate(bits?: number) {
+	if (bits === undefined || !Number.isFinite(bits) || bits < 0) return 'Measuring…';
+	return bits >= 1_000_000
+		? `${(bits / 1_000_000).toFixed(2)} Mbps`
+		: `${Math.round(bits / 1000)} kbps`;
+}
 
 function useRawPlayback(onTracks?: (status: RawPlaybackStatus) => void) {
 	const player = useMediaPlayer();
@@ -32,9 +39,23 @@ function useRawPlayback(onTracks?: (status: RawPlaybackStatus) => void) {
 	// Vidstack measures lazily mounted menus during their first render. Reading
 	// the current snapshot synchronously avoids inserting a clipped entry later.
 	const status = useSyncExternalStore(subscribe, snapshot, () => undefined);
+	const reported = useRef<{ provider: unknown; callback: unknown; tracks: string } | undefined>(
+		undefined
+	);
 	useEffect(() => {
-		if (status) onTracks?.(status);
-	}, [status, onTracks]);
+		if (!status || !onTracks) return;
+		// Telemetry is local UI state; it must not re-broadcast room track status.
+		const { bitrate: _bitrate, ...trackStatus } = status;
+		const tracks = JSON.stringify(trackStatus);
+		if (
+			reported.current?.provider === player?.provider &&
+			reported.current?.callback === onTracks &&
+			reported.current?.tracks === tracks
+		)
+			return;
+		reported.current = { provider: player?.provider, callback: onTracks, tracks };
+		onTracks(status);
+	}, [status, onTracks, player]);
 	const provider = player?.provider;
 	return { status, provider: provider instanceof RawProvider ? provider : undefined, player };
 }
@@ -145,6 +166,9 @@ export function RawVideoSettings({
 }) {
 	const { status, provider } = useRawPlayback();
 	const audio = status?.audioTracks.find((t) => t.id === status.audio)?.title ?? 'Default';
+	const bitrate = status?.bitrate;
+	const totalBitrate =
+		bitrate?.video === undefined ? undefined : bitrate.video + (bitrate.audio ?? 0);
 	const output = status?.changing
 		? 'Preparing…'
 		: status?.output === 'Native dynamic HDR (unverified)'
@@ -215,6 +239,14 @@ export function RawVideoSettings({
 													? 'Client player'
 													: 'Checking…'}
 							</dd>
+							<dt className="text-white/55">Live bitrate</dt>
+							<dd
+								className="m-0 text-right tabular-nums text-white/90"
+								data-raw-bitrate
+								title={`Video: ${formatBitrate(bitrate?.video)} · Audio: ${formatBitrate(bitrate?.audio)}. Measured over the last three seconds of media; updates during playback.`}
+							>
+								{status?.changing ? 'Measuring…' : formatBitrate(totalBitrate)}
+							</dd>
 						</dl>
 						{status?.reason && (
 							<p className="mt-3 border-t border-white/10 pt-2 text-white/60">{status.reason}</p>
@@ -248,7 +280,6 @@ export function RawVideoSettings({
 export function RawSubtitleSettings() {
 	const { status, provider } = useRawPlayback();
 	const tracks = status?.subtitleTracks ?? [];
-	if (!tracks.length) return null;
 	const selected = tracks.find((t) => t.id === status?.subtitle)?.title ?? 'Off';
 	const options = [
 		{ value: '-1', label: 'Off' },
@@ -258,6 +289,7 @@ export function RawSubtitleSettings() {
 		<Menu.Root className="vds-player-settings-menu vds-subtitles-settings-menu vds-menu">
 			<DefaultMenuButton
 				label="Subtitles"
+				disabled={!status?.ready || status.changing || !tracks.length}
 				hint={selected}
 				Icon={defaultLayoutIcons.Menu.Captions}
 			/>

@@ -14,7 +14,13 @@ import (
 )
 
 const SegmentSeconds = 6
-const profileVersion = "nvenc-segments-v3"
+const profileVersion = "nvenc-segments-v4"
+
+// Four 20 ms Opus packets minus libopus's 312-sample encoder lookahead.
+// Encode a short lead-in, then discard it so each cached clip starts with
+// warmed audio and contains exactly its timeline's packets, without a repeated
+// priming/padding packet at every six-second boundary.
+const audioLead = 0.0735
 
 type Profile struct {
 	Quality   int
@@ -106,7 +112,7 @@ func (p Probe) output() string {
 }
 
 // HandBrake's NVENC CQ mapping: VBR, zero target bitrate, I/P/B initial
-// quantizers CQ-2/CQ/CQ+2. Its slowest preset maps to p7. Streaming adds closed
+// quantizers CQ-2/CQ/CQ+2. The default NVENC preset is p3 (fast). Streaming adds closed
 // two-second GOPs; it does not silently replace CQ with a low-bitrate preset.
 func videoArgs(codec string, p Profile, video Stream) []string {
 	args := []string{"-map", "0:v:0", "-an", "-sn", "-dn", "-c:v", codec + "_nvenc", "-preset", p.Preset, "-tune", "hq", "-rc", "vbr", "-cq", strconv.Itoa(p.Quality), "-b:v", "0", "-init_qpP", strconv.Itoa(p.Quality), "-init_qpI", strconv.Itoa(max(0, p.Quality-2)), "-init_qpB", strconv.Itoa(min(51, p.Quality+2)), "-pix_fmt", "p010le", "-fps_mode", "vfr", "-force_key_frames", "expr:gte(t,n_forced*2)", "-forced-idr", "1"}
@@ -139,6 +145,10 @@ func toolRevision(ctx context.Context, binary string) string {
 func encodeArgs(input, dir, codec string, segment int, duration float64, p Profile, source Probe) []string {
 	start := float64(segment * SegmentSeconds)
 	length := math.Min(SegmentSeconds, duration-start)
+	lead := 0.0
+	if source.count("audio") > 0 && segment > 0 {
+		lead = audioLead
+	}
 	clip := []string{"-t", fmt.Sprintf("%.6f", length)}
 	args := []string{"-hide_banner", "-loglevel", "error", "-nostdin", "-y"}
 	args = append(args, inputRestrictions(input)...)
@@ -151,25 +161,37 @@ func encodeArgs(input, dir, codec string, segment int, duration float64, p Profi
 	if source.video().Codec == "av1" {
 		args = append(args, "-c:v", "av1")
 	}
-	args = append(args, "-ss", fmt.Sprintf("%.6f", start), "-i", input)
+	args = append(args, "-ss", fmt.Sprintf("%.6f", start-lead), "-i", input)
 	// Limit container metadata to the normalized API; copied chapter tracks can
 	// otherwise introduce a spurious MP4 data stream in every fragment.
 	args = append(args, clip...)
+	if lead > 0 {
+		args = append(args, "-ss", fmt.Sprintf("%.6f", lead))
+	}
 	args = append(args, "-map_chapters", "-1", "-map_metadata", "-1")
 	args = append(args, videoArgs(codec, p, source.video())...)
 	args = append(args, fragmentArgs(start)...)
 	args = append(args, filepath.Join(dir, "video.mp4"))
 	if source.count("audio") > 0 {
-		args = append(args, clip...)
+		args = append(args, "-t", fmt.Sprintf("%.6f", length+audioLead))
 		args = append(args, "-map_chapters", "-1", "-map_metadata", "-1")
 		args = append(args, "-map", "0:a", "-vn", "-sn", "-dn", "-c:a", "libopus", "-b:a", strconv.Itoa(p.AudioKbps)+"k", "-ac", "2")
+		filter := "aresample=48000:async=1:first_pts=0"
+		if segment == 0 {
+			filter += ",adelay=3528S:all=1"
+		}
+		filter += ",apad=pad_dur=0.02"
+		args = append(args, "-ar", "48000", "-frame_duration", "20", "-af", filter,
+			"-bsf:a", fmt.Sprintf("noise=drop='lt(n,4)+gte(n,%d)'", 4+int(math.Ceil(length*50))))
 		args = append(args, fragmentArgs(start)...)
 		args = append(args, filepath.Join(dir, "audio.mp4"))
 	}
 	return args
 }
 
-func softwareInput(args []string) []string {
+// Only the input decoder may fall back to software (e.g. unsupported NVDEC
+// profiles). Output encoding remains av1_nvenc/hevc_nvenc on every attempt.
+func softwareDecodeInput(args []string) []string {
 	result := []string{}
 	input := true
 	for i := 0; i < len(args); i++ {

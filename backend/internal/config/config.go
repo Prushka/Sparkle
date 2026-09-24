@@ -42,7 +42,7 @@ func Load() (Config, error) {
 		EncodeCacheTTL:    24 * time.Hour,
 		EncodeConcurrency: 2,
 		EncodeQuality:     22,
-		EncodePreset:      getenv("ENCODE_PRESET", "p7"),
+		EncodePreset:      getenv("ENCODE_PRESET", "p3"),
 		EncodeAudioKbps:   144,
 		PlexURL:           os.Getenv("PLEX_URL"),
 		PlexToken:         os.Getenv("PLEX_TOKEN"),

@@ -3,11 +3,12 @@
   "commit": "152f629d3021fd8013efa464fcb7b55f9fbe7753",
   "ffmpeg": "3a14ab29692763e561610412cdeb1985da4e3cd8",
   "emscripten": "4.0.10",
-  "patchHash": "c0a55254c2c4aed1af082256128dde43ee29bfbd0556fccf7c803cbfd7c9c872",
+  "patchHash": "354de0b7737097756c587b18e3b691c97f883cc753c92398802d4ca5a85b3b24",
   "sources": {
     "hdr-sdr.ts": "7145cc1cb27cf75cdae17ef1c6f4cc3121289dad6fbe7edecb9f3ef8db350c6b",
     "dovi-sdr.ts": "d4a572d72c175bba9fff94adcf0ec72a2b306c341e87877876b4d5cbb68cdb74",
-    "hdr-metadata.ts": "aa6a67b3940d7a4bca2b91ff004bdd1bbc2467a146964726410c29a802057114"
+    "hdr-metadata.ts": "aa6a67b3940d7a4bca2b91ff004bdd1bbc2467a146964726410c29a802057114",
+    "playback-bitrate.ts": "f08686866a4cbb2a42515dde2066623ae97c6ecfce037d10cd9b1af77f27905c"
   },
   "artifacts": {
     "truehd.wasm": "acc4d68e8af00b65c32e41ed0c48b39fcee96df38ccce74b39ca23c7fe93e45b",
@@ -32,7 +33,7 @@
     "avplayer/73.avplayer.js": "35258b144e329175e1238445a971afbd51d13632071ba719fcf60e8acdba7e03",
     "avplayer/74.avplayer.js": "8af3aea9c6556031a5cebe645d2b6d658c3647796fa675fc36f1d51a310737a2",
     "avplayer/757.avplayer.js": "38329167184e8c42bb837a5c430eae5be9afa66979e0ba033dfcd3793e37a810",
-    "avplayer/773.avplayer.js": "e6cf32fa02314edf13b8a0aa20e4c4ffaacd73d66b5881ec92e0c6791a2af326",
+    "avplayer/773.avplayer.js": "8fcac7752980cd1965479730e301138f5f280a3b978cdb0b0c584f041e9a44f8",
     "avplayer/793.avplayer.js": "4b5acc63dffe3847a23919a4efa6751f29324867e57d36b0ed9b4f0cbaf502d3",
     "avplayer/809.avplayer.js": "e77cfaeb6031a833e00acf097123d2da2c9f0b4f916725451021f69322a79695",
     "avplayer/810.avplayer.js": "4546d904d7eac887f0448389cd6680822ec6e12d3a667da785be611cd913a347",
@@ -42,7 +43,7 @@
     "avplayer/888.avplayer.js": "636f045b692045666610992c2b8782d87fff87fc1f2a0a125e0da47e574ea176",
     "avplayer/933.avplayer.js": "76920cb417b6359bf5481339e6f8ddb1e3b395ddd4909740c98cb89b34d70ab1",
     "avplayer/977.avplayer.js": "89a9e0df3097ccdeca218b4419f327015368940f31e36f5c7061a00cdb564754",
-    "avplayer/avplayer.js": "e91aec33642b8f4f9f866c751c309a3038ed7d528f69fe5162c25ca48dbd425d"
+    "avplayer/avplayer.js": "0e11ff59ae557979b1d5c2f02e394274534d24b9ab7749f785648a94bb2a0583"
   },
   "codecs": {
     "decode/aac-atomic.wasm": "45e90ba204af8295db460adb50e929dd38c3ed8d27422973149737613cc4f584",

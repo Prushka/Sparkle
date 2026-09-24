@@ -6,7 +6,7 @@
 		"prebuild": "node scripts/prepare-player-assets.mjs",
 		"prepare:player": "node scripts/prepare-player-assets.mjs",
 		"test:e2e": "playwright test",
-		"test:player": "node scripts/tests/subtitle-bitmap.mjs && node scripts/tests/hdr-policy.mjs && node scripts/tests/hdr-metadata.mjs && node scripts/tests/encoded-policy.mjs",
+		"test:player": "node scripts/tests/subtitle-bitmap.mjs && node scripts/tests/hdr-policy.mjs && node scripts/tests/hdr-metadata.mjs && node scripts/tests/encoded-policy.mjs && node scripts/tests/playback-bitrate.mjs",
 		"dev": "next dev --webpack --hostname 0.0.0.0 -p 3001",
 		"build": "next build --webpack && node scripts/generate-sw.mjs",
 		"start": "next start",

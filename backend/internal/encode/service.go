@@ -188,6 +188,10 @@ type chunkIndex struct {
 	Audio int64 `json:"audio"`
 }
 
+func (s *Service) fingerprint(source *source) string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("%s:%s:%s:%+v", profileVersion, s.revision, source.key, s.options.Profile))))
+}
+
 func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 	codec := r.PathValue("codec")
 	allowed := false
@@ -201,7 +205,7 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	resource := r.PathValue("resource")
-	if resource != "manifest" && resource != "fonts.json" && resource != "video.m3u8" && resource != "audio.m3u8" && resource != "video-init.mp4" && resource != "audio-init.mp4" && !segmentResource.MatchString(resource) {
+	if resource != "manifest" && resource != "fonts.json" && resource != "master.m3u8" && resource != "video.m3u8" && resource != "audio.m3u8" && resource != "video-init.mp4" && resource != "audio-init.mp4" && !segmentResource.MatchString(resource) {
 		http.NotFound(w, r)
 		return
 	}
@@ -213,7 +217,8 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer file.Close()
-	if fingerprint := r.URL.Query().Get("v"); fingerprint != "" && fingerprint != source.key {
+	fingerprint := s.fingerprint(source)
+	if requested := r.URL.Query().Get("v"); requested != "" && requested != fingerprint {
 		http.Error(w, "Media changed; reload playback", 409)
 		return
 	}
@@ -265,10 +270,24 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		video := source.probe.video()
-		writeJSON(w, map[string]any{"fingerprint": source.key, "codec": codec, "output": source.probe.output(), "duration": source.duration, "width": video.Width, "height": video.Height, "audio": source.probe.count("audio") > 0, "subtitleTracks": tracks, "hasFonts": hasFonts, "segmentSeconds": SegmentSeconds})
+		writeJSON(w, map[string]any{"fingerprint": fingerprint, "playlist": "master.m3u8", "codec": codec, "output": source.probe.output(), "duration": source.duration, "width": video.Width, "height": video.Height, "audio": source.probe.count("audio") > 0, "subtitleTracks": tracks, "hasFonts": hasFonts, "segmentSeconds": SegmentSeconds})
 		return
 	}
 	if strings.HasSuffix(resource, ".m3u8") {
+		if resource == "master.m3u8" {
+			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+			w.Header().Set("Cache-Control", "private, no-cache")
+			_, _ = io.WriteString(w, "#EXTM3U\n#EXT-X-VERSION:7\n")
+			audio := ""
+			if source.probe.count("audio") > 0 {
+				_, _ = fmt.Fprintf(w, "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"audio\",NAME=\"Audio\",DEFAULT=YES,AUTOSELECT=YES,URI=\"audio.m3u8?v=%s\"\n", fingerprint)
+				audio = ",AUDIO=\"audio\""
+			}
+			// One variant, with the existing bounded audio/video segment caches.
+			// CQ is variable bitrate; this is a playlist selection hint, not telemetry.
+			_, _ = fmt.Fprintf(w, "#EXT-X-STREAM-INF:BANDWIDTH=80000000%s\nvideo.m3u8?v=%s\n", audio, fingerprint)
+			return
+		}
 		kind := strings.TrimSuffix(resource, ".m3u8")
 		if kind == "audio" && source.probe.count("audio") == 0 {
 			http.NotFound(w, r)
@@ -276,9 +295,9 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 		w.Header().Set("Cache-Control", "private, no-cache")
-		_, _ = fmt.Fprintf(w, "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:%d\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-MAP:URI=\"%s-init.mp4?v=%s\"\n", SegmentSeconds, kind, source.key)
+		_, _ = fmt.Fprintf(w, "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:%d\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-MAP:URI=\"%s-init.mp4?v=%s\"\n", SegmentSeconds, kind, fingerprint)
 		for n := 0; n < int(math.Ceil(source.duration/SegmentSeconds)); n++ {
-			_, _ = fmt.Fprintf(w, "#EXTINF:%.6f,\n%s-%d.m4s?v=%s\n", math.Min(SegmentSeconds, source.duration-float64(n*SegmentSeconds)), kind, n, source.key)
+			_, _ = fmt.Fprintf(w, "#EXTINF:%.6f,\n%s-%d.m4s?v=%s\n", math.Min(SegmentSeconds, source.duration-float64(n*SegmentSeconds)), kind, n, fingerprint)
 		}
 		_, _ = io.WriteString(w, "#EXT-X-ENDLIST\n")
 		return
@@ -326,7 +345,7 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 			if ctx.Err() != nil {
 				return err
 			}
-			if err = run(ctx, s.options.FFmpeg, softwareInput(args), nil); err != nil {
+			if err = run(ctx, s.options.FFmpeg, softwareDecodeInput(args), nil); err != nil {
 				return err
 			}
 		}
@@ -336,6 +355,9 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 		if source.probe.count("audio") > 0 {
+			if err = clearOpusPreSkip(filepath.Join(dir, "audio.mp4")); err != nil {
+				return err
+			}
 			index.Audio, err = shiftFragments(filepath.Join(dir, "audio.mp4"), float64(number*SegmentSeconds))
 			if err != nil {
 				return err

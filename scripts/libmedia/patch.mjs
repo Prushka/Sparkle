@@ -32,6 +32,126 @@ function patch(file, before, after, all = false) {
 	writeFileSync(path, all ? original.replaceAll(before, after) : original.replace(before, after));
 }
 const player = 'packages/avplayer/src/AVPlayer.ts';
+// Query a bounded packet window at the playhead in both MSE and WASM paths.
+writeFileSync(
+	resolve(root, 'packages/avpipeline/src/playback-bitrate.ts'),
+	readFileSync('scripts/libmedia/playback-bitrate.ts')
+);
+const demuxPipeline = 'packages/avpipeline/src/DemuxPipeline.ts';
+patch(
+	demuxPipeline,
+	"import Pipeline from './Pipeline'",
+	"import Pipeline from './Pipeline'\nimport PlaybackBitrate from './playback-bitrate'"
+);
+patch(
+	demuxPipeline,
+	'  leftIPCPort: IPCPort\n',
+	'  sparkleBitrate?: PlaybackBitrate\n  leftIPCPort: IPCPort\n'
+);
+patch(
+	demuxPipeline,
+	'      if (task.stats !== nullptr) {',
+	`      if (task.cacheAVPackets.has(streamIndex)) {
+        const stream = task.formatContext.streams[streamIndex]
+        if (stream.codecpar.codecType === AVMediaType.AVMEDIA_TYPE_AUDIO || stream.codecpar.codecType === AVMediaType.AVMEDIA_TYPE_VIDEO) {
+          (task.sparkleBitrate ||= new PlaybackBitrate()).add(stream.id,
+            Number(avRescaleQ2(avpacket.pts, addressof(avpacket.timeBase), AV_MILLI_TIME_BASE_Q)), avpacket.size)
+        }
+      }
+      if (task.stats !== nullptr) {`
+);
+patch(
+	demuxPipeline,
+	'  public async seek(taskId:',
+	`  public async getPlaybackBitrate(taskId: string, streamId: number, time: number) {
+    return this.tasks.get(taskId)?.sparkleBitrate?.read(streamId, time)
+  }
+
+  public async seek(taskId:`
+);
+patch(
+	demuxPipeline,
+	'        let ret: int32 | int64 = await demux.seek(',
+	'        task.sparkleBitrate = undefined\n        let ret: int32 | int64 = await demux.seek('
+);
+patch(
+	player,
+	'  public getStats() {',
+	`  public async getPlaybackBitrate() {
+    const time = Number(this.currentTime)
+    const video = this.selectedVideoStream
+    const audio = this.selectedAudioStream
+    const values = await Promise.all([
+      video ? AVPlayer.DemuxerThread.getPlaybackBitrate(this.subTaskId || this.taskId, video.id, time) : undefined,
+      audio ? AVPlayer.DemuxerThread.getPlaybackBitrate(this.taskId, audio.id, time) : undefined
+    ])
+    return { video: values[0], audio: values[1] }
+  }
+
+  public getStats() {`
+);
+// Sparkle's audio HLS contains embedded tracks, not one rendition per language.
+patch(
+	player,
+	`  public async selectAudio(id: number, smooth?: boolean) {
+    if (defined(ENABLE_PROTOCOL_HLS) && this.isHls() || defined(ENABLE_PROTOCOL_DASH) && this.isDash()) {`,
+	`  public async selectAudio(id: number, smooth?: boolean, embedded = false) {
+    if (!embedded && (defined(ENABLE_PROTOCOL_HLS) && this.isHls() || defined(ENABLE_PROTOCOL_DASH) && this.isDash())) {`
+);
+// Same-codec embedded tracks still require flushing the native buffer.
+patch(
+	player,
+	'        if (stream.codecpar.codecId !== this.selectedAudioStream.codecpar.codecId',
+	`        // Embedded Opus tracks have the same codec parameters. A connection
+        // change alone retains the previous language in both queues and MSE.
+        if (embedded && this.useMSE && defined(ENABLE_MSE)) {
+          await this.doSeek(this.currentTime, this.selectedVideoStream?.index ?? stream.index, {
+            onBeforeSeek: async () => {
+              await AVPlayer.DemuxerThread.changeConnectStream(this.taskId, stream.index, this.selectedAudioStream.index)
+              await AVPlayer.MSEThread.reAddStream(this.taskId, stream.index, serializeAVCodecParameters(stream.codecpar), stream.timeBase, stream.metadata, stream.startTime)
+            }
+          })
+          this.selectedAudioStream = stream
+          this.status = this.lastStatus
+          this.fire(eventType.CHANGED, [AVMediaType.AVMEDIA_TYPE_AUDIO, stream.id, lastSelectStreamId])
+          return
+        }
+        if (stream.codecpar.codecId !== this.selectedAudioStream.codecpar.codecId`
+);
+// A mode switch can close MSE while its loop awaits a demux packet. Cancel
+// those pulls, then let the loops finish before releasing their muxer buffers.
+const msePipeline = 'packages/avplayer/src/mse/MSEPipeline.ts';
+patch(msePipeline, '  seeking: boolean', '  closed?: boolean\n  seeking: boolean');
+patch(
+	msePipeline,
+	"    const result = await leftIPCPort.request<pointer<AVPacketRef> | AVPacketSerialize>('pull')",
+	`    if (task.closed) return IOError.END as pointer<AVPacketRef>
+    const result = await leftIPCPort.request<pointer<AVPacketRef> | AVPacketSerialize>('pull').catch((error) => {
+      if (task.closed) return IOError.END as pointer<AVPacketRef>
+      throw error
+    })
+    if (task.closed) return IOError.END as pointer<AVPacketRef>`
+);
+patch(
+	msePipeline,
+	'  public async unregisterTask(id: string): Promise<void> {\n    const task = this.tasks.get(id)\n    if (task) {',
+	`  public async unregisterTask(id: string): Promise<void> {
+    const task = this.tasks.get(id)
+    if (task) {
+      task.closed = true
+      task.audio?.pullIPC?.destroy()
+      task.video?.pullIPC?.destroy()
+      await Promise.all([task.audio?.loop?.stopBeforeNextTick(), task.video?.loop?.stopBeforeNextTick()])`
+);
+for (const kind of ['audio', 'video']) {
+	patch(
+		msePipeline,
+		`        if (task.${kind}.pullIPC) {
+          task.${kind}.pullIPC.destroy()
+        }`,
+		`        // ${kind} pulls were cancelled before awaiting the loop above.`
+	);
+}
 // AudioRenderPipeline pools PCM buffers across players/tracks. The stock
 // resampler only reallocates for a larger sample count, even when a stereo
 // buffer is reused for 5.1/7.1 or the sample format changes. Invalidate that

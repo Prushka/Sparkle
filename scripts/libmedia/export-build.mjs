@@ -33,7 +33,7 @@ const patchHash = createHash('sha256')
 	.update((await readFile('scripts/libmedia/patch.mjs', 'utf8')).replaceAll('\r\n', '\n'))
 	.digest('hex');
 const sources = {};
-for (const file of ['hdr-sdr.ts', 'dovi-sdr.ts', 'hdr-metadata.ts'])
+for (const file of ['hdr-sdr.ts', 'dovi-sdr.ts', 'hdr-metadata.ts', 'playback-bitrate.ts'])
 	sources[file] = createHash('sha256')
 		.update((await readFile(`scripts/libmedia/${file}`, 'utf8')).replaceAll('\r\n', '\n'))
 		.digest('hex');
