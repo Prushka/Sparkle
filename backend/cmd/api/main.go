@@ -7,6 +7,7 @@ import (
 	"Sparkle/internal/jobs"
 	"Sparkle/internal/lifecycle"
 	"Sparkle/internal/plex"
+	"Sparkle/internal/plexauth"
 	"Sparkle/internal/realtime"
 	"compress/gzip"
 	"context"
@@ -52,10 +53,22 @@ func main() {
 		}
 	}
 	mediaCatalog := catalog.New(jobStore, plexClient, cfg.MediaCacheDir)
+	var identity func(context.Context) (string, error)
+	if plexClient != nil {
+		identity = plexClient.MachineIdentifier
+	}
+	auth, err := plexauth.New(plexauth.Options{Identity: identity, Origins: cfg.PlexAuthOrigins, Secure: cfg.PlexAuthCookieSecure, SameSite: cfg.PlexAuthCookieSameSite})
+	if err != nil {
+		log.Fatalf("authentication configuration error: %v", err)
+	}
+	defer auth.Close()
 	hub := realtime.NewHub(realtime.Options{
 		OutputDir:      cfg.OutputDir,
 		PFPDir:         cfg.PFPDir,
 		MaxUploadBytes: cfg.MaxPFPBytes,
+		AuthorizeMedia: auth.RequireMedia,
+		CanAccessMedia: auth.CanAccess,
+		CheckOrigin:    auth.OriginAllowed,
 	})
 	pruner := &cachePruner{jobStore: jobStore}
 
@@ -73,6 +86,7 @@ func main() {
 	go hub.Run(ctx)
 
 	mux := http.NewServeMux()
+	auth.Register(mux)
 	mediaCatalog.Register(mux)
 	encoder.Register(mux)
 	mux.Handle("GET /static/pfp/", profileFiles(cfg.PFPDir, cfg.OutputDir))
@@ -88,7 +102,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           withCompression(withCORS(mux)),
+		Handler:           auth.Middleware(withCompression(mux)),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 		ReadTimeout:       cfg.ReadTimeout,
 		WriteTimeout:      cfg.WriteTimeout,
@@ -255,27 +269,6 @@ func withCompression(next http.Handler) http.Handler {
 		}()
 
 		next.ServeHTTP(gzipWriter, r)
-	})
-}
-
-func withCORS(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Origin")
-		if origin == "" {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-		} else {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Add("Vary", "Origin")
-		}
-		w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, If-None-Match, Range, If-Range")
-		w.Header().Set("Access-Control-Expose-Headers", "ETag, Retry-After, Accept-Ranges, Content-Range, Content-Length, Last-Modified")
-
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
 	})
 }
 

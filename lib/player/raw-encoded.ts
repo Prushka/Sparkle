@@ -1,3 +1,4 @@
+import { backendFetch } from '@/lib/plex-access';
 import type { EncodedCodec, HDRPreference, RawPart } from './raw-types';
 
 const preferenceKey = 'sparkle.raw.hdr';
@@ -49,7 +50,7 @@ export async function encodedCapabilities(
 	signal: AbortSignal
 ): Promise<EncodedCodec[]> {
 	try {
-		const response = await fetch(`${base}/encoding/capabilities`, { signal });
+		const response = await backendFetch(`${base}/encoding/capabilities`, { signal });
 		if (!response.ok) return [];
 		const data = await response.json();
 		const available: EncodedCodec[] = [];
@@ -102,7 +103,7 @@ export async function slowNetwork(
 	try {
 		const bytes = Math.min(1024 * 1024, part.size);
 		const started = performance.now();
-		const response = await fetch(`${base}${part.url}`, {
+		const response = await backendFetch(`${base}${part.url}`, {
 			headers: { Range: `bytes=0-${bytes - 1}` },
 			cache: 'no-store',
 			signal: sampleSignal
@@ -137,7 +138,7 @@ export async function loadEncodedPart(
 	signal: AbortSignal
 ): Promise<EncodedPart> {
 	const url = `${base}${part.url.replace(/\/file$/, '')}/encoded/${codec}`;
-	const response = await fetch(`${url}/manifest`, { signal, cache: 'no-store' });
+	const response = await backendFetch(`${url}/manifest`, { signal, cache: 'no-store' });
 	if (!response.ok)
 		throw new Error(
 			'Server encoding is unavailable for this media. Choose Automatic or Compatible.'

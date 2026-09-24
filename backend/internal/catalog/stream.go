@@ -90,7 +90,7 @@ func (s *Service) art(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", http.DetectContentType(data))
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Cache-Control", "private, max-age=3600")
+	w.Header().Set("Cache-Control", "private, no-cache")
 	etag := fmt.Sprintf(`"%x"`, sha256.Sum256(data))
 	w.Header().Set("ETag", etag)
 	if r.Header.Get("If-None-Match") == etag {

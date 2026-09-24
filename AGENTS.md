@@ -28,6 +28,7 @@ files. Optional on-demand NVENC encoding serves cached derivatives of Plex media
 | `backend/cmd/api/`, `backend/internal/config/`                  | Go entry point, HTTP routing/middleware, environment configuration                       |
 | `backend/internal/catalog/`, `backend/internal/plex/`           | Catalog normalization, read-only Plex access, confined streaming and artwork             |
 | `backend/internal/encode/`                                      | Optional shared NVENC segments, confined inputs, bounded cache and GPU concurrency       |
+| `backend/internal/plexauth/`, `components/plex-auth.tsx`        | Plex PIN sign-in, secure sessions, membership checks and account/room UI                 |
 | `backend/internal/jobs/`, `backend/internal/realtime/`          | Existing processed jobs; room/WebSocket state, profiles, chat, games and voice signaling |
 | `windows/`, `backend/internal/lifecycle/`, root Windows scripts | Native tray host, compiled-backend installation and graceful shutdown                    |
 | `scripts/libmedia/`, `vendor/libmedia/`                         | Reproducible player patches, pinned binaries, manifest and notices                       |
@@ -74,6 +75,11 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
 
 ## Contracts to preserve
 
+- Plex sign-in uses server-held account tokens and opaque HttpOnly cookies. Raw APIs,
+  files, NVENC derivatives and rooms require membership of the configured server;
+  any member may access every configured library. Anonymous users get existing Encoded
+  media only. Keep exact-origin CORS/CSRF checks and credentialed backend/player fetches.
+  See [authentication](docs/plex-auth.md); never bypass it using the owner token in a browser.
 - Plex access is read-only and endpoint-allowlisted. Do not add watched-state updates,
   scans, Plex transcoding, media modifications, or whole-original-file caching.
   Server decoding is confined to the explicit optional encoded mode; raw playback remains client-side.

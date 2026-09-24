@@ -11,6 +11,10 @@ test('room controls and current media fit desktop and mobile after the component
 	await page.route('**/api/runtime-env', (route) =>
 		route.fulfill({ json: { backendBaseUrl: '/be', staticBaseUrl: '/static' } })
 	);
+	await page.route('**/be/auth/plex/session', (route) =>
+		route.fulfill({ json: { enabled: true, authenticated: false, canAccessRaw: false } })
+	);
+	await page.routeWebSocket('**/be/sync/**', () => {});
 	await page.route('**/be/rooms/layout-room', (route) =>
 		route.fulfill({ json: { roomId: 'layout-room', mediaId: 'layout-fixture' } })
 	);
@@ -50,6 +54,7 @@ test('room controls and current media fit desktop and mobile after the component
 	await expect(join).toHaveCSS('border-top-width', '0px');
 	const profile = page.getByRole('button', { name: 'Open profile settings', exact: true });
 	const media = page.getByRole('region', { name: 'Current media', exact: true });
+	await expect(media.getByRole('button', { name: 'Sign in with Plex' })).toBeVisible();
 	await expect(media.getByRole('heading', { name: title, exact: true })).toBeVisible();
 	await expect(media.getByText('Encoded', { exact: true })).toBeVisible();
 	await expect(media.getByText('S01E02 · A new beginning', { exact: true })).toBeVisible();

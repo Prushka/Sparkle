@@ -44,7 +44,7 @@ func (s *Service) Details(ctx context.Context, id string) (map[string]any, error
 		match := s.matchingArtwork(lookup, identityFromTitle(str(job, "Input")))
 		cancel()
 		if match.Poster != "" {
-			job["Poster"] = match.Poster
+			job["Poster"] = s.publicArtworkURL(match.Poster)
 		}
 		if match.Summary != "" {
 			job["Summary"] = match.Summary
@@ -53,7 +53,7 @@ func (s *Service) Details(ctx context.Context, id string) (map[string]any, error
 			job["Year"] = match.Year
 		}
 		if match.Backdrop != "" {
-			job["Backdrop"] = match.Backdrop
+			job["Backdrop"] = s.publicArtworkURL(match.Backdrop)
 		}
 	}
 	canonical := str(job, "Id")

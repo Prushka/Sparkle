@@ -1,3 +1,4 @@
+import { backendFetch } from '@/lib/plex-access';
 import {
 	preprocessJob,
 	preprocessLibraryJobs,
@@ -36,7 +37,7 @@ export function resetClientDataCache() {
 
 export async function loadRuntimeConfig(): Promise<RuntimeConfig> {
 	if (!runtimeConfigPromise) {
-		runtimeConfigPromise = fetch('/api/runtime-env', { cache: 'no-store' }).then(
+		runtimeConfigPromise = backendFetch('/api/runtime-env', { cache: 'no-store' }).then(
 			async (response) => {
 				if (!response.ok) {
 					throw new Error(`Failed to load runtime config: ${response.status}`);
@@ -59,7 +60,7 @@ export async function fetchRoomRecord(
 	backendBaseUrl: string,
 	roomId: string
 ): Promise<RoomRecord | null> {
-	const response = await fetch(
+	const response = await backendFetch(
 		joinBackendPath(backendBaseUrl, `/rooms/${encodeURIComponent(roomId)}`),
 		{
 			cache: 'no-store'
@@ -79,7 +80,7 @@ export async function createRoomRecord(
 	mediaId?: string,
 	roomId?: string
 ): Promise<RoomRecord> {
-	const response = await fetch(joinBackendPath(backendBaseUrl, '/rooms'), {
+	const response = await backendFetch(joinBackendPath(backendBaseUrl, '/rooms'), {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json'
@@ -100,7 +101,7 @@ export async function updateRoomRecord(
 	roomId: string,
 	mediaId: string
 ): Promise<RoomRecord> {
-	const response = await fetch(
+	const response = await backendFetch(
 		joinBackendPath(backendBaseUrl, `/rooms/${encodeURIComponent(roomId)}`),
 		{
 			method: 'PUT',
@@ -121,7 +122,7 @@ export async function fetchJobs(backendBaseUrl: string, force = false): Promise<
 		jobsPromise = null;
 	}
 	if (!jobsPromise) {
-		jobsPromise = fetch(joinBackendPath(backendBaseUrl, '/all'), { cache: 'no-store' }).then(
+		jobsPromise = backendFetch(joinBackendPath(backendBaseUrl, '/all'), { cache: 'no-store' }).then(
 			async (response) => {
 				if (!response.ok) {
 					throw new Error(`Failed to load media library: ${response.status}`);
@@ -134,7 +135,7 @@ export async function fetchJobs(backendBaseUrl: string, force = false): Promise<
 }
 
 export async function fetchJob(backendBaseUrl: string, mediaId: string): Promise<Job> {
-	const response = await fetch(
+	const response = await backendFetch(
 		joinBackendPath(backendBaseUrl, `/media/${encodeURIComponent(mediaId)}`),
 		{
 			cache: 'no-store'
@@ -161,9 +162,15 @@ export async function fetchMediaData(
 	return {
 		jobs: [job],
 		job,
-		video: job.Raw ? joinBackendPath(runtimeConfig.backendBaseUrl, `/media/${job.Id}`) : `${base}/${codec}.mp4`,
-		preview: job.Poster ? joinBackendPath(runtimeConfig.backendBaseUrl, job.Poster) : `${base}/poster.jpg`,
-		icon: job.Poster ? joinBackendPath(runtimeConfig.backendBaseUrl, job.Poster) : `${base}/poster.jpg`,
+		video: job.Raw
+			? joinBackendPath(runtimeConfig.backendBaseUrl, `/media/${job.Id}`)
+			: `${base}/${codec}.mp4`,
+		preview: job.Poster
+			? joinBackendPath(runtimeConfig.backendBaseUrl, job.Poster)
+			: `${base}/poster.jpg`,
+		icon: job.Poster
+			? joinBackendPath(runtimeConfig.backendBaseUrl, job.Poster)
+			: `${base}/poster.jpg`,
 		rating: -1,
 		title: job.Title.episode
 			? `${job.Title.title} - ${job.Title.episode.se} - ${job.Title.episode.title}`

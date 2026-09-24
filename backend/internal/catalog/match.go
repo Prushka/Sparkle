@@ -256,7 +256,7 @@ func (s *Service) enrichPage(ctx context.Context, items []Item) {
 			for i := range work {
 				value := s.matchingArtwork(ctx, items[i].match)
 				if value.Poster != "" {
-					items[i].Poster = value.Poster
+					items[i].Poster = s.publicArtworkURL(value.Poster)
 				}
 				if value.Summary != "" {
 					items[i].Summary = value.Summary

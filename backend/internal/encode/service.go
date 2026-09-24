@@ -238,7 +238,7 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		etag := fmt.Sprintf(`"fonts-%s"`, source.key)
 		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "private, max-age=86400, immutable")
+		w.Header().Set("Cache-Control", "private, no-cache")
 		w.Header().Set("ETag", etag)
 		if r.Header.Get("If-None-Match") == etag {
 			w.WriteHeader(304)
@@ -427,7 +427,7 @@ func serveOpenFile(w http.ResponseWriter, r *http.Request, f *os.File, offset, l
 	}
 	w.Header().Set("Content-Type", mime)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Cache-Control", "private, max-age=86400, immutable")
+	w.Header().Set("Cache-Control", "private, no-cache")
 	w.Header().Set("ETag", fmt.Sprintf(`"%s-%d-%d"`, key, offset, length))
 	http.ServeContent(w, r, "encoded", info.ModTime(), io.NewSectionReader(f, offset, length))
 }

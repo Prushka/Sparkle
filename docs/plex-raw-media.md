@@ -5,6 +5,8 @@ continues to return processed items only. Raw media uses original-file range
 requests with client-side decoding. Optional [server encoding](server-encoding.md)
 provides shared NVENC derivatives; Plex access and original files stay read-only.
 There is no Plex transcoding session or full-original-file cache.
+Raw media requires [Plex sign-in](plex-auth.md): any member of the configured
+server can access every configured library. Anonymous visitors use existing Encoded media.
 Audio output is decoded PCM: TrueHD decoding does not imply
 Atmos bitstream passthrough.
 

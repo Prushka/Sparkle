@@ -4,6 +4,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { LibraryHome } from '@/components/library-home';
+import { PlexRoomGate, usePlexAuth } from '@/components/plex-auth';
+import { PlexAccessError, plexAccessRequiredEvent } from '@/lib/plex-access';
 import {
 	createRoomRecord,
 	fetchMediaData,
@@ -106,6 +108,7 @@ function getBackendWebSocketUrl(base: string, path: string) {
 
 type LoadState =
 	| { status: 'loading' }
+	| { status: 'plex-required' }
 	| { status: 'library'; config: RuntimeConfig; roomId: string }
 	| { status: 'player'; data: ServerData }
 	| { status: 'error'; message: string };
@@ -167,6 +170,7 @@ function ErrorView({ message, onRetry }: { message: string; onRetry: () => void 
 }
 
 export function RoomClient({ route }: { route: RoomRoute }) {
+	const auth = usePlexAuth();
 	const router = useRouter();
 	const searchParams = useSearchParams();
 	const [state, setState] = useState<LoadState>({ status: 'loading' });
@@ -174,6 +178,35 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 	const lastMediaKeyRef = useRef('');
 	const latestMediaUpdatedRef = useRef(0);
 	const loadGenerationRef = useRef(0);
+	const blockedRevision = useRef(0);
+	const authRef = useLatestRef(auth);
+	const requirePlexAccess = useCallback(() => {
+		loadGenerationRef.current++;
+		blockedRevision.current = authRef.current.revision;
+		setState({ status: 'plex-required' });
+		void authRef.current.refresh();
+	}, [authRef]);
+	useEffect(() => {
+		window.addEventListener(plexAccessRequiredEvent, requirePlexAccess);
+		return () => window.removeEventListener(plexAccessRequiredEvent, requirePlexAccess);
+	}, [requirePlexAccess]);
+	useEffect(() => {
+		if (
+			state.status === 'player' &&
+			state.data.job.Id.startsWith('plex-') &&
+			auth.ready &&
+			!auth.canAccessRaw
+		) {
+			requirePlexAccess();
+		} else if (
+			state.status === 'plex-required' &&
+			auth.canAccessRaw &&
+			auth.revision !== blockedRevision.current
+		) {
+			blockedRevision.current = auth.revision;
+			setRetryKey((v) => v + 1);
+		}
+	}, [state, auth.ready, auth.canAccessRaw, auth.revision, requirePlexAccess]);
 	const previousRouteRef = useRef<RoomRoute | null>(null);
 	const previousRouteForLoadRef = useRef<RoomRoute | null>(null);
 	const searchValues = useMemo<SearchValues>(
@@ -325,6 +358,10 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 		loadGenerationRef.current = generation;
 		void loadRoom(generation).catch((caught) => {
 			if (!disposed && loadGenerationRef.current === generation) {
+				if (caught instanceof PlexAccessError) {
+					requirePlexAccess();
+					return;
+				}
 				setState({
 					status: 'error',
 					message: caught instanceof Error ? caught.message : 'Unknown error'
@@ -334,7 +371,7 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 		return () => {
 			disposed = true;
 		};
-	}, [loadRoom, retryKey]);
+	}, [loadRoom, retryKey, requirePlexAccess]);
 
 	useEffect(() => {
 		if (state.status === 'player') {
@@ -402,13 +439,17 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 				lastMediaKeyRef.current = mediaKey;
 				setState({ status: 'player', data });
 			} catch (caught) {
+				if (caught instanceof PlexAccessError) {
+					requirePlexAccess();
+					return;
+				}
 				setState({
 					status: 'error',
 					message: caught instanceof Error ? caught.message : 'Unknown error'
 				});
 			}
 		},
-		[redirectSuffix, route.roomId, router, state]
+		[redirectSuffix, route.roomId, router, state, requirePlexAccess]
 	);
 	const handleRoomMediaChangedRef = useLatestRef(handleRoomMediaChanged);
 
@@ -465,6 +506,10 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 					await handleRoomMediaChangedRef.current('', room.mediaUpdated);
 				}
 			} catch (error) {
+				if (!disposed && error instanceof PlexAccessError) {
+					requirePlexAccess();
+					return;
+				}
 				console.warn('Unable to refresh library room media', error);
 			}
 		};
@@ -497,8 +542,12 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 			socket.onerror = () => {
 				socket?.close();
 			};
-			socket.onclose = () => {
+			socket.onclose = (event) => {
 				if (!disposed) {
+					if (event.code === 4003) {
+						requirePlexAccess();
+						return;
+					}
 					clearReconnectTimer();
 					reconnectTimer = window.setTimeout(connect, 1000);
 				}
@@ -520,12 +569,16 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 		};
 	}, [
 		handleRoomMediaChangedRef,
+		requirePlexAccess,
 		mediaSubscriberBackendBaseUrl,
 		mediaSubscriberRoomId,
 		mediaSubscriberMediaId,
 		mediaSubscriberStatus
 	]);
 
+	if (state.status === 'plex-required') {
+		return <PlexRoomGate onLeave={() => router.replace('/')} />;
+	}
 	if (state.status === 'loading') {
 		return <LoadingView />;
 	}

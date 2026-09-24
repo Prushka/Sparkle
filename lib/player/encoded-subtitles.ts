@@ -1,3 +1,4 @@
+import { backendFetch } from '@/lib/plex-access';
 import { RawSubtitles } from './raw-subtitles';
 import { encodedURL, type EncodedPart } from './raw-encoded';
 
@@ -109,7 +110,7 @@ export class EncodedSubtitles {
 		const controller = new AbortController(),
 			generation = this.generation;
 		this.pending.set(n, controller);
-		void fetch(encodedURL(this.part, `subtitles-${n}.json`), { signal: controller.signal })
+		void backendFetch(encodedURL(this.part, `subtitles-${n}.json`), { signal: controller.signal })
 			.then(async (response) => {
 				if (!response.ok || Number(response.headers.get('Content-Length')) > 40 * 1024 * 1024)
 					throw new Error('Captions unavailable');
@@ -133,7 +134,7 @@ export class EncodedSubtitles {
 		const request = new AbortController();
 		this.fontRequest = request;
 		const generation = this.generation;
-		void fetch(encodedURL(this.part, 'fonts.json'), { signal: request.signal })
+		void backendFetch(encodedURL(this.part, 'fonts.json'), { signal: request.signal })
 			.then(async (response) => {
 				if (!response.ok) throw new Error('Fonts unavailable');
 				return (await response.json()) as string[];

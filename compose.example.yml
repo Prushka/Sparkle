@@ -11,6 +11,9 @@ services:
       MEDIA_CACHE_DIR: /cache/media
       PLEX_URL: ${PLEX_URL}
       PLEX_TOKEN: ${PLEX_TOKEN}
+      PLEX_AUTH_ORIGINS: ${PLEX_AUTH_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+      PLEX_AUTH_COOKIE_SECURE: ${PLEX_AUTH_COOKIE_SECURE:-true}
+      PLEX_AUTH_COOKIE_SAMESITE: ${PLEX_AUTH_COOKIE_SAMESITE:-lax}
       PLEX_LIBRARY_IDS: ${PLEX_LIBRARY_IDS}
       PLEX_PATH_MAPPINGS: '[{"plex":"/data/Managed-Videos","local":"/media/Managed-Videos"}]'
     ports:

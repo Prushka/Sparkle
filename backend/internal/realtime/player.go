@@ -18,8 +18,10 @@ const (
 )
 
 type Player struct {
-	conn *websocket.Conn
-	send chan []byte
+	canAccess     func(string) bool
+	canAccessRoom func() bool
+	conn          *websocket.Conn
+	send          chan []byte
 
 	state                PlayerSnapshot
 	joined               bool
@@ -112,6 +114,10 @@ func (p *Player) writePump() {
 				_ = p.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
+			if p.canAccessRoom != nil && !p.canAccessRoom() {
+				p.denyAccess()
+				return
+			}
 
 			writer, err := p.conn.NextWriter(websocket.TextMessage)
 			if err != nil {
@@ -125,10 +131,19 @@ func (p *Player) writePump() {
 				return
 			}
 		case <-ticker.C:
+			if p.canAccessRoom != nil && !p.canAccessRoom() {
+				p.denyAccess()
+				return
+			}
 			_ = p.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := p.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
 		}
 	}
+}
+
+func (p *Player) denyAccess() {
+	_ = p.conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(4003, "plex_sign_in_required"), time.Now().Add(writeWait))
+	_ = p.conn.Close()
 }

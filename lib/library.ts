@@ -1,3 +1,4 @@
+import { backendFetch } from '@/lib/plex-access';
 import { joinBackendPath } from '@/lib/player/data';
 export interface LibraryItem {
 	id: string;
@@ -37,7 +38,7 @@ export async function libraryPage(
 	signal?: AbortSignal
 ): Promise<LibraryPage> {
 	const path = parent ? `/library/items/${encodeURIComponent(parent)}/children` : '/library/items';
-	const response = await fetch(joinBackendPath(base, `${path}?${params}`), {
+	const response = await backendFetch(joinBackendPath(base, `${path}?${params}`), {
 		signal,
 		cache: 'no-store'
 	});

@@ -102,6 +102,7 @@ func (s *Service) decodeCursor(raw string, q query) (cursor, error) {
 }
 
 func (s *Service) Register(mux *http.ServeMux) {
+	mux.HandleFunc("GET /library/artwork/{token}", s.publicArt)
 	mux.HandleFunc("GET /library/sources", s.sources)
 	mux.HandleFunc("GET /library/items", s.browse)
 	mux.HandleFunc("GET /library/items/{id}/children", s.browse)

@@ -139,7 +139,7 @@ func TestProcessedDetailsKeepIdentityAndAssets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if job["Id"] != "stable-id" || job["source"] != "processed" || job["Raw"] != nil || job["Summary"] != "Plex description" || !strings.HasPrefix(str(job, "Poster"), "/media/plex-") {
+	if job["Id"] != "stable-id" || job["source"] != "processed" || job["Raw"] != nil || job["Summary"] != "Plex description" || !strings.HasPrefix(str(job, "Poster"), "/library/artwork/") {
 		t.Fatalf("wrong processed enrichment: %+v", job)
 	}
 	data, _ := json.Marshal(job)

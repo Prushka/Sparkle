@@ -1,3 +1,4 @@
+import { backendFetch } from '@/lib/plex-access';
 import {
 	VideoProviderLoader,
 	TimeRange,
@@ -252,7 +253,7 @@ export class RawProvider implements MediaProviderAdapter {
 			try {
 				const url = new URL(String(src.src), location.href);
 				this.baseURL = url.href.slice(0, url.href.indexOf('/media/'));
-				const response = await fetch(url, { signal: this.abort.signal, cache: 'no-store' });
+				const response = await backendFetch(url, { signal: this.abort.signal, cache: 'no-store' });
 				if (!response.ok) throw new Error('This Plex item is unavailable.');
 				const job: Job = await response.json();
 				if (generation !== this.generation) return;
@@ -380,6 +381,7 @@ export class RawProvider implements MediaProviderAdapter {
 			}
 		});
 		const options = {
+			http: { credentials: 'include' as RequestCredentials },
 			ext: this.encoded
 				? 'm3u8'
 				: ({ mpegts: 'ts', matroska: 'mkv' } as Record<string, string>)[this.raw!.container] ||

@@ -118,7 +118,7 @@ const PRECACHE_URLS = ${JSON.stringify(precacheUrls, null, '\t')};
 const CORE_PATHS = new Set(['/manifest.json', '/offline.html', '/favicon.ico']);
 const CORE_PREFIXES = ['/_next/static/', '/favicon/', '/fonts/'];
 const RUNTIME_PREFIXES = ['/icons/', '/media/', '/scripts/', '/sound/'];
-const NETWORK_ONLY_PREFIXES = ['/api/', '/be/', '/library/', '/media/plex-', '/_next/webpack-hmr', '/static/'];
+const NETWORK_ONLY_PREFIXES = ['/api/', '/auth/', '/be/', '/library/', '/media/plex-', '/_next/webpack-hmr', '/static/'];
 
 const isLocalDev = () =>
 \tself.location.hostname === 'localhost' ||

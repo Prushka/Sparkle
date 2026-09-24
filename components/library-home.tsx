@@ -5,6 +5,7 @@ import { RoomNavigationInput } from '@/components/room-navigation-input';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/lib/theme';
 import { IconSparkles, IconMoon, IconSun } from '@tabler/icons-react';
+import { PlexAccountButton } from '@/components/plex-auth';
 export function LibraryHome({
 	staticBaseUrl,
 	backendBaseUrl,
@@ -35,7 +36,8 @@ export function LibraryHome({
 						</span>
 						<h1 className="text-lg font-semibold tracking-tight">Library</h1>
 					</div>
-					<div className="flex min-w-0 flex-1 gap-2 sm:max-w-xl">
+					<div className="flex min-w-0 flex-1 flex-wrap justify-end gap-2 sm:max-w-2xl">
+						<PlexAccountButton />
 						<RoomNavigationInput inputId="library-room-navigation-input" className="h-9 flex-1" />
 						<Button
 							variant="outline"

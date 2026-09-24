@@ -3,6 +3,8 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { createRoomRecord, loadRuntimeConfig, resetClientDataCache } from '@/lib/player/data';
+import { PlexAccessError } from '@/lib/plex-access';
+import { PlexRoomGate, usePlexAuth } from '@/components/plex-auth';
 
 type SearchValues = {
 	mediaId?: string;
@@ -47,6 +49,8 @@ function ErrorView({ message, onRetry }: { message: string; onRetry: () => void 
 }
 
 export function HomeClient() {
+	const auth = usePlexAuth();
+	const [needsPlex, setNeedsPlex] = useState(false);
 	const router = useRouter();
 	const searchParams = useSearchParams();
 	const [error, setError] = useState('');
@@ -93,6 +97,10 @@ export function HomeClient() {
 				router.replace(`${roomPath}${redirectSuffix}`);
 			} catch (caught) {
 				if (!disposed) {
+					if (caught instanceof PlexAccessError) {
+						setNeedsPlex(true);
+						return;
+					}
 					setError(caught instanceof Error ? caught.message : 'Unknown error');
 				}
 			}
@@ -102,7 +110,26 @@ export function HomeClient() {
 		return () => {
 			disposed = true;
 		};
-	}, [redirectSuffix, retryKey, router, searchValues.mediaId, searchValues.requestedRoomId]);
+	}, [
+		redirectSuffix,
+		retryKey,
+		router,
+		searchValues.mediaId,
+		searchValues.requestedRoomId,
+		auth.canAccessRaw
+	]);
+
+	if (needsPlex && !auth.canAccessRaw) {
+		return (
+			<PlexRoomGate
+				onLeave={() => {
+					setNeedsPlex(false);
+					router.replace('/');
+					setRetryKey((v) => v + 1);
+				}}
+			/>
+		);
+	}
 
 	if (error) {
 		return (

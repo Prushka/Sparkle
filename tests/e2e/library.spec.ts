@@ -20,6 +20,11 @@ const season = {
 };
 
 async function fixture(page: Page) {
+	await page.route('**/auth/plex/session', (route) =>
+		route.fulfill({
+			json: { enabled: true, authenticated: true, canAccessRaw: true, name: 'Library fixture' }
+		})
+	);
 	await page.route('**/library/sources', (route) =>
 		route.fulfill({
 			json: { sources: [{ id: '1', source: 'plex', title: 'A very long Plex library name' }] }

@@ -66,6 +66,8 @@ import {
 	IconVolume
 } from '@tabler/icons-react';
 import { useAppState } from '@/lib/app-state';
+import { PlexAccountButton } from '@/components/plex-auth';
+import { backendFetch, PlexAccessError, plexAccessRequiredEvent } from '@/lib/plex-access';
 import { useTheme } from '@/lib/theme';
 import { createNotificationAudioUrl } from '@/lib/player/notification-audio';
 import {
@@ -6176,7 +6178,7 @@ export function Player({
 
 		const check = (async () => {
 			try {
-				const response = await fetch(
+				const response = await backendFetch(
 					joinBackendPath(backendBaseUrl, `/rooms/${encodeURIComponent(room)}`),
 					{ cache: 'no-store' }
 				);
@@ -6193,6 +6195,10 @@ export function Player({
 					return true;
 				}
 			} catch (error) {
+				if (error instanceof PlexAccessError) {
+					window.dispatchEvent(new Event(plexAccessRequiredEvent));
+					return true;
+				}
 				console.warn('Unable to refresh room media', error);
 			} finally {
 				roomMediaCheckRef.current = null;
@@ -8476,6 +8482,11 @@ export function Player({
 				awaitingInitialPlaybackSyncRef.current = false;
 				socketRef.current = null;
 				socketUrlRef.current = null;
+				if (event.code === 4003) {
+					clearReconnectTimer();
+					window.dispatchEvent(new Event(plexAccessRequiredEvent));
+					return;
+				}
 				if (intentionallyDisconnected) {
 					clearReconnectTimer();
 					exitedRef.current = true;
@@ -9349,7 +9360,7 @@ export function Player({
 							title={job.Input}
 							artist="Let's watch anime!"
 							controlsDelay={1500}
-							crossOrigin
+							crossOrigin={job.Raw ? 'use-credentials' : true}
 							keyShortcuts={PLAYER_KEY_SHORTCUTS}
 							load="eager"
 							ref={setPlayerElement}
@@ -9878,6 +9889,7 @@ export function Player({
 							summary={data.plot || job.Summary || ''}
 						>
 							<div className="flex flex-wrap items-center gap-2">
+								<PlexAccountButton />
 								<MediaSelection
 									ref={mediaSelectionRef}
 									data={data}

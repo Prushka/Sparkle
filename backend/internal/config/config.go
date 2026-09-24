@@ -8,57 +8,63 @@ import (
 )
 
 type Config struct {
-	EncodeEnabled     bool
-	FFmpeg            string
-	FFprobe           string
-	EncodeCacheBytes  int64
-	EncodeCacheTTL    time.Duration
-	EncodeConcurrency int64
-	EncodeQuality     int64
-	EncodePreset      string
-	EncodeAudioKbps   int64
-	PlexURL           string
-	PlexToken         string
-	PlexMappings      string
-	PlexLibraryIDs    string
-	MediaCacheDir     string
-	PFPDir            string
-	Addr              string
-	OutputDir         string
-	JobsCacheTTL      time.Duration
-	MaxPFPBytes       int64
-	ReadHeaderTimeout time.Duration
-	ReadTimeout       time.Duration
-	WriteTimeout      time.Duration
-	IdleTimeout       time.Duration
-	ShutdownTimeout   time.Duration
+	PlexAuthOrigins        string
+	PlexAuthCookieSecure   bool
+	PlexAuthCookieSameSite string
+	EncodeEnabled          bool
+	FFmpeg                 string
+	FFprobe                string
+	EncodeCacheBytes       int64
+	EncodeCacheTTL         time.Duration
+	EncodeConcurrency      int64
+	EncodeQuality          int64
+	EncodePreset           string
+	EncodeAudioKbps        int64
+	PlexURL                string
+	PlexToken              string
+	PlexMappings           string
+	PlexLibraryIDs         string
+	MediaCacheDir          string
+	PFPDir                 string
+	Addr                   string
+	OutputDir              string
+	JobsCacheTTL           time.Duration
+	MaxPFPBytes            int64
+	ReadHeaderTimeout      time.Duration
+	ReadTimeout            time.Duration
+	WriteTimeout           time.Duration
+	IdleTimeout            time.Duration
+	ShutdownTimeout        time.Duration
 }
 
 func Load() (Config, error) {
 	cfg := Config{
-		FFmpeg:            getenv("FFMPEG", "ffmpeg"),
-		FFprobe:           getenv("FFPROBE", "ffprobe"),
-		EncodeCacheBytes:  20 << 30,
-		EncodeCacheTTL:    24 * time.Hour,
-		EncodeConcurrency: 2,
-		EncodeQuality:     22,
-		EncodePreset:      getenv("ENCODE_PRESET", "p3"),
-		EncodeAudioKbps:   144,
-		PlexURL:           os.Getenv("PLEX_URL"),
-		PlexToken:         os.Getenv("PLEX_TOKEN"),
-		PlexMappings:      os.Getenv("PLEX_PATH_MAPPINGS"),
-		PlexLibraryIDs:    os.Getenv("PLEX_LIBRARY_IDS"),
-		MediaCacheDir:     getenv("MEDIA_CACHE_DIR", "./cache/media"),
-		PFPDir:            getenv("PFP_DIR", "./data/pfp"),
-		Addr:              getenv("ADDR", ":1323"),
-		OutputDir:         getenv("OUTPUT", "./output"),
-		JobsCacheTTL:      30 * time.Minute,
-		MaxPFPBytes:       12_000_000,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       60 * time.Second,
-		ShutdownTimeout:   10 * time.Second,
+		PlexAuthOrigins:        getenv("PLEX_AUTH_ORIGINS", "http://localhost:3001,http://127.0.0.1:3001"),
+		PlexAuthCookieSecure:   true,
+		PlexAuthCookieSameSite: getenv("PLEX_AUTH_COOKIE_SAMESITE", "lax"),
+		FFmpeg:                 getenv("FFMPEG", "ffmpeg"),
+		FFprobe:                getenv("FFPROBE", "ffprobe"),
+		EncodeCacheBytes:       20 << 30,
+		EncodeCacheTTL:         24 * time.Hour,
+		EncodeConcurrency:      2,
+		EncodeQuality:          22,
+		EncodePreset:           getenv("ENCODE_PRESET", "p3"),
+		EncodeAudioKbps:        144,
+		PlexURL:                os.Getenv("PLEX_URL"),
+		PlexToken:              os.Getenv("PLEX_TOKEN"),
+		PlexMappings:           os.Getenv("PLEX_PATH_MAPPINGS"),
+		PlexLibraryIDs:         os.Getenv("PLEX_LIBRARY_IDS"),
+		MediaCacheDir:          getenv("MEDIA_CACHE_DIR", "./cache/media"),
+		PFPDir:                 getenv("PFP_DIR", "./data/pfp"),
+		Addr:                   getenv("ADDR", ":1323"),
+		OutputDir:              getenv("OUTPUT", "./output"),
+		JobsCacheTTL:           30 * time.Minute,
+		MaxPFPBytes:            12_000_000,
+		ReadHeaderTimeout:      5 * time.Second,
+		ReadTimeout:            30 * time.Second,
+		WriteTimeout:           30 * time.Second,
+		IdleTimeout:            60 * time.Second,
+		ShutdownTimeout:        10 * time.Second,
 	}
 
 	if os.Getenv("ADDR") == "" {
@@ -68,6 +74,12 @@ func Load() (Config, error) {
 	}
 
 	var err error
+	if value := os.Getenv("PLEX_AUTH_COOKIE_SECURE"); value != "" {
+		cfg.PlexAuthCookieSecure, err = strconv.ParseBool(value)
+		if err != nil {
+			return Config{}, fmt.Errorf("PLEX_AUTH_COOKIE_SECURE must be true or false")
+		}
+	}
 	if value := os.Getenv("ENCODE_ENABLED"); value != "" {
 		cfg.EncodeEnabled, err = strconv.ParseBool(value)
 		if err != nil {

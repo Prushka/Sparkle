@@ -54,6 +54,8 @@ const (
 )
 
 type Hub struct {
+	authorizeMedia func(http.ResponseWriter, *http.Request, string) bool
+	canAccessMedia func(context.Context, string) bool
 	outputDir      string
 	pfpDir         string
 	maxUploadBytes int64
@@ -65,6 +67,9 @@ type Hub struct {
 }
 
 type Room struct {
+	// Serialize authorization and mutations against HTTP/WebSocket media changes.
+	// The state mutex remains independent so socket writes never wait on Plex IO.
+	accessMu                  sync.Mutex
 	id                        string
 	mediaID                   string
 	mediaUpdatedAt            int64
@@ -96,7 +101,13 @@ type roomResponse struct {
 }
 
 func NewHub(options Options) *Hub {
+	checkOrigin := options.CheckOrigin
+	if checkOrigin == nil {
+		checkOrigin = func(*http.Request) bool { return true }
+	}
 	return &Hub{
+		authorizeMedia: options.AuthorizeMedia,
+		canAccessMedia: options.CanAccessMedia,
 		outputDir:      options.OutputDir,
 		pfpDir:         options.PFPDir,
 		maxUploadBytes: options.MaxUploadBytes,
@@ -105,7 +116,7 @@ func NewHub(options Options) *Hub {
 			ReadBufferSize:    1024,
 			WriteBufferSize:   1024,
 			EnableCompression: true,
-			CheckOrigin:       func(_ *http.Request) bool { return true },
+			CheckOrigin:       checkOrigin,
 		},
 	}
 }
@@ -157,6 +168,9 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid player id", http.StatusBadRequest)
 		return
 	}
+	if snapshot, ok := h.roomSnapshot(roomID); ok && !h.permit(w, r, snapshot.MediaID) {
+		return
+	}
 
 	conn, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -170,6 +184,15 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	player := newPlayer(conn, playerID)
 	room := h.addPlayerToRoom(roomID, player)
+	if h.canAccessMedia != nil {
+		player.canAccess = func(id string) bool { return h.canAccessMedia(r.Context(), id) }
+		player.canAccessRoom = func() bool {
+			room.mu.RLock()
+			id := room.mediaID
+			room.mu.RUnlock()
+			return player.canAccess(id)
+		}
+	}
 
 	log.Printf("[%s] connected to room %s", playerID, roomID)
 	go player.writePump()
@@ -259,7 +282,10 @@ func (h *Hub) HandleCreateRoom(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, h.upsertRoom(roomID, mediaID, nil))
+	if !h.permit(w, r, mediaID) {
+		return
+	}
+	h.writeAuthorizedRoom(w, r, roomID, mediaID, true)
 }
 
 func (h *Hub) HandleGetRoom(w http.ResponseWriter, r *http.Request) {
@@ -272,6 +298,9 @@ func (h *Hub) HandleGetRoom(w http.ResponseWriter, r *http.Request) {
 	snapshot, ok := h.roomSnapshot(roomID)
 	if !ok {
 		http.NotFound(w, r)
+		return
+	}
+	if !h.permit(w, r, snapshot.MediaID) {
 		return
 	}
 	writeJSON(w, snapshot)
@@ -295,11 +324,41 @@ func (h *Hub) HandleUpdateRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, ok := h.roomSnapshot(roomID); !ok {
+	if !h.permit(w, r, mediaID) {
+		return
+	}
+	h.writeAuthorizedRoom(w, r, roomID, mediaID, false)
+}
+
+// The desired media is authorized before calling this method. Existing room
+// access is checked while holding the same lock used by socket mutations.
+func (h *Hub) writeAuthorizedRoom(w http.ResponseWriter, r *http.Request, roomID, mediaID string, create bool) {
+	h.mu.Lock()
+	room := h.rooms[roomID]
+	if room == nil && create {
+		room = newRoom(roomID, mediaID)
+		h.rooms[roomID] = room
+	}
+	h.mu.Unlock()
+	if room == nil {
 		http.NotFound(w, r)
 		return
 	}
-	writeJSON(w, h.upsertRoom(roomID, mediaID, nil))
+	room.accessMu.Lock()
+	room.mu.RLock()
+	current := room.mediaID
+	room.mu.RUnlock()
+	if !h.permit(w, r, current) {
+		room.accessMu.Unlock()
+		return
+	}
+	response := room.updateMediaID(mediaID, nil)
+	room.accessMu.Unlock()
+	writeJSON(w, response)
+}
+
+func (h *Hub) permit(w http.ResponseWriter, r *http.Request, id string) bool {
+	return h.authorizeMedia == nil || h.authorizeMedia(w, r, id)
 }
 
 func decodeJSONRequest(w http.ResponseWriter, r *http.Request, target any) error {
@@ -494,7 +553,19 @@ func (h *Hub) readPump(room *Room, player *Player) {
 			}
 			return
 		}
+		room.accessMu.Lock()
+		if player.canAccessRoom != nil && !player.canAccessRoom() {
+			room.accessMu.Unlock()
+			player.denyAccess()
+			return
+		}
+		if target, moving := broadcastMoveToMediaID(payload.Broadcast); moving && player.canAccess != nil && !player.canAccess(target) {
+			room.accessMu.Unlock()
+			player.denyAccess()
+			return
+		}
 		room.handlePayload(player, payload)
+		room.accessMu.Unlock()
 	}
 }
 

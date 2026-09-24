@@ -44,6 +44,7 @@ type Client struct {
 	cacheBytes int
 	requests   chan struct{}
 	identity   string
+	machineID  string
 	initMu     sync.Mutex
 }
 
@@ -157,10 +158,20 @@ func (c *Client) get(ctx context.Context, endpoint string, query url.Values, tar
 }
 
 func (c *Client) Identity(ctx context.Context) (string, error) {
+	if _, err := c.MachineIdentifier(ctx); err != nil {
+		return "", err
+	}
 	c.initMu.Lock()
 	defer c.initMu.Unlock()
-	if c.identity != "" {
-		return c.identity, nil
+	return c.identity, nil
+}
+
+// MachineIdentifier is used only by server-side Plex membership verification.
+func (c *Client) MachineIdentifier(ctx context.Context) (string, error) {
+	c.initMu.Lock()
+	defer c.initMu.Unlock()
+	if c.machineID != "" {
+		return c.machineID, nil
 	}
 	var r Response
 	if err := c.get(ctx, "/identity", nil, &r); err != nil {
@@ -171,7 +182,8 @@ func (c *Client) Identity(ctx context.Context) (string, error) {
 	}
 	h := sha256.Sum256([]byte(r.Container.MachineIdentifier))
 	c.identity = fmt.Sprintf("%x", h[:6])
-	return c.identity, nil
+	c.machineID = r.Container.MachineIdentifier
+	return c.machineID, nil
 }
 
 func (c *Client) ID(ctx context.Context, key string, version int64) (string, error) {

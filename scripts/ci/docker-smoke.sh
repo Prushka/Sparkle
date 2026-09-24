@@ -26,10 +26,6 @@ printf 'WEBVTT\n\nNOTE Sparkle range test\n' > "$fixture_dir/output/ci-probe.vtt
 # A user-defined bridge permits the host browser to reach the published frontend port.
 # Docker's internal-only networks disable port publishing on current engines.
 docker network create "$network" >/dev/null
-docker run -d --name "$api" --network "$network" --network-alias sparkle-api \
-  --read-only --tmpfs /data/pfp --tmpfs /cache/media \
-  --mount "type=bind,source=$fixture_dir/output,target=/data/output,readonly" \
-  "$LOCAL_API_IMAGE" >/dev/null
 docker run -d --name "$frontend" --network "$network" -p 127.0.0.1::3000 \
   -e SERVER_BE=/be -e SERVER_STATIC=/static \
   -e SERVER_INTERNAL_BE=http://sparkle-api:1323 \
@@ -39,6 +35,11 @@ docker run -d --name "$frontend" --network "$network" -p 127.0.0.1::3000 \
 test "$(docker exec "$frontend" id -u)" = '1001'
 port="$(docker port "$frontend" 3000/tcp)"
 export SPARKLE_TEST_URL="http://$port"
+docker run -d --name "$api" --network "$network" --network-alias sparkle-api \
+  --read-only --tmpfs /data/pfp --tmpfs /cache/media \
+  -e PLEX_AUTH_ORIGINS="$SPARKLE_TEST_URL" \
+  --mount "type=bind,source=$fixture_dir/output,target=/data/output,readonly" \
+  "$LOCAL_API_IMAGE" >/dev/null
 for attempt in {1..60}; do
   if curl --fail --silent "$SPARKLE_TEST_URL/api/runtime-env" >/dev/null; then
     break
@@ -55,4 +56,5 @@ node scripts/ci/smoke-images.mjs
 SPARKLE_TEST_CHANNEL=chrome npx playwright test \
   tests/e2e/library.spec.ts tests/e2e/room-layout.spec.ts tests/e2e/raw.spec.ts \
   --grep 'Library|virtualized|million-item|room controls'
+SPARKLE_TEST_CHANNEL=chrome npx playwright test tests/e2e/plex-auth.spec.ts
 echo 'Both containers passed API/proxy, range, player asset and browser smoke tests.'

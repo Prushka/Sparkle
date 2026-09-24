@@ -5,6 +5,8 @@ Vidstack → Video Settings → HDR output offers **Automatic**, **Compatible**,
 including SDR. The selection is saved in browser localStorage (`sparkle.raw.hdr`).
 Each participant chooses locally; identical encodes are shared across participants
 and rooms. The room continues to identify the original Plex item and media version.
+These derivatives require the same [Plex membership](plex-auth.md) as the original;
+they are separate from the public Encoded catalog.
 The HDR output panel shows live video-plus-selected-audio bitrate for the active
 mode, including original playback and client tone mapping. It measures compressed
 packet bytes over the preceding three seconds of media, updated once per second;

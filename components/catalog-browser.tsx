@@ -31,6 +31,8 @@ import {
 } from '@/components/ui/select';
 import { LibraryPoster } from '@/components/library-poster';
 import { useLibraryNavigation, type LibraryTrailItem } from '@/lib/use-library-navigation';
+import { usePlexAuth } from '@/components/plex-auth';
+import { backendFetch } from '@/lib/plex-access';
 
 const sourceOptions = { all: 'Both sources', processed: 'Encoded', plex: 'Plex · Raw' };
 const sortOptions = {
@@ -72,9 +74,17 @@ export function CatalogBrowser({
 	onSelect?: (id: string) => void;
 	compact?: boolean;
 }) {
+	const auth = usePlexAuth();
+	const rawAllowed = !auth.enabled || auth.canAccessRaw;
 	const [sources, setSources] = useState<LibrarySource[]>([]);
 	const { state: navigation, update: navigate } = useLibraryNavigation(compact);
-	const { source, library, kind, sort, query, trail } = navigation;
+	const { kind, sort, query } = navigation;
+	const source = rawAllowed ? navigation.source : 'processed';
+	const library = rawAllowed ? navigation.library : '';
+	const trail =
+		rawAllowed || !navigation.trail.some((item) => item.id.startsWith('plex-'))
+			? navigation.trail
+			: [];
 	const [search, setSearch] = useState(query);
 	const searchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 	const [items, setItems] = useState<LibraryItem[]>([]);
@@ -101,12 +111,12 @@ export function CatalogBrowser({
 	const rowHeight = Math.ceil(posterHeight + (episodes ? 108 : 82));
 	useEffect(() => {
 		const controller = new AbortController();
-		fetch(joinBackendPath(backendBaseUrl, '/library/sources'), { signal: controller.signal })
+		backendFetch(joinBackendPath(backendBaseUrl, '/library/sources'), { signal: controller.signal })
 			.then((r) => (r.ok ? r.json() : Promise.reject()))
 			.then((v) => setSources(v.sources))
 			.catch(() => {});
 		return () => controller.abort();
-	}, [backendBaseUrl]);
+	}, [backendBaseUrl, auth.revision]);
 	// Only user edits schedule a search. Mirroring URL/history state back into a
 	// debounce effect can resurrect a cleared query or undo hierarchy navigation.
 	useEffect(() => {
@@ -129,6 +139,7 @@ export function CatalogBrowser({
 	}, []);
 	const load = useCallback(
 		async (next?: string) => {
+			if (!auth.ready) return;
 			if (next && busyRef.current) return;
 			requestRef.current?.abort();
 			const controller = new AbortController();
@@ -166,7 +177,7 @@ export function CatalogBrowser({
 				}
 			}
 		},
-		[backendBaseUrl, source, library, kind, sort, query, parent]
+		[backendBaseUrl, source, library, kind, sort, query, parent, auth.ready, auth.revision]
 	);
 	useEffect(() => {
 		setItems([]);
@@ -258,9 +269,13 @@ export function CatalogBrowser({
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
-							<SelectItem value="all">Both sources</SelectItem>
+							<SelectItem value="all" disabled={!rawAllowed}>
+								Both sources
+							</SelectItem>
 							<SelectItem value="processed">Encoded</SelectItem>
-							<SelectItem value="plex">Plex · Raw</SelectItem>
+							<SelectItem value="plex" disabled={!rawAllowed}>
+								Plex · Raw{!rawAllowed ? ' · Sign in' : ''}
+							</SelectItem>
 						</SelectContent>
 					</Select>
 					<Select

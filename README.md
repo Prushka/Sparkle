@@ -10,6 +10,9 @@ library from the same Library view.
 ## Features
 
 - Shared play/pause, seeking, media changes, reconnects, profiles, chat, and notifications.
+- Plex sign-in in Library and the player. Server members can access every configured
+  Raw library; anonymous visitors can use existing Encoded media. Raw rooms prompt
+  visitors to sign in or leave. See [authentication setup](docs/plex-auth.md).
 - **Go back to library** beside **Change media** clears the room's selected media and
   returns everyone to Library while keeping the same room ID and library filters.
 - A paged, searchable poster Library with source filters, seasons, episodes, and **Raw**
@@ -156,18 +159,21 @@ credentials out of browser configuration.
 
 ### Backend
 
-| Variable             | Purpose / example                                                         |
-| -------------------- | ------------------------------------------------------------------------- |
-| `ADDR`               | Listening address; `:1323`                                                |
-| `OUTPUT`             | Existing processed-media root; `./output` in `.env.example`               |
-| `JOBS_CACHE_TTL`     | Processed catalog refresh interval; `15m` in the example/startup scripts  |
-| `PFP_DIR`            | Writable directory for new avatars; `./data/pfp`                          |
-| `MAX_PFP_BYTES`      | Avatar upload limit; `12000000` bytes                                     |
-| `MEDIA_CACHE_DIR`    | Writable artwork and optional encoded-segment cache; `./cache/media`      |
-| `PLEX_URL`           | Plex server base URL, without a token or credentials in the URL           |
-| `PLEX_TOKEN`         | Server-only Plex token                                                    |
-| `PLEX_LIBRARY_IDS`   | Comma-separated allowed section IDs; empty allows all movie/show sections |
-| `PLEX_PATH_MAPPINGS` | JSON array mapping absolute Plex roots to absolute backend-visible roots  |
+| Variable                    | Purpose / example                                                                    |
+| --------------------------- | ------------------------------------------------------------------------------------ |
+| `ADDR`                      | Listening address; `:1323`                                                           |
+| `OUTPUT`                    | Existing processed-media root; `./output` in `.env.example`                          |
+| `JOBS_CACHE_TTL`            | Processed catalog refresh interval; `15m` in the example/startup scripts             |
+| `PFP_DIR`                   | Writable directory for new avatars; `./data/pfp`                                     |
+| `MAX_PFP_BYTES`             | Avatar upload limit; `12000000` bytes                                                |
+| `MEDIA_CACHE_DIR`           | Writable artwork and optional encoded-segment cache; `./cache/media`                 |
+| `PLEX_URL`                  | Plex server base URL, without a token or credentials in the URL                      |
+| `PLEX_TOKEN`                | Server-only Plex token                                                               |
+| `PLEX_LIBRARY_IDS`          | Comma-separated allowed section IDs; empty allows all movie/show sections            |
+| `PLEX_PATH_MAPPINGS`        | JSON array mapping absolute Plex roots to absolute backend-visible roots             |
+| `PLEX_AUTH_ORIGINS`         | Exact trusted frontend origins; defaults to localhost and 127.0.0.1 on port 3001     |
+| `PLEX_AUTH_COOKIE_SECURE`   | Secure cookies; `true` by default, `false` allowed only for loopback development     |
+| `PLEX_AUTH_COOKIE_SAMESITE` | `lax` by default; `none` enables Secure partitioned cookies for cross-site embedding |
 
 Windows mapping example:
 
@@ -186,6 +192,11 @@ defined in [config.go](backend/internal/config/config.go). Without the startup
 scripts, its processed-cache default is `30m` and relative paths use the process
 working directory. Rooms and their live state are held in backend memory and
 are not persisted across a backend restart.
+
+Plex account tokens remain in backend memory behind an HttpOnly session cookie;
+they are never stored in browser localStorage. Sessions last up to 14 days but
+backend restarts sign everyone out. Use HTTPS and configure the actual frontend
+origin for deployment; see [Plex sign-in](docs/plex-auth.md) for proxy and Activity settings.
 
 See [Plex configuration](docs/plex-raw-media.md#configuration) for library IDs,
 mapping confinement, cache limits, and the catalog/streaming API.
