@@ -27,11 +27,27 @@ export async function getRoomRecord(
 	roomId: string
 ): Promise<RoomRecord | null> {
 	const response = await fetchFn(roomUrl(roomId), fetchOptions());
-	if (response.status === 404) {
+	// Room participation still requires membership; previews use the separate read below.
+	if ([401, 403, 404].includes(response.status)) {
 		return null;
 	}
 	if (!response.ok) {
 		throw new Error(`Failed to load room ${roomId}: ${response.status}`);
+	}
+	return response.json();
+}
+
+export async function getRoomPreviewRecord(
+	fetchFn: typeof fetch,
+	roomId: string
+): Promise<RoomRecord | null> {
+	const response = await fetchFn(
+		`${getBackendBaseUrl()}/share/rooms/${encodeURIComponent(roomId)}`,
+		{ cache: 'no-store' }
+	);
+	if (response.status === 404) return null;
+	if (!response.ok) {
+		throw new Error(`Failed to load room preview ${roomId}: ${response.status}`);
 	}
 	return response.json();
 }

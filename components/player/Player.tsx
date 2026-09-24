@@ -66,7 +66,7 @@ import {
 	IconVolume
 } from '@tabler/icons-react';
 import { useAppState } from '@/lib/app-state';
-import { PlexAccountButton } from '@/components/plex-auth';
+import { PlexAccountButton, usePlexAuth } from '@/components/plex-auth';
 import { backendFetch, PlexAccessError, plexAccessRequiredEvent } from '@/lib/plex-access';
 import { useTheme } from '@/lib/theme';
 import { createNotificationAudioUrl } from '@/lib/player/notification-audio';
@@ -5791,9 +5791,12 @@ export function Player({
 		discordAuth
 	} = useAppState();
 	const { theme, setTheme } = useTheme();
+	const plexAuth = usePlexAuth();
+	const socketAccount = plexAuth.authenticated ? plexAuth.profileId || 'plex' : 'guest';
 	const playerElementRef = useRef<MediaPlayerInstance | null>(null);
 	const socketRef = useRef<WebSocket | null>(null);
 	const socketUrlRef = useRef<string | null>(null);
+	const socketAccountRef = useRef('');
 	const reconnectTimerRef = useRef<number | null>(null);
 	const reconnectAttemptRef = useRef(0);
 	const youtubeSocketRef = useRef<WebSocket | null>(null);
@@ -5874,7 +5877,9 @@ export function Player({
 	const [audioRemountKey, setAudioRemountKey] = useState(0);
 	const [name, setName] = useState('');
 	const [profileNameDraft, setProfileNameDraft] = useState('');
-	const [profileId, setProfileId] = useState('');
+	const [localProfileId, setProfileId] = useState('');
+	const profileId =
+		plexAuth.authenticated && plexAuth.profileId ? plexAuth.profileId : localProfileId;
 	const [playerId, setPlayerId] = useState('');
 	const [controlsChatPickerOpen, setControlsChatPickerOpen] = useState(false);
 	const lastSavedNameRef = useRef('');
@@ -5999,7 +6004,11 @@ export function Player({
 	const discordUser = discord?.user;
 	const discordUserId = discordUser?.id || '';
 	const isDiscordActivityFrame = searchParams.has('frame_id') || searchParams.has('instance_id');
-	const displayName = discordUser ? getName(discordUser) || '' : name;
+	const displayName = plexAuth.authenticated
+		? plexAuth.name || 'Plex user'
+		: discordUser
+			? getName(discordUser) || ''
+			: name;
 	const voiceSupported = !isDiscordActivityFrame && !discordUser;
 	const socketCommunicating = socketConnected && tickedSecsAgo >= 0 && tickedSecsAgo < 5;
 	const currentChessPlayer = useMemo<ChessPlayerSyncState | null>(() => {
@@ -6631,7 +6640,7 @@ export function Player({
 	}, [discordUser]);
 
 	useEffect(() => {
-		if (discordUser || typeof window === 'undefined' || !name) {
+		if (plexAuth.authenticated || discordUser || typeof window === 'undefined' || !name) {
 			return;
 		}
 		if (window.localStorage.getItem(GENERATED_NAME_STORAGE_KEY) !== name) {
@@ -6643,7 +6652,7 @@ export function Player({
 		}
 		window.sessionStorage.setItem(messageKey, '1');
 		addSystemMessage(`Using placeholder name: ${name}`);
-	}, [addSystemMessage, discordUser, name]);
+	}, [addSystemMessage, discordUser, name, plexAuth.authenticated]);
 
 	useEffect(() => {
 		if (typeof window === 'undefined') {
@@ -7569,7 +7578,7 @@ export function Player({
 			discordUser
 		};
 		return [
-			{ ...selfPlayer, name: selfPlayer.name || displayName || 'You' },
+			{ ...selfPlayer, profileId, name: displayName || selfPlayer.name || 'You' },
 			...roomPlayers.filter((player) => player.id !== playerId)
 		];
 	}, [
@@ -8223,6 +8232,7 @@ export function Player({
 			if (
 				existingSocket &&
 				socketUrlRef.current === socketUrl &&
+				socketAccountRef.current === socketAccount &&
 				(existingSocket.readyState === WebSocket.CONNECTING ||
 					existingSocket.readyState === WebSocket.OPEN)
 			) {
@@ -8243,6 +8253,7 @@ export function Player({
 			const socket = new WebSocket(socketUrl);
 			socketRef.current = socket;
 			socketUrlRef.current = socketUrl;
+			socketAccountRef.current = socketAccount;
 			console.log(`Socket, connecting to ${room}`);
 			socket.onopen = () => {
 				if (socketRef.current !== socket) {
@@ -8530,6 +8541,7 @@ export function Player({
 			onRoomMediaChangedRef,
 			playSoundEffectRef,
 			pulseSoundEffectBadgeRef,
+			socketAccount,
 			sendProfileRef,
 			sendSettingsRef,
 			updateLastTickedRef,
@@ -8540,6 +8552,12 @@ export function Player({
 	useEffect(() => {
 		connectRef.current = connect;
 	}, [connect]);
+
+	useEffect(() => {
+		// Reconnect with the new HttpOnly session after sign-in/out. Keep the
+		// player ID and local playback instance; only account binding changes.
+		if (socketRef.current) connect();
+	}, [connect, socketAccount]);
 
 	const startWatchRoomConnection = useCallback(() => {
 		void refreshRoomMedia().then((changed) => {
@@ -9769,6 +9787,9 @@ export function Player({
 									</Dialog.Content>
 								</Dialog.Root>
 							);
+						}
+						if (plexAuth.authenticated) {
+							return <PlexAccountButton key={player.id}>{playerBadge}</PlexAccountButton>;
 						}
 						return (
 							<Dialog.Root key={player.id} onOpenChange={handleProfileSettingsOpenChange}>

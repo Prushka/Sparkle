@@ -7,6 +7,7 @@ import {
 	useEffect,
 	useRef,
 	useState,
+	type ReactElement,
 	type ReactNode
 } from 'react';
 import { IconChevronRight, IconLoader2, IconLogout } from '@tabler/icons-react';
@@ -20,6 +21,7 @@ type PlexSession = {
 	authenticated: boolean;
 	canAccessRaw: boolean;
 	name?: string;
+	profileId?: string;
 };
 type PlexAuth = PlexSession & {
 	ready: boolean;
@@ -112,13 +114,16 @@ export function PlexAuthProvider({ children }: { children: ReactNode }) {
 			const target = new URL(data.url);
 			if (target.origin !== 'https://app.plex.tv' || target.pathname !== '/auth')
 				throw new Error('Invalid Plex sign-in destination.');
+			// Confirm the HttpOnly pending cookie survives a round trip before
+			// sending the user to Plex, which cannot detect our cookie restrictions.
+			let result = await request('poll', 'POST', controller.signal);
 			popup.location.replace(target.href);
 			const deadline = Date.now() + 10 * 60_000;
 			while (Date.now() < deadline && !controller.signal.aborted) {
-				await new Promise<void>((resolve) => setTimeout(resolve, 2000));
-				if (controller.signal.aborted) break;
-				const result = await request('poll', 'POST', controller.signal);
 				if (!result.pending) {
+					// A focus refresh started before this response must not overwrite
+					// the newly authenticated session with its anonymous snapshot.
+					generation.current++;
 					apply(result.data);
 					if (!result.data.canAccessRaw)
 						setError(
@@ -127,10 +132,11 @@ export function PlexAuthProvider({ children }: { children: ReactNode }) {
 					popup.close();
 					return;
 				}
-				if (popup.closed) {
-					setError('Plex sign-in was cancelled.');
-					return;
-				}
+				// Plex can sever the window handle through its opener policy. Only
+				// the server-bound PIN determines whether authorization completed.
+				await new Promise<void>((resolve) => setTimeout(resolve, 2000));
+				if (controller.signal.aborted) break;
+				result = await request('poll', 'POST', controller.signal);
 			}
 			if (!controller.signal.aborted) setError('Plex sign-in expired. Please try again.');
 		} catch (caught) {
@@ -169,24 +175,26 @@ export function usePlexAuth() {
 	return value;
 }
 
-export function PlexAccountButton() {
+export function PlexAccountButton({ children }: { children?: ReactElement } = {}) {
 	const auth = usePlexAuth();
 	const [open, setOpen] = useState(false);
 	if (auth.ready && !auth.enabled) return null;
 	return (
 		<Dialog.Root open={open} onOpenChange={setOpen}>
 			<Dialog.Trigger asChild>
-				<Button
-					variant="outline"
-					size="sm"
-					className="h-9 max-w-full gap-2"
-					aria-label={auth.authenticated ? 'Plex account' : 'Sign in with Plex'}
-				>
-					<IconChevronRight className="size-4 text-amber-400" aria-hidden="true" />
-					<span className="max-w-36 truncate">
-						{auth.authenticated ? auth.name || 'Plex account' : 'Sign in with Plex'}
-					</span>
-				</Button>
+				{children ?? (
+					<Button
+						variant="outline"
+						size="sm"
+						className="h-9 max-w-full gap-2"
+						aria-label={auth.authenticated ? 'Plex account' : 'Sign in with Plex'}
+					>
+						<IconChevronRight className="size-4 text-amber-400" aria-hidden="true" />
+						<span className="max-w-36 truncate">
+							{auth.authenticated ? auth.name || 'Plex account' : 'Sign in with Plex'}
+						</span>
+					</Button>
+				)}
 			</Dialog.Trigger>
 			<Dialog.Content>
 				<Dialog.DialogHeader>

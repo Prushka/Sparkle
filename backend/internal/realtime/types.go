@@ -52,6 +52,7 @@ type Options struct {
 	AuthorizeMedia func(http.ResponseWriter, *http.Request, string) bool
 	CanAccessMedia func(context.Context, string) bool
 	CheckOrigin    func(*http.Request) bool
+	AccountProfile func(context.Context) (id, name string, ok bool)
 	PFPDir         string
 	OutputDir      string
 	MaxUploadBytes int64

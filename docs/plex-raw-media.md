@@ -7,6 +7,8 @@ provides shared NVENC derivatives; Plex access and original files stay read-only
 There is no Plex transcoding session or full-original-file cache.
 Raw media requires [Plex sign-in](plex-auth.md): any member of the configured
 server can access every configured library. Anonymous visitors use existing Encoded media.
+Shared Raw links expose title metadata and covers without a session for complete
+previews; library browsing, room participation and playback still require membership.
 Audio output is decoded PCM: TrueHD decoding does not imply
 Atmos bitstream passthrough.
 

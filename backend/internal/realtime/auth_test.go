@@ -1,12 +1,49 @@
 package realtime
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestAccountProfileOverridesRoomEdits(t *testing.T) {
+	r := newRoom("profiles", "encoded")
+	p := newPlayer(nil, "participant")
+	p.accountProfile = func() (string, string, bool) { return "plex-verified", "Plex member", true }
+	r.players[p.state.Id] = p
+	r.handlePayload(p, ClientPayload{Type: ProfileSync, Name: "Forged name", ProfileId: "custom-avatar", DiscordUser: &DiscordUser{ID: "123", Username: "fake"}})
+	if p.state.Name != "Plex member" || p.state.ProfileId != "plex-verified" || p.state.DiscordUser != nil {
+		t.Fatal("client overrode Plex account identity")
+	}
+	p.accountProfile = nil
+	r.handlePayload(p, ClientPayload{Type: ProfileSync, Name: "Guest name", ProfileId: "plex-verified"})
+	if p.state.Name != "Guest name" || p.state.ProfileId != "participant" {
+		t.Fatal("guest impersonated Plex avatar")
+	}
+	r.handlePayload(p, ClientPayload{Type: ProfileSync, Name: "Custom guest", ProfileId: "custom-avatar"})
+	if p.state.Name != "Custom guest" || p.state.ProfileId != "custom-avatar" {
+		t.Fatal("guest customization lost")
+	}
+	if isValidSocketPlayerID("plex-verified") || isValidSocketPlayerID("media_plex-verified") {
+		t.Fatal("Plex avatar namespace available as guest ID")
+	}
+	for _, signedIn := range []bool{false, true} {
+		h := NewHub(Options{AccountProfile: func(context.Context) (string, string, bool) { return "plex-verified", "Member", signedIn }})
+		defer h.Close()
+		for _, id := range []string{"plex-verified", "custom-avatar"} {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest("POST", "/pfp/"+id, nil)
+			req.SetPathValue("id", id)
+			h.HandlePFP(w, req)
+			if (signedIn || strings.HasPrefix(id, "plex-")) && w.Code != 403 {
+				t.Fatal("Plex avatar upload allowed")
+			}
+		}
+	}
+}
 
 func TestAnonymousUpdateCannotRacePastRawRoomAuthorization(t *testing.T) {
 	checking, release := make(chan struct{}), make(chan struct{})

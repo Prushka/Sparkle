@@ -18,10 +18,11 @@ const (
 )
 
 type Player struct {
-	canAccess     func(string) bool
-	canAccessRoom func() bool
-	conn          *websocket.Conn
-	send          chan []byte
+	canAccess      func(string) bool
+	canAccessRoom  func() bool
+	accountProfile func() (id, name string, ok bool)
+	conn           *websocket.Conn
+	send           chan []byte
 
 	state                PlayerSnapshot
 	joined               bool

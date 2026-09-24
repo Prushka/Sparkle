@@ -12,7 +12,8 @@ library from the same Library view.
 - Shared play/pause, seeking, media changes, reconnects, profiles, chat, and notifications.
 - Plex sign-in in Library and the player. Server members can access every configured
   Raw library; anonymous visitors can use existing Encoded media. Raw rooms prompt
-  visitors to sign in or leave. See [authentication setup](docs/plex-auth.md).
+  visitors to sign in or leave. Shared Raw links render full titles, descriptions and
+  covers without sign-in; playback remains protected. See [authentication setup](docs/plex-auth.md).
 - **Go back to library** beside **Change media** clears the room's selected media and
   returns everyone to Library while keeping the same room ID and library filters.
 - A paged, searchable poster Library with source filters, seasons, episodes, and **Raw**
@@ -195,7 +196,9 @@ are not persisted across a backend restart.
 
 Plex account tokens remain in backend memory behind an HttpOnly session cookie;
 they are never stored in browser localStorage. Sessions last up to 14 days but
-backend restarts sign everyone out. Use HTTPS and configure the actual frontend
+backend restarts sign everyone out. Signed-in room profiles use the Plex name and
+avatar; clicking your badge opens the Plex account dialog. Sign-out restores your
+saved guest profile. Use HTTPS and configure the actual frontend
 origin for deployment; see [Plex sign-in](docs/plex-auth.md) for proxy and Activity settings.
 
 See [Plex configuration](docs/plex-raw-media.md#configuration) for library IDs,

@@ -4,7 +4,7 @@ import { getBrowserStaticBaseUrl, getBrowserBackendBaseUrl } from '@/lib/server/
 import { fallbackDescription, getJobDescription } from '@/lib/server/metadata/job';
 import { getJob } from '@/lib/server/jobs';
 import { getRequestOrigin, toAbsoluteUrl } from '@/lib/server/request';
-import { getRoomRecord } from '@/lib/server/rooms';
+import { getRoomPreviewRecord } from '@/lib/server/rooms';
 import type { Job } from '@/lib/player/t';
 
 export type MediaPageRoute = {
@@ -58,7 +58,7 @@ async function getMediaMetadataData(route: MediaPageRoute): Promise<MediaMetadat
 
 	if (!mediaId) {
 		try {
-			const room = await getRoomRecord(fetch, route.roomId);
+			const room = await getRoomPreviewRecord(fetch, route.roomId);
 			mediaId = room?.mediaId || '';
 		} catch (error) {
 			console.error('Unable to load metadata room', error);
@@ -117,7 +117,9 @@ export async function generateMediaPageMetadata(route: MediaPageRoute): Promise<
 	const displayTitle = getDisplayTitle(data.job);
 	const description = await getJobDescription(fetch, data.job);
 	const previewUrl = toAbsoluteUrl(
-		data.job.Poster ? `${getBrowserBackendBaseUrl()}${data.job.Poster}` : `${getBrowserStaticBaseUrl()}/${data.job.Id}/poster.jpg`,
+		data.job.Poster
+			? `${getBrowserBackendBaseUrl()}${data.job.Poster}`
+			: `${getBrowserStaticBaseUrl()}/${data.job.Id}/poster.jpg`,
 		data.origin
 	);
 

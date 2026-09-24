@@ -42,8 +42,14 @@ func fixture(t *testing.T) (*Service, *http.ServeMux, *atomic.Int32, string) {
 				}
 			}
 			json.NewEncoder(w).Encode(map[string]any{"MediaContainer": map[string]any{"Metadata": rows, "offset": off, "totalSize": 1000000}})
-		case "/library/metadata/7", "/library/metadata/8":
-			fmt.Fprintf(w, `{"MediaContainer":{"Metadata":[{"ratingKey":%q,"librarySectionID":1,"type":"movie","title":"Sample","duration":10000,"Media":[{"id":1,"duration":10000,"Part":[{"id":2,"file":"/media/movie.mkv","size":10}]}]}]}}`, strings.TrimPrefix(r.URL.Path, "/library/metadata/"))
+		case "/library/metadata/7", "/library/metadata/8", "/library/metadata/9":
+			section := 1
+			if r.URL.Path == "/library/metadata/9" {
+				section = 2 // Not configured for sharing or playback.
+			}
+			fmt.Fprintf(w, `{"MediaContainer":{"Metadata":[{"ratingKey":%q,"librarySectionID":%d,"type":"movie","title":"Sample","summary":"A shared movie description.","year":2026,"duration":10000,"thumb":"/library/metadata/7/thumb/1","art":"/library/metadata/7/art/1","Media":[{"id":1,"duration":10000,"Part":[{"id":2,"file":"/media/movie.mkv","size":10}]}]}]}}`, strings.TrimPrefix(r.URL.Path, "/library/metadata/"), section)
+		case "/library/metadata/7/thumb/1", "/library/metadata/7/art/1":
+			w.Write([]byte("\x89PNG\r\n\x1a\nfixture image"))
 		default:
 			t.Errorf("unexpected Plex endpoint: %s", r.URL.Path)
 			http.NotFound(w, r)

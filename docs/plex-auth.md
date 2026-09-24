@@ -5,6 +5,13 @@ Plex's hosted sign-in window; passwords stay with Plex. The same account button
 offers **Sign out of Plex**. A Raw room presents sign-in and leave actions until
 the account is authorized. Leaving this prompt does not change the shared room.
 
+While signed in, room badges, chat and other participants use the verified Plex
+name and profile picture. Clicking your room badge opens **Plex account** instead
+of the guest profile editor. Change the name/picture in Plex; room messages cannot
+override that account identity. Signing out restores the saved guest profile.
+Discord Activity voice behavior remains unchanged; a signed-in Plex profile takes
+precedence over its display name/avatar.
+
 Anonymous visitors can browse, play and share existing **Encoded** titles from
 `OUTPUT`. Any member of the configured Plex server can access **every configured
 Raw library**, including libraries not individually shared with that member in
@@ -12,13 +19,22 @@ Plex. This is intentionally server membership authorization, not replication of
 Plex's per-library, rating, label or item restrictions. Do not enable this policy
 for a server whose members should have different access within Sparkle.
 
-Original files, Raw metadata, hierarchy, artwork, embedded tracks and on-demand
-NVENC derivatives all require membership. Selecting Encoded AV1/HEVC for a Plex
-video does not make it public. Public Encoded titles may retain conservatively
-matched Plex descriptions and covers; a signed, artwork-only URL permits those
-covers without granting arbitrary Plex access. Raw room HTTP requests and
-WebSocket connections enforce membership too, including later media changes.
-Public share/oEmbed previews for Raw titles use generic metadata.
+Original files, Raw library browsing/hierarchy, embedded track bytes and on-demand
+NVENC derivatives require membership. Selecting Encoded AV1/HEVC for a Plex video
+does not make playback public. Raw room participation, HTTP mutations and WebSocket
+connections enforce membership too, including later media changes.
+
+Shared links intentionally expose complete sanitized single-title metadata and
+poster/backdrop images without a session. `GET/HEAD /media/{id}` and
+`GET/HEAD /media/{id}/artwork/{poster|backdrop}` power Open Graph, Twitter and oEmbed
+previews. This includes titles, descriptions, episode information, technical metadata
+and artwork for configured libraries only; credentials and filesystem paths stay
+private. Referenced file/encode URLs still require authorization. `/share/rooms/{room}`
+provides only room ID, current media ID and its update timestamp for room-only links;
+it cannot join, create or change a room, or expose chat/participants/playback state.
+Preview requests do not forward viewer cookies and never enumerate the Plex library.
+Public Encoded titles continue to reuse conservatively matched Plex descriptions
+and signed artwork URLs.
 
 ## Configuration
 
@@ -42,6 +58,14 @@ Set-Cookie headers and avoids cross-site cookie restrictions. Absolute API URLs
 also work when cookies are permitted; use the same hostname consistently during
 development (`localhost` and `127.0.0.1` are different cookie sites). Every private
 backend fetch and libmedia range/HLS loader must include credentials.
+
+For local development, use `SERVER_BE=/be` and `SERVER_STATIC=/static`; keep the
+backend's address in `SERVER_INTERNAL_BE` and `SERVER_INTERNAL_STATIC`. A frontend
+on `localhost` with an absolute LAN-address API is cross-site: browsers can reject
+the Lax sign-in cookie even though Plex itself reports success. Sparkle checks the
+pending cookie before opening Plex authorization and reports missing cookies
+separately from an expired PIN. If this happens, correct the public proxy bases,
+reload the frontend configuration, then reload the page and start a new sign-in.
 
 Secure cookies are enabled by default. Use HTTPS for deployed instances. For
 local development only, `PLEX_AUTH_COOKIE_SECURE=false` is accepted when every
@@ -70,6 +94,13 @@ tokens stay in backend memory, never localStorage, browser responses or logs.
 The cookie survives browser restarts for up to 14 days; **backend restarts sign
 everyone out**, because session credentials are deliberately not persisted to
 disk. The stable client-identifier cookie is not an access credential.
+
+Plex avatar URLs and tokens remain server-side. A hashed profile identifier uses
+the existing room-avatar route, so other participants can see the picture without
+receiving account credentials. Avatar requests are limited to Plex's public avatar
+endpoint and its HTTPS `assets.plex.tv/avatars/` redirects, reject other redirects
+and non-image/oversized responses, and use a memory
+cache capped at 64 images of 512 KiB each. No avatar is written to mapped media.
 
 Membership is rechecked after five minutes on subsequent requests and active
 Raw-room socket checks. Plex verification failures fail closed. Sign-out revokes
@@ -101,3 +132,8 @@ sign-in/out, cookie visibility, mobile layouts, membership denial and resuming
 the original Raw room. A real Plex account must still complete its hosted sign-in
 to verify that account's membership. Never insert the owner's configured Plex
 token into a browser test to bypass the member flow.
+
+Run `tests/e2e/metadata.spec.ts` with `SPARKLE_RAW_TEST_ID` set to a configured Raw
+media ID to verify anonymous crawler HTML, oEmbed, artwork and playback denial.
+Optionally set `SPARKLE_RAW_TEST_ROOM` to an existing room playing that media to
+also verify room-only links. These checks need no account/session cookies.

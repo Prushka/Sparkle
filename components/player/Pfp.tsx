@@ -27,6 +27,9 @@ export function Pfp({
 	className?: string;
 	staticBaseUrl: string;
 }) {
+	// Plex profile IDs resolve through the server's avatar proxy, including in
+	// historical chat entries that still carry an older Discord identity.
+	if (id.startsWith('plex-')) discordUser = null;
 	const { pfpLastFetched, updatePfp } = useAppState();
 	const pfpRevision = pfpLastFetched[id];
 	const [failedImageSrc, setFailedImageSrc] = useState('');

@@ -56,6 +56,7 @@ const (
 type Hub struct {
 	authorizeMedia func(http.ResponseWriter, *http.Request, string) bool
 	canAccessMedia func(context.Context, string) bool
+	accountProfile func(context.Context) (id, name string, ok bool)
 	outputDir      string
 	pfpDir         string
 	maxUploadBytes int64
@@ -108,6 +109,7 @@ func NewHub(options Options) *Hub {
 	return &Hub{
 		authorizeMedia: options.AuthorizeMedia,
 		canAccessMedia: options.CanAccessMedia,
+		accountProfile: options.AccountProfile,
 		outputDir:      options.OutputDir,
 		pfpDir:         options.PFPDir,
 		maxUploadBytes: options.MaxUploadBytes,
@@ -183,6 +185,12 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	player := newPlayer(conn, playerID)
+	if h.accountProfile != nil {
+		player.accountProfile = func() (string, string, bool) { return h.accountProfile(r.Context()) }
+		if id, name, ok := player.accountProfile(); ok {
+			player.state.ProfileId, player.state.Name = id, trimRunes(name, 80)
+		}
+	}
 	room := h.addPlayerToRoom(roomID, player)
 	if h.canAccessMedia != nil {
 		player.canAccess = func(id string) bool { return h.canAccessMedia(r.Context(), id) }
@@ -200,6 +208,9 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 }
 
 func isValidSocketPlayerID(id string) bool {
+	if strings.HasPrefix(strings.TrimPrefix(id, MediaSubscriberPrefix), "plex-") {
+		return false
+	}
 	if strings.HasPrefix(id, MediaSubscriberPrefix) {
 		return safeID.MatchString(strings.TrimPrefix(id, MediaSubscriberPrefix))
 	}
@@ -211,6 +222,16 @@ func (h *Hub) HandlePFP(w http.ResponseWriter, r *http.Request) {
 	if !safeID.MatchString(id) {
 		http.Error(w, "invalid profile id", http.StatusBadRequest)
 		return
+	}
+	if strings.HasPrefix(id, "plex-") {
+		http.Error(w, "Plex profile pictures are managed by Plex", http.StatusForbidden)
+		return
+	}
+	if h.accountProfile != nil {
+		if _, _, ok := h.accountProfile(r.Context()); ok {
+			http.Error(w, "Plex profile pictures are managed by Plex", http.StatusForbidden)
+			return
+		}
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, h.maxUploadBytes+(1<<20))
@@ -289,6 +310,16 @@ func (h *Hub) HandleCreateRoom(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Hub) HandleGetRoom(w http.ResponseWriter, r *http.Request) {
+	h.getRoom(w, r, false)
+}
+
+// A share preview exposes only the room's current media identity. It neither
+// joins/creates a room nor returns participants, chat, or playback state.
+func (h *Hub) HandleRoomPreview(w http.ResponseWriter, r *http.Request) {
+	h.getRoom(w, r, true)
+}
+
+func (h *Hub) getRoom(w http.ResponseWriter, r *http.Request, preview bool) {
 	roomID := strings.TrimSpace(r.PathValue("room"))
 	if !safeID.MatchString(roomID) {
 		http.Error(w, "invalid room", http.StatusBadRequest)
@@ -300,9 +331,10 @@ func (h *Hub) HandleGetRoom(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if !h.permit(w, r, snapshot.MediaID) {
+	if !preview && !h.permit(w, r, snapshot.MediaID) {
 		return
 	}
+	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, snapshot)
 }
 
@@ -757,14 +789,20 @@ func (r *Room) handlePayload(current *Player, payload ClientPayload) {
 	case ProfileSync:
 		name := strings.TrimSpace(payload.Name)
 		profileID := strings.TrimSpace(payload.ProfileId)
-		if !safeID.MatchString(profileID) {
+		discordUser := sanitizeDiscordUser(payload.DiscordUser)
+		if !safeID.MatchString(profileID) || strings.HasPrefix(profileID, "plex-") {
 			profileID = current.state.Id
+		}
+		if current.accountProfile != nil {
+			if accountID, accountName, ok := current.accountProfile(); ok {
+				profileID, name, discordUser = accountID, accountName, nil
+			}
 		}
 		name = trimRunes(name, 80)
 		r.updatePlayer(current, now, func(state *PlayerSnapshot) {
 			state.Name = name
 			state.ProfileId = profileID
-			state.DiscordUser = sanitizeDiscordUser(payload.DiscordUser)
+			state.DiscordUser = discordUser
 		})
 	case BroadcastSync:
 		r.broadcast(current, sanitizeBroadcast(payload.Broadcast))

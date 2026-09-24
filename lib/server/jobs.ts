@@ -2,6 +2,8 @@ import { preprocessJob, type Job } from '@/lib/player/t';
 import { getBackendBaseUrl } from '@/lib/server/env';
 
 export async function getJob(fetchFn: typeof fetch, target: string): Promise<Job | null> {
+	// Direct metadata and artwork are public for link previews. File/encode
+	// requests and room participation still require a verified Plex session.
 	const response = await fetchFn(`${getBackendBaseUrl()}/media/${encodeURIComponent(target)}`, {
 		cache: 'no-store'
 	});

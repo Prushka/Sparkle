@@ -69,6 +69,7 @@ func main() {
 		AuthorizeMedia: auth.RequireMedia,
 		CanAccessMedia: auth.CanAccess,
 		CheckOrigin:    auth.OriginAllowed,
+		AccountProfile: auth.Profile,
 	})
 	pruner := &cachePruner{jobStore: jobStore}
 
@@ -89,13 +90,14 @@ func main() {
 	auth.Register(mux)
 	mediaCatalog.Register(mux)
 	encoder.Register(mux)
-	mux.Handle("GET /static/pfp/", profileFiles(cfg.PFPDir, cfg.OutputDir))
+	mux.Handle("GET /static/pfp/", auth.ProfileImages(profileFiles(cfg.PFPDir, cfg.OutputDir)))
 	mux.Handle("GET /static/", staticFiles(cfg.OutputDir))
 	mux.HandleFunc("GET /all", handleAll(jobStore))
 	mux.HandleFunc("GET /media/{id}", mediaCatalog.Media)
 	mux.HandleFunc("POST /cache/prune", pruner.Handle)
 	mux.HandleFunc("POST /rooms", hub.HandleCreateRoom)
 	mux.HandleFunc("GET /rooms/{room}", hub.HandleGetRoom)
+	mux.HandleFunc("GET /share/rooms/{room}", hub.HandleRoomPreview)
 	mux.HandleFunc("PUT /rooms/{room}", hub.HandleUpdateRoom)
 	mux.HandleFunc("POST /pfp/{id}", hub.HandlePFP)
 	mux.HandleFunc("GET /sync/{room}/{id}", hub.HandleWebSocket)

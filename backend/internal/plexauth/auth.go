@@ -39,6 +39,7 @@ type Options struct {
 type session struct {
 	mu                  sync.Mutex
 	token, client, name string
+	profileID, avatar   string
 	expires, checked    time.Time
 	access              bool
 	ctx                 context.Context
@@ -65,19 +66,21 @@ type Manager struct {
 	sessions map[[32]byte]*session
 	pins     map[[32]byte]*pending
 	rates    map[string]rate
+	avatars  map[string]*avatarEntry
 }
 type status struct {
 	Enabled       bool   `json:"enabled"`
 	Authenticated bool   `json:"authenticated"`
 	CanAccessRaw  bool   `json:"canAccessRaw"`
 	Name          string `json:"name,omitempty"`
+	ProfileID     string `json:"profileId,omitempty"`
 }
 type contextKey struct{}
 
 func New(opts Options) (*Manager, error) {
 	m := &Manager{identity: opts.Identity, origins: map[string]bool{}, secure: opts.Secure, sameSite: http.SameSiteLaxMode,
 		http: &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
-		api:  "https://plex.tv/api/v2", sessions: map[[32]byte]*session{}, pins: map[[32]byte]*pending{}, rates: map[string]rate{}}
+		api:  "https://plex.tv/api/v2", sessions: map[[32]byte]*session{}, pins: map[[32]byte]*pending{}, rates: map[string]rate{}, avatars: map[string]*avatarEntry{}}
 	if opts.SameSite == "none" {
 		if !opts.Secure {
 			return nil, errors.New("PLEX_AUTH_COOKIE_SAMESITE=none requires secure cookies")
@@ -161,6 +164,7 @@ func (m *Manager) state(ctx context.Context) status {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		v.Authenticated, v.Name, v.CanAccessRaw = true, s.name, s.access && s.ctx.Err() == nil && time.Since(s.checked) < accessTTL
+		v.ProfileID = s.profileID
 	}
 	return v
 }
@@ -179,11 +183,11 @@ func (m *Manager) refresh(ctx context.Context, s *session) {
 	if time.Since(s.checked) < accessTTL || s.ctx.Err() != nil {
 		return
 	}
-	name, access, err := m.verify(ctx, s.token, s.client)
+	profile, access, err := m.verify(ctx, s.token, s.client)
 	s.checked = time.Now()
 	s.access = err == nil && access
 	if err == nil {
-		s.name = name
+		s.name, s.profileID, s.avatar = profile.name, profile.id, profile.avatar
 	}
 	if !s.access {
 		s.cancel()
@@ -229,14 +233,15 @@ func (m *Manager) request(ctx context.Context, method, endpoint, client, token s
 	}
 	return nil
 }
-func (m *Manager) verify(ctx context.Context, token, client string) (string, bool, error) {
+func (m *Manager) verify(ctx context.Context, token, client string) (accountProfile, bool, error) {
 	var user struct {
 		ID       int64  `json:"id"`
 		Username string `json:"username"`
 		Title    string `json:"title"`
+		Thumb    string `json:"thumb"`
 	}
 	if err := m.request(ctx, "GET", "/user", client, token, nil, &user); err != nil || user.ID == 0 {
-		return "", false, errors.New("Unable to verify the Plex account")
+		return accountProfile{}, false, errors.New("Unable to verify the Plex account")
 	}
 	var resources []struct {
 		ClientIdentifier string `json:"clientIdentifier"`
@@ -244,11 +249,11 @@ func (m *Manager) verify(ctx context.Context, token, client string) (string, boo
 		AccessToken      string `json:"accessToken"`
 	}
 	if err := m.request(ctx, "GET", "/resources?includeHttps=1", client, token, nil, &resources); err != nil {
-		return "", false, err
+		return accountProfile{}, false, err
 	}
 	server, err := m.identity(ctx)
 	if err != nil {
-		return "", false, errors.New("Unable to verify access to the configured Plex server")
+		return accountProfile{}, false, errors.New("Unable to verify access to the configured Plex server")
 	}
 	name := user.Title
 	if name == "" {
@@ -257,16 +262,17 @@ func (m *Manager) verify(ctx context.Context, token, client string) (string, boo
 	if len(name) > 128 {
 		name = string([]rune(name)[:min(128, len([]rune(name)))])
 	}
+	profile := accountProfile{id: profileID(user.ID), name: name, avatar: safeAvatarURL(user.Thumb)}
 	for _, resource := range resources {
 		if resource.ClientIdentifier == server && resource.AccessToken != "" {
 			for _, provided := range strings.Split(resource.Provides, ",") {
 				if provided == "server" {
-					return name, true, nil
+					return profile, true, nil
 				}
 			}
 		}
 	}
-	return name, false, nil
+	return profile, false, nil
 }
 
 // Pruning and hard caps keep unauthenticated PIN creation and sessions bounded.
@@ -348,10 +354,18 @@ func (m *Manager) poll(w http.ResponseWriter, r *http.Request) {
 	if !m.mutation(w, r) {
 		return
 	}
+	pendingID := cookieID(r, pendingCookie)
+	if pendingID == "" {
+		reply(w, http.StatusBadRequest, map[string]string{
+			"code":  "plex_sign_in_cookie_required",
+			"error": "Your browser did not return the sign-in cookie. Allow cookies for Sparkle or contact the server owner.",
+		})
+		return
+	}
 	ctx, cancelRequest := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancelRequest()
 	r = r.WithContext(ctx)
-	key := sha256.Sum256([]byte(cookieID(r, pendingCookie)))
+	key := sha256.Sum256([]byte(pendingID))
 	m.mu.Lock()
 	m.pruneLocked()
 	p := m.pins[key]
@@ -390,7 +404,7 @@ func (m *Manager) poll(w http.ResponseWriter, r *http.Request) {
 		reply(w, 502, map[string]string{"error": "Invalid Plex sign-in response"})
 		return
 	}
-	name, access, err := m.verify(r.Context(), pin.AuthToken, p.client)
+	profile, access, err := m.verify(r.Context(), pin.AuthToken, p.client)
 	if err != nil {
 		reply(w, 502, map[string]string{"error": err.Error()})
 		return
@@ -398,7 +412,7 @@ func (m *Manager) poll(w http.ResponseWriter, r *http.Request) {
 	id := randomID()
 	expires := time.Now().Add(sessionTTL)
 	sessionContext, cancel := context.WithDeadline(context.Background(), expires)
-	s := &session{token: pin.AuthToken, client: p.client, name: name, access: access, checked: time.Now(), expires: expires, ctx: sessionContext, cancel: cancel}
+	s := &session{token: pin.AuthToken, client: p.client, name: profile.name, profileID: profile.id, avatar: profile.avatar, access: access, checked: time.Now(), expires: expires, ctx: sessionContext, cancel: cancel}
 	m.mu.Lock()
 	if m.pins[key] != p || len(m.sessions) >= 2048 {
 		m.mu.Unlock()
@@ -416,7 +430,7 @@ func (m *Manager) poll(w http.ResponseWriter, r *http.Request) {
 	m.mu.Unlock()
 	m.cookie(w, pendingCookie, "", -time.Hour)
 	m.cookie(w, sessionCookie, id, sessionTTL)
-	reply(w, 200, status{Enabled: true, Authenticated: true, CanAccessRaw: access, Name: name})
+	reply(w, 200, status{Enabled: true, Authenticated: true, CanAccessRaw: access, Name: profile.name, ProfileID: profile.id})
 }
 func (m *Manager) logout(w http.ResponseWriter, r *http.Request) {
 	if !m.mutation(w, r) {
@@ -433,6 +447,19 @@ func (m *Manager) logout(w http.ResponseWriter, r *http.Request) {
 	m.cookie(w, sessionCookie, "", -time.Hour)
 	m.cookie(w, pendingCookie, "", -time.Hour)
 	reply(w, 200, status{Enabled: m.identity != nil})
+}
+
+// Link previews may read a single title's sanitized metadata and cover without
+// a session. Keep this allowlist exact: descendants include private media bytes.
+func publicMediaRead(r *http.Request) bool {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		return false
+	}
+	parts := strings.Split(r.URL.Path, "/")
+	if len(parts) < 3 || parts[1] != "media" || !strings.HasPrefix(parts[2], "plex-") {
+		return false
+	}
+	return len(parts) == 3 || (len(parts) == 5 && parts[3] == "artwork" && (parts[4] == "poster" || parts[4] == "backdrop"))
 }
 
 func (m *Manager) Middleware(next http.Handler) http.Handler {
@@ -467,7 +494,7 @@ func (m *Manager) Middleware(next http.Handler) http.Handler {
 		}
 		allowed := m.state(r.Context()).CanAccessRaw
 		path := r.URL.Path
-		protected := strings.HasPrefix(path, "/media/plex-") || strings.HasPrefix(path, "/library/items/plex-")
+		protected := (strings.HasPrefix(path, "/media/plex-") && !publicMediaRead(r)) || strings.HasPrefix(path, "/library/items/plex-")
 		if protected && !allowed {
 			Required(w)
 			return
@@ -525,6 +552,7 @@ func (m *Manager) Close() {
 	}
 	m.sessions = map[[32]byte]*session{}
 	m.pins = map[[32]byte]*pending{}
+	m.avatars = map[string]*avatarEntry{}
 }
 
 // String deliberately avoids any credentials when inspected by diagnostics.

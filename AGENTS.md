@@ -75,11 +75,16 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
 
 ## Contracts to preserve
 
-- Plex sign-in uses server-held account tokens and opaque HttpOnly cookies. Raw APIs,
+- Plex sign-in uses server-held account tokens and opaque HttpOnly cookies. Raw browsing,
   files, NVENC derivatives and rooms require membership of the configured server;
   any member may access every configured library. Anonymous users get existing Encoded
   media only. Keep exact-origin CORS/CSRF checks and credentialed backend/player fetches.
   See [authentication](docs/plex-auth.md); never bypass it using the owner token in a browser.
+  Signed-in room profiles use the server-verified Plex name and proxied avatar. Reserve
+  the Plex profile namespace and preserve guest preferences on sign-out. Single-title
+  metadata and poster/backdrop GET/HEAD requests are public for full link previews;
+  `/share/rooms/{room}` exposes only the current media identity. Keep files, derivatives,
+  hierarchy, room mutations and WebSockets protected; never forward sessions into previews.
 - Plex access is read-only and endpoint-allowlisted. Do not add watched-state updates,
   scans, Plex transcoding, media modifications, or whole-original-file caching.
   Server decoding is confined to the explicit optional encoded mode; raw playback remains client-side.

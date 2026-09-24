@@ -24,6 +24,7 @@ func TestRoomHTTPAndWebSocketAuthorization(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /rooms", hub.HandleCreateRoom)
 	mux.HandleFunc("GET /rooms/{room}", hub.HandleGetRoom)
+	mux.HandleFunc("GET /share/rooms/{room}", hub.HandleRoomPreview)
 	mux.HandleFunc("PUT /rooms/{room}", hub.HandleUpdateRoom)
 	mux.HandleFunc("GET /sync/{room}/{id}", hub.HandleWebSocket)
 	f.m.Register(mux)
@@ -102,6 +103,17 @@ func TestRoomHTTPAndWebSocketAuthorization(t *testing.T) {
 			t.Fatal("raw room readable/mutable by guest", method, w.Code)
 		}
 	}
+	preview := roomRequest("GET", "/share/rooms/auth-room", "", nil)
+	var previewData map[string]any
+	if preview.Code != 200 || json.Unmarshal(preview.Body.Bytes(), &previewData) != nil || previewData["mediaId"] != "plex-server-1-1" || len(previewData) != 3 {
+		t.Fatal("preview must expose only current room/media identity", preview.Code, preview.Body.String())
+	}
+	if preview.Header().Get("Cache-Control") != "no-store" {
+		t.Fatal("room preview can retain stale media")
+	}
+	if roomRequest("GET", "/share/rooms/missing", "", nil).Code != 404 || roomRequest("PUT", "/share/rooms/auth-room", "encoded", nil).Code != 405 {
+		t.Fatal("preview created or changed a room")
+	}
 	conn, response, err := dial("media_denied", nil, "https://sparkle.test")
 	if conn != nil {
 		conn.Close()
@@ -161,5 +173,71 @@ func TestAnonymousWebSocketCannotSelectPlexMedia(t *testing.T) {
 	w := call(f.m.Middleware(mux), "GET", "/rooms/encoded-room")
 	if w.Code != 200 || strings.Contains(w.Body.String(), "plex-server-") {
 		t.Fatal("guest changed room media")
+	}
+}
+
+func TestPlexProfileSharedWithOtherRoomParticipants(t *testing.T) {
+	f := setup(t)
+	hub := realtime.NewHub(realtime.Options{AccountProfile: f.m.Profile, CheckOrigin: f.m.OriginAllowed})
+	defer hub.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go hub.Run(ctx)
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /sync/{room}/{id}", hub.HandleWebSocket)
+	server := httptest.NewServer(f.m.Middleware(mux))
+	defer server.Close()
+	memberCookie := f.login(t)
+	dial := func(id string, cookie *http.Cookie) *websocket.Conn {
+		t.Helper()
+		headers := http.Header{"Origin": {"https://sparkle.test"}}
+		if cookie != nil {
+			headers.Set("Cookie", cookie.String())
+		}
+		conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(server.URL, "http")+"/sync/profiles/"+id, headers)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { conn.Close() })
+		conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+		return conn
+	}
+	member, guest := dial("member", memberCookie), dial("guest", nil)
+	if err := member.WriteJSON(realtime.ClientPayload{Type: realtime.ProfileSync, Name: "Forged name", ProfileId: "fake-avatar"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := guest.WriteJSON(realtime.ClientPayload{Type: realtime.ProfileSync, Name: "Guest", ProfileId: "guest-avatar"}); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		var message realtime.SendPayload
+		if err := guest.ReadJSON(&message); err != nil {
+			t.Fatal(err)
+		}
+		if len(message.Players) != 2 {
+			continue
+		}
+		for _, player := range message.Players {
+			if player.Id == "member" && (player.Name != "Test member" || player.ProfileId != profileID(42)) {
+				t.Fatal("Plex profile not shared", player)
+			}
+		}
+		break
+	}
+	if err := member.WriteJSON(realtime.ClientPayload{Type: realtime.ChatSync, Chat: "Profile check"}); err != nil {
+		t.Fatal(err)
+	}
+	for {
+		var message realtime.SendPayload
+		if err := guest.ReadJSON(&message); err != nil {
+			t.Fatal(err)
+		}
+		if message.Chat == nil || message.Chat.Message != "Profile check" {
+			continue
+		}
+		if message.Chat.Author == nil || message.Chat.Author.Name != "Test member" || message.Chat.Author.ProfileId != profileID(42) {
+			t.Fatal("chat lost Plex identity")
+		}
+		break
 	}
 }

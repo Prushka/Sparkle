@@ -2,11 +2,18 @@ import { expect, test, type Page } from '@playwright/test';
 
 const rawId = 'plex-fixture-1-1';
 const denied = { code: 'plex_sign_in_required', error: 'Plex access required' };
+const plexProfileId = 'plex-0123456789abcdef0123456789abcdef';
 
 // Browser contracts use a fake PIN service. Backend tests independently verify
 // real HTTP cookies, Plex response validation, server membership and revocation.
-async function fixture(page: Page, member = true) {
+async function fixture(
+	page: Page,
+	member = true,
+	options: { cookiesBlocked?: boolean; manualAuthorization?: boolean } = {}
+) {
 	let signedIn = false;
+	let authorized = false;
+	let authorizationsOpened = 0;
 	let mediaId = rawId;
 	let roomWrites = 0;
 	const catalogSources: string[] = [];
@@ -14,17 +21,19 @@ async function fixture(page: Page, member = true) {
 		enabled: true,
 		authenticated: signedIn,
 		canAccessRaw: signedIn && member,
-		...(signedIn ? { name: 'Test member' } : {})
+		...(signedIn ? { name: 'Test member', profileId: plexProfileId } : {})
 	});
 	await page.route('**/api/runtime-env', (route) =>
 		route.fulfill({ json: { backendBaseUrl: '/be', staticBaseUrl: '/static' } })
 	);
-	await page.context().route('https://app.plex.tv/auth*', (route) =>
-		route.fulfill({
+	await page.context().route('https://app.plex.tv/auth*', (route) => {
+		authorizationsOpened++;
+		if (!options.manualAuthorization) authorized = true;
+		return route.fulfill({
 			contentType: 'text/html',
 			body: '<title>Plex test authorization</title><p>Mock Plex authorization</p>'
-		})
-	);
+		});
+	});
 	await page.route('**/be/auth/plex/*', async (route) => {
 		const action = new URL(route.request().url()).pathname.split('/').pop();
 		if (action !== 'session') {
@@ -33,9 +42,28 @@ async function fixture(page: Page, member = true) {
 		}
 		if (action === 'start')
 			return route.fulfill({
-				json: { url: 'https://app.plex.tv/auth#?clientID=fixture&code=fixture-pin', expiresIn: 600 }
+				json: {
+					url: 'https://app.plex.tv/auth#?clientID=fixture&code=fixture-pin',
+					expiresIn: 600
+				},
+				headers: options.cookiesBlocked
+					? {}
+					: {
+							'set-cookie':
+								'sparkle_plex_pending=opaque-pending-fixture; HttpOnly; SameSite=Lax; Path=/'
+						}
 			});
 		if (action === 'poll') {
+			if (!route.request().headers()['cookie']?.includes('sparkle_plex_pending='))
+				return route.fulfill({
+					status: 400,
+					json: {
+						code: 'plex_sign_in_cookie_required',
+						error:
+							'Your browser did not return the sign-in cookie. Allow cookies for Sparkle or contact the server owner.'
+					}
+				});
+			if (!authorized) return route.fulfill({ status: 202, json: { pending: true } });
 			signedIn = true;
 			return route.fulfill({
 				json: status(),
@@ -92,32 +120,44 @@ async function fixture(page: Page, member = true) {
 		});
 	});
 	await page.route(`**/be/media/${rawId}`, (route) =>
-		route.fulfill(
-			status().canAccessRaw
-				? {
-						json: {
-							Id: rawId,
-							Source: 'plex',
-							Input: 'Private movie.mkv',
-							State: 'complete',
-							Duration: 120,
-							EncodedCodecs: ['h264-8bit'],
-							Files: {},
-							MappedAudio: {},
-							Streams: [],
-							Chapters: [],
-							DominantColors: [],
-							JobModTime: 1
-						}
-					}
-				: { status: 401, json: denied }
-		)
+		route.fulfill({
+			json: {
+				Id: rawId,
+				Source: 'plex',
+				Input: 'Private movie.mkv',
+				State: 'complete',
+				Duration: 120,
+				EncodedCodecs: ['h264-8bit'],
+				Files: {},
+				MappedAudio: {},
+				Streams: [],
+				Chapters: [],
+				DominantColors: [],
+				JobModTime: 1
+			}
+		})
 	);
 	await page.route(/\/static\/(?:plex-fixture-1-1|encoded-fixture|pfp)\//, (route) =>
 		route.fulfill({ status: 404 })
 	);
+	await page.route(`**/static/pfp/${plexProfileId}.png*`, (route) =>
+		route.fulfill({
+			contentType: 'image/png',
+			body: Buffer.from(
+				'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aB1sAAAAASUVORK5CYII=',
+				'base64'
+			)
+		})
+	);
 	await page.routeWebSocket('**/be/sync/**', () => {});
-	return { catalogSources, roomWrites: () => roomWrites };
+	return {
+		catalogSources,
+		roomWrites: () => roomWrites,
+		authorizationsOpened: () => authorizationsOpened,
+		authorize: () => {
+			authorized = true;
+		}
+	};
 }
 
 async function signIn(page: Page) {
@@ -187,7 +227,20 @@ test('Raw room prompts, resumes the same room after sign-in and gates sign-out',
 	await signIn(page);
 	await expect(page.getByRole('region', { name: 'Current media' })).toBeVisible();
 	await expect(page).toHaveURL(new RegExp(`/private-room/media/${rawId}\\?query=keep`));
-	await page.getByRole('button', { name: 'Plex account', exact: true }).click();
+	const profile = page.getByRole('button', { name: 'Open profile settings', exact: true });
+	await expect(profile).toContainText('Test member');
+	await expect(profile.locator('img')).toHaveAttribute(
+		'src',
+		new RegExp(`/pfp/${plexProfileId}\\.png`)
+	);
+	await expect
+		.poll(() => profile.locator('img').evaluate((img: HTMLImageElement) => img.naturalWidth))
+		.toBeGreaterThan(0);
+	await profile.click();
+	await expect(
+		page.getByRole('dialog').getByRole('heading', { name: 'Plex account' })
+	).toBeVisible();
+	await expect(page.getByRole('dialog').getByRole('textbox')).toHaveCount(0);
 	await page.getByRole('button', { name: 'Sign out of Plex' }).click();
 	await expect(page.getByRole('heading', { name: 'Plex access required' })).toBeVisible();
 	await expect(page.getByRole('region', { name: 'Current media' })).toHaveCount(0);
@@ -206,4 +259,105 @@ test('an authenticated Plex account without server membership cannot enter a Raw
 	await expect(page.getByRole('dialog').getByRole('alert')).toContainText('does not have access');
 	await expect(page.getByRole('button', { name: 'Sign out of Plex' })).toBeVisible();
 	await expect(page.getByRole('region', { name: 'Current media' })).toHaveCount(0);
+});
+
+test('Plex profile overrides an Encoded room and sign-out restores guest customization', async ({
+	page
+}) => {
+	await fixture(page);
+	await page.addInitScript(() => {
+		localStorage.setItem('name', 'Saved guest');
+		localStorage.setItem('id', 'saved-guest-avatar');
+	});
+	await page.route('**/be/media/encoded-fixture', (route) =>
+		route.fulfill({
+			json: {
+				Id: 'encoded-fixture',
+				Source: 'processed',
+				Input: 'Public movie.mkv',
+				State: 'complete',
+				Duration: 120,
+				EncodedCodecs: ['h264-8bit'],
+				Files: {},
+				MappedAudio: {},
+				Streams: [],
+				Chapters: [],
+				DominantColors: [],
+				JobModTime: 1
+			}
+		})
+	);
+	await page.route('**/be/rooms/public-room', (route) =>
+		route.fulfill({ json: { roomId: 'public-room', mediaId: 'encoded-fixture' } })
+	);
+	await page.goto('/public-room/media/encoded-fixture');
+	const profile = page.getByRole('button', { name: 'Open profile settings', exact: true });
+	await expect(profile).toContainText('Saved guest');
+	await page.getByRole('button', { name: 'Sign in with Plex', exact: true }).click();
+	await signIn(page);
+	await page.keyboard.press('Escape');
+	await expect(profile).toContainText('Test member');
+	await profile.click();
+	await expect(page.getByRole('heading', { name: 'Plex account', exact: true })).toBeVisible();
+	await page.getByRole('button', { name: 'Sign out of Plex' }).click();
+	await expect(profile).toContainText('Saved guest');
+	await profile.click();
+	await expect(page.getByRole('heading', { name: 'Profile Settings', exact: true })).toBeVisible();
+	await expect(page.getByRole('textbox').last()).toHaveValue('Saved guest');
+	expect(
+		await page.evaluate(() => ({
+			name: localStorage.getItem('name'),
+			id: localStorage.getItem('id')
+		}))
+	).toEqual({ name: 'Saved guest', id: 'saved-guest-avatar' });
+});
+
+test('blocked cookies are reported before opening Plex authorization', async ({ page }) => {
+	const f = await fixture(page, true, { cookiesBlocked: true });
+	await page.goto('/public-room');
+	await page.getByRole('button', { name: 'Sign in with Plex', exact: true }).click();
+	const popup = page.waitForEvent('popup');
+	await page.getByRole('button', { name: 'Continue with Plex' }).click();
+	const authWindow = await popup;
+	await expect(page.getByRole('dialog').getByRole('alert')).toContainText('sign-in cookie');
+	await expect(page.getByRole('button', { name: 'Continue with Plex' })).toBeEnabled();
+	await expect.poll(() => authWindow.isClosed()).toBe(true);
+	expect(f.authorizationsOpened()).toBe(0);
+	await expect(page.getByRole('link', { name: /Private movie/ })).toHaveCount(0);
+});
+
+test('delayed authorization survives a closed popup handle and a stale focus refresh', async ({
+	page
+}) => {
+	const f = await fixture(page, true, { manualAuthorization: true });
+	await page.goto('/public-room');
+	await page.getByRole('button', { name: 'Sign in with Plex', exact: true }).click();
+	const popup = page.waitForEvent('popup');
+	await page.getByRole('button', { name: 'Continue with Plex' }).click();
+	const authWindow = await popup;
+	await expect(authWindow).toHaveURL(/https:\/\/app\.plex\.tv\/auth/);
+	let releaseRefresh!: () => void;
+	const heldRefresh = new Promise<void>((resolve) => {
+		releaseRefresh = resolve;
+	});
+	await page.route('**/be/auth/plex/session', async (route) => {
+		await heldRefresh;
+		await route.fulfill({ json: { enabled: true, authenticated: false, canAccessRaw: false } });
+	});
+	const staleRequest = page.waitForRequest('**/be/auth/plex/session');
+	await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+	await staleRequest;
+	await authWindow.close();
+	// Another pending response must not interpret a severed handle as cancellation.
+	const pending = await page.waitForResponse('**/be/auth/plex/poll');
+	expect(pending.status()).toBe(202);
+	f.authorize();
+	await expect(page.getByRole('button', { name: 'Sign out of Plex' })).toBeVisible();
+	const staleResponse = page.waitForResponse('**/be/auth/plex/session');
+	releaseRefresh();
+	await staleResponse;
+	await page.unroute('**/be/auth/plex/session');
+	await page.keyboard.press('Escape');
+	await expect(page.getByRole('link', { name: /Private movie/ })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Plex account', exact: true })).toBeVisible();
 });

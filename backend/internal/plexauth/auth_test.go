@@ -83,7 +83,7 @@ func setup(t *testing.T) *fixture {
 			if r.Header.Get("X-Plex-Token") != "account-secret" {
 				t.Error("incorrect server-side account token")
 			}
-			fmt.Fprint(w, `{"id":42,"username":"member","title":"Test member"}`)
+			fmt.Fprint(w, `{"id":42,"username":"member","title":"Test member","thumb":"https://plex.tv/users/test-member/avatar?c=123"}`)
 		case "/resources":
 			if f.member.Load() {
 				fmt.Fprint(w, `[{"clientIdentifier":"configured-server","provides":"server","accessToken":"resource-secret"}]`)
@@ -196,7 +196,7 @@ func TestStrongPINSessionAndLogout(t *testing.T) {
 	if w := call(f.h, "POST", "/auth/plex/logout", cookie); w.Code != 200 {
 		t.Fatal(w.Code)
 	}
-	if w := call(f.h, "GET", "/media/plex-example", cookie); w.Code != 401 {
+	if w := call(f.h, "GET", "/media/plex-example/parts/1/file", cookie); w.Code != 401 {
 		t.Fatal("logout did not revoke session")
 	}
 }
@@ -204,7 +204,7 @@ func TestStrongPINSessionAndLogout(t *testing.T) {
 func TestAnonymousProtectionAndEncodedPaging(t *testing.T) {
 	f := setup(t)
 	for _, method := range []string{"GET", "HEAD"} {
-		for _, path := range []string{"/media/plex-test", "/media/plex-test/artwork/poster", "/media/plex-test/parts/1/file", "/media/plex-test/parts/1/encoded/hevc/video-0.m4s", "/media/plex-test/parts/1/encoded/av1/fonts.json", "/library/items/plex-test/children", "/library/items?source=plex", "/library/items?libraryId=1"} {
+		for _, path := range []string{"/media/plex-test/parts/1/file", "/media/plex-test/parts/1/encoded/hevc/video-0.m4s", "/media/plex-test/parts/1/encoded/av1/fonts.json", "/media/plex-test/artwork/poster/file", "/media/plex-test/artwork/unknown", "/media/plex-test/other", "/library/items/plex-test/children", "/library/items?source=plex", "/library/items?libraryId=1"} {
 			w := call(f.h, method, path)
 			if w.Code != 401 || w.Header().Get("Cache-Control") != "no-store" {
 				t.Errorf("unprotected %s %s: %d", method, path, w.Code)
@@ -225,6 +225,58 @@ func TestAnonymousProtectionAndEncodedPaging(t *testing.T) {
 		if w := call(f.h, "GET", path); w.Code != 200 {
 			t.Fatal("public encoded media blocked")
 		}
+	}
+}
+
+func TestPublicMetadataAndArtworkRequireNoSession(t *testing.T) {
+	f := setup(t)
+	f.member.Store(false)
+	nonmember := f.login(t)
+	for _, cookie := range []*http.Cookie{nil, nonmember, {Name: sessionCookie, Value: randomID()}} {
+		for _, path := range []string{"/media/plex-test", "/media/plex-test/artwork/poster", "/media/plex-test/artwork/backdrop"} {
+			for _, method := range []string{"GET", "HEAD"} {
+				r := httptest.NewRequest(method, path, nil)
+				// Link-preview crawlers have neither Origin nor a login cookie.
+				if cookie != nil {
+					r.AddCookie(cookie)
+				}
+				w := httptest.NewRecorder()
+				f.h.ServeHTTP(w, r)
+				if w.Code != 200 || len(w.Result().Cookies()) != 0 {
+					t.Fatalf("public preview denied or issued credentials: %s %s: %d", method, path, w.Code)
+				}
+			}
+			for _, method := range []string{"POST", "PUT", "DELETE"} {
+				if w := call(f.h, method, path); w.Code != 401 {
+					t.Fatalf("metadata exception allowed mutation: %s %s", method, path)
+				}
+			}
+		}
+	}
+}
+
+func TestPollDistinguishesMissingCookieFromExpiredPIN(t *testing.T) {
+	f := setup(t)
+	start := call(f.h, "POST", "/auth/plex/start")
+	pending := findCookie(t, start, pendingCookie)
+	for _, cookies := range [][]*http.Cookie{nil, {{Name: pendingCookie, Value: "invalid"}}} {
+		w := call(f.h, "POST", "/auth/plex/poll", cookies...)
+		if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), `"code":"plex_sign_in_cookie_required"`) {
+			t.Fatalf("missing cookie reported as expiration: %d %s", w.Code, w.Body.String())
+		}
+		if len(w.Result().Cookies()) != 0 || w.Header().Get("Cache-Control") != "no-store" {
+			t.Fatal("missing cookie must not issue credentials or cache its response")
+		}
+	}
+	if w := call(f.h, "POST", "/auth/plex/poll", pending); w.Code != http.StatusAccepted {
+		t.Fatal("valid pending cookie rejected", w.Code)
+	}
+	f.m.pins[sha256.Sum256([]byte(pending.Value))].expires = time.Now().Add(-time.Second)
+	if w := call(f.h, "POST", "/auth/plex/poll", pending); w.Code != http.StatusGone {
+		t.Fatal("expired PIN not rejected", w.Code)
+	}
+	if len(f.m.sessions) != 0 || f.checks.Load() != 0 {
+		t.Fatal("unclaimed PIN authenticated")
 	}
 }
 
@@ -284,7 +336,7 @@ func TestForgeryCSRFAndOriginChecks(t *testing.T) {
 	if w := call(f.h, "POST", "/auth/plex/poll", &http.Cookie{Name: pendingCookie, Value: randomID()}); w.Code != 410 {
 		t.Fatal("forged flow accepted")
 	}
-	if w := call(f.h, "GET", "/media/plex-test", &http.Cookie{Name: sessionCookie, Value: randomID()}); w.Code != 401 {
+	if w := call(f.h, "GET", "/media/plex-test/parts/1/file", &http.Cookie{Name: sessionCookie, Value: randomID()}); w.Code != 401 {
 		t.Fatal("forged session accepted")
 	}
 	valid := f.login(t)
