@@ -55,6 +55,6 @@ node scripts/ci/smoke-images.mjs
 # These synthetic tests need no private Plex catalog, credentials or media fixtures.
 SPARKLE_TEST_CHANNEL=chrome npx playwright test \
   tests/e2e/library.spec.ts tests/e2e/room-layout.spec.ts tests/e2e/raw.spec.ts \
-  --grep 'Library|virtualized|million-item|room controls'
-SPARKLE_TEST_CHANNEL=chrome npx playwright test tests/e2e/plex-auth.spec.ts
+  --grep 'Library|virtualized|million-item|room controls' --trace retain-on-failure
+SPARKLE_TEST_CHANNEL=chrome npx playwright test tests/e2e/plex-auth.spec.ts --trace retain-on-failure
 echo 'Both containers passed API/proxy, range, player asset and browser smoke tests.'

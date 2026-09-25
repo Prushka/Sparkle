@@ -188,12 +188,18 @@ test('Library selects allow background scrolling and keyboard selection', async 
 	await page.mouse.wheel(0, 500);
 	await expect.poll(() => grid.evaluate((el) => el.scrollTop)).toBeGreaterThan(100);
 	await page.keyboard.press('Escape');
-	await source.focus();
-	await page.keyboard.press('ArrowDown');
+	await expect(page.getByRole('listbox')).not.toBeVisible();
+	await expect(source).toBeFocused();
+	await source.press('ArrowDown');
 	await expect(page.getByRole('listbox')).toBeVisible();
+	// Visibility precedes Base UI's animation-frame focus transfer. Sending End
+	// to the still-focused trigger can leave the original value selected in CI.
+	await expect(page.getByRole('option', { name: 'Both sources', exact: true })).toBeFocused();
 	await page.keyboard.press('End');
+	await expect(page.getByRole('option', { name: 'Plex · Raw', exact: true })).toBeFocused();
 	await page.keyboard.press('Enter');
 	await expect(source).toContainText('Plex · Raw');
+	await expect(page).toHaveURL(/[?&]source=plex(?:&|$)/);
 });
 
 test('Library controls and popups fit narrow mobile, tablet and desktop layouts', async ({

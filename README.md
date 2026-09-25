@@ -246,7 +246,8 @@ It runs Go race tests/vet, TypeScript and player tests, then starts both built i
 with disposable fixtures and checks HTTP APIs, frontend proxying, byte ranges, pinned
 player assets, and synthetic Chrome Library/room regressions. These checks need no
 Plex credentials or personal media; real-media and physical HDR qualification remain
-separate.
+separate. Failed browser checks retain traces, screenshots and error context in the
+run's `browser-smoke-<attempt>` artifact for seven days.
 
 - Branch pushes and manual runs publish `meinya/sparkle-api:<short-commit>` and
   `meinya/sparkle-next:<short-commit>` only after both images pass.
