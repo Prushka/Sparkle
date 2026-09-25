@@ -109,8 +109,9 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
 - Raw demuxing/decoding stays client-side. Keep audio, subtitles, HDR choices, and versions
   inside Vidstack settings. Audio/subtitle preferences are local; version changes are shared.
 - Audio normalization is a local control beside Captions. Preserve the PCM hook before
-  user volume and the native element's clock, volume and mute. Use linked multichannel
-  gain, bounded AudioWorklet processing and an exact unity bypass when disabled; never
+  user volume and the native element's clock, volume and mute. Downmix to stereo before
+  measuring loudness; link left/right gain and guard peaks after mixing. Keep bounded
+  AudioWorklet processing and an exact original-channel bypass when disabled; never
   seek, reload or broadcast playback events for a normalization toggle. See
   [audio normalization](docs/audio-normalization.md) for assets, lifecycle and checks.
 - Server encodes share cache keys by source fingerprint, codec, profile and time segment,

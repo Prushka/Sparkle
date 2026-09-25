@@ -24,12 +24,12 @@ export function AudioNormalizationButton() {
 		return () => el.removeEventListener('sparkle-normalization-status', update);
 	}, [player]);
 	const label = !enabled
-		? 'Normalize audio'
+		? 'Normalize audio to stereo'
 		: state === 'unavailable'
 			? 'Normalization unavailable · original audio'
 			: state === 'loading'
 				? 'Loading audio normalization…'
-				: 'Disable audio normalization';
+				: 'Disable stereo normalization';
 	return (
 		<DefaultTooltip content={label} placement="top">
 			<button

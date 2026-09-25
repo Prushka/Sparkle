@@ -4,6 +4,7 @@ export const NORMALIZATION_EVENT = 'sparkle-audio-normalization';
 export type NormalizationStatus = {
 	state: 'off' | 'loading' | 'active' | 'unavailable';
 	channels?: number;
+	inputChannels?: number;
 	gainDB?: number;
 	frames?: number;
 };
@@ -52,7 +53,7 @@ async function loadModule(context: BaseAudioContext) {
 	let pending = modules.get(context);
 	if (!pending) {
 		pending = context.audioWorklet
-			.addModule('/vendor/libmedia/audio/normalize-v1.js')
+			.addModule('/vendor/libmedia/audio/normalize-v2.js')
 			.catch((error) => {
 				modules.delete(context);
 				throw error;
@@ -69,6 +70,13 @@ export class AudioNormalization {
 	private destination?: AudioNode;
 	private element?: HTMLMediaElement;
 	private boost?: GainNode;
+	private dry?: GainNode;
+	private wet?: GainNode;
+	private dryConnected = false;
+	private wetConnected = false;
+	private stereoSupported?: boolean;
+	private routed?: boolean;
+	private routeTimer?: ReturnType<typeof setTimeout>;
 	private gain = 1;
 	private disposed = false;
 	private unsubscribe?: () => void;
@@ -78,7 +86,7 @@ export class AudioNormalization {
 	private publish(status: NormalizationStatus) {
 		if (!this.disposed) this.report((this.status = status));
 	}
-	/** PCM hook is before libmedia's user-volume gain, preserving surround channels. */
+	/** PCM hook is before user volume. Its off route preserves original channels. */
 	async bindPCM(source: AudioNode, destination: AudioNode) {
 		this.source = source;
 		this.destination = destination;
@@ -152,15 +160,67 @@ export class AudioNormalization {
 			volume: this.element ? (this.element.muted ? 0 : this.element.volume) : 1
 		});
 	};
+	private routeStereo(enabled: boolean) {
+		if (!this.dry || !this.wet || enabled === this.routed) return;
+		this.routed = enabled;
+		clearTimeout(this.routeTimer);
+		if (enabled && !this.wetConnected) {
+			this.wet.connect(this.destination!);
+			this.wetConnected = true;
+		}
+		if (!enabled && !this.dryConnected) {
+			this.dry.connect(this.destination!);
+			this.dryConnected = true;
+		}
+		const now = this.dry.context.currentTime;
+		for (const [node, value] of [
+			[this.dry, enabled ? 0 : 1],
+			[this.wet, enabled ? 1 : 0]
+		] as const) {
+			node.gain.cancelAndHoldAtTime(now);
+			node.gain.linearRampToValueAtTime(value, now + 0.005);
+		}
+		// Disconnect only after the sample-clock fade finishes, including when a
+		// paused AudioContext resumes later. Removing the silent dry route makes
+		// the downstream bus genuinely two-channel, rather than 5.1 with zeros.
+		const finish = () => {
+			if (this.disposed || this.routed !== enabled || !this.dry || !this.wet) return;
+			if (this.dry.context.currentTime < now + 0.005) {
+				this.routeTimer = setTimeout(finish, 25);
+				return;
+			}
+			if (enabled && this.dryConnected) {
+				this.dry.disconnect(this.destination!);
+				this.dryConnected = false;
+			} else if (!enabled && this.wetConnected) {
+				this.wet.disconnect(this.destination!);
+				this.wetConnected = false;
+			}
+		};
+		this.routeTimer = setTimeout(finish, 20);
+	}
 	private async update() {
 		if (this.disposed) return;
 		if (!readNormalization()) {
 			this.configure();
-			this.publish({ ...this.status, state: 'off' });
+			this.routeStereo(false);
+			this.publish({
+				...this.status,
+				state: 'off',
+				channels: this.status.inputChannels,
+				gainDB: 0
+			});
 			return;
 		}
 		if (this.node) {
+			// A paused/disconnected worklet must be pulled again before it can
+			// report the current track's layout. Keep original audio until then.
+			if (!this.wetConnected) {
+				this.wet!.connect(this.destination!);
+				this.wetConnected = true;
+			}
 			this.configure();
+			if (this.stereoSupported) this.routeStereo(true);
 			this.resume();
 			return;
 		}
@@ -190,18 +250,28 @@ export class AudioNormalization {
 		const node = new AudioWorkletNode(context, 'sparkle-normalize', {
 			numberOfInputs: 1,
 			numberOfOutputs: 1,
+			outputChannelCount: [2],
 			channelCountMode: 'max',
 			channelInterpretation: 'discrete'
 		});
 		if (this.element) this.nativeGraph(context as AudioContext);
-		this.source?.disconnect(this.destination!);
 		this.node = node;
+		this.dry = new GainNode(context, { gain: 1, channelCountMode: 'max' });
+		this.wet = new GainNode(context, { gain: 0, channelCountMode: 'max' });
+		this.source!.connect(this.dry).connect(this.destination!);
+		this.source!.disconnect(this.destination!);
+		this.dryConnected = true;
+		this.routed = false;
 		node.port.onmessage = ({ data }) => {
 			if (data?.type !== 'status') return;
+			const enabled = readNormalization();
+			this.stereoSupported = data.supported;
+			this.routeStereo(enabled && data.supported);
 			this.publish({
-				state: !readNormalization() ? 'off' : data.active ? 'active' : 'unavailable',
-				channels: data.channels,
-				gainDB: data.gainDB,
+				state: !enabled ? 'off' : data.supported ? 'active' : 'unavailable',
+				channels: enabled && data.supported ? 2 : data.inputChannels,
+				inputChannels: data.inputChannels,
+				gainDB: enabled && data.supported ? data.gainDB : 0,
 				frames: data.frames
 			});
 		};
@@ -211,16 +281,24 @@ export class AudioNormalization {
 		};
 		this.configure();
 		this.source!.connect(node);
-		node.connect(this.destination!);
-		this.publish({ state: 'active' });
+		node.connect(this.wet).connect(this.destination!);
+		this.wetConnected = true;
+		this.publish({ state: 'loading' });
 	}
 	private detach() {
 		if (!this.node) return;
+		clearTimeout(this.routeTimer);
 		this.source?.disconnect(this.node);
 		this.node.disconnect();
 		this.node.port.postMessage({ type: 'dispose' });
 		this.node.port.close();
 		this.node = undefined;
+		if (this.dry) this.source?.disconnect(this.dry);
+		this.dry?.disconnect();
+		this.wet?.disconnect();
+		this.dry = this.wet = undefined;
+		this.dryConnected = this.wetConnected = false;
+		this.routed = this.stereoSupported = undefined;
 		this.source?.connect(this.destination!);
 	}
 	dispose() {

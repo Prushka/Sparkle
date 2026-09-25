@@ -62,6 +62,7 @@ test('normalization is local, persistent, responsive, and leaves room playback c
 			});
 			await page.goto(`${baseURL}/${roomId}/media/${mediaId}`);
 			await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+			await expect(page.getByRole('button', { name: 'Send message', exact: true })).toBeEnabled();
 			await expect
 				.poll(() => page.locator('video').evaluate((v) => v.currentTime), { timeout: 15000 })
 				.toBeGreaterThan(1);
@@ -95,6 +96,7 @@ test('normalization is local, persistent, responsive, and leaves room playback c
 		await button.click();
 		await expect(button).toHaveAttribute('aria-pressed', 'true');
 		await expect(player).toHaveAttribute('data-normalization-state', 'active');
+		await expect(player).toHaveAttribute('data-normalization-channels', '2');
 		await expect(other).toHaveAttribute('data-normalization-state', 'off');
 		await expect
 			.poll(async () => Number(await player.getAttribute('data-normalization-gain-d-b')), {
@@ -287,6 +289,14 @@ for (const mode of ['compatible', 'av1', 'hevc'] as const) {
 				await page.goto(`${baseURL}/${roomId}/media/${mediaId}`);
 				await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
 				await expect(page.locator('.sparkle-raw-surface')).toHaveCount(1);
+				await expect(page.locator('[data-media-player]')).toHaveAttribute(
+					'data-raw-ready',
+					'true',
+					{
+						timeout: 20000
+					}
+				);
+				await expect(page.getByRole('button', { name: 'Send message', exact: true })).toBeEnabled();
 				await expect
 					.poll(
 						() =>
@@ -301,6 +311,7 @@ for (const mode of ['compatible', 'av1', 'hevc'] as const) {
 				player = a.locator('[data-media-player]'),
 				other = b.locator('[data-media-player]');
 			await expect(player).toHaveAttribute('data-normalization-state', 'active');
+			await expect(player).toHaveAttribute('data-normalization-channels', '2');
 			await expect(other).toHaveAttribute('data-normalization-state', 'off');
 			await player.focus();
 			await a.keyboard.press('k');

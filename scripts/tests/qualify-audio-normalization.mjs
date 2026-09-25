@@ -60,6 +60,26 @@ const fixtures = [
 		]
 	]
 ];
+const hdrVideo = [
+	'-c:v',
+	'hevc_nvenc',
+	'-preset',
+	'p3',
+	'-pix_fmt',
+	'p010le',
+	'-color_primaries',
+	'bt2020',
+	'-color_trc',
+	'smpte2084',
+	'-colorspace',
+	'bt2020nc'
+];
+fixtures.push(
+	['ac3-51.mkv', [...hdrVideo, '-c:a', 'ac3', '-b:a', '640k', '-ac', '6']],
+	['eac3-51.mkv', [...hdrVideo, '-c:a', 'eac3', '-b:a', '640k', '-ac', '6']],
+	['dts-51.mkv', [...hdrVideo, '-c:a', 'dca', '-strict', '-2', '-b:a', '1536k', '-ac', '6']],
+	['flac-71.mkv', [...hdrVideo, '-c:a', 'flac', '-ac', '8']]
+);
 for (const [file, encoding] of fixtures) {
 	if (await stat(join(root, file)).catch(() => null)) continue;
 	execFileSync(
@@ -76,7 +96,10 @@ for (const [file, encoding] of fixtures) {
 			'-f',
 			'lavfi',
 			'-i',
-			'aevalsrc=0.035*sin(2*PI*440*t)|0.035*sin(2*PI*550*t)|0.035*sin(2*PI*660*t)|0.015*sin(2*PI*60*t)|0.025*sin(2*PI*770*t)|0.025*sin(2*PI*880*t):s=48000:c=5.1',
+			'aevalsrc=0.035*sin(2*PI*440*t)|0.035*sin(2*PI*550*t)|0.035*sin(2*PI*660*t)|0.015*sin(2*PI*60*t)|0.025*sin(2*PI*770*t)|0.025*sin(2*PI*880*t)' +
+				(file.includes('-71')
+					? '|0.025*sin(2*PI*990*t)|0.025*sin(2*PI*1100*t):s=48000:c=7.1'
+					: ':s=48000:c=5.1'),
 			'-t',
 			'48',
 			...encoding,
@@ -106,15 +129,15 @@ const rawBundle = (
 ).outputFiles[0].text;
 let currentFixture, lifecycleScenario;
 const collector = `class Capture extends AudioWorkletProcessor {
- constructor(){ super(); this.samples=0; this.zeros=0; this.max=0; this.energy=0; this.channels=0; this.active=false;
- this.port.onmessage=({data})=>{if(data==='arm'){this.samples=this.zeros=this.max=this.energy=0;this.active=true;}
- else if(data==='report'){this.active=false;this.port.postMessage({samples:this.samples,zeros:this.zeros,max:this.max,rms:Math.sqrt(this.energy/Math.max(1,this.samples)),channels:this.channels});}}; }
+ constructor(){ super(); this.samples=0; this.zeros=0; this.max=0; this.energy=0; this.channels=0; this.active=false;this.difference=0;
+ this.port.onmessage=({data})=>{if(data==='arm'){this.samples=this.zeros=this.max=this.energy=this.difference=0;this.active=true;}
+ else if(data==='report'){this.active=false;this.port.postMessage({samples:this.samples,zeros:this.zeros,max:this.max,rms:Math.sqrt(this.energy/Math.max(1,this.samples)),channels:this.channels,difference:this.difference});}}; }
  process(inputs,outputs){const a=inputs[0];if(this.active&&a?.length){this.channels=a.length;let energy=0;
- for(const channel of a)for(const x of channel){energy+=x*x;this.max=Math.max(this.max,Math.abs(x));}this.samples+=a[0].length*a.length;this.energy+=energy;if(energy===0)this.zeros++;}return true;}
+ for(let c=0;c<a.length;c++)for(let i=0;i<a[c].length;i++){const x=a[c][i];energy+=x*x;this.max=Math.max(this.max,Math.abs(x));if(inputs[1]?.[c])this.difference=Math.max(this.difference,Math.abs(x-inputs[1][c][i]));}this.samples+=a[0].length*a.length;this.energy+=energy;if(energy===0)this.zeros++;}return true;}
 } registerProcessor('capture',Capture);`;
 const server = createServer(async (req, res) => {
 	const path = new URL(req.url, 'http://localhost').pathname;
-	if (path.endsWith('/normalize-v1.js')) {
+	if (path.endsWith('/normalize-v2.js')) {
 		if (lifecycleScenario === 'missing-worklet') return res.writeHead(503).end();
 		if (lifecycleScenario === 'cancel-loading') await new Promise((r) => setTimeout(r, 150));
 	}
@@ -163,9 +186,10 @@ const server = createServer(async (req, res) => {
 								id: 1,
 								index: 1,
 								streamType: 2,
-								codec: currentFixture.mode === 'wasm' ? 'truehd' : 'flac',
-								displayTitle: '5.1 test',
-								channels: 6
+								codec:
+									currentFixture.audioCodec || (currentFixture.mode === 'wasm' ? 'truehd' : 'flac'),
+								displayTitle: 'Multichannel test',
+								channels: currentFixture.channels || 6
 							}
 						]
 					}
@@ -230,12 +254,120 @@ const browser = await chromium.launch({
 });
 const results = [];
 try {
+	// A full 7.1 graph, independent of the physical sound card's output count.
+	// Tests actual AudioWorklet routing, rapid toggles and sample-exact dry bypass.
+	{
+		const page = await browser.newPage();
+		await page.goto(`http://127.0.0.1:${server.address().port}`);
+		const graph = await page.evaluate(async () => {
+			const { AudioNormalization, saveNormalization } = await import('/controller.js');
+			const ctx = new AudioContext({ sampleRate: 48000 });
+			await ctx.audioWorklet.addModule('/capture.js');
+			const buffer = ctx.createBuffer(8, 48000, 48000);
+			const tones = [440, 550, 660, 60, 770, 880, 990, 1100];
+			for (let c = 0; c < 8; c++)
+				for (let i = 0; i < 48000; i++)
+					buffer.getChannelData(c)[i] = 0.035 * Math.sin((2 * Math.PI * tones[c] * i) / 48000);
+			const source = new AudioBufferSourceNode(ctx, { buffer, loop: true });
+			const destination = ctx.createGain();
+			destination.connect(ctx.destination);
+			const normalizer = new AudioNormalization();
+			saveNormalization(true);
+			await ctx.resume();
+			await normalizer.bindPCM(source, destination);
+			const capture = new AudioWorkletNode(ctx, 'capture', {
+				numberOfInputs: 2,
+				outputChannelCount: [1],
+				channelCountMode: 'max',
+				channelInterpretation: 'discrete'
+			});
+			destination.connect(capture, 0, 0);
+			source.connect(capture, 0, 1);
+			capture.connect(ctx.destination);
+			const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+			const measure = async () => {
+				capture.port.postMessage('arm');
+				await sleep(300);
+				const result = new Promise((r) => (capture.port.onmessage = ({ data }) => r(data)));
+				capture.port.postMessage('report');
+				return result;
+			};
+			source.start();
+			await sleep(4000);
+			const on = await measure(),
+				status = { ...normalizer.status };
+			const split = ctx.createChannelSplitter(2),
+				analysers = [ctx.createAnalyser(), ctx.createAnalyser()];
+			normalizer.node.connect(split);
+			analysers.forEach((analyser, i) => {
+				analyser.fftSize = 32768;
+				analyser.smoothingTimeConstant = 0;
+				split.connect(analyser, i);
+			});
+			await sleep(750);
+			const spectra = analysers.map((analyser) => {
+				const bins = new Float32Array(analyser.frequencyBinCount);
+				analyser.getFloatFrequencyData(bins);
+				return tones.map((hz) => bins[Math.round((hz * analyser.fftSize) / ctx.sampleRate)]);
+			});
+			split.disconnect();
+			normalizer.node.disconnect(split);
+			for (let i = 0; i < 8; i++) {
+				saveNormalization(i % 2 === 0);
+				await sleep(2);
+			}
+			saveNormalization(false);
+			await sleep(150);
+			const off = await measure();
+			saveNormalization(true);
+			await sleep(500);
+			const restored = await measure();
+			source.stop();
+			normalizer.dispose();
+			await ctx.close();
+			return { on, status, spectra, off, restored };
+		});
+		assert.equal(graph.status.inputChannels, 8);
+		assert.equal(graph.on.channels, 2);
+		assert.equal(graph.on.zeros, 0);
+		assert.equal(graph.off.channels, 8);
+		assert.equal(graph.off.difference, 0, 'disabled graph restores every original 7.1 sample');
+		assert.equal(graph.restored.channels, 2);
+		assert.equal(graph.restored.zeros, 0);
+		const [left, right] = graph.spectra;
+		for (const speaker of [0, 4, 6])
+			assert.ok(left[speaker] - right[speaker] > 35, 'left speaker stays left');
+		for (const speaker of [1, 5, 7])
+			assert.ok(right[speaker] - left[speaker] > 35, 'right speaker stays right');
+		assert.ok(Math.abs(left[2] - right[2]) < 0.2, 'center dialogue reaches both sides equally');
+		assert.ok(left[3] < -80 && right[3] < -80, 'LFE is omitted from the stereo mix');
+		results.push({ name: '7.1 stereo routing and exact bypass', ...graph });
+		console.log(
+			'7.1 graph: stereo matrix, dialogue, surrounds, rapid toggles and exact bypass passed'
+		);
+		await page.close();
+	}
 	const cases = [
 		{ name: 'Encoded MP4 AAC stereo', file: '/fixture/stereo.mp4', mode: 'element' },
 		{ name: 'Encoded MP4 AAC 5.1', file: '/fixture/surround.mp4', mode: 'element' },
 		{ name: 'Compatible HDR HEVC + FLAC 5.1', file: '/fixture/hdr-flac.mkv', mode: 'compatible' },
 		{ name: 'Tone mapping HDR HEVC + FLAC 5.1', file: '/fixture/hdr-flac.mkv', mode: 'sdr' },
 		{ name: 'Raw H264 + TrueHD 5.1', file: '/fixture/truehd.mkv', mode: 'wasm' },
+		{ name: 'Raw AC-3 5.1', file: '/fixture/ac3-51.mkv', mode: 'compatible', audioCodec: 'ac3' },
+		{
+			name: 'Raw E-AC-3 5.1',
+			file: '/fixture/eac3-51.mkv',
+			mode: 'compatible',
+			audioCodec: 'eac3'
+		},
+		{ name: 'Raw DTS 5.1', file: '/fixture/dts-51.mkv', mode: 'compatible', audioCodec: 'dts' },
+		{
+			name: 'Raw FLAC 7.1',
+			file: '/fixture/flac-71.mkv',
+			mode: 'compatible',
+			audioCodec: 'flac',
+			channels: 8
+		},
 		{ name: 'Encoded AV1 + Opus', file: '/av1/master.m3u8', mode: 'native' },
 		{ name: 'Encoded HEVC + Opus', file: '/hevc/master.m3u8', mode: 'native' }
 	].filter(
@@ -490,6 +622,20 @@ try {
 		results.push({ name: fixture.name, ...result });
 		assert.equal(result.isolated, false);
 		assert.equal(result.on.state, 'active');
+		assert.equal(result.on.channels, 2, 'normalized bus is stereo');
+		assert.equal(
+			result.steady.channels,
+			2,
+			'capture receives two channels, not silent surround lanes'
+		);
+		if (fixture.file.endsWith('/surround.mp4')) {
+			assert.equal(result.on.inputChannels, 6, 'native AAC really supplies 5.1 before the mix');
+			assert.equal(
+				result.off.channels,
+				6,
+				'disabled normalization restores the original channel count'
+			);
+		}
 		assert.ok(result.steady.rms > 0.01);
 		assert.equal(result.steady.zeros, 0, 'steady playback has no silent render quanta');
 		assert.ok(result.end - result.start > 11.5, 'clock advances normally under UI load');

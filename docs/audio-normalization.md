@@ -9,27 +9,41 @@ settings, voice chat, files, server encoding parameters or room messages.
 ## Processing
 
 [loudness-worklet 2.0.3](https://github.com/lcweden/loudness-worklet) is pinned in
-the npm lockfile. Its BS.1770 K-weighted meter runs inside a single AudioWorklet
-with Sparkle's linked gain controller. Processing uses a 400 ms analysis window,
+the npm lockfile. A single AudioWorklet first mixes decoded PCM to **two-channel
+stereo**, then measures that actual mix with the BS.1770 K-weighted meter and
+applies linked left/right gain. Measuring the mix accounts for phase cancellation
+and summed dialogue/surround energy; measuring each original channel independently
+would give the wrong target for stereo playback. Processing uses a 400 ms analysis window,
 a -18 LUFS target, at most +12 dB boost / -18 dB attenuation, a silence gate,
 80 ms gain-reduction smoothing and a 2 s gain-increase response. The analysis
 window does **not** buffer or delay output samples. A linked sample-peak guard
-includes LFE and reserves 2 dB headroom. It is not a certified true-peak limiter
+measures the stereo mix and reserves 2 dB headroom, including when individually safe
+source channels sum above full scale. It is not a certified true-peak limiter
 or an offline, two-pass loudness scan; highly dynamic material may not stay at
 the exact target.
 The adapter disables unused integrated/LRA histograms and oversampled true-peak
 analysis; only momentary loudness and Sparkle's sample-peak guard are used. This
 reserves audio-thread time for decoding rather than unused meter displays.
 
-Supported decoded speaker layouts are mono, stereo, 5.0, 5.1 and conventional
-7.1. LFE is excluded from loudness measurement, but receives the same gain and
-peak protection. All channels retain their order and relative levels. The player
-or browser may already downmix to the output device's channel count. This feature
-does not add surround hardware, recover discarded channels or preserve compressed
-bitstream/Atmos passthrough. Unrecognized decoded layouts bypass processing.
+The mixer follows [Web Audio's stereo downmix rules](https://www.w3.org/TR/webaudio/#down-mixing):
+5.1 center feeds both sides at −3 dB, each surround feeds its corresponding side
+at −3 dB, and LFE is omitted. Bass in the full-range main channels remains.
+Quad uses equal front/rear contributions. Conventional 3.0/5.0 use the same center
+rule; 6.1 back center feeds both sides at −6 dB; 7.1 folds both back and side
+pairs into their respective stereo side at −3 dB. Mono is duplicated to stereo.
+These use canonical speaker ordering, not arbitrary discrete channel arrangements.
+Unknown channel counts report unavailable and keep the original audio route.
 
-Turning off returns to sample-exact unity gain after a short click-avoiding ramp
-(within 100 ms). The normalizer adds no lookahead, sample queue, resampling or
+The decoder/browser may already downmix to the output device's channel count;
+the normalizer then measures that stereo result without downmixing it again.
+The AV1/HEVC server modes already deliver stereo Opus. The feature does not recover
+discarded channels or preserve compressed bitstream/Atmos passthrough.
+
+Turning off crossfades to the original PCM route over 5 ms, restoring its original
+channel count and sample-exact unity gain. Turning on crossfades to the stereo
+worklet; the silent original branch is disconnected after the audio-clock fade
+so the downstream bus really has two channels. Rapid toggles cancel obsolete
+cleanup; paused contexts finish their fades when resumed. The normalizer adds no lookahead, sample queue, resampling or
 timeline offset. Main-thread UI work does not process or transfer audio samples.
 Volume and mute remain independent: the WASM hook is before the user's gain;
 native measurement compensates for the element volume. Seek/track changes reset
@@ -65,19 +79,24 @@ reused elements restore their direct route even when the setting is off.
 
 `npm run prepare:player` serves the worklet and MIT license locally under
 `public/vendor/libmedia/audio/`. The preparation script verifies the pinned meter
-hash, exports its processor for synchronous composition, and adjusts its 7.1
-weight table for Web Audio's side/back-surround layout. Change this reproducible
+hash and exports its processor for synchronous composition. The meter always
+receives stereo; `scripts/audio/stereo-mix.js` defines the channel matrix.
+`normalize-v2.js` uses a new asset URL so cached older worklets cannot retain
+the previous multichannel behavior. Change this reproducible
 adapter and the source worklet, never generated files. Rebuild/export libmedia
 when its graph hooks change; see [the build guide](../scripts/libmedia/README.md).
 
 ## Checks
 
 - `npm run prepare:player` then `npm run test:player`: calibrated 1 kHz reference
-  signals, 44.1/48 kHz, mono through 7.1, linked gain, LFE peaks, unknown-layout
-  bypass, sample counts and exact off-state samples.
+  signals, 44.1/48 kHz, mono through 7.1, per-speaker impulses, center/surround
+  placement, phase cancellation, post-mix peak protection and sample counts.
 - `npm run test:audio`: real browser decoders, generated AAC stereo/5.1 MP4,
-  HEVC PQ + FLAC 5.1 MKV, H.264 + TrueHD 5.1 MKV and shared NVENC AV1/HEVC +
-  Opus fragments. Requires FFmpeg with NVENC and previously generated
+  HEVC PQ with AC-3/E-AC-3/DTS/FLAC 5.1 and FLAC 7.1, H.264 + TrueHD 5.1 MKV,
+  and shared NVENC AV1/HEVC + Opus fragments. A full 7.1 PCM graph separately
+  checks center/side/back routing, LFE omission, actual two-channel output,
+  rapid toggles and exact original eight-channel samples after disabling.
+  Requires FFmpeg with NVENC and previously generated
   `cache/encoded-audio-fixture` from the opt-in Go
   `TestNVENCAudioContinuityFixture` test. Uses an isolated loopback fixture server,
   never real Plex credentials. Reports under ignored `cache/audio-normalization/`.
