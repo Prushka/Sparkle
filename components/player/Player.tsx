@@ -13,6 +13,8 @@ import {
 } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
+import { AudioNormalizationButton } from './AudioNormalization';
+import { normalizeVideoProvider } from '@/lib/player/normalized-video-provider';
 import { AnimatePresence, motion } from 'motion/react';
 import {
 	MediaPlayer,
@@ -6873,6 +6875,10 @@ export function Player({
 			} catch {
 				// The player may already be loading while a source switch is in flight.
 			}
+			// RawProvider owns its placeholder and creates native/canvas surfaces
+			// asynchronously. Loading its rendered video as Vidstack's target would
+			// destroy that provider and leave its replacement without setup/timers.
+			if (videoSrc?.type === RAW_MEDIA_TYPE) return;
 			const videoElement = getPlayerVideoElement(playerEl);
 			if (videoElement) {
 				prepareVideoElementForBackgroundPlayback(
@@ -6894,7 +6900,7 @@ export function Player({
 				window.cancelAnimationFrame(animationFrame);
 			}
 		};
-	}, [mediaProviderEl, playerEl, playerSrcUrl]);
+	}, [mediaProviderEl, playerEl, playerSrcUrl, videoSrc?.type]);
 
 	const applyYouTubeState = useCallback((nextState: YouTubeSyncState) => {
 		const normalized = normalizeYouTubeSyncState(nextState);
@@ -9371,6 +9377,7 @@ export function Player({
 				>
 					{mounted && playerSrcUrl ? (
 						<MediaPlayer
+							onProviderLoaderChange={normalizeVideoProvider}
 							className={mediaPlayerClassName}
 							key={`${job.Id}:${playerSrcUrl}:${audioRemountKey}:${thumbnailVttSrc}`}
 							src={{ src: playerSrcUrl, type: videoSrc?.type ?? 'video/mp4' } as PlayerSrc}
@@ -9476,10 +9483,20 @@ export function Player({
 									),
 									settingsMenuItemsEnd: job.Raw ? <RawSubtitleSettings /> : subtitlesSettingsMenu,
 									largeLayout: {
-										beforeCaptionButton: renderControlsChat(false, 'large')
+										beforeCaptionButton: (
+											<>
+												{renderControlsChat(false, 'large')}
+												<AudioNormalizationButton />
+											</>
+										)
 									},
 									smallLayout: {
-										beforeCaptionButton: renderControlsChat(true, 'small')
+										beforeCaptionButton: (
+											<>
+												{renderControlsChat(true, 'small')}
+												<AudioNormalizationButton />
+											</>
+										)
 									}
 								}}
 							/>

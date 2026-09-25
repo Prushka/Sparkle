@@ -23,6 +23,8 @@ library from the same Library view.
   Large Plex libraries load on demand; confidently matched processed titles reuse Plex
   covers and descriptions.
 - Vidstack controls for playback, audio selection, subtitles, HDR options, and media versions.
+- Optional client-side audio normalization beside Captions, with a saved local preference
+  for Encoded MP4 and every Raw playback mode, including multichannel audio.
 - Optional shared NVENC AV1/HEVC playback for Plex, with on-demand cached segments and a
   saved output preference. Automatic selects a compatible encode on a measured slow connection.
 - Embedded ASS/SSA with fonts, text subtitles, and PGS/SUP bitmap subtitles; local subtitle
@@ -51,6 +53,10 @@ original file is cached. Artwork has a 512 MiB budget; encoded segments default 
 See [server encoding](docs/server-encoding.md) for GPU setup, settings and limits.
 Encoded audio and video share a native playback clock on compatible browsers.
 HDR output settings show live bitrate for the active playback mode.
+
+The waveform button beside Captions enables [audio normalization](docs/audio-normalization.md).
+It adjusts loudness in an AudioWorklet, preserves channel balance and the playback clock,
+and leaves the original samples unchanged when off. The preference is local to each browser.
 
 Raw playback supports client WASM fallbacks, including TrueHD audio and embedded
 subtitles. TrueHD output is decoded PCM, not Atmos bitstream passthrough. Raw

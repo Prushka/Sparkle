@@ -27,6 +27,9 @@ func TestEncoderUsesFastNVENCWithReferenceQualityOnEveryAttempt(t *testing.T) {
 			}
 			for _, attempt := range [][]string{args, retry} {
 				command := strings.Join(attempt, " ")
+				if strings.Contains(command, "-s12m_tc 0") != (codec == "av1") {
+					t.Fatal("AV1 timecode workaround missing or applied to another codec")
+				}
 				for _, want := range []string{"-ss 23.926500", "-ss 0.073500", "-t 6.000000", "-t 6.073500", "noise=drop='lt(n,4)+gte(n,304)'", "-c:v " + codec + "_nvenc", "-preset p3", "-rc vbr -cq 22 -b:v 0", "-init_qpP 22 -init_qpI 20 -init_qpB 24", "-pix_fmt p010le", "-c:a libopus -b:a 144k -ac 2", "type=DOVI_METADATA", "type=DYNAMIC_HDR_PLUS"} {
 					if !strings.Contains(command, want) {
 						t.Errorf("missing %s", want)

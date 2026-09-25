@@ -49,6 +49,64 @@ RSS from 55.09 MiB to a measured peak of 55.38 MiB. This is a bounded-memory
 range test, not a complete 74 GB transfer. No raw-file copy or derivative was
 created. Test evidence and build artifacts are under ignored `cache/`.
 
+## Client audio normalization
+
+Validated September 23–24, 2026 in Chrome 153.0.8010.53 and 154.0.8037.57 on Windows, without
+cross-origin isolation. The [normalization checks](audio-normalization.md#checks)
+use generated, deterministic media through actual browser decoders and the Raw
+provider, with captured output rather than only advancing player timestamps.
+
+| Playback path            | Material                           | Result                                                                   |
+| ------------------------ | ---------------------------------- | ------------------------------------------------------------------------ |
+| Existing Encoded         | H.264/AAC stereo and 5.1 MP4       | Pass; native 5.1 retains six channels at the meter                       |
+| Raw Compatible           | HEVC PQ/FLAC 5.1 MKV               | Pass; native video with separate client PCM audio                        |
+| Raw Tone mapping         | HEVC PQ/FLAC 5.1 MKV               | Pass; client video/audio decoding                                        |
+| Raw client fallback      | H.264/TrueHD 5.1 MKV               | Pass; client PCM audio                                                   |
+| Raw Encoded AV1 and HEVC | NVENC video/Opus, two audio tracks | Pass; four six-second segment boundaries, track and output-mode switches |
+
+All seven cases captured zero silent render quanta during 12-second steady-tone
+windows (20 seconds for segmented encodes), while the UI thread was blocked for
+80 ms every 400 ms. Volume, mute, pause/toggle, seek/resume, preference retention
+and unity gain when disabled passed. The separate audio clock remained within
+66 ms of the native video clock in the final settled steady-playback sample. This
+compares reported clocks, not physical speaker/display latency.
+
+DSP reference checks cover mono, stereo, 5.0, 5.1, conventional 7.1, 44.1/48 kHz,
+quiet/loud material, channel balance, LFE peak protection and sample-exact bypass.
+Unsupported layouts bypass. Browser tests also cover failed worklet loading,
+cancelled installation, native element reuse and Audio Boost before/after
+normalization. Two-client Encoded MP4 and Raw Compatible/AV1/HEVC app tests passed local preference
+independence, saved state after reload, pause/seek/resume, reconnect and
+desktop/320/390 px control-bar placement. The Raw startup check retains the
+rendering surface and timer while asynchronously installing the audio graph.
+Encoded Raw tests also restore the saved alternate audio track during startup.
+
+Live Avatar (2009) checks exercised Compatible HEVC/AC-3 and Encoded HEVC/Opus
+with normalization. Encoded AV1 exposed an unrelated NVENC timecode defect:
+Chrome's native decoder stopped around 0.4 seconds with or without normalization.
+An original six-second HEVC reference encoded with S12M insertion enabled
+reproduces the failure in native video and libmedia MSE. Disabling only S12M
+insertion passes both paths, retaining 10-bit BT.2020/PQ, the exact mastering
+display values and content-light metadata. Native decode failures now reach
+the provider instead of leaving it buffering. This validates bitstream handling,
+not physical HDR output.
+After installing the updated backend, the live movie also passed more than a
+minute of native AV1 playback with normalization active and the English TrueHD
+source track converted to Opus. Short checks do not establish feature-length
+continuity or physical speaker latency.
+
+To repeat that opt-in comparison, create short, video-only AV1 MP4 clips from a
+timecode-bearing source using the documented NVENC profile, with `-s12m_tc 1`
+and `-s12m_tc 0`. Set `SPARKLE_AV1_BROKEN_FIXTURE` and
+`SPARKLE_AV1_FIXED_FIXTURE` to those local clips, then run
+`node scripts/tests/qualify-native-av1.mjs`. It uses a temporary loopback server
+and checks native playback, MSE playback and sanitized error propagation.
+
+The stereo output device downmixed the raw multichannel fixtures before the
+normalizer; actual surround-speaker output, Bluetooth, other browsers and
+feature-length playback have not been qualified by these tests. Normalization
+adds no sample queue or timeline changes. Physical HDR qualification is separate.
+
 ## Optional server encoding
 
 NVENC validation on September 23, 2026 used Windows, an RTX 5090, driver 616.92,

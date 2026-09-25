@@ -75,6 +75,14 @@ settings follow [HandBrake's NVENC mapping](https://github.com/HandBrake/HandBra
 No resolution or frame-rate reduction is imposed. Audio is downmixed to stereo;
 Atmos/DTS:X bitstream passthrough is not provided.
 
+AV1 disables S12M timecode insertion (`-s12m_tc 0`) to avoid the
+[FFmpeg/NVENC malformed timecode metadata bug](https://forums.developer.nvidia.com/t/ffmpeg-av1-nvenc-encoder-sometimes-generates-undecodeable-bitstreams/364011),
+which can make Chrome stop with a native decode error. This removes only timecode
+insertion; it retains HDR color, mastering and light-level metadata. Encode profile
+revision v5 prevents reuse of affected older cached segments. Native decoder
+failures reach the player's error state instead of leaving it buffering; users
+can choose another output mode while staying in the room.
+
 PQ and HLG retain 10-bit color signaling and use native video/MSE, including browser
 tone mapping on SDR displays. Dolby Vision Profile 5 needs libplacebo to apply its
 RPU and convert to BT.2020/PQ; see [FFmpeg's libplacebo documentation](https://ffmpeg.org/ffmpeg-filters.html#libplacebo).

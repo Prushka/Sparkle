@@ -23,6 +23,7 @@ import { EncodedSubtitles } from './encoded-subtitles';
 import { compatibleHDR, planHDR, sourceHDR, supportsNativeHDR } from './raw-hdr';
 import { RawSubtitles } from './raw-subtitles';
 import { RawPictureInPicture } from './raw-pip';
+import { AudioNormalization, reportNormalization } from './audio-normalization';
 
 export const RAW_MEDIA_TYPE = 'video/x-sparkle-raw';
 export const RAW_STATUS_EVENT = 'sparkle-raw-status';
@@ -123,6 +124,30 @@ export class RawProvider implements MediaProviderAdapter {
 	private audioContainer = document.createElement('div');
 	private engine?: Engine;
 	private audioEngine?: Engine;
+	private normalizers = new Set<AudioNormalization>();
+	private audioFilter = async (source: GainNode, destination: GainNode) => {
+		const normalizer = this.createNormalizer();
+		const dispose = await normalizer.bindPCM(source, destination);
+		return () => {
+			dispose();
+			this.normalizers.delete(normalizer);
+		};
+	};
+	private nativeAudioFilter = async (element: HTMLMediaElement) => {
+		const normalizer = this.createNormalizer();
+		const dispose = await normalizer.bindNative(element);
+		return () => {
+			dispose();
+			this.normalizers.delete(normalizer);
+		};
+	};
+	private createNormalizer() {
+		const normalizer = new AudioNormalization((status) =>
+			reportNormalization(this.ctx.player.el, status)
+		);
+		this.normalizers.add(normalizer);
+		return normalizer;
+	}
 	private subtitles?: RawSubtitles;
 	private subtitleLayers: RawSubtitles[] = [];
 	private raw?: RawMedia;
@@ -226,6 +251,10 @@ export class RawProvider implements MediaProviderAdapter {
 		return command;
 	}
 	private fail(error: unknown) {
+		// Stop both local clocks if native video fails while WASM audio is still
+		// decoding. Do not emit a pause request into the shared room timeline.
+		if (this.initialized)
+			void Promise.allSettled([this.engine?.pause(), this.audioEngine?.pause()]);
 		const message =
 			error instanceof Error && !/\[packages|https?:|[A-Z]:[\\/]/.test(error.message)
 				? error.message
@@ -346,6 +375,8 @@ export class RawProvider implements MediaProviderAdapter {
 		if (generation !== this.generation || this.destroyed) return;
 		this.subtitles = new RawSubtitles(this.container);
 		this.engine = new Constructor({
+			audioFilter: this.audioFilter,
+			nativeAudioFilter: this.nativeAudioFilter,
 			container: this.container,
 			wasmBaseUrl: '/vendor/libmedia/1.3.1',
 			enableWorker: true,
@@ -353,6 +384,9 @@ export class RawProvider implements MediaProviderAdapter {
 			enableWebCodecs: true,
 			enableWebGPU: false,
 			enableAudioWorklet: true,
+			// Two bounded ~53 ms PCM blocks at 48 kHz tolerate decoder/GC jitter.
+			// libmedia accounts for these buffers in its audio presentation clock.
+			audioWorkletBufferLength: 20,
 			preLoadTime: this.encoded ? 12 : 4,
 			subtitleSink: this.subtitles.sink
 		});
@@ -363,7 +397,7 @@ export class RawProvider implements MediaProviderAdapter {
 			if (active())
 				this.fail(
 					new Error(
-						'The selected codec or rendering path failed. Choose another track or media version.'
+						'Playback decoding failed. Try another HDR output mode, audio track or media version.'
 					)
 				);
 		});
@@ -464,11 +498,14 @@ export class RawProvider implements MediaProviderAdapter {
 			part.streams.some((s) => s.streamType === 2)
 		) {
 			this.audioEngine = new Constructor({
+				audioFilter: this.audioFilter,
+				nativeAudioFilter: this.nativeAudioFilter,
 				container: this.audioContainer,
 				wasmBaseUrl: '/vendor/libmedia/1.3.1',
 				enableWorker: true,
 				enableHardware: true,
 				enableAudioWorklet: true,
+				audioWorkletBufferLength: 20,
 				checkUseMSE: () => false,
 				preLoadTime: this.encoded ? 12 : 4
 			});
@@ -615,6 +652,7 @@ export class RawProvider implements MediaProviderAdapter {
 			);
 			this.publish({ changing: true });
 			this.notify('seeking', target);
+			this.normalizers.forEach((normalizer) => normalizer.reset());
 			if (index !== this.part) {
 				await this.loadPart(index, this.generation);
 				if (!this.paused) await this.start();
@@ -680,6 +718,7 @@ export class RawProvider implements MediaProviderAdapter {
 				time = this.timeline;
 			await this.engine.pause();
 			await this.audioEngine?.pause();
+			this.normalizers.forEach((normalizer) => normalizer.reset());
 			if (kind === 'audio')
 				await (this.audioEngine ?? this.engine).selectAudio(id, false, !!this.encoded);
 			else {
@@ -944,7 +983,15 @@ export class RawProvider implements MediaProviderAdapter {
 			const drift = Number(this.audioEngine.currentTime - this.engine.currentTime);
 			// Correct ordinary clock drift smoothly. Repeated demux/decoder seeks
 			// are expensive for large MKVs and can starve an incoming pause command.
-			this.setAudioRate(this.rate * (Math.abs(drift) > 80 ? (drift > 0 ? 0.97 : 1.03) : 1));
+			// Hysteresis avoids repeatedly flushing the time stretcher around the
+			// threshold as worker clock reports and render quanta arrive.
+			const correction =
+				drift > 120 || (this.audioRate < this.rate && drift > 40)
+					? 0.97
+					: drift < -120 || (this.audioRate > this.rate && drift < -40)
+						? 1.03
+						: 1;
+			this.setAudioRate(this.rate * correction);
 			if (Math.abs(drift) > 1500) {
 				this.driftSince ||= performance.now();
 			} else this.driftSince = 0;
@@ -989,6 +1036,8 @@ export class RawProvider implements MediaProviderAdapter {
 		this.audioWaiting = false;
 		this.driftSince = 0;
 		await Promise.allSettled([engine?.destroy(), audio?.destroy()]);
+		this.normalizers.forEach((normalizer) => normalizer.dispose());
+		this.normalizers.clear();
 		subtitles?.destroy();
 		layers.forEach((layer) => layer.destroy());
 		if (!this.engine) {

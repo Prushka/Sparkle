@@ -72,6 +72,14 @@ The patches add TrueHD/PGS admission, non-isolated subtitle packet transfer,
 embedded font access, bounded subtitle sinks/layers, zlib-compressed Matroska
 subtitle packets, native HDR guards, exact High 10/HEVC/AV1 color probes,
 Matroska Dolby configuration signaling, and MP4 static/Dolby HDR box preservation.
+Optional pre-volume PCM and native-media audio hooks install client normalization
+before playback and clean it up on stop. The locally prepared loudness meter and
+linked gain worklet are described in [audio normalization](../../docs/audio-normalization.md).
+The non-isolated audio worker reports statistics every 50 ms rather than 500 ms,
+preserving one-second peak-stat resets. This prevents a stale audio playhead from
+driving unnecessary speed corrections against native video.
+Native media errors propagate through the player error event, without browser
+diagnostics or paths, and detached elements cannot report errors into a new source.
 `hdr-metadata.ts` extracts bounded HEVC SEI from hvcC and the first video packet
 into native MSE `mdcv`/`clli` boxes without modifying samples. It is hash-pinned
 in the exported manifest and shares its parser with malformed-input/unit tests.

@@ -32,6 +32,72 @@ function patch(file, before, after, all = false) {
 	writeFileSync(path, all ? original.replaceAll(before, after) : original.replace(before, after));
 }
 const player = 'packages/avplayer/src/AVPlayer.ts';
+// Native decode failures must reach the provider instead of silently leaving
+// its clock running over a paused MSE element. Do not expose browser diagnostics.
+patch(
+	player,
+	'    element.onwaiting = () => {',
+	`    element.onerror = () => {
+      if ((this.video === element || this.audio === element) && element.error) {
+        this.fire(eventType.ERROR, [new Error('Native media decoding failed')])
+      }
+    }
+    element.onwaiting = () => {`
+);
+patch(
+	player,
+	'        container.removeChild(this.video)',
+	'        this.video.onerror = null\n        container.removeChild(this.video)'
+);
+patch(
+	player,
+	'        container.removeChild(this.audio)',
+	'        this.audio.onerror = null\n        container.removeChild(this.audio)'
+);
+// In non-isolated browsers the audio worker copied its playhead only every
+// 500 ms. Comparing that stale clock to native video repeatedly entered and
+// flushed time stretching. Keep the clock fresh; retain one-second stats resets.
+const audioWorker = 'packages/avplayer/src/worker/AudioPipeline.ts';
+patch(audioWorker, '    }, 0, 500)', '    }, 0, 50)');
+patch(audioWorker, 'secondCounter === 2', 'secondCounter === 20', true);
+// Optional graph hooks run before samples start. PCM is pre-volume; native MSE
+// retains its HTMLMediaElement clock. Teardown owns every installed graph.
+patch(
+	player,
+	'  audioWorkletBufferLength?: int32',
+	`  audioWorkletBufferLength?: int32
+  audioFilter?: (source: GainNode, destination: GainNode) => Promise<() => void>
+  nativeAudioFilter?: (element: HTMLMediaElement) => Promise<() => void>`
+);
+patch(
+	player,
+	'  private gainNode: GainNode',
+	'  private sparkleAudioCleanup?: () => void\n  private gainNode: GainNode'
+);
+patch(
+	player,
+	'      this.audioSourceNode.connect(this.gainNode)',
+	`      if (this.options.audioFilter) {
+        const input = AVPlayer.audioContext.createGain()
+        this.audioSourceNode.connect(input)
+        this.sparkleAudioCleanup = await this.options.audioFilter(input, this.gainNode)
+      }
+      else this.audioSourceNode.connect(this.gainNode)`
+);
+patch(
+	player,
+	'      if (drmSystemKey) {\n        const mediaKeySystemAccess',
+	`      if (this.selectedAudioStream && this.options.nativeAudioFilter) {
+        this.sparkleAudioCleanup = await this.options.nativeAudioFilter(this.video || this.audio)
+      }
+      if (drmSystemKey) {
+        const mediaKeySystemAccess`
+);
+patch(
+	player,
+	'    if (this.audioSourceNode) {\n      //',
+	'    this.sparkleAudioCleanup?.()\n    this.sparkleAudioCleanup = undefined\n    if (this.audioSourceNode) {\n      //'
+);
 // Query a bounded packet window at the playhead in both MSE and WASM paths.
 writeFileSync(
 	resolve(root, 'packages/avpipeline/src/playback-bitrate.ts'),

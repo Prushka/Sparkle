@@ -74,4 +74,5 @@ await build({
 for (const file of ['jassub-worker.wasm', 'jassub-worker-modern.wasm'])
 	await cp(`node_modules/jassub/dist/wasm/${file}`, `${subtitles}/${file}`);
 await cp('node_modules/jassub/dist/default.woff2', `${subtitles}/default.woff2`);
+await import('./audio/prepare.mjs');
 console.log('Prepared locally hosted raw-player assets');

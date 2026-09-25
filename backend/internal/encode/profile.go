@@ -14,7 +14,7 @@ import (
 )
 
 const SegmentSeconds = 6
-const profileVersion = "nvenc-segments-v4"
+const profileVersion = "nvenc-segments-v5"
 
 // Four 20 ms Opus packets minus libopus's 312-sample encoder lookahead.
 // Encode a short lead-in, then discard it so each cached clip starts with
@@ -126,6 +126,12 @@ func videoArgs(codec string, p Profile, video Stream) []string {
 	args = append(args, "-vf", filter)
 	if codec == "hevc" {
 		args = append(args, "-tag:v", "hvc1")
+	}
+	if codec == "av1" {
+		// FFmpeg/NVENC can serialize HEVC S12M timecode into malformed AV1
+		// metadata OBUs, which native browser decoders reject. Disable only
+		// timecode insertion; HDR color/mastering/light metadata stays intact.
+		args = append(args, "-s12m_tc", "0")
 	}
 	return args
 }
