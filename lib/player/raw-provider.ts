@@ -407,7 +407,7 @@ export class RawProvider implements MediaProviderAdapter {
 			// Two bounded ~53 ms PCM blocks at 48 kHz tolerate decoder/GC jitter.
 			// libmedia accounts for these buffers in its audio presentation clock.
 			audioWorkletBufferLength: 20,
-			preLoadTime: this.encoded ? 12 : 4,
+			preLoadTime: this.encoded ? 24 : 4,
 			subtitleSink: this.subtitles.sink
 		});
 		const engine = this.engine!;
@@ -525,7 +525,7 @@ export class RawProvider implements MediaProviderAdapter {
 				enableAudioWorklet: true,
 				audioWorkletBufferLength: 20,
 				checkUseMSE: () => false,
-				preLoadTime: this.encoded ? 12 : 4
+				preLoadTime: this.encoded ? 24 : 4
 			});
 			await this.audioEngine!.load(
 				this.encoded ? encodedURL(this.encoded, 'audio.m3u8') : `${this.baseURL}${part.url}`,

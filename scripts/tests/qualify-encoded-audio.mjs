@@ -45,7 +45,7 @@ try {
 				container: document.querySelector('#fixture'),
 				wasmBaseUrl: '/vendor/libmedia/1.3.1',
 				enableWorker: true,
-				preLoadTime: 12
+				preLoadTime: 24
 			});
 			await player.load(url, { ext: 'm3u8' });
 			player.setHDRPlayback('native', player.getVideoMimeType());
