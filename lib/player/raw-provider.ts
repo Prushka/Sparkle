@@ -31,6 +31,12 @@ import {
 import { RawSubtitles } from './raw-subtitles';
 import { RawPictureInPicture } from './raw-pip';
 import { AudioNormalization, reportNormalization } from './audio-normalization';
+import { pickRawAudioTrack, pickRawSubtitleTrack, rawSelectionStream } from './raw-track-selection';
+import {
+	readTrackPreference,
+	saveStoredAudioSelection,
+	writeTrackPreference
+} from './track-selection';
 
 export const RAW_MEDIA_TYPE = 'video/x-sparkle-raw';
 export const RAW_STATUS_EVENT = 'sparkle-raw-status';
@@ -130,6 +136,7 @@ export class RawProvider implements MediaProviderAdapter {
 	private captionRestore?: { subtitle: number; layers: number[] };
 	private audioContainer = document.createElement('div');
 	private engine?: Engine;
+	private mediaId = '';
 	private audioEngine?: Engine;
 	private normalizers = new Set<AudioNormalization>();
 	private audioFilter = async (source: GainNode, destination: GainNode) => {
@@ -295,6 +302,7 @@ export class RawProvider implements MediaProviderAdapter {
 				if (generation !== this.generation) return;
 				if (!job.Raw?.parts.length) throw new Error('No mapped media parts are available.');
 				this.raw = job.Raw;
+				this.mediaId = job.Id;
 				this.duration = job.Duration;
 				this.availableEncoders = await encodedCapabilities(
 					this.baseURL,
@@ -524,14 +532,22 @@ export class RawProvider implements MediaProviderAdapter {
 			(type === 'audio' ? (this.audioEngine ?? engine) : engine)
 				.getStreams()
 				.filter((s) => s.mediaType.toLowerCase() === type)
-				.map((s, index) => ({
-					id: s.id,
-					title:
-						(this.encoded && type === 'audio'
-							? part.streams.filter((p) => p.streamType === 2)[index]?.displayTitle
-							: part.streams.find((p) => p.index === s.index)?.displayTitle) ||
-						String(s.metadata.title || s.metadata.language || `${type} ${s.index + 1}`)
-				}));
+				.map((s, index) => {
+					const original =
+						this.encoded && type === 'audio'
+							? part.streams.filter((p) => p.streamType === 2)[index]
+							: part.streams.find((p) => p.index === s.index);
+					return {
+						id: s.id,
+						index: original?.index ?? s.index,
+						language:
+							original?.languageCode || String(s.metadata.language || original?.language || ''),
+						codec: original?.codec || String(s.codecparProxy.codecId),
+						title:
+							original?.displayTitle ||
+							String(s.metadata.title || s.metadata.language || `${type} ${s.index + 1}`)
+					};
+				});
 		this.publish({
 			output: plan?.output ?? 'SDR',
 			renderer: plan?.renderer ?? (nativeVideo ? 'native' : undefined),
@@ -564,29 +580,19 @@ export class RawProvider implements MediaProviderAdapter {
 		await this.audioEngine?.play({ video: false, audio: true, subtitle: false });
 		if (!this.initialized) {
 			this.initialized = true;
-			const audioPreference = localStorage.getItem('sparkle.raw.audio');
-			const subtitlePreference = localStorage.getItem('sparkle.raw.subtitle');
-			const audio = this.status.audioTracks.find((t) => t.title === audioPreference);
-			const subtitle = this.status.subtitleTracks.find((t) => t.title === subtitlePreference);
+			const audio = pickRawAudioTrack(this.status.audioTracks, this.mediaId);
+			const subtitle = pickRawSubtitleTrack(this.status.subtitleTracks);
 			if (audio) await (this.audioEngine ?? engine).selectAudio(audio.id, false, !!this.encoded);
 			if (subtitle && !this.encoded) await engine.selectSubtitle(subtitle.id);
-			engine.setSubtitleEnable(subtitlePreference !== 'off');
+			engine.setSubtitleEnable(!!subtitle);
 			this.publish({
 				audio: (this.audioEngine ?? engine).getSelectedAudioStreamId(),
-				subtitle:
-					subtitlePreference === 'off'
-						? -1
-						: this.encoded
-							? (subtitle?.id ??
-								this.encoded.subtitleTracks.find((track) => track.default)?.id ??
-								this.status.subtitleTracks[0]?.id ??
-								-1)
-							: engine.getSelectedSubtitleStreamId()
+				subtitle: subtitle?.id ?? -1
 			});
 			this.encodedCaptions?.select([this.status.subtitle ?? -1]);
 			try {
 				const names: unknown = JSON.parse(
-					localStorage.getItem('sparkle.raw.subtitleLayers') || '[]'
+					readTrackPreference('sparkle.raw.subtitleLayers') || '[]'
 				);
 				if (Array.isArray(names)) {
 					const ids = names
@@ -702,12 +708,18 @@ export class RawProvider implements MediaProviderAdapter {
 		return this.enqueue(async () => {
 			if (!this.engine || this.engine !== expectedEngine || !this.initialized) return;
 			const tracks = kind === 'audio' ? this.status.audioTracks : this.status.subtitleTracks;
-			if (
-				(id < 0 && kind === 'audio') ||
-				(id >= 0 && !tracks.some((t) => t.id === id)) ||
-				this.status[kind] === id
-			)
+			if ((id < 0 && kind === 'audio') || (id >= 0 && !tracks.some((t) => t.id === id))) return;
+			if (this.status[kind] === id) {
+				if (kind === 'audio')
+					saveStoredAudioSelection(
+						rawSelectionStream(
+							tracks.find((t) => t.id === id)!,
+							'audio'
+						),
+						this.mediaId
+					);
 				return;
+			}
 			if (kind === 'subtitle' && this.encodedCaptions) {
 				this.publish({ subtitle: id, subtitleLayers: [] });
 				this.encodedCaptions.select([id]);
@@ -739,7 +751,15 @@ export class RawProvider implements MediaProviderAdapter {
 			const title = (kind === 'audio' ? this.status.audioTracks : this.status.subtitleTracks).find(
 				(t) => t.id === id
 			)?.title;
-			localStorage.setItem(`sparkle.raw.${kind}`, id < 0 ? 'off' : (title ?? ''));
+			if (kind === 'audio')
+				saveStoredAudioSelection(
+					rawSelectionStream(
+						tracks.find((t) => t.id === id)!,
+						'audio'
+					),
+					this.mediaId
+				);
+			else writeTrackPreference('sparkle.raw.subtitle', id < 0 ? 'off' : (title ?? ''));
 			this.publish({ [kind]: id, changing: false });
 		});
 	}
@@ -755,7 +775,9 @@ export class RawProvider implements MediaProviderAdapter {
 			const restore = this.captionRestore;
 			await this.selectTrack(
 				'subtitle',
-				restore?.subtitle ?? this.status.subtitleTracks[0]?.id ?? -1
+				restore?.subtitle ??
+					pickRawSubtitleTrack(this.status.subtitleTracks, undefined, null)?.id ??
+					-1
 			);
 			if (restore?.layers.length) await this.selectSubtitleLayers(restore.layers);
 		}

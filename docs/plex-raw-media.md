@@ -131,6 +131,18 @@ PGS run in the browser. Assets are served from `/vendor/libmedia/`; clients do
 not fetch decoders from a third-party CDN. No global COOP/COEP headers are added.
 Non-isolated execution is exercised by the real-media test script.
 
+Raw and Encoded playback share track-selection priorities. Without an available
+saved audio choice, prefer Japanese, then English, then Chinese, then the first
+available track. Only explicit audio selections write `audioSelection` to local
+storage; matching uses the track within the same media, then title/language across
+media. Automatic fallbacks never overwrite the saved choice. Existing explicit
+Raw audio choices remain supported until a new shared choice is made.
+
+Subtitles share the Encoded default format/language priorities in every Raw mode:
+ASS/SSA, VTT, SRT, then
+PGS/SUP on desktop, with VTT ahead of ASS on iOS/Android; prefer English within
+the selected format. Each source retains its own saved subtitle choices and Off
+state; preference matching, track ordering, and layer behavior are not yet identical.
 Raw audio and subtitle choices stay local. Up to three embedded subtitle layers
 share one demuxer and clock; layer preferences are stored separately from the
 existing processed subtitle preferences. Media-version choices are room-wide.

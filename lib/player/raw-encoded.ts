@@ -1,5 +1,5 @@
 import { backendFetch } from '@/lib/plex-access';
-import type { EncodedCodec, HDRPreference, RawPart } from './raw-types';
+import type { EncodedCodec, HDRPreference, RawPart, RawPlaybackTrack } from './raw-types';
 import { normalizeHDRPreference } from './raw-hdr';
 
 const preferenceKey = 'sparkle.raw.hdr';
@@ -34,7 +34,7 @@ export interface EncodedPart {
 	width: number;
 	height: number;
 	audio: boolean;
-	subtitleTracks: { id: number; title: string; default?: boolean }[];
+	subtitleTracks: (RawPlaybackTrack & { default?: boolean })[];
 	hasFonts: boolean;
 	segmentSeconds: number;
 }
@@ -151,6 +151,9 @@ export async function loadEncodedPart(
 	const subtitles = part.streams.filter((s) => s.streamType === 3);
 	result.subtitleTracks = result.subtitleTracks.map((track, index) => ({
 		...track,
+		index: subtitles[index]?.index,
+		language: subtitles[index]?.languageCode || subtitles[index]?.language,
+		codec: subtitles[index]?.codec,
 		default: subtitles[index]?.default,
 		title: subtitles[index]?.displayTitle || track.title
 	}));

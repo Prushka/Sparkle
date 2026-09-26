@@ -47,6 +47,13 @@ export type HDROutput =
 	| 'unsupported';
 export type EncodedCodec = 'av1' | 'hevc';
 export type HDRPreference = 'auto' | 'compatible' | 'sdr' | EncodedCodec;
+export interface RawPlaybackTrack {
+	id: number;
+	title: string;
+	index?: number;
+	language?: string;
+	codec?: string;
+}
 export interface RawPlaybackStatus {
 	ready: boolean;
 	changing: boolean;
@@ -58,8 +65,8 @@ export interface RawPlaybackStatus {
 	bitrate?: { video?: number; audio?: number };
 	renderer?: 'native' | 'software';
 	reason?: string;
-	audioTracks: { id: number; title: string }[];
-	subtitleTracks: { id: number; title: string }[];
+	audioTracks: RawPlaybackTrack[];
+	subtitleTracks: RawPlaybackTrack[];
 	audio?: number;
 	subtitle?: number;
 	subtitleLayers?: number[];

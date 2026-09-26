@@ -108,6 +108,9 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   byte ranges, HEAD, validators, cancellation, streaming deadlines, and compression bypass.
 - Raw demuxing/decoding stays client-side. Keep audio, subtitles, HDR choices, and versions
   inside Vidstack settings. Audio/subtitle preferences are local; version changes are shared.
+  Keep Encoded and Raw defaults in `lib/player/track-selection.ts`: audio prefers Japanese,
+  English, then Chinese; subtitle format/language priorities are shared. Persist audio only
+  after explicit selection, never while applying defaults or falling back from missing tracks.
 - Audio normalization is a local control beside Captions. Preserve the PCM hook before
   user volume and the native element's clock, volume and mute. Downmix to stereo before
   measuring loudness; link left/right gain and guard peaks after mixing. Keep bounded

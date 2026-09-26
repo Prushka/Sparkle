@@ -356,6 +356,16 @@ and `npm run build` at the root. Browser tests use `SPARKLE_TEST_URL` (default
   loopback and closes after the run; it does not modify the app catalog or Plex.
 - `npx playwright test tests/e2e/hdr-color.spec.ts`: synthetic GPU reference tests
   without Plex credentials or media fixtures.
+- `node scripts/tests/prepare-track-fixture.mjs --nvenc` creates disposable
+  multilingual MKV, processed MP4, and NVENC AV1/HEVC fixtures in the ignored cache.
+  Run `npx playwright test tests/e2e/track-selection.spec.ts` against the running app
+  to check shared track priorities, explicit-only audio persistence, captions,
+  local track changes while playing/paused, reconnects, source transitions and
+  two-client synchronization. These use real decoders and synthetic metadata/file
+  routes without Plex credentials. Omit `--nvenc` without a supported GPU; the
+  AV1/HEVC cases skip when those fixtures are absent. Subtitle policy also has
+  desktop/mobile unit coverage in `npm run test:player`; this is not physical
+  mobile-device or HDR qualification.
 
 `SPARKLE_BUILD_DIR=.next-raw-validation` isolates a validation build from an
 existing development checkout. The ordinary build still uses `.next`.

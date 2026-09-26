@@ -23,6 +23,8 @@ library from the same Library view.
   Large Plex libraries load on demand; confidently matched processed titles reuse Plex
   covers and descriptions.
 - Vidstack controls for playback, audio selection, subtitles, HDR options, and media versions.
+- Shared Encoded/Raw track priorities: Japanese → English → Chinese audio, with only
+  explicit choices saved; Raw subtitles use the Encoded format/language priorities.
 - Optional client-side audio normalization beside Captions, with a saved local preference
   for Encoded MP4 and every Raw playback mode. Multichannel audio is downmixed to
   stereo before normalization; disabling restores the original audio routing.
