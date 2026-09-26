@@ -36,6 +36,7 @@ using System.Runtime.InteropServices;
 public static class SparkleLauncherTestWindow {
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr window);
     [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr window, uint message, IntPtr wparam, IntPtr lparam);
+    [DllImport("shcore.dll")] public static extern int GetProcessDpiAwareness(IntPtr process, out int awareness);
 }
 '@
 
@@ -66,6 +67,8 @@ $trayProcess = $null
 try {
     $trayProcess = Invoke-App
     Wait-Until { Test-Api } 'compiled backend HTTP readiness'
+    $awareness = 0
+    if ([SparkleLauncherTestWindow]::GetProcessDpiAwareness($trayProcess.Handle, [ref]$awareness) -ne 0 -or $awareness -ne 1) { throw 'Installed tray entry point is not system DPI aware.' }
     $api = @(Get-FixtureApi)
     if ($api.Count -ne 1) { throw 'Expected exactly one compiled backend.' }
     $trayProcess.Refresh()
@@ -85,8 +88,12 @@ try {
     if (-not $quit.WaitForExit(5000)) { throw 'Quit command did not exit.' }
     if (-not $trayProcess.WaitForExit(20000)) { throw 'Graceful tray shutdown timed out.' }
     Wait-Until { @(Get-FixtureApi).Count -eq 0 } 'compiled backend cleanup'
-    $log = Get-Content -LiteralPath (Join-Path $TestRoot '.sparkle-backend\logs\sparkle.log') -Raw
+    $logDirectory = Join-Path $TestRoot '.sparkle-backend\logs'
+    $archives = @(Get-ChildItem -LiteralPath $logDirectory -Filter 'sparkle-*.log')
+    if ($archives.Count -ne 1) { throw 'Graceful quit did not archive exactly one tray session.' }
+    $log = Get-Content -LiteralPath $archives[0].FullName -Raw
     if ($log -notmatch 'sparkle backend stopped' -or $log -notmatch 'exit code 0') { throw 'Backend did not exit gracefully.' }
+    if ($log -notmatch 'Sparkle Backend tray exited at ') { throw 'Exit timestamp missing from archive.' }
 
     $trayProcess = Invoke-App
     Wait-Until { Test-Api } 'startup after quit'
@@ -95,7 +102,15 @@ try {
     Wait-Until { @(Get-FixtureApi).Count -eq 0 } 'job cleanup after forced tray exit'
     $quit = Invoke-App '--quit'
     if (-not $quit.WaitForExit(5000)) { throw 'Quit without an instance must return immediately.' }
-    Write-Host 'PASS: compiled API; hidden login; single-instance logs activation; close hides logs; graceful quit; forced-exit process cleanup.'
+    $interruptedLog = Get-Content -LiteralPath (Join-Path $logDirectory 'sparkle.log') -Raw
+    $trayProcess = Invoke-App
+    Wait-Until { Test-Api } 'startup after forced tray exit'
+    $recovered = @(Get-ChildItem -LiteralPath $logDirectory -Filter 'sparkle-*-recovered.log')
+    if ($recovered.Count -ne 1 -or (Get-Content -LiteralPath $recovered[0].FullName -Raw) -ne $interruptedLog) { throw 'Forced-exit log was not preserved on relaunch.' }
+    $quit = Invoke-App '--quit'
+    if (-not $quit.WaitForExit(5000) -or -not $trayProcess.WaitForExit(20000)) { throw 'Final fixture shutdown timed out.' }
+    Wait-Until { @(Get-FixtureApi).Count -eq 0 } 'final compiled backend cleanup'
+    Write-Host 'PASS: compiled API; system DPI awareness; hidden login; single-instance logs activation; close hides logs; graceful quit archive; forced-exit process cleanup and log recovery.'
 } finally {
     if ($trayProcess -and -not $trayProcess.HasExited) {
         $quit = Invoke-App '--quit'

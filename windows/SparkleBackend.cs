@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
@@ -20,9 +21,13 @@ namespace Sparkle.Backend.Windows
 {
     internal static class Program
     {
+        [DllImport("user32.dll")] internal static extern bool SetProcessDPIAware();
+
         [STAThread]
         private static void Main(string[] args)
         {
+            // Match the sibling tray apps: opt in before WinForms creates UI.
+            SetProcessDPIAware();
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             try
@@ -88,7 +93,7 @@ namespace Sparkle.Backend.Windows
         private readonly string root, backendPath;
         private readonly EventWaitHandle showEvent, quitEvent;
         private readonly LogBuffer logs;
-        private readonly Icon icon;
+        private readonly Icon icon, trayIcon;
         private readonly NotifyIcon tray;
         private readonly ContextMenuStrip menu;
         private readonly ToolStripMenuItem statusItem, startItem, stopItem, restartItem;
@@ -108,7 +113,8 @@ namespace Sparkle.Backend.Windows
             quitEvent = quitActivation;
             if (!File.Exists(Path.Combine(root, "start-backend.ps1"))) throw new FileNotFoundException("Cannot find start-backend.ps1 in " + root);
             logs = new LogBuffer(Path.Combine(root, ".sparkle-backend", "logs"));
-            icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath) ?? (Icon)SystemIcons.Application.Clone();
+            icon = LoadIcon(SystemInformation.IconSize);
+            trayIcon = LoadIcon(SystemInformation.SmallIconSize);
             LogWindow = new LogsWindow(logs, icon);
             menu = new ContextMenuStrip();
             statusItem = new ToolStripMenuItem("Starting") { Enabled = false };
@@ -123,7 +129,7 @@ namespace Sparkle.Backend.Windows
             menu.Items.Add("Open Log Folder", null, delegate { LogWindow.OpenFolder(); });
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Quit", null, delegate { StopBackend(false, true); });
-            tray = new NotifyIcon { Icon = icon, Text = "Sparkle Backend", ContextMenuStrip = menu, Visible = true };
+            tray = new NotifyIcon { Icon = trayIcon, Text = "Sparkle Backend", ContextMenuStrip = menu, Visible = true };
             tray.MouseDoubleClick += delegate(object sender, MouseEventArgs e) { if (e.Button == MouseButtons.Left) ShowLogs(); };
             timer = new System.Windows.Forms.Timer { Interval = 250 };
             timer.Tick += delegate { Tick(); };
@@ -135,6 +141,15 @@ namespace Sparkle.Backend.Windows
         internal bool IsRunning { get { return backend != null && !backend.HasExited; } }
         internal bool IsQuitting { get { return quitting; } }
         internal int BackendProcessId { get { return backend == null ? 0 : backend.Id; } }
+
+        internal static Icon LoadIcon(Size size)
+        {
+            using (var stream = typeof(TrayApplication).Assembly.GetManifestResourceStream("SparkleBackend.Icon"))
+            {
+                if (stream == null) throw new InvalidOperationException("The Sparkle Backend icon resource is missing.");
+                using (var source = new Icon(stream, size)) return (Icon)source.Clone();
+            }
+        }
 
         internal void ShowLogs()
         {
@@ -265,7 +280,13 @@ namespace Sparkle.Backend.Windows
             if (job != null) { job.Dispose(); job = null; }
             if (backend != null)
             {
-                try { if (backend.HasExited) backend.WaitForExit(); } catch (InvalidOperationException) { }
+                try
+                {
+                    // Drain final stdout/stderr before archiving, including when
+                    // closing the job just terminated the launcher.
+                    if (backend.WaitForExit(5000)) backend.WaitForExit();
+                }
+                catch (InvalidOperationException) { }
                 backend.Dispose();
                 backend = null;
             }
@@ -292,6 +313,7 @@ namespace Sparkle.Backend.Windows
                 ReleaseBackend();
                 tray.Visible = false;
                 tray.Dispose();
+                trayIcon.Dispose();
                 menu.Dispose();
                 LogWindow.Dispose();
                 icon.Dispose();
@@ -313,6 +335,7 @@ namespace Sparkle.Backend.Windows
 
         internal LogsWindow(LogBuffer buffer, Icon icon)
         {
+            SuspendLayout();
             logs = buffer;
             Text = "Sparkle Backend - Logs";
             Icon = icon;
@@ -320,6 +343,7 @@ namespace Sparkle.Backend.Windows
             Size = new Size(1000, 640);
             MinimumSize = new Size(600, 360);
             Font = new Font("Segoe UI", 10);
+            AutoScaleDimensions = new SizeF(96, 96);
             AutoScaleMode = AutoScaleMode.Dpi;
             var header = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(10), WrapContents = true };
             status = new Label { AutoSize = true, Margin = new Padding(3, 7, 24, 3) };
@@ -344,6 +368,7 @@ namespace Sparkle.Backend.Windows
             Controls.Add(text);
             Controls.Add(header);
             Controls.Add(footer);
+            ResumeLayout(true);
         }
 
         internal string LogText { get { return text.Text; } }
@@ -386,24 +411,115 @@ namespace Sparkle.Backend.Windows
     internal sealed class LogBuffer : IDisposable
     {
         internal const int MaxCharacters = 250000;
-        internal const int MaxFileBytes = 8 * 1024 * 1024;
+        internal const int MaxArchives = 5;
+        internal const string ArchiveTimeFormat = "yyyy-MM-dd_HH-mm-ss.fffffff'Z'";
         private readonly object sync = new object();
         private readonly Queue<KeyValuePair<long, string>> entries = new Queue<KeyValuePair<long, string>>();
-        private readonly StreamWriter file;
+        private StreamWriter file;
+        private readonly string filePath;
         private int characters;
         private long sequence;
         private bool disposed;
         internal readonly string DirectoryPath;
         private static readonly Regex Ansi = new Regex("\x1b\\[[0-9;]*[a-zA-Z]", RegexOptions.Compiled);
+        private static readonly Regex ArchiveName = new Regex(@"\Asparkle-(?<time>\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}\.\d{7}Z)(?:-recovered)?(?:-(?<sequence>\d{4,}))?\.log\z", RegexOptions.Compiled);
 
         internal LogBuffer(string directory)
         {
             DirectoryPath = directory;
             Directory.CreateDirectory(directory);
-            string path = Path.Combine(directory, "sparkle.log");
-            // A new tray session replaces the previous log on disk and in memory.
-            file = new StreamWriter(new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.ReadWrite), new UTF8Encoding(false)) { AutoFlush = true };
+            filePath = Path.Combine(directory, "sparkle.log");
+            string failure = null;
+            try
+            {
+                // A killed tray cannot record its exit. Mark the last-write time
+                // explicitly as recovered instead of inventing an exit timestamp.
+                if (File.Exists(filePath) && new FileInfo(filePath).Length > 0)
+                    ArchiveFile(File.GetLastWriteTimeUtc(filePath), true);
+                PruneArchives();
+            }
+            catch (IOException error) { failure = error.Message; }
+            catch (UnauthorizedAccessException error) { failure = error.Message; }
+            // If rotation failed, append rather than destroy the previous log.
+            file = OpenFile();
             Write("app", "Sparkle Backend tray started.");
+            if (failure != null) Write("app", "Could not archive or prune logs: " + failure);
+        }
+
+        // Only a tray exit ends the session; backend restarts keep the same log.
+        internal void EndSession(DateTime exitedAtUtc)
+        {
+            lock (sync)
+            {
+                if (disposed || file.BaseStream.Length == 0) return;
+                Write("app", "Sparkle Backend tray exited at " + exitedAtUtc.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture) + ".");
+                file.Dispose();
+                string failure = null;
+                try { ArchiveFile(exitedAtUtc, false); PruneArchives(); }
+                catch (IOException error) { failure = error.Message; }
+                catch (UnauthorizedAccessException error) { failure = error.Message; }
+                finally { file = OpenFile(); }
+                if (failure != null) Write("app", "Could not archive or prune logs: " + failure);
+            }
+        }
+
+        private StreamWriter OpenFile()
+        {
+            return new StreamWriter(new FileStream(filePath, FileMode.Append, FileAccess.Write,
+                FileShare.ReadWrite | FileShare.Delete), new UTF8Encoding(false)) { AutoFlush = true };
+        }
+
+        private void ArchiveFile(DateTime timestampUtc, bool recovered)
+        {
+            string name = "sparkle-" + timestampUtc.ToUniversalTime().ToString(ArchiveTimeFormat, CultureInfo.InvariantCulture)
+                + (recovered ? "-recovered" : "");
+            int lastSuffix = -1;
+            foreach (string path in Directory.GetFiles(DirectoryPath, name + "*.log", SearchOption.TopDirectoryOnly))
+            {
+                string stem = Path.GetFileNameWithoutExtension(path);
+                int suffix;
+                if (stem == name) lastSuffix = Math.Max(lastSuffix, 0);
+                else if (stem.StartsWith(name + "-", StringComparison.Ordinal) && Int32.TryParse(stem.Substring(name.Length + 1),
+                    NumberStyles.None, CultureInfo.InvariantCulture, out suffix) && suffix > 0)
+                    lastSuffix = Math.Max(lastSuffix, suffix);
+            }
+            // Keep increasing after retention removes the original filename.
+            if (lastSuffix == Int32.MaxValue) throw new IOException("Too many logs share the same exit timestamp.");
+            string destination = Path.Combine(DirectoryPath, name
+                + (lastSuffix < 0 ? "" : "-" + (lastSuffix + 1).ToString("D4", CultureInfo.InvariantCulture)) + ".log");
+            File.Move(filePath, destination);
+        }
+
+        private sealed class Archive
+        {
+            internal string Path;
+            internal DateTime Timestamp;
+            internal int Sequence;
+        }
+
+        private void PruneArchives()
+        {
+            var archives = new List<Archive>();
+            foreach (string path in Directory.GetFiles(DirectoryPath, "sparkle-*.log", SearchOption.TopDirectoryOnly))
+            {
+                Match match = ArchiveName.Match(Path.GetFileName(path));
+                DateTime timestamp;
+                int sequence = 0;
+                if (!match.Success || !DateTime.TryParseExact(match.Groups["time"].Value, ArchiveTimeFormat,
+                    CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out timestamp)) continue;
+                if (match.Groups["sequence"].Success && (!Int32.TryParse(match.Groups["sequence"].Value,
+                    NumberStyles.None, CultureInfo.InvariantCulture, out sequence) || sequence <= 0)) continue;
+                archives.Add(new Archive { Path = path, Timestamp = timestamp, Sequence = sequence });
+            }
+            // Use exit timestamps, not mutable filesystem dates. For collisions,
+            // the unsuffixed original is older than its numbered successors.
+            archives.Sort(delegate(Archive left, Archive right)
+            {
+                int order = left.Timestamp.CompareTo(right.Timestamp);
+                if (order == 0) order = left.Sequence.CompareTo(right.Sequence);
+                return order == 0 ? StringComparer.Ordinal.Compare(left.Path, right.Path) : order;
+            });
+            for (int i = 0; i < archives.Count - MaxArchives; i++) File.Delete(archives[i].Path);
         }
 
         internal void Write(string source, string message)
@@ -412,21 +528,10 @@ namespace Sparkle.Backend.Windows
             lock (sync)
             {
                 if (disposed) return;
-                try
-                {
-                    // Bound long-running login sessions as well as the UI buffer.
-                    if (file.BaseStream.Length + Encoding.UTF8.GetByteCount(line) > MaxFileBytes)
-                    {
-                        file.BaseStream.SetLength(0);
-                        file.BaseStream.Position = 0;
-                        file.WriteLine("[app] Log size limit reached; continuing current session.");
-                    }
-                    if (line.Length > MaxCharacters / 2) line = line.Substring(0, MaxCharacters / 2) + " [truncated]\r\n";
-                    file.Write(line);
-                }
+                try { file.Write(line); }
                 catch (IOException) { line = "[app] Could not write to the log file. " + line; }
                 catch (UnauthorizedAccessException) { line = "[app] Log file access denied. " + line; }
-                // Bound memory even when writing to disk fails.
+                // Keep full lines on disk, but bound memory even for huge output.
                 if (line.Length > MaxCharacters / 2) line = line.Substring(0, MaxCharacters / 2) + " [display truncated]\r\n";
                 Add(line);
             }
@@ -452,7 +557,15 @@ namespace Sparkle.Backend.Windows
             }
         }
 
-        public void Dispose() { lock (sync) { disposed = true; file.Dispose(); } }
+        public void Dispose()
+        {
+            lock (sync)
+            {
+                if (disposed) return;
+                try { EndSession(DateTime.UtcNow); }
+                finally { disposed = true; file.Dispose(); }
+            }
+        }
     }
 
     // Job membership is inherited by children. The last handle closing also

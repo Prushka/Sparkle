@@ -171,8 +171,11 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   `.sparkle-backend/`. The tray owns its process tree through a kill-on-close Job Object;
   release the startup gate only after assignment. Stop/Restart/Quit use a private event
   for graceful Go shutdown before bounded forced cleanup. Closing logs only hides the
-  window. Preserve single-instance activation, bounded UTF-8 logs, and terminal-free
-  children. Shortcut names and instance IDs must stay distinct from Sparkle-Transcoder.
+  window. Preserve single-instance activation, system DPI awareness, the yellow backend
+  icon, bounded UTF-8 log display, and terminal-free children. Keep full disk logs with
+  five UTC exit-timestamped tray-session archives plus the active log; recover interrupted
+  sessions and delete only older recognized archives. Shortcut names and instance IDs
+  must stay distinct from Sparkle-Transcoder.
   Run both Windows test scripts for launcher changes; they use disposable cache fixtures
   and must never inherit real Plex credentials or stop the developer's backend.
 - Edit `scripts/generate-sw.mjs`, not generated `public/sw.js`. Regenerate Wordle dictionaries

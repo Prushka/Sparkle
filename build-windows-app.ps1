@@ -32,7 +32,9 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Backend build failed.' }
     & $Compiler /nologo /target:winexe /optimize+ /platform:anycpu `
         /reference:System.dll /reference:System.Core.dll /reference:System.Drawing.dll /reference:System.Windows.Forms.dll `
-        "/win32icon:$RepoRoot\public\favicon.ico" "/out:$StagedApp" "$RepoRoot\windows\SparkleBackend.cs"
+        "/win32icon:$RepoRoot\windows\assets\sparkle-backend.ico" `
+        "/resource:$RepoRoot\windows\assets\sparkle-backend.ico,SparkleBackend.Icon" `
+        "/out:$StagedApp" "$RepoRoot\windows\SparkleBackend.cs"
     if ($LASTEXITCODE -ne 0) { throw 'Windows tray build failed.' }
     Copy-Item -LiteralPath $StagedBackend -Destination $ApiPath -Force
     Copy-Item -LiteralPath $StagedApp -Destination $AppPath -Force

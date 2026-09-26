@@ -147,9 +147,12 @@ It uses the existing `.env`; the frontend still runs separately.
 Double-click the tray icon or open **Sparkle Backend** from Start to see live logs
 in a dedicated window. Closing that window hides it. Right-click the tray for
 Start, Stop, Restart, or Quit. Restarting the backend clears in-memory rooms/chat.
-Logs are bounded and stored in `.sparkle-backend/logs/sparkle.log`; a fresh tray
-session replaces the previous session's log. Sparkle-Transcoder's shortcuts remain
-separate. See [Windows launcher setup, updates, and tests](docs/windows-backend.md).
+The DPI-aware app uses a yellow server/sparkle icon. Full logs are stored in
+`.sparkle-backend/logs/sparkle.log`; exiting the tray archives the session with its
+UTC exit timestamp and keeps the latest five archives plus the active log. Only older
+archives are deleted; interrupted sessions are recovered on the next launch.
+Sparkle-Transcoder's shortcuts remain separate. See
+[Windows launcher setup, updates, and tests](docs/windows-backend.md).
 
 ## Configuration
 

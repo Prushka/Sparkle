@@ -4,6 +4,12 @@ Sparkle Backend uses the same native Windows Forms tray pattern as Sparkle-Trans
 It runs the watch-party Go API without an empty PowerShell/console window, starts at
 current-user sign-in, and provides a dedicated live log window. It does not start the
 Next.js frontend. This is a per-user desktop application, not a Windows service.
+Like the sibling apps, it enables system DPI awareness before creating Windows Forms
+controls, with a 96 DPI layout baseline. It uses a dedicated server/sparkle icon in
+their shared yellow (`#f5c542`), with native frames from 16 to 256 pixels for the tray,
+log window, executable and shortcuts. System DPI awareness scales for the login
+display setting; moving between monitors with different scaling can still involve
+Windows bitmap scaling.
 
 ## Install and use
 
@@ -49,12 +55,25 @@ drive, it must be connected in this user's sign-in session before the backend st
 otherwise use an accessible UNC mapping or retry Start after connecting the drive.
 
 The window captures stdout/stderr with UTF-8, timestamps, a pause-display toggle,
-Copy Logs and Open Log Folder. Logs live at `.sparkle-backend/logs/sparkle.log`.
-Starting a fresh tray session replaces the previous file; hiding/reopening logs and
-restarting the backend within that tray session preserve it. The file is capped at
-8 MiB, then truncated with a continuation marker. The display retains at most 250,000
-characters/2,000 entries, with oversized individual lines truncated. These generated
-files and binaries are ignored by Git and excluded from the frontend Docker context.
+Copy Logs and Open Log Folder. The active log is `.sparkle-backend/logs/sparkle.log`.
+Hiding/reopening logs and stopping/restarting the backend keep the same tray-session
+log. On tray exit, final output is drained and the full log is archived as
+`sparkle-yyyy-MM-dd_HH-mm-ss.fffffffZ.log`, with the UTC exit time also recorded inside.
+The latest five archives are retained in addition to the active log. Only older files
+matching the archive naming scheme are deleted, ordered by their timestamp rather than
+filesystem modification time; unrelated files and subdirectories are left alone.
+
+After a crash or forced termination, the next launch preserves the unfinished log
+with a `-recovered` suffix and its last-write time, since the exact exit time is unknown.
+These recovered logs count toward the five archives. Filename collisions use numbered
+suffixes. If an open viewer blocks a rename, the app appends and reports the failure
+instead of overwriting the log. Disk logs are no longer size-truncated and can grow
+throughout a long session. Only the display is bounded to 250,000 characters/2,000
+entries, with oversized individual lines shortened for display. These generated logs
+and binaries are ignored by Git and excluded from the frontend Docker context.
+
+The checked-in icon can be regenerated with `windows/assets/generate-icon.ps1`; it
+uses vector drawing instructions and the built-in Windows drawing runtime.
 
 To update after pulling changes, choose **Quit**, then rerun the installer. Builds
 refuse to overwrite a running copy. If Go is not on `PATH`, supply `-GoExe <path>`.
@@ -106,11 +125,14 @@ go -C backend vet ./...
 ```
 
 The first suite uses a fake backend/encoder to check absence of console windows,
-root-relative configuration, UTF-8 live logs, bounded log storage, close/reopen,
+root-relative configuration, DPI scaling, icon sizes, UTF-8 live logs, bounded log
+display, full disk logs, five-archive retention, recovery, timestamp collisions,
+locked-file safety, final stdout/stderr capture, close/reopen,
 activation, start/stop/restart/quit and process-tree cleanup. The second builds the real
 API and GUI in a path containing spaces, serves an empty catalog on a temporary loopback
-port, and checks single-instance activation, hidden login launch, graceful shutdown
-and cleanup after killing the tray process. Both use disposable fixtures under
+port, and checks process DPI awareness, single-instance activation, hidden login launch,
+graceful shutdown archives, cleanup and log recovery after killing the tray process.
+Both use disposable fixtures under
 `cache/`, without real Plex credentials or media. Go lifecycle tests exercise the
 native shutdown event; run race tests with CGO and a supported C compiler as well.
 

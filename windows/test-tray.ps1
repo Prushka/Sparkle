@@ -26,6 +26,7 @@ $TestApp = Join-Path $TestRoot "TrayTests.exe"
 if ($LASTEXITCODE -ne 0) { throw "Fake backend compilation failed." }
 & $Compiler /nologo /target:winexe /main:Sparkle.Backend.Windows.TrayTests `
     /reference:System.dll /reference:System.Core.dll /reference:System.Drawing.dll /reference:System.Windows.Forms.dll `
+    "/win32icon:$PSScriptRoot\assets\sparkle-backend.ico" "/resource:$PSScriptRoot\assets\sparkle-backend.ico,SparkleBackend.Icon" `
     "/out:$TestApp" "$PSScriptRoot\SparkleBackend.cs" "$PSScriptRoot\tests\TrayTests.cs"
 if ($LASTEXITCODE -ne 0) { throw "Tray test compilation failed." }
 # Explicitly isolate configuration from the developer's ENV_FILE.
