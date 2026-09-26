@@ -23,17 +23,17 @@ const native5 = await planHDR(p5, hevc, config5, 'auto', true, async (mime) =>
 );
 assert.equal(native5.renderer, 'native');
 assert.equal(native5.output, 'Native dynamic HDR (unverified)');
-assert.equal(
-	(await planHDR(p5, hevc, config5, 'auto', false, async () => false)).renderer,
-	'software'
+await assert.rejects(
+	planHDR(p5, hevc, config5, 'auto', false, async () => false),
+	/Dolby-aware/
 );
 await assert.rejects(
 	planHDR({ ...p5, DOVIELPresent: true }, hevc, config5, 'auto', false, async () => false),
 	/Dolby-aware/
 );
-assert.equal(
-	(await planHDR(p5, hevc, undefined, 'auto', false, async () => false)).renderer,
-	'software'
+await assert.rejects(
+	planHDR(p5, hevc, undefined, 'auto', false, async () => false),
+	/Dolby-aware/
 );
 const p7 = {
 	...base,
@@ -69,15 +69,23 @@ const plus = await planHDR(
 	async (_, mode) => mode === 'HDR10+'
 );
 assert.equal(plus.output, 'Native dynamic HDR (unverified)');
-const sdr = await planHDR(base, hevc, undefined, 'sdr', true, async () => {
-	throw new Error('SDR mode must not request native playback');
-});
-assert.equal(sdr.renderer, 'software');
-assert.equal(sdr.output, 'SDR tone mapping');
+// Even stale/direct requests for the disabled mode must never activate software.
+for (const hdrDisplay of [false, true]) {
+	for (const preference of ['auto', 'compatible', 'sdr', 'av1', 'hevc']) {
+		for (const track of [base, p7, { ...base, colorTrc: 'arib-std-b67' }]) {
+			const plan = await planHDR(track, hevc, undefined, preference, hdrDisplay, async () => true);
+			assert.equal(plan.renderer, 'native');
+			await assert.rejects(
+				planHDR(track, hevc, undefined, preference, hdrDisplay, async () => false),
+				/Native HDR playback is unavailable/
+			);
+		}
+	}
+}
 assert.equal(
 	(await planHDR(base, hevc, undefined, 'auto', false, async () => true)).output,
 	'SDR tone mapping'
 );
 console.log(
-	'HDR policy: exact Dolby profiles, no Profile 7 EL claims, HDR10+ probes, local SDR fallback passed'
+	'HDR policy: exact Dolby profiles, HDR10+ probes, native output on SDR/HDR displays, no software fallback passed'
 );

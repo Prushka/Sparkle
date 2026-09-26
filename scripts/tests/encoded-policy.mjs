@@ -16,10 +16,15 @@ globalThis.localStorage = {
 	getItem: (key) => preferences.get(key) ?? null,
 	setItem: (key, value) => preferences.set(key, value)
 };
-for (const mode of ['auto', 'compatible', 'sdr', 'av1', 'hevc']) {
+for (const mode of ['auto', 'compatible', 'av1', 'hevc']) {
 	saveHDRPreference(mode);
 	assert.equal(readHDRPreference(), mode);
 }
+preferences.set('sparkle.raw.hdr', 'sdr');
+assert.equal(readHDRPreference(), 'compatible');
+assert.equal(preferences.get('sparkle.raw.hdr'), 'compatible', 'migrate persisted software mode');
+saveHDRPreference('sdr');
+assert.equal(preferences.get('sparkle.raw.hdr'), 'compatible', 'reject new software selections');
 preferences.set('sparkle.raw.hdr', 'invalid');
 assert.equal(readHDRPreference(), 'auto');
 Object.defineProperty(globalThis, 'localStorage', {

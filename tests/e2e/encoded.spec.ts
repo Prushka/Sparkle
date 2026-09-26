@@ -29,9 +29,11 @@ test('every HDR output mode reports measured bitrate and keeps mobile menus sepa
 	await player.hover();
 	await page.getByRole('button', { name: 'Settings', exact: true }).click();
 	await page.getByRole('menuitem', { name: /^Video Settings/ }).click();
+	await expect(page.getByRole('menuitemradio', { name: 'Tone mapping', exact: true })).toHaveCount(
+		0
+	);
 	for (const [mode, label] of [
 		['compatible', 'Compatible'],
-		['sdr', 'Tone mapping'],
 		['auto', 'Automatic'],
 		['av1', 'Encoded AV1'],
 		['hevc', 'Encoded HEVC']
@@ -40,6 +42,7 @@ test('every HDR output mode reports measured bitrate and keeps mobile menus sepa
 		await expect
 			.poll(() => page.evaluate(() => (window as any).testProvider.status.hdrPreference))
 			.toBe(mode);
+		await expect(player).toHaveAttribute('data-raw-renderer', 'native');
 		await expect
 			.poll(() => page.evaluate(() => (window as any).testProvider.status.bitrate?.video ?? 0), {
 				timeout: 30000
@@ -285,7 +288,7 @@ test('encoded ASS fonts load on caption selection and settings fit a mobile view
 	await player.hover();
 	await page.getByRole('button', { name: 'Settings', exact: true }).click();
 	await page.getByRole('menuitem', { name: /^Video Settings/ }).click();
-	for (const name of ['Automatic', 'Compatible', 'Tone mapping', 'Encoded AV1', 'Encoded HEVC']) {
+	for (const name of ['Automatic', 'Compatible', 'Encoded AV1', 'Encoded HEVC']) {
 		const option = page.getByRole('menuitemradio', { name, exact: true });
 		await option.scrollIntoViewIfNeeded();
 		const box = (await option.boundingBox())!;

@@ -351,7 +351,11 @@ try {
 		{ name: 'Encoded MP4 AAC stereo', file: '/fixture/stereo.mp4', mode: 'element' },
 		{ name: 'Encoded MP4 AAC 5.1', file: '/fixture/surround.mp4', mode: 'element' },
 		{ name: 'Compatible HDR HEVC + FLAC 5.1', file: '/fixture/hdr-flac.mkv', mode: 'compatible' },
-		{ name: 'Tone mapping HDR HEVC + FLAC 5.1', file: '/fixture/hdr-flac.mkv', mode: 'sdr' },
+		{
+			name: 'Legacy tone mapping preference migrates to native HEVC + FLAC 5.1',
+			file: '/fixture/hdr-flac.mkv',
+			mode: 'sdr'
+		},
 		{ name: 'Raw H264 + TrueHD 5.1', file: '/fixture/truehd.mkv', mode: 'wasm' },
 		{ name: 'Raw AC-3 5.1', file: '/fixture/ac3-51.mkv', mode: 'compatible', audioCodec: 'ac3' },
 		{
@@ -429,6 +433,10 @@ try {
 				if (!provider.status.ready) throw new Error(provider.status.reason);
 				await provider.play();
 				engine = provider.engine;
+				if (!engine.isMSE() || provider.status.renderer !== 'native')
+					throw new Error('Raw and encoded playback must use native video');
+				if (fixture.mode === 'sdr' && localStorage.getItem('sparkle.raw.hdr') !== 'compatible')
+					throw new Error('Legacy tone mapping preference was not migrated');
 				audioEngine = provider.audioEngine;
 				normalizer = [...provider.normalizers][0];
 				element = container.querySelector('.sparkle-raw-surface video');

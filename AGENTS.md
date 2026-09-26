@@ -128,6 +128,9 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   media-generation checks, stale-message rejection, and remote-event suppression through
   readiness, seeks, buffering, track changes, recovery, and teardown. Loading must not emit
   accidental pauses or stale positions.
+- Software tone mapping is temporarily disabled by `SOFTWARE_TONE_MAPPING_ENABLED`.
+  Preserve its implementation for rework, migrate saved `sdr` choices to Compatible,
+  and require native video for active raw/encoded modes on SDR and HDR displays.
 - Prefer native video/MSE for HDR. Keep source format separate from output mode. The
   MSE initialization segment must include HEVC mastering/light-level metadata even
   when it exists only in bitstream SEI. Keep audio-only MKV seeks on the cluster index.

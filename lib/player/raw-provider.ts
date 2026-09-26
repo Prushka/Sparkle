@@ -20,7 +20,14 @@ import {
 	type EncodedPart
 } from './raw-encoded';
 import { EncodedSubtitles } from './encoded-subtitles';
-import { compatibleHDR, planHDR, sourceHDR, supportsNativeHDR } from './raw-hdr';
+import {
+	compatibleHDR,
+	normalizeHDRPreference,
+	planHDR,
+	SOFTWARE_TONE_MAPPING_ENABLED,
+	sourceHDR,
+	supportsNativeHDR
+} from './raw-hdr';
 import { RawSubtitles } from './raw-subtitles';
 import { RawPictureInPicture } from './raw-pip';
 import { AudioNormalization, reportNormalization } from './audio-normalization';
@@ -483,20 +490,18 @@ export class RawProvider implements MediaProviderAdapter {
 		if (plan) {
 			engine.setBaseHDROnly(plan.baseOnly);
 			engine.setHDRPlayback(plan.renderer, plan.mime, video?.DOVIProfile === 5);
-		} else if (this.encoded) {
+		} else if (this.encoded || !SOFTWARE_TONE_MAPPING_ENABLED) {
 			engine.setHDRPlayback('native', engine.getVideoMimeType());
 		}
+		const nativeVideo =
+			!SOFTWARE_TONE_MAPPING_ENABLED || !!this.encoded || plan?.renderer === 'native';
 		this.subtitles.setFonts(engine.getEmbeddedFonts());
 		// Encoded Opus and video share one native media clock when supported.
 		// Original unsupported audio still uses the independent WASM decoder.
 		const combinedAudio =
 			this.encoded?.playlist === 'master.m3u8' &&
 			(plan?.renderer === 'software' || supportsNativeVideo('audio/mp4; codecs="opus"'));
-		if (
-			(this.encoded || plan?.renderer === 'native') &&
-			!combinedAudio &&
-			part.streams.some((s) => s.streamType === 2)
-		) {
+		if (nativeVideo && !combinedAudio && part.streams.some((s) => s.streamType === 2)) {
 			this.audioEngine = new Constructor({
 				audioFilter: this.audioFilter,
 				nativeAudioFilter: this.nativeAudioFilter,
@@ -529,7 +534,7 @@ export class RawProvider implements MediaProviderAdapter {
 				}));
 		this.publish({
 			output: plan?.output ?? 'SDR',
-			renderer: plan?.renderer ?? (this.encoded ? 'native' : undefined),
+			renderer: plan?.renderer ?? (nativeVideo ? 'native' : undefined),
 			reason: this.encoded
 				? `${this.hdrPreference === 'auto' ? 'Slow connection · ' : ''}Shared NVENC ${this.encoded.codec.toUpperCase()}${/Dolby|HDR10\+/.test(originalHDR) ? ` · ${this.encoded.output} conversion` : ''}.`
 				: plan?.reason,
@@ -834,6 +839,7 @@ export class RawProvider implements MediaProviderAdapter {
 		return this.chooseHDR('compatible');
 	}
 	async chooseHDR(preference: HDRPreference, networkChange = false) {
+		preference = normalizeHDRPreference(preference);
 		if (
 			(preference === 'av1' || preference === 'hevc') &&
 			!this.availableEncoders.includes(preference)

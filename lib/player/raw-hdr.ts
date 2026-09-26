@@ -1,5 +1,12 @@
 import type { RawTrack, HDROutput, HDRPreference } from './raw-types';
 
+// Retain the client tone mapper for rework, but never select it in production.
+export const SOFTWARE_TONE_MAPPING_ENABLED = false;
+
+export function normalizeHDRPreference(preference: HDRPreference): HDRPreference {
+	return preference === 'sdr' && !SOFTWARE_TONE_MAPPING_ENABLED ? 'compatible' : preference;
+}
+
 export function sourceHDR(track?: RawTrack) {
 	if (!track) return 'Unknown';
 	const formats: string[] = [];
@@ -62,6 +69,7 @@ export async function planHDR(
 	hdrDisplay: boolean,
 	probe: HDRProbe
 ): Promise<HDRPlan> {
+	preference = normalizeHDRPreference(preference);
 	const base = compatibleHDR(track);
 	const dynamic = track.DOVIPresent || track.HDR10PlusPresent;
 	if (preference === 'auto') {
@@ -88,7 +96,7 @@ export async function planHDR(
 	if (!base) {
 		// Older MKV muxers may omit the container DV record. The software
 		// renderer still requires and validates RPU metadata on every frame.
-		if (track.DOVIProfile === 5 && !track.DOVIELPresent)
+		if (SOFTWARE_TONE_MAPPING_ENABLED && track.DOVIProfile === 5 && !track.DOVIELPresent)
 			return {
 				renderer: 'software',
 				mime,
@@ -97,7 +105,7 @@ export async function planHDR(
 				reason: 'Dolby Vision P5 converted to SDR on this device. 4K playback may be CPU-limited.'
 			};
 		throw new Error(
-			`Dolby Vision Profile ${track.DOVIProfile ?? '?'} needs a supported Dolby-aware decoder on this device. Choose a compatible media version.`
+			`Dolby Vision Profile ${track.DOVIProfile ?? '?'} needs a supported Dolby-aware decoder. Choose Encoded AV1/HEVC or another media version.`
 		);
 	}
 	const fallback = dynamic
@@ -115,6 +123,10 @@ export async function planHDR(
 					? 'Original HDR video, rendered by the browser.'
 					: 'Browser tone mapping for this SDR display.')
 		};
+	if (!SOFTWARE_TONE_MAPPING_ENABLED)
+		throw new Error(
+			'Native HDR playback is unavailable. Choose Encoded AV1/HEVC or another media version.'
+		);
 	return {
 		renderer: 'software',
 		mime,

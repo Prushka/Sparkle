@@ -1,14 +1,17 @@
 # Optional server encoding
 
 Vidstack → Video Settings → HDR output offers **Automatic**, **Compatible**,
-**Tone mapping**, **Encoded AV1**, and **Encoded HEVC** for every Plex video,
+**Encoded AV1**, and **Encoded HEVC** for every Plex video,
 including SDR. The selection is saved in browser localStorage (`sparkle.raw.hdr`).
+The software **Tone mapping** option and fallback are temporarily disabled; existing
+saved selections migrate to **Compatible**. All modes use native video, including
+browser-managed HDR-to-SDR conversion on SDR displays.
 Each participant chooses locally; identical encodes are shared across participants
 and rooms. The room continues to identify the original Plex item and media version.
 These derivatives require the same [Plex membership](plex-auth.md) as the original;
 they are separate from the public Encoded catalog.
 The HDR output panel shows live video-plus-selected-audio bitrate for the active
-mode, including original playback and client tone mapping. It measures compressed
+mode, including original playback and server encodes. It measures compressed
 packet bytes over the preceding three seconds of media, updated once per second;
 it is not network download speed or an estimate for inactive modes. Hover the
 readout for the video/audio breakdown. Seeks and mode changes reset the measurement.

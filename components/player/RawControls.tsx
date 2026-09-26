@@ -11,6 +11,7 @@ import {
 import { RAW_STATUS_EVENT, RawProvider } from '@/lib/player/raw-provider';
 import type { RawMedia, RawPlaybackStatus } from '@/lib/player/raw-types';
 import type { HDRPreference } from '@/lib/player/raw-types';
+import { SOFTWARE_TONE_MAPPING_ENABLED } from '@/lib/player/raw-hdr';
 
 function formatBitrate(bits?: number) {
 	if (bits === undefined || !Number.isFinite(bits) || bits < 0) return 'Measuring…';
@@ -203,7 +204,7 @@ export function RawVideoSettings({
 						options={[
 							{ value: 'auto', label: 'Automatic' },
 							{ value: 'compatible', label: 'Compatible' },
-							{ value: 'sdr', label: 'Tone mapping' },
+							...(SOFTWARE_TONE_MAPPING_ENABLED ? [{ value: 'sdr', label: 'Tone mapping' }] : []),
 							{
 								value: 'av1',
 								label: `Encoded AV1${status?.encodedAvailable?.includes('av1') ? '' : ' · unavailable'}`

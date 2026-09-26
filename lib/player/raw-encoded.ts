@@ -1,12 +1,16 @@
 import { backendFetch } from '@/lib/plex-access';
 import type { EncodedCodec, HDRPreference, RawPart } from './raw-types';
+import { normalizeHDRPreference } from './raw-hdr';
 
 const preferenceKey = 'sparkle.raw.hdr';
 export function readHDRPreference(): HDRPreference {
 	try {
 		const value = localStorage.getItem(preferenceKey);
-		if (value && ['auto', 'compatible', 'sdr', 'av1', 'hevc'].includes(value))
-			return value as HDRPreference;
+		if (value && ['auto', 'compatible', 'sdr', 'av1', 'hevc'].includes(value)) {
+			const preference = normalizeHDRPreference(value as HDRPreference);
+			if (preference !== value) saveHDRPreference(preference);
+			return preference;
+		}
 	} catch {
 		/* Storage may be unavailable in embedded/private contexts. */
 	}
@@ -14,7 +18,7 @@ export function readHDRPreference(): HDRPreference {
 }
 export function saveHDRPreference(value: HDRPreference) {
 	try {
-		localStorage.setItem(preferenceKey, value);
+		localStorage.setItem(preferenceKey, normalizeHDRPreference(value));
 	} catch {
 		/* Playback still works. */
 	}

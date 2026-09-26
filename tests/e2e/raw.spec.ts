@@ -267,8 +267,11 @@ test('two raw clients synchronize playback, pause, seek and delayed join', async
 	if (process.env.SPARKLE_RAW_EXPECTED_HDR) {
 		const pauseCount = messages[0].filter((m) => m.type === 'pause').length;
 		const time = messages[0].filter((m) => m.type === 'time').at(-1)?.time || 0;
-		await pages[0].getByRole('menuitemradio', { name: 'Tone mapping', exact: true }).click();
-		await expect(player).toHaveAttribute('data-raw-renderer', 'software', { timeout: 30_000 });
+		await expect(
+			pages[0].getByRole('menuitemradio', { name: 'Tone mapping', exact: true })
+		).toHaveCount(0);
+		await pages[0].getByRole('menuitemradio', { name: 'Automatic', exact: true }).click();
+		await expect(player).toHaveAttribute('data-raw-renderer', 'native', { timeout: 30_000 });
 		await expect
 			.poll(() => messages[0].filter((m) => m.type === 'time').at(-1)?.time || 0, {
 				timeout: 30_000

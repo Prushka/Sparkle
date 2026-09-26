@@ -54,6 +54,8 @@ original file is cached. Artwork has a 512 MiB budget; encoded segments default 
 See [server encoding](docs/server-encoding.md) for GPU setup, settings and limits.
 Encoded audio and video share a native playback clock on compatible browsers.
 HDR output settings show live bitrate for the active playback mode.
+Software tone mapping is temporarily disabled; Compatible and AV1/HEVC playback use
+native video on SDR and HDR displays. Saved Tone mapping selections switch to Compatible.
 
 The waveform button beside Captions enables [audio normalization](docs/audio-normalization.md).
 It downmixes multichannel audio to stereo before adjusting loudness in an AudioWorklet,

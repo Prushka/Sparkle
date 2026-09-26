@@ -7,6 +7,10 @@ const backend = new URL(process.env.SPARKLE_TEST_BACKEND_URL || '/be', base).hre
 	''
 );
 const id = process.env.SPARKLE_HDR_TEST_ID;
+if (process.env.SPARKLE_HDR_MODE === 'sdr')
+	throw new Error(
+		'Software tone mapping is temporarily disabled; qualify native playback instead.'
+	);
 if (!id) throw new Error('Set SPARKLE_HDR_TEST_ID to an HDR item ID');
 const browser = await chromium.launch({
 	channel: process.env.SPARKLE_TEST_CHANNEL || 'chrome',
