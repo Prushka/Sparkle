@@ -3,7 +3,7 @@
   "commit": "152f629d3021fd8013efa464fcb7b55f9fbe7753",
   "ffmpeg": "3a14ab29692763e561610412cdeb1985da4e3cd8",
   "emscripten": "4.0.10",
-  "patchHash": "7d905415c9f379ab0e8451f465977a4af3ed5624779601c4672c289afb22d2a4",
+  "patchHash": "fbd0a9db21f194e959956d460c2b0fa502e9bb4e1be4e1f2c0a01fbecdc8461a",
   "sources": {
     "hdr-sdr.ts": "7145cc1cb27cf75cdae17ef1c6f4cc3121289dad6fbe7edecb9f3ef8db350c6b",
     "dovi-sdr.ts": "d4a572d72c175bba9fff94adcf0ec72a2b306c341e87877876b4d5cbb68cdb74",
@@ -43,7 +43,7 @@
     "avplayer/888.avplayer.js": "636f045b692045666610992c2b8782d87fff87fc1f2a0a125e0da47e574ea176",
     "avplayer/933.avplayer.js": "76920cb417b6359bf5481339e6f8ddb1e3b395ddd4909740c98cb89b34d70ab1",
     "avplayer/977.avplayer.js": "89a9e0df3097ccdeca218b4419f327015368940f31e36f5c7061a00cdb564754",
-    "avplayer/avplayer.js": "8a621a8c88edea21b19d29744d257c0807215fb3133ad44331f43b632779c8e0"
+    "avplayer/avplayer.js": "c305a90a886761f663ae857d290595b63476f919030e1d8ac2291c44cd6345b6"
   },
   "codecs": {
     "decode/aac-atomic.wasm": "45e90ba204af8295db460adb50e929dd38c3ed8d27422973149737613cc4f584",

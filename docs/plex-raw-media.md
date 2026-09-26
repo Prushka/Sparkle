@@ -107,7 +107,7 @@ on image hover or native lazy-loading inside translated virtual rows.
 Raw playback uses the existing Vidstack control bar. **Settings → Video Settings**
 contains embedded audio, source/output HDR information, explicit compatible HDR
 fallbacks, and shared media versions. **Settings → Subtitles** contains the primary
-track and up to two additional layers. These menus remain accessible when HDR
+track and additional same-format layers. These menus remain accessible when HDR
 playback is unsupported, so the user can select a compatible representation.
 
 The **CC** button (or **C** while the player is focused) toggles raw subtitles and
@@ -153,10 +153,15 @@ of two identically titled tracks was previously selected.
 Both menus use the same format tabs and track toggles: Styled (ASS/SSA), Native
 (VTT), Text (SRT), and Image (PGS/SUP), showing only available formats. ASS and VTT
 support same-format companions. Changing formats restores that format's layers;
-turning off the primary promotes its next companion. Raw retains its bounded
-maximum of three simultaneous tracks. SRT and PGS select one track at a time.
-Raw packets and extracted Encoded files use their respective renderers, with
-shared catalog construction, preference matching, toggle transitions, and storage.
+turning off the primary promotes its next companion. Neither source imposes a
+three-track cap. SRT and PGS select one track at a time. Both sources share
+multilingual ASS fallback fonts, font normalization, and merged style/event
+composition in `lib/player/subtitle-rendering.ts`. Tracks with different ASS script
+resolutions are normalized before merging. Styled layers shrink together
+and share one libass collision domain; Native layers stack as lines with the same
+size policy. Raw composes bounded active packet windows instead of downloading
+whole tracks, including in NVENC AV1/HEVC mode. Embedded fonts remain available.
+Catalog construction, preference matching, toggle transitions, and storage are shared.
 Audio and subtitle choices stay local. Media-version choices are room-wide.
 Multipart positions are converted to one seconds-based room timeline. Parts
 without reliable durations are explicitly rejected rather than synchronized to

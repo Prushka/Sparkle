@@ -309,7 +309,6 @@ export function RawSubtitleSettings() {
 					}
 					selectedTrack={selected}
 					tracks={tracks}
-					maxLayers={2}
 				/>
 			</Menu.Items>
 		</Menu.Root>

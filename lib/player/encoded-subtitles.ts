@@ -1,5 +1,6 @@
 import { backendFetch } from '@/lib/plex-access';
 import { RawSubtitles } from './raw-subtitles';
+import { RawSubtitleComposition } from './raw-subtitle-composition';
 import { encodedURL, type EncodedPart } from './raw-encoded';
 
 type Chunk = {
@@ -15,6 +16,7 @@ function bytes(value: string | null) {
 export class EncodedSubtitles {
 	private selected: number[] = [];
 	private renderers: RawSubtitles[] = [];
+	private composition?: RawSubtitleComposition;
 	private chunks = new Map<number, Chunk>();
 	private pending = new Map<number, AbortController>();
 	private fed = new Set<number>();
@@ -32,12 +34,18 @@ export class EncodedSubtitles {
 	) {}
 	select(ids: number[]) {
 		this.renderers.forEach((renderer) => renderer.destroy());
-		this.selected = ids.slice(0, 3);
-		this.renderers = this.selected.map((_, index) => {
-			const renderer = new RawSubtitles(this.container, index);
-			renderer.setFonts(this.fonts);
-			return renderer;
-		});
+		this.selected = [...new Set(ids)].filter((id) =>
+			this.part.subtitleTracks.some((track) => track.id === id)
+		);
+		this.renderers = [];
+		// Keep the font cache and ASS worker alive when only the selected tracks
+		// change. Recreating a worker for every toggle needlessly reloads fonts.
+		this.composition ??= new RawSubtitleComposition(this.container);
+		for (const id of this.selected) {
+			const renderer = new RawSubtitles(this.container, this.composition);
+			renderer.setLanguage(this.part.subtitleTracks.find((track) => track.id === id)?.language);
+			this.renderers.push(renderer);
+		}
 		this.fed.clear();
 		this.seen.clear();
 		this.update(this.time, true);
@@ -148,6 +156,7 @@ export class EncodedSubtitles {
 			.finally(() => {
 				if (generation !== this.generation) return;
 				this.fontsLoaded = true;
+				this.composition?.setFonts(this.fonts);
 				this.select(this.selected);
 			});
 	}
@@ -159,6 +168,8 @@ export class EncodedSubtitles {
 		this.pending.clear();
 		this.renderers.forEach((renderer) => renderer.destroy());
 		this.renderers = [];
+		this.composition?.destroy();
+		this.composition = undefined;
 		this.chunks.clear();
 	}
 }

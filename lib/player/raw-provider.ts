@@ -596,6 +596,7 @@ export class RawProvider implements MediaProviderAdapter {
 			this.initialized = true;
 			const audio = pickRawAudioTrack(this.status.audioTracks, this.mediaId);
 			const subtitle = this.subtitleSelectionTracks.find((track) => track.default);
+			this.subtitles?.setLanguage(subtitle?.language);
 			if (audio) await (this.audioEngine ?? engine).selectAudio(audio.id, false, !!this.encoded);
 			if (subtitle && !this.encoded) await engine.selectSubtitle(subtitle.id);
 			engine.setSubtitleEnable(!!subtitle);
@@ -759,7 +760,7 @@ export class RawProvider implements MediaProviderAdapter {
 			const layers = tracks
 				.filter((track) => this.status.subtitleLayers?.includes(track.id))
 				.map((track) => track.src);
-			return getToggledSubtitleSelection(tracks, primary, layers, track, checked, 2);
+			return getToggledSubtitleSelection(tracks, primary, layers, track, checked);
 		});
 	}
 	toggleSubtitles() {
@@ -807,7 +808,7 @@ export class RawProvider implements MediaProviderAdapter {
 				next.layerTracks.map((track) => track.src),
 				tracks,
 				primary
-			).slice(0, 2);
+			);
 			const layers = layerSrcs.map((src) => tracks.find((track) => track.src === src)!.id);
 			const same =
 				id === this.status.subtitle &&
@@ -824,6 +825,7 @@ export class RawProvider implements MediaProviderAdapter {
 					await this.audioEngine?.pause();
 					if (this.engine !== engine || this.destroyed) return;
 					await this.applySubtitleLayers([]);
+					this.subtitles?.setLanguage(primary?.language);
 					engine.setSubtitleEnable(id >= 0);
 					if (id >= 0) await engine.selectSubtitle(id);
 					if (this.engine !== engine || this.destroyed) return;
@@ -843,15 +845,13 @@ export class RawProvider implements MediaProviderAdapter {
 	private async applySubtitleLayers(ids: number[]) {
 		if (!this.engine) return;
 		if (this.encodedCaptions) {
-			const selected = ids
-				.slice(0, 2)
-				.map((id, index) =>
-					id !== this.status.subtitle &&
-					ids.indexOf(id) === index &&
-					this.status.subtitleTracks.some((track) => track.id === id)
-						? id
-						: -1
-				);
+			const selected = ids.map((id, index) =>
+				id !== this.status.subtitle &&
+				ids.indexOf(id) === index &&
+				this.status.subtitleTracks.some((track) => track.id === id)
+					? id
+					: -1
+			);
 			this.encodedCaptions.select([this.status.subtitle ?? -1, ...selected]);
 			this.publish({ subtitleLayers: selected });
 			return;
@@ -859,19 +859,17 @@ export class RawProvider implements MediaProviderAdapter {
 		await this.engine.setSubtitleLayers([]);
 		this.subtitleLayers.forEach((layer) => layer.destroy());
 		this.subtitleLayers = [];
-		const selected = ids
-			.slice(0, 2)
-			.map((id, index) =>
-				id !== this.engine!.getSelectedSubtitleStreamId() &&
-				this.status.subtitleTracks.some((t) => t.id === id) &&
-				ids.indexOf(id) === index
-					? id
-					: -1
-			);
-		const layers = selected.flatMap((id, index) => {
+		const selected = ids.map((id, index) =>
+			id !== this.engine!.getSelectedSubtitleStreamId() &&
+			this.status.subtitleTracks.some((t) => t.id === id) &&
+			ids.indexOf(id) === index
+				? id
+				: -1
+		);
+		const layers = selected.flatMap((id) => {
 			if (id < 0) return [];
-			const renderer = new RawSubtitles(this.container, index + 1);
-			renderer.setFonts(this.engine!.getEmbeddedFonts());
+			const renderer = this.subtitles!.createLayer();
+			renderer.setLanguage(this.subtitleSelectionTracks.find((track) => track.id === id)?.language);
 			this.subtitleLayers.push(renderer);
 			return [{ id, sink: renderer.sink }];
 		});

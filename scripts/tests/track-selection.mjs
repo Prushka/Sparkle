@@ -22,6 +22,7 @@ const {
 	pickRawSubtitleTrack,
 	rawSubtitleFormat,
 	getRawSubtitleTracks,
+	restoreRawSubtitleLayers,
 	createSubtitleTracks,
 	getSubtitleFormatSelection,
 	getToggledSubtitleSelection,
@@ -234,18 +235,25 @@ assert.deepEqual(
 	state.layerTracks.map((t) => t.id),
 	[17, 18]
 );
-assert.equal(
+assert.deepEqual(
 	getToggledSubtitleSelection(
 		tracks,
 		primary,
 		state.layerTracks.map((t) => t.src),
 		tracks.find((t) => t.id === 15),
-		true,
-		2
-	),
-	null,
-	'Raw decoder layer limit'
+		true
+	).layerTracks.map((track) => track.id),
+	[17, 18, 15],
+	'Raw and Encoded allow more than three selected tracks'
 );
+const allLayers = [17, 18, 15].map((id) => tracks.find((track) => track.id === id));
+persistSubtitleTrackSelection(tracks, primary, allLayers);
+assert.deepEqual(
+	restoreRawSubtitleLayers(tracks, primary, duplicates),
+	allLayers.map((track) => track.src),
+	'Restoring saved Raw layers does not truncate the selection'
+);
+persistSubtitleTrackSelection(tracks, primary, [companion]);
 saveStoredSubtitleSelectionOff();
 assert.equal(getStoredSubtitleSelection().disabled, true);
 assert.equal(

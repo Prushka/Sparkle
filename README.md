@@ -31,8 +31,9 @@ library from the same Library view.
   stereo before normalization; disabling restores the original audio routing.
 - Optional shared NVENC AV1/HEVC playback for Plex, with on-demand cached segments and a
   saved output preference. Automatic selects a compatible encode on a measured slow connection.
-- Embedded ASS/SSA with fonts, text subtitles, and PGS/SUP bitmap subtitles; local subtitle
-  layers and audio preferences stay independent for each participant.
+- Embedded ASS/SSA with multilingual fallback fonts, text subtitles, and PGS/SUP bitmap
+  subtitles. Raw and Encoded share subtitle layer sizing and stacking, without a
+  three-track cap; layer and audio preferences stay local to each participant.
 - Raw caption toggle and supported-browser picture-in-picture. Chrome Document PiP keeps
   subtitle layers; raw Google Cast options explain tab casting and direct-cast limitations.
 - Shared YouTube, Chess, and Wordle tabs, plus browser voice chat outside Discord Activities.

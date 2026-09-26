@@ -116,7 +116,7 @@ export function restoreRawSubtitleLayers(
 							track.format === format &&
 							titles.some((title) => originals.find((raw) => raw.id === track.id)?.title === title)
 					);
-					if (layers.length) saveStoredSubtitleLayerSelections(format, layers.slice(0, 2));
+					if (layers.length) saveStoredSubtitleLayerSelections(format, layers);
 				}
 			}
 		} catch {
@@ -125,6 +125,6 @@ export function restoreRawSubtitleLayers(
 		removeTrackPreference('sparkle.raw.subtitleLayers');
 	}
 	return isStackableSubtitleFormat(primary.format)
-		? getStoredSubtitleLayerSrcs(tracks, primary).slice(0, 2)
+		? getStoredSubtitleLayerSrcs(tracks, primary)
 		: [];
 }

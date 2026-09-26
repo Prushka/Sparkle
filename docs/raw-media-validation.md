@@ -1,6 +1,6 @@
 # Raw-media validation record
 
-Validated September 22–23, 2026 on Windows using the configured Plex server and
+Validated September 22–26, 2026 on Windows using the configured Plex server and
 read-only mapped files. This records implementation evidence, not certification
 of every codec, browser, display, or Dolby profile.
 
@@ -22,21 +22,21 @@ of every codec, browser, display, or Dolby profile.
 
 Chrome 153.0.8010.53 on Windows, headless and **not cross-origin isolated**:
 
-| Material           | Evidence                                                                                               |
-| ------------------ | ------------------------------------------------------------------------------------------------------ |
-| H.264 8-bit, AAC   | Playing clock advances, indexed seek and pause                                                         |
-| H.264 10-bit, AAC  | Client fallback plays and seeks; ASS with 15 fonts                                                     |
-| HEVC SDR, FLAC     | Playing clock advances, seek, pause; ASS with eight fonts                                              |
-| HEVC SDR, E-AC-3   | Track selected and client playback advances                                                            |
-| H.264, DTS         | Playing clock advances, seek and pause                                                                 |
-| H.264, AC-3        | Track selected, playing clock advances                                                                 |
-| H.264, TrueHD      | Browser WASM decoder plays and seeks; PCM output, no Atmos passthrough claim                           |
-| ASS/embedded fonts | Visible captions inspected after seek; local JASSUB worker/WASM                                        |
-| SRT                | Visible text observed after seek                                                                       |
-| MP4 embedded text  | Caption text displayed without binary styling-box bytes                                                |
-| PGS                | Visible bitmap captions inspected; zlib-compressed Matroska packets and fragmented objects supported   |
-| Multiple subtitles | Primary ASS plus SRT and a second ASS layer receive packets from one demuxer; both ASS renderers ready |
-| Large attachments  | Oversized attachment skipped correctly; aggregate attachment budget enforced before allocation         |
+| Material           | Evidence                                                                                             |
+| ------------------ | ---------------------------------------------------------------------------------------------------- |
+| H.264 8-bit, AAC   | Playing clock advances, indexed seek and pause                                                       |
+| H.264 10-bit, AAC  | Client fallback plays and seeks; ASS with 15 fonts                                                   |
+| HEVC SDR, FLAC     | Playing clock advances, seek, pause; ASS with eight fonts                                            |
+| HEVC SDR, E-AC-3   | Track selected and client playback advances                                                          |
+| H.264, DTS         | Playing clock advances, seek and pause                                                               |
+| H.264, AC-3        | Track selected, playing clock advances                                                               |
+| H.264, TrueHD      | Browser WASM decoder plays and seeks; PCM output, no Atmos passthrough claim                         |
+| ASS/embedded fonts | Visible captions inspected after seek; local JASSUB worker/WASM                                      |
+| SRT                | Visible text observed after seek                                                                     |
+| MP4 embedded text  | Caption text displayed without binary styling-box bytes                                              |
+| PGS                | Visible bitmap captions inspected; zlib-compressed Matroska packets and fragmented objects supported |
+| Multiple subtitles | Four styled tracks compose in one ASS renderer; matching Raw/Encoded shrink and collision behavior   |
+| Large attachments  | Oversized attachment skipped correctly; aggregate attachment budget enforced before allocation       |
 
 Five-second playback windows advanced approximately 4.5–4.8 seconds. Paused
 clock settling stayed below 0.5 seconds in these samples. Range requests were
@@ -363,12 +363,19 @@ and `npm run build` at the root. Browser tests use `SPARKLE_TEST_URL` (default
   local track changes while playing/paused, reconnects, source transitions and
   two-client synchronization. Subtitle cases cover missing saved tracks, duplicate
   titles across Compatible/AV1/HEVC and reloads, shared Off state, per-format ASS/VTT
-  layers, promotion of companion tracks, rendered text packets, and matching
+  layers (including four styled tracks in all three modes), promotion of companion
+  tracks, merged text packets, and matching
   Encoded/Raw controls at desktop and 375 px widths. These use real decoders and synthetic metadata/file
   routes without Plex credentials. Omit `--nvenc` without a supported GPU; the
   AV1/HEVC cases skip when those fixtures are absent. Subtitle policy also has
   desktop/mobile unit coverage in `npm run test:player`; this is not physical
   mobile-device or HDR qualification.
+- `npx playwright test tests/e2e/subtitle-rendering.spec.ts` checks the real local
+  JASSUB worker without Plex credentials. Chinese ink masks distinguish real glyphs
+  from repeated missing-font boxes; four styled layers with different script resolutions
+  share one renderer and shrink,
+  then restore their size when layers are removed. Five text layers stack as lines;
+  seek clearing and worker/canvas teardown are covered. Screenshots accompany these checks.
 
 `SPARKLE_BUILD_DIR=.next-raw-validation` isolates a validation build from an
 existing development checkout. The ordinary build still uses `.next`.

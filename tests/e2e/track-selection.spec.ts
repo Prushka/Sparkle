@@ -5,6 +5,38 @@ import type { RawPlaybackStatus } from '../../lib/player/raw-types';
 const root = 'cache/track-selection';
 const rawId = 'track-raw-fixture',
 	encodedId = 'track-encoded-fixture';
+test.afterEach(async ({ page }, info) => {
+	if (info.status === info.expectedStatus) return;
+	const diagnostics = await page
+		.evaluate(async () => {
+			const provider = (window as any).trackTestProvider;
+			const captions = provider?.encodedCaptions;
+			const group = (captions?.renderers[0] ?? provider?.subtitles)?.composition;
+			return {
+				selected: captions?.selected,
+				chunks: captions && [...captions.chunks.keys()],
+				failures: captions && [...captions.failures],
+				pending: captions && [...captions.pending.keys()],
+				fontsLoaded: captions?.fontsLoaded,
+				flushing: group?.flushing,
+				dirty: group?.dirty,
+				destroyed: group?.destroyed,
+				message: group?.text.textContent,
+				layers:
+					group &&
+					[...group.layers].map((layer: any) => ({
+						format: layer.format,
+						contentLength: layer.content.length
+					})),
+				styles: group?.renderer && !group.flushing ? await group.renderer.renderer.getStyles() : []
+			};
+		})
+		.catch(() => ({}));
+	await info.attach('subtitle-rendering-diagnostics', {
+		body: JSON.stringify(diagnostics, null, 2),
+		contentType: 'application/json'
+	});
+});
 const audio = ['eng', 'chi', 'jpn'].map((Language, i) => ({
 	Index: i + 1,
 	Language,
@@ -489,6 +521,27 @@ for (const mode of ['compatible', 'av1', 'hevc']) {
 			.evaluate((v: HTMLVideoElement) => v.currentTime);
 		await openSubtitles(page);
 		await expect(page.getByRole('radiogroup', { name: 'Subtitle format' })).toBeVisible();
+		// Exercise the actual demuxer and NVENC packet paths beyond the former cap.
+		for (const index of [5, 6, 7]) await rawToggle(page, index, true);
+		await expect.poll(async () => (await status(page)).subtitleLayers?.length).toBe(3);
+		await expect
+			.poll(
+				() =>
+					page.evaluate(async () => {
+						const provider = (window as any).trackTestProvider;
+						const group = (provider.encodedCaptions?.renderers[0] ?? provider.subtitles)
+							?.composition;
+						if (!group?.renderer || group.flushing) return 0;
+						const styles = await group.renderer.renderer.getStyles();
+						return styles.filter((style: any) => style.Name.startsWith('sparkle_')).length;
+					}),
+				{ timeout: 20_000 }
+			)
+			.toBe(4);
+		expect(
+			page.workers().filter((worker) => worker.url().endsWith('/jassub/worker.js'))
+		).toHaveLength(1);
+		for (const index of [5, 6, 7]) await rawToggle(page, index, false);
 		await rawToggle(page, 7, true);
 		await rawToggle(page, 8, false);
 		await expect.poll(() => rawSubtitleIndex(page)).toBe(7);
@@ -513,8 +566,10 @@ for (const mode of ['compatible', 'av1', 'hevc']) {
 			.toEqual([10]);
 		if (mode !== 'compatible')
 			await expect(
-				page.locator('.sparkle-raw-surface').getByText('English text', { exact: true })
-			).toBeVisible();
+				page
+					.locator('.sparkle-raw-surface [data-raw-subtitle-composition="text"]')
+					.filter({ hasText: 'English text' })
+			).toHaveText('English text\nChinese text');
 		await page.getByRole('radio', { name: 'Styled', exact: true }).click();
 		// Remove every other selected track so duplicate #2 is the primary.
 		if ((await rawSubtitleIndex(page)) !== 7) {
@@ -645,6 +700,7 @@ for (const source of ['raw', 'encoded']) {
 		expect(box!.x).toBeGreaterThanOrEqual(0);
 		expect(box!.x + box!.width).toBeLessThanOrEqual(375);
 		await page.getByRole('radio', { name: 'Native', exact: true }).click();
+		await expect(page.getByRole('radio', { name: 'Native', exact: true })).toBeChecked();
 		await expect(page.getByRole('menuitemcheckbox', { name: /English/ })).toBeChecked();
 		await page.screenshot({ path: test.info().outputPath(`${source}-mobile-subtitles.png`) });
 	});

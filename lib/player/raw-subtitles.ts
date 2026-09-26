@@ -1,4 +1,5 @@
-import type JASSUB from 'jassub';
+import { RawSubtitleComposition, type SubtitleLayer } from './raw-subtitle-composition';
+import { assPacketDialogue } from './subtitle-rendering';
 import { decodeRawTextSubtitle } from './raw-text-subtitles';
 import SUPtitles from '@/lib/suptitles/suptitles';
 import {
@@ -17,22 +18,16 @@ const PGS = 0x17006,
 /** A bounded subtitle packet sink. It never downloads or retains a whole track. */
 export class RawSubtitles {
 	private canvas = document.createElement('canvas');
-	private text = document.createElement('div');
-	private ass?: JASSUB;
-	private assReady = false;
+	private composition: RawSubtitleComposition;
+	private layer: SubtitleLayer;
+	private ownsComposition: boolean;
+	private textUntil = 0;
 	private sup: SUPtitles;
-	private fonts: Uint8Array[] = [];
 	private codec = 0;
 	private header = '';
 	private packets: Packet[] = [];
 	private assWindow: Packet[] = [];
 	private bytes = 0;
-	private generation = 0;
-	private rendererGeneration = 0;
-	private assQueue = Promise.resolve();
-	private assDirty = false;
-	private assFlushing = false;
-	private transferred = false;
 	private currentTime = 0;
 	private pcs: PresentationCompositionSegment | null = null;
 	private wds: WindowDefinitionSegment | null = null;
@@ -42,7 +37,7 @@ export class RawSubtitles {
 	private destroyed = false;
 	constructor(
 		private container: HTMLElement,
-		layer = 0
+		composition?: RawSubtitleComposition
 	) {
 		Object.assign(this.canvas.style, {
 			position: 'absolute',
@@ -53,25 +48,21 @@ export class RawSubtitles {
 			pointerEvents: 'none',
 			zIndex: '2'
 		});
-		Object.assign(this.text.style, {
-			position: 'absolute',
-			bottom: '7%',
-			left: '5%',
-			width: '90%',
-			textAlign: 'center',
-			color: 'white',
-			fontSize: 'clamp(16px, 2.4vw, 34px)',
-			whiteSpace: 'pre-line',
-			textShadow: '0 2px 3px black, 0 -1px 2px black',
-			pointerEvents: 'none',
-			zIndex: '2'
-		});
-		this.text.style.bottom = `${7 + layer * 10}%`;
-		container.append(this.canvas, this.text);
+		this.ownsComposition = !composition;
+		this.composition = composition ?? new RawSubtitleComposition(container);
+		this.layer = this.composition.add();
+		container.append(this.canvas);
 		this.sup = new SUPtitles(this.canvas, new Uint8Array(), () => this.currentTime);
 	}
 	setFonts(fonts: Uint8Array[]) {
-		this.fonts = fonts;
+		this.composition.setFonts(fonts);
+	}
+	createLayer() {
+		return new RawSubtitles(this.container, this.composition);
+	}
+	setLanguage(language = '') {
+		this.layer.language = language;
+		this.composition.update();
 	}
 	readonly sink = {
 		reset: (codec: number, header: Uint8Array) => this.reset(codec, header),
@@ -93,45 +84,12 @@ export class RawSubtitles {
 		this.clear();
 		this.codec = codec;
 		this.header = new TextDecoder().decode(header);
-		const generation = ++this.rendererGeneration;
-		void this.ass?.destroy();
-		this.ass = undefined;
-		this.assReady = false;
-		if (this.transferred || codec === ASS || codec === SSA) {
-			const canvas = this.canvas.cloneNode() as HTMLCanvasElement;
-			this.canvas.replaceWith(canvas);
-			this.canvas = canvas;
-			this.sup.cv = [canvas];
-			this.transferred = false;
-		}
-		if (codec !== ASS && codec !== SSA) return;
-		const rendererURL = '/vendor/libmedia/jassub/jassub.js';
-		this.assQueue = import(/* webpackIgnore: true */ rendererURL)
-			.then(async ({ default: Renderer }: { default: typeof JASSUB }) => {
-				if (generation !== this.rendererGeneration || this.destroyed) return;
-				this.transferred = true;
-				this.ass = new Renderer({
-					canvas: this.canvas,
-					subContent: this.header,
-					fonts: this.fonts,
-					queryFonts: false,
-					workerUrl: '/vendor/libmedia/jassub/worker.js',
-					wasmUrl: '/vendor/libmedia/jassub/jassub-worker.wasm',
-					modernWasmUrl: '/vendor/libmedia/jassub/jassub-worker-modern.wasm',
-					availableFonts: { 'liberation sans': '/vendor/libmedia/jassub/default.woff2' },
-					defaultFont: 'liberation sans',
-					libassMemoryLimit: 32,
-					libassGlyphLimit: 8
-				});
-				await this.ass.ready;
-				if (generation === this.rendererGeneration && !this.destroyed) this.assReady = true;
-			})
-			.catch(() => {
-				this.text.textContent = 'This subtitle renderer is unavailable on this client.';
-			});
+		this.layer.format = codec === ASS || codec === SSA ? 'ass' : codec === PGS ? 'bitmap' : 'text';
+		this.canvas.style.display = codec === PGS ? '' : 'none';
+		this.updateASS();
 	}
+
 	clear() {
-		++this.generation;
 		this.packets = [];
 		this.bytes = 0;
 		this.assWindow = [];
@@ -141,42 +99,22 @@ export class RawSubtitles {
 		this.palettes.clear();
 		this.objects = [];
 		this.sup.lastPalette = null;
-		this.text.textContent = '';
-		if (this.ass) {
-			this.assDirty = true;
-			void this.flushASS();
-		} else if (!this.transferred)
-			this.canvas.getContext('2d')?.clearRect(0, 0, this.canvas.width, this.canvas.height);
+		this.layer.text = '';
+		this.updateASS();
+		this.canvas.getContext('2d')?.clearRect(0, 0, this.canvas.width, this.canvas.height);
 	}
-	private async flushASS() {
-		if (this.assFlushing) return;
-		this.assFlushing = true;
-		try {
-			await this.assQueue;
-			while (this.assDirty && this.ass && !this.destroyed) {
-				this.assDirty = false;
-				const renderer = this.ass,
-					generation = this.generation,
-					packets = [...this.assWindow];
-				const decoded = packets.map((p) => new TextDecoder().decode(p.data));
-				// libmedia's Matroska demuxer already turns ASS chunks into complete
-				// Dialogue lines. Feeding those to ass_process_chunk shifts fields.
-				if (decoded.every((line) => /^Dialogue:/i.test(line))) {
-					await renderer.renderer.setTrack(`${this.header}\n${decoded.join('\n')}`);
-					continue;
-				}
-				await renderer.renderer.setTrack(this.header);
-				for (const p of packets) {
-					if (this.destroyed || generation !== this.generation || renderer !== this.ass) break;
-					await renderer.renderer.processChunk(new TextDecoder().decode(p.data), p.pts, p.duration);
-				}
-			}
-		} catch {
-			/* Track replacement or teardown cancels pending rendering. */
-		} finally {
-			this.assFlushing = false;
-		}
+	private updateASS() {
+		this.layer.content =
+			this.header +
+			'\n' +
+			this.assWindow
+				.map((packet) =>
+					assPacketDialogue(new TextDecoder().decode(packet.data), packet.pts, packet.duration)
+				)
+				.join('\n');
+		this.composition.update();
 	}
+
 	time(ms: number) {
 		if (this.destroyed) return;
 		this.currentTime = ms;
@@ -198,24 +136,20 @@ export class RawSubtitles {
 				let bytes = this.assWindow.reduce((sum, p) => sum + p.data.byteLength, 0);
 				while (bytes > 8 * 1024 * 1024 && this.assWindow.length)
 					bytes -= this.assWindow.shift()!.data.byteLength;
-				this.assDirty = true;
-				void this.flushASS();
+				this.updateASS();
 			} else {
-				this.text.textContent = decodeRawTextSubtitle(this.codec, packet.data);
-				this.text.dataset.until = String(packet.pts + (packet.duration || 5000));
+				this.layer.text = decodeRawTextSubtitle(this.codec, packet.data);
+				this.textUntil = packet.pts + (packet.duration || 5000);
+				this.composition.update();
 			}
 		}
-		if (Number(this.text.dataset.until) < ms) this.text.textContent = '';
-		if (this.assReady && this.ass && !this.ass.busy)
-			void this.ass
-				.manualRender({
-					mediaTime: ms / 1000,
-					expectedDisplayTime: performance.now(),
-					width: this.container.clientWidth,
-					height: this.container.clientHeight
-				})
-				.catch(() => {});
+		if (this.textUntil < ms && this.layer.text) {
+			this.layer.text = '';
+			this.composition.update();
+		}
+		this.composition.time(ms);
 	}
+
 	private renderPGS(packet: Packet) {
 		for (let offset = 0; offset + 3 <= packet.data.length;) {
 			const type = packet.data[offset],
@@ -275,15 +209,12 @@ export class RawSubtitles {
 	}
 	destroy() {
 		this.destroyed = true;
-		++this.generation;
-		++this.rendererGeneration;
 		this.sup.dispose();
-		void this.ass?.destroy();
+		this.composition.remove(this.layer);
+		if (this.ownsComposition) this.composition.destroy();
 		this.canvas.remove();
-		this.text.remove();
 		this.packets = [];
 		this.assWindow = [];
 		this.objects = [];
-		this.fonts = [];
 	}
 }

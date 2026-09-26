@@ -652,7 +652,7 @@ patch(
       layer.render.destroy()
     }
     this.sparkleLayers = []
-    for (const layer of layers.slice(0, 2)) {
+    for (const layer of layers) {
       const stream = this.formatContext.streams.find((s) => s.id === layer.id)
       if (!stream || stream === this.selectedSubtitleStream || stream.codecpar.codecType !== AVMediaType.AVMEDIA_TYPE_SUBTITLE || this.sparkleLayers.some((l) => l.index === stream.index)) continue
       const render = new (await import('./subtitle/SubtitleRender')).default({

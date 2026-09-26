@@ -114,7 +114,9 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   Keep subtitle catalog construction, toggles, matching and per-format layer persistence
   shared in `lib/player/subtitle-selection.ts` and `SubtitlesMenuSection.tsx`. Preserve
   Encoded's format/language policy and layout; Raw uses version/stream identities rather
-  than titles and caps same-format ASS/VTT playback at three simultaneous tracks.
+  than titles. Keep ASS font fallback and layer composition shared in
+  `lib/player/subtitle-rendering.ts`; Raw uses one ASS renderer for collision-aware
+  stacking and bounded packet windows, without a separate track-count cap.
 - Audio normalization is a local control beside Captions. Preserve the PCM hook before
   user volume and the native element's clock, volume and mute. Downmix to stereo before
   measuring loudness; link left/right gain and guard peaks after mixing. Keep bounded
