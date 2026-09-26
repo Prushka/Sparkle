@@ -23,7 +23,7 @@ test('native output migrates tone mapping and preserves two-client playback', as
 					if (!localStorage.getItem('sparkle.raw.hdr'))
 						localStorage.setItem('sparkle.raw.hdr', mode);
 				},
-				index === 0 ? 'sdr' : 'auto'
+				index === 0 ? 'sdr' : 'compatible'
 			);
 			await page.route('**/auth/plex/session', (route) =>
 				route.fulfill({ json: { enabled: false, authenticated: false, canAccessRaw: true } })
@@ -123,9 +123,26 @@ test('native output migrates tone mapping and preserves two-client playback', as
 		await expect(
 			first.getByRole('menuitemradio', { name: 'Compatible', exact: true })
 		).toHaveAttribute('aria-checked', 'true');
+		const beforeModeChange = await first
+			.locator('.sparkle-raw-surface video')
+			.evaluate((video: HTMLVideoElement) => video.currentTime);
 		await first.getByRole('menuitemradio', { name: 'Automatic', exact: true }).click();
+		await expect(player).toHaveAttribute('data-raw-blocked', 'true');
+		await expect(first.locator('[data-raw-hdr-status]')).toContainText(
+			'Automatic requires Encoded AV1 or HEVC'
+		);
+		// An unavailable local encode must not pause the other participant.
+		await expect(pages[1].locator('[data-media-player]')).not.toHaveAttribute('data-paused', '');
+		await first.getByRole('menuitemradio', { name: 'Compatible', exact: true }).click();
 		await expect(player).toHaveAttribute('data-raw-ready', 'true');
 		await expect(player).toHaveAttribute('data-raw-renderer', 'native');
+		await expect
+			.poll(() =>
+				first
+					.locator('.sparkle-raw-surface video')
+					.evaluate((video: HTMLVideoElement) => video.currentTime)
+			)
+			.toBeGreaterThanOrEqual(beforeModeChange - 0.5);
 		await expect(pages[1].locator('[data-media-player]')).not.toHaveAttribute('data-paused', '');
 		await first.keyboard.press('Escape');
 		await first.keyboard.press('Escape');

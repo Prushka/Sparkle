@@ -87,7 +87,7 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   hierarchy, room mutations and WebSockets protected; never forward sessions into previews.
 - Plex access is read-only and endpoint-allowlisted. Do not add watched-state updates,
   scans, Plex transcoding, media modifications, or whole-original-file caching.
-  Server decoding is confined to the explicit optional encoded mode; raw playback remains client-side.
+  Server decoding is confined to the optional encoded mode; Compatible playback remains client-side.
 - Resolve the longest matching mapping prefix and use root-confined file access. Retain
   traversal, symlink/junction, alternate-stream, and allowed-section protections. Keep
   `PFP_DIR` and `MEDIA_CACHE_DIR` outside mapped media roots; legacy avatars remain readable.
@@ -128,6 +128,9 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   read-only handles and timestamp continuity. Use NVENC exclusively for AV1/HEVC video
   encoding, with fast p3 and CQ 24 by default, using the documented NVENC rate-control mapping.
   CPU source decoding must never substitute a software video encoder.
+  Automatic always prefers browser-supported Encoded AV1, then HEVC, independent of
+  network conditions. Unavailable or failed encoding must not fall back to original
+  playback; Compatible requires an explicit saved user choice. Do not probe network speed.
   Prefer one native clock for encoded video/Opus audio. Keep subtitle menu roots
   mounted during provider changes; Vidstack hides sibling menus when opening a submenu.
   Bitrate means bounded compressed packet bytes over media time, not network throughput.

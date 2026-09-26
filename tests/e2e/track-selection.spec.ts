@@ -71,6 +71,10 @@ function serveBytes(route: Route, bytes: Buffer, contentType = 'application/octe
 
 async function fixture(page: Page) {
 	await page.addInitScript(() => {
+		// Track-only cases also run without NVENC fixtures. Output-policy cases
+		// explicitly override this choice below.
+		if (!localStorage.getItem('sparkle.raw.hdr'))
+			localStorage.setItem('sparkle.raw.hdr', 'compatible');
 		document.addEventListener(
 			'provider-setup',
 			(event) => {
@@ -250,7 +254,7 @@ async function openVideoSettings(page: Page) {
 	await page.getByRole('menuitem', { name: /^Video Settings/ }).click();
 }
 
-for (const mode of ['compatible', 'av1', 'hevc']) {
+for (const mode of ['compatible', 'av1', 'hevc', 'auto']) {
 	test(`Raw ${mode}: shared defaults, explicit persistence and local selection keep room sync`, async ({
 		browser,
 		request,
@@ -261,7 +265,7 @@ for (const mode of ['compatible', 'av1', 'hevc']) {
 			'Run node scripts/tests/prepare-track-fixture.mjs --nvenc'
 		);
 		test.skip(
-			mode !== 'compatible' && !existsSync(`${root}/${mode}/master.m3u8`),
+			mode !== 'compatible' && !existsSync(`${root}/${mode === 'auto' ? 'av1' : mode}/master.m3u8`),
 			'Prepare the optional NVENC fixtures'
 		);
 		const room = `track-${mode}-${Date.now()}`;
@@ -288,6 +292,11 @@ for (const mode of ['compatible', 'av1', 'hevc']) {
 					'true',
 					{ timeout: 20_000 }
 				);
+				if (mode === 'auto')
+					await expect(page.locator('[data-media-player]')).toHaveAttribute(
+						'data-raw-encoding',
+						/av1|hevc/
+					);
 				await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
 				await expect(page.getByRole('textbox', { name: 'Chat', exact: true }).last()).toBeEnabled();
 				await expect.poll(() => audioTitle(page), { timeout: 20_000 }).toBe('Japanese');
@@ -418,6 +427,120 @@ for (const mode of ['compatible', 'av1', 'hevc']) {
 		} finally {
 			await Promise.all(pages.map((p) => p.close()));
 		}
+	});
+}
+
+for (const codec of ['av1', 'hevc']) {
+	test(`Automatic selects ${codec} by native support without reading the original, and Compatible remains explicit`, async ({
+		page,
+		request
+	}) => {
+		test.skip(!existsSync(`${root}/${codec}/master.m3u8`), 'Prepare multilingual/NVENC fixtures');
+		await fixture(page);
+		await page.addInitScript((codec) => {
+			if (!sessionStorage.getItem('seeded-output-preference')) {
+				localStorage.setItem('sparkle.raw.hdr', 'auto');
+				sessionStorage.setItem('seeded-output-preference', 'true');
+			}
+			Object.defineProperty(navigator, 'connection', {
+				configurable: true,
+				value: {
+					effectiveType: codec === 'av1' ? '4g' : '3g',
+					downlink: codec === 'av1' ? 1000 : 0.2,
+					saveData: codec === 'hevc'
+				}
+			});
+			if (codec === 'hevc') {
+				const supports = MediaSource.isTypeSupported.bind(MediaSource);
+				MediaSource.isTypeSupported = (type) => !type.includes('av01') && supports(type);
+			}
+		}, codec);
+		let originalRequests = 0;
+		page.on('request', (request) => {
+			if (/\/parts\/[^/]+\/file(?:\?|$)/.test(request.url())) originalRequests++;
+		});
+		const room = `automatic-${codec}-${Date.now()}`;
+		await request.post('/be/rooms', { data: { roomId: room, mediaId: rawId } });
+		await page.goto(`/${room}/media/${rawId}`);
+		await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+		await expect.poll(async () => (await status(page))?.encodedCodec).toBe(codec);
+		await expect.poll(() => audioTitle(page)).toBe('Japanese');
+		expect(originalRequests).toBe(0);
+		expect(await page.evaluate(() => localStorage.getItem('sparkle.raw.hdr'))).toBe('auto');
+		await page.reload();
+		await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+		await expect.poll(() => audioTitle(page)).toBe('Japanese');
+		expect((await status(page)).encodedCodec).toBe(codec);
+		expect(originalRequests).toBe(0);
+		await page.locator('[data-media-player]').press('k');
+		await expect(page.locator('[data-media-player]')).toHaveAttribute('data-paused', '');
+		await openVideoSettings(page);
+		await page.getByRole('menuitemradio', { name: 'Compatible', exact: true }).click();
+		await expect.poll(async () => (await status(page))?.hdrPreference).toBe('compatible');
+		await expect.poll(async () => (await status(page))?.changing).toBe(false);
+		expect((await status(page)).encodedCodec).toBeUndefined();
+		expect(originalRequests).toBeGreaterThan(0);
+		await expect(page.locator('[data-media-player]')).toHaveAttribute('data-paused', '');
+		await page.reload();
+		await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+		await expect.poll(() => audioTitle(page)).toBe('Japanese');
+		expect((await status(page)).hdrPreference).toBe('compatible');
+		expect((await status(page)).encodedCodec).toBeUndefined();
+		await openVideoSettings(page);
+		originalRequests = 0;
+		await page.getByRole('menuitemradio', { name: 'Automatic', exact: true }).click();
+		await expect.poll(async () => (await status(page))?.encodedCodec).toBe(codec);
+		await expect.poll(async () => (await status(page))?.changing).toBe(false);
+		expect(originalRequests).toBe(0);
+	});
+}
+
+for (const failure of ['unsupported browser', 'encoding disabled', 'manifest failure']) {
+	test(`Automatic reports ${failure} without falling back to Compatible`, async ({
+		page,
+		request
+	}) => {
+		test.skip(!existsSync(`${root}/multilingual.mkv`), 'Prepare multilingual fixtures');
+		await fixture(page);
+		await page.addInitScript((failure) => {
+			localStorage.removeItem('sparkle.raw.hdr');
+			if (failure === 'unsupported browser') {
+				const supports = MediaSource.isTypeSupported.bind(MediaSource);
+				MediaSource.isTypeSupported = (type) => !/av01|hvc1/.test(type) && supports(type);
+			}
+		}, failure);
+		await page.route('**/encoding/capabilities', (route) =>
+			route.fulfill({ json: { codecs: failure === 'encoding disabled' ? [] : ['av1', 'hevc'] } })
+		);
+		if (failure === 'manifest failure')
+			await page.route('**/encoded/*/manifest', (route) => route.fulfill({ status: 503 }));
+		let originalRequests = 0;
+		page.on('request', (request) => {
+			if (/\/parts\/[^/]+\/file(?:\?|$)/.test(request.url())) originalRequests++;
+		});
+		const room = `automatic-failure-${Date.now()}`;
+		await request.post('/be/rooms', { data: { roomId: room, mediaId: rawId } });
+		await page.goto(`/${room}/media/${rawId}`);
+		await expect
+			.poll(async () => (await status(page))?.reason)
+			.toMatch(
+				failure === 'manifest failure'
+					? /Server encoding is unavailable/
+					: /Automatic requires Encoded AV1 or HEVC/
+			);
+		expect(originalRequests).toBe(0);
+		expect((await status(page)).hdrPreference).toBe('auto');
+		expect((await status(page)).ready).toBe(false);
+		await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+		await expect(page.getByRole('textbox', { name: 'Chat', exact: true }).last()).toBeEnabled();
+		await openVideoSettings(page);
+		await expect(
+			page.getByRole('menuitemradio', { name: 'Automatic', exact: true })
+		).toHaveAttribute('aria-checked', 'true');
+		await page.getByRole('menuitemradio', { name: 'Compatible', exact: true }).click();
+		await expect.poll(async () => (await status(page))?.ready).toBe(true);
+		expect((await status(page)).hdrPreference).toBe('compatible');
+		expect(originalRequests).toBeGreaterThan(0);
 	});
 }
 

@@ -16,17 +16,17 @@ packet bytes over the preceding three seconds of media, updated once per second;
 it is not network download speed or an estimate for inactive modes. Hover the
 readout for the video/audio breakdown. Seeks and mode changes reset the measurement.
 
-Automatic normally uses original playback. On a slow network it prefers supported
-10-bit AV1, then HEVC, provided the server successfully tested that NVENC encoder
-and the browser admits its native MSE codec. Save Data/2G/3G or a capped 1 MiB range
-sample below the source's average bitrate triggers encoding. Sustained buffering
-can trigger another sample, with a 30-second cooldown. It does not switch repeatedly
-between raw and encoded playback as throughput fluctuates. Constant quality is not
-adaptive bitrate: extremely slow connections can still buffer.
+Automatic always prefers supported 10-bit AV1, then HEVC, provided the server
+successfully tested that NVENC encoder and the browser admits its native MSE codec.
+Network speed and Save Data do not affect selection; no network probe is performed.
+If neither codec is available or encoding fails, playback reports the error and stays
+in Automatic. Original-file playback requires explicitly selecting Compatible, which
+is also saved across reloads. Constant quality is not adaptive bitrate: extremely slow
+connections can still buffer.
 
 ## Setup
 
-Raw playback remains available without FFmpeg or a GPU. To enable encoding on
+Compatible playback remains available without FFmpeg or a GPU. To enable encoding on
 Windows, add these backend settings to the existing `.env`, adapting tool paths:
 
 ```dotenv

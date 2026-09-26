@@ -88,53 +88,6 @@ export async function encodedCapabilities(
 	}
 }
 
-/** A capped range sample, never a whole-file download or a guess from Chromium's
- * privacy-rounded (often 10 Mbps even on LAN) Network Information estimate. */
-export async function slowNetwork(
-	base: string,
-	part: RawPart,
-	signal: AbortSignal
-): Promise<boolean> {
-	const connection = (
-		navigator as Navigator & { connection?: { effectiveType?: string; saveData?: boolean } }
-	).connection;
-	if (connection?.saveData || ['slow-2g', '2g', '3g'].includes(connection?.effectiveType ?? ''))
-		return true;
-	const bitrate = (part.size * 8) / part.duration;
-	if (!Number.isFinite(bitrate) || bitrate < 2_000_000) return false;
-	const timeout = AbortSignal.timeout(4000);
-	const sampleSignal = AbortSignal.any([signal, timeout]);
-	try {
-		const bytes = Math.min(1024 * 1024, part.size);
-		const started = performance.now();
-		const response = await backendFetch(`${base}${part.url}`, {
-			headers: { Range: `bytes=0-${bytes - 1}` },
-			cache: 'no-store',
-			signal: sampleSignal
-		});
-		if (response.status !== 206 || Number(response.headers.get('Content-Length')) > bytes) {
-			await response.body?.cancel();
-			return false;
-		}
-		const reader = response.body?.getReader();
-		if (!reader) return false;
-		let received = 0;
-		for (;;) {
-			const next = await reader.read();
-			if (next.done) break;
-			received += next.value.byteLength;
-			if (received > bytes) {
-				await reader.cancel();
-				return false;
-			}
-		}
-		const elapsed = performance.now() - started;
-		return received === bytes && elapsed > 600 && (received * 8000) / elapsed < bitrate * 1.25;
-	} catch {
-		return timeout.aborted && !signal.aborted;
-	}
-}
-
 export async function loadEncodedPart(
 	base: string,
 	part: RawPart,
@@ -145,7 +98,7 @@ export async function loadEncodedPart(
 	const response = await backendFetch(`${url}/manifest`, { signal, cache: 'no-store' });
 	if (!response.ok)
 		throw new Error(
-			'Server encoding is unavailable for this media. Choose Automatic or Compatible.'
+			'Server encoding is unavailable for this media. Choose another encoded mode or select Compatible.'
 		);
 	const result: EncodedPart = { ...(await response.json()), base: url };
 	const subtitles = part.streams.filter((s) => s.streamType === 3);

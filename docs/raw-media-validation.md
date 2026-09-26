@@ -133,7 +133,7 @@ The broader browser checks and timing measurements below used p7.
 - Three-second reference conversions passed for Dolby Vision Profiles 5, 8.1 and
   8.4 with both encoders. Profile 5 applies libplacebo RPU conversion; output is
   compatible PQ/HLG without Dolby configuration. Profile 7 uses its base layer.
-- Chrome tests passed automatic slow-network selection, native AV1/HEVC frames,
+- Chrome tests passed native AV1/HEVC frames,
   segment boundaries, pause/resume, and a seek to about 4,998 seconds in the large
   source. Decoded frames reported limited-range BT.2020/PQ; HLG fixtures reported
   BT.2020/HLG. HEVC output retained mastering and content-light SEI in the sampled
@@ -195,7 +195,7 @@ These are pipeline and UI checks; screenshots cannot certify physical luminance
 or color accuracy.
 
 The sampled HEVC 10-bit **Dolby Vision Profile 7 / HDR10+** file was tested
-separately. Automatic mode selected its explicitly labeled compatible HDR10 representation;
+separately. Original playback used its explicitly labeled compatible HDR10 representation;
 Chrome displayed native MSE video at 3840×2160 while a separate client instance
 decoded TrueHD. On the test's SDR display, the UI reported **SDR tone mapping**.
 The native clock advanced beyond 13 seconds without a page error.
@@ -370,6 +370,10 @@ and `npm run build` at the root. Browser tests use `SPARKLE_TEST_URL` (default
   AV1/HEVC cases skip when those fixtures are absent. Subtitle policy also has
   desktop/mobile unit coverage in `npm run test:player`; this is not physical
   mobile-device or HDR qualification.
+  Automatic cases check AV1 preference, HEVC when AV1 is unsupported, fast/slow
+  connection hints, no original-file network probe, reload persistence, explicit
+  Compatible recovery, and unavailable/failed encoding without an original-file fallback.
+  Two-client synchronization also runs with Automatic selected.
 - `npx playwright test tests/e2e/subtitle-rendering.spec.ts` checks the real local
   JASSUB worker without Plex credentials. Chinese ink masks distinguish real glyphs
   from repeated missing-font boxes; four styled layers with different script resolutions

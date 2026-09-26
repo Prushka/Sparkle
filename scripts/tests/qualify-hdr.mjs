@@ -126,6 +126,8 @@ function captureMSE() {
 }
 try {
 	await page.addInitScript(captureMSE);
+	// This qualification inspects original-file metadata and native remuxing.
+	await page.addInitScript(() => localStorage.setItem('sparkle.raw.hdr', 'compatible'));
 	page.on('worker', (worker) => void worker.evaluate(captureMSE).catch(() => {}));
 	const room = `hdr-check-${Date.now()}`;
 	const created = await page.request.post(`${backend}/rooms`, {
@@ -168,7 +170,7 @@ try {
 	await page.waitForTimeout(14000);
 	await page
 		.locator('.sparkle-raw-surface')
-		.screenshot({ path: `cache/hdr-${id}-${process.env.SPARKLE_HDR_MODE || 'auto'}.png` });
+		.screenshot({ path: `cache/hdr-${id}-${process.env.SPARKLE_HDR_MODE || 'compatible'}.png` });
 	const result = await page.evaluate(() => ({
 		userAgent: navigator.userAgent,
 		displayReportsHDR: matchMedia('(dynamic-range: high)').matches,
@@ -280,7 +282,7 @@ try {
 	result.errors = errors;
 	await mkdir('cache', { recursive: true });
 	await writeFile(
-		`cache/hdr-${id}-${process.env.SPARKLE_HDR_MODE || 'auto'}-${process.env.SPARKLE_TEST_CHANNEL || 'chrome'}.json`,
+		`cache/hdr-${id}-${process.env.SPARKLE_HDR_MODE || 'compatible'}-${process.env.SPARKLE_TEST_CHANNEL || 'chrome'}.json`,
 		JSON.stringify(result, null, 2)
 	);
 	console.log(JSON.stringify(result));

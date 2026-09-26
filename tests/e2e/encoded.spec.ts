@@ -150,7 +150,7 @@ for (const codec of ['av1', 'hevc']) {
 		expect(errors).toEqual([]);
 	});
 }
-test('automatic chooses a shared encode on a slow connection without changing the saved preference', async ({
+test('automatic chooses a shared encode without a network probe or changing the saved preference', async ({
 	page,
 	request
 }) => {
@@ -159,10 +159,9 @@ test('automatic chooses a shared encode on a slow connection without changing th
 	const room = `encoded-auto-${Date.now()}`;
 	await request.post(`${backend}/rooms`, { data: { roomId: room, mediaId: fixture } });
 	await page.addInitScript(() => localStorage.setItem('sparkle.raw.hdr', 'auto'));
-	await page.route('**/parts/*/file', async (route) => {
-		if (route.request().headers().range === 'bytes=0-1048575')
-			await new Promise((resolve) => setTimeout(resolve, 1500));
-		await route.continue();
+	const originals: string[] = [];
+	page.on('request', (request) => {
+		if (/\/parts\/[^/]+\/file(?:\?|$)/.test(request.url())) originals.push(request.url());
 	});
 	await page.goto(`/${room}/media/${fixture}`);
 	await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
@@ -170,6 +169,7 @@ test('automatic chooses a shared encode on a slow connection without changing th
 	await expect(player).toHaveAttribute('data-raw-encoding', /av1|hevc/, { timeout: 60_000 });
 	await expect(player).toHaveAttribute('data-raw-ready', 'true', { timeout: 60_000 });
 	expect(await page.evaluate(() => localStorage.getItem('sparkle.raw.hdr'))).toBe('auto');
+	expect(originals).toEqual([]);
 });
 for (const codec of ['av1', 'hevc']) {
 	test(`NVENC ${codec} preserves native color, timeline, captions and the saved choice`, async ({

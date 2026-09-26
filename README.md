@@ -30,7 +30,8 @@ library from the same Library view.
   for Encoded MP4 and every Raw playback mode. Multichannel audio is downmixed to
   stereo before normalization; disabling restores the original audio routing.
 - Optional shared NVENC AV1/HEVC playback for Plex, with on-demand cached segments and a
-  saved output preference. Automatic selects a compatible encode on a measured slow connection.
+  saved output preference. Automatic prefers browser-supported AV1, then HEVC,
+  regardless of network speed; original playback requires selecting Compatible.
 - Embedded ASS/SSA with multilingual fallback fonts, text subtitles, and PGS/SUP bitmap
   subtitles. Raw and Encoded share subtitle layer sizing and stacking, without a
   three-track cap; layer and audio preferences stay local to each participant.
@@ -70,15 +71,15 @@ Raw playback supports client WASM fallbacks, including TrueHD audio and embedded
 subtitles. TrueHD output is decoded PCM, not Atmos bitstream passthrough. Raw
 storyboards are currently omitted; processed storyboards remain available.
 
-HDR prefers native video/MSE with exact codec/profile checks. Automatic mode tries
-native Dolby Vision or HDR10+ and then a labeled compatible HDR10/HLG representation.
-The client preserves HDR color signaling and supplies HEVC mastering/light-level
-metadata to the native player even when it exists only in the encoded bitstream.
-Vidstack → Video Settings also offers client-side SDR tone mapping for PQ/HLG and
-Dolby Vision Profile 5 (including RPU reshaping). Source format, renderer and output
-are reported separately. **Full dynamic-HDR display output is not yet qualified**;
-native runtime admission is labeled unverified. Profile 7 enhancement layers are
-not decoded; its compatible base layer remains playable. Unsupported playback does not prevent participation in
+All active HDR modes use native video/MSE. Automatic uses a supported server encode
+and reports an error if neither encoder is available; it never falls back to the
+original file. Encodes report HDR10, HLG, or SDR and do not preserve dynamic HDR.
+Explicit Compatible playback preserves original HDR color signaling and supplies
+HEVC mastering/light-level metadata even when it exists only in the encoded bitstream.
+Client-side software tone mapping is temporarily disabled; SDR displays use the
+browser's color conversion. Source format, renderer and output are reported separately.
+**Full dynamic-HDR display output is not yet qualified**. Profile 7 enhancement layers
+are not decoded; its compatible base layer remains playable. Unsupported playback does not prevent participation in
 the room. See the [qualification record](docs/raw-media-validation.md) for tested
 Windows Chrome/Edge combinations and pending Safari, mobile, Firefox, and Activity checks.
 

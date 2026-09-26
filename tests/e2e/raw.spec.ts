@@ -99,11 +99,10 @@ test('two raw clients synchronize playback, pause, seek and delayed join', async
 	const messages: any[][] = [[], []];
 	const errors: string[] = [];
 	for (const [index, page] of pages.entries()) {
-		if (process.env.SPARKLE_RAW_ENCODE_MODE)
-			await page.addInitScript(
-				(mode) => localStorage.setItem('sparkle.raw.hdr', mode),
-				process.env.SPARKLE_RAW_ENCODE_MODE
-			);
+		await page.addInitScript(
+			(mode) => localStorage.setItem('sparkle.raw.hdr', mode),
+			process.env.SPARKLE_RAW_ENCODE_MODE || 'compatible'
+		);
 		await page.addInitScript(() => {
 			const sockets: WebSocket[] = [];
 			(window as any).testSockets = sockets;

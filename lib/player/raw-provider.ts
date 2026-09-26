@@ -15,7 +15,6 @@ import {
 	loadEncodedPart,
 	readHDRPreference,
 	saveHDRPreference,
-	slowNetwork,
 	supportsNativeVideo,
 	type EncodedPart
 } from './raw-encoded';
@@ -202,9 +201,6 @@ export class RawProvider implements MediaProviderAdapter {
 	private encoded?: EncodedPart;
 	private encodedCaptions?: EncodedSubtitles;
 	private availableEncoders: EncodedCodec[] = [];
-	private autoEncoded?: EncodedCodec;
-	private networkCheck = false;
-	private lastNetworkCheck = 0;
 	private destroyed = false;
 	private driftCorrection = false;
 	private buffering = false;
@@ -294,7 +290,6 @@ export class RawProvider implements MediaProviderAdapter {
 		this.abort = new AbortController();
 		this.currentSrc = src as Src<string>;
 		this.hdrPreference = readHDRPreference();
-		this.autoEncoded = undefined;
 		this.availableEncoders = [];
 		this.desiredTime = 0;
 		this.part = 0;
@@ -324,12 +319,6 @@ export class RawProvider implements MediaProviderAdapter {
 				);
 				if (generation !== this.generation) return;
 				this.publish({ encodedAvailable: this.availableEncoders });
-				if (
-					this.hdrPreference === 'auto' &&
-					this.availableEncoders.length &&
-					(await slowNetwork(this.baseURL, job.Raw.parts[0], this.abort.signal))
-				)
-					this.autoEncoded = this.availableEncoders[0];
 				await this.loadPart(0, generation);
 			} catch (e) {
 				if (generation === this.generation && !this.abort.signal.aborted) this.fail(e);
@@ -369,9 +358,13 @@ export class RawProvider implements MediaProviderAdapter {
 			this.hdrPreference === 'av1' || this.hdrPreference === 'hevc'
 				? this.hdrPreference
 				: this.hdrPreference === 'auto'
-					? this.autoEncoded
+					? this.availableEncoders[0]
 					: undefined;
 		this.encoded = undefined;
+		if (this.hdrPreference === 'auto' && !encode)
+			throw new Error(
+				'Automatic requires Encoded AV1 or HEVC support on this server and browser. Select Compatible to play the original.'
+			);
 		if (encode) {
 			if (!this.availableEncoders.includes(encode))
 				throw new Error(
@@ -566,7 +559,7 @@ export class RawProvider implements MediaProviderAdapter {
 			output: plan?.output ?? 'SDR',
 			renderer: plan?.renderer ?? (nativeVideo ? 'native' : undefined),
 			reason: this.encoded
-				? `${this.hdrPreference === 'auto' ? 'Slow connection · ' : ''}Shared NVENC ${this.encoded.codec.toUpperCase()}${/Dolby|HDR10\+/.test(originalHDR) ? ` · ${this.encoded.output} conversion` : ''}.`
+				? `${this.hdrPreference === 'auto' ? 'Automatic · ' : ''}Shared NVENC ${this.encoded.codec.toUpperCase()}${/Dolby|HDR10\+/.test(originalHDR) ? ` · ${this.encoded.output} conversion` : ''}.`
 				: plan?.reason,
 			audioTracks: list('audio'),
 			subtitleTracks,
@@ -885,7 +878,7 @@ export class RawProvider implements MediaProviderAdapter {
 	async chooseCompatibleHDR() {
 		return this.chooseHDR('compatible');
 	}
-	async chooseHDR(preference: HDRPreference, networkChange = false) {
+	async chooseHDR(preference: HDRPreference) {
 		preference = normalizeHDRPreference(preference);
 		if (
 			(preference === 'av1' || preference === 'hevc') &&
@@ -897,22 +890,18 @@ export class RawProvider implements MediaProviderAdapter {
 			return;
 		}
 		return this.enqueue(async () => {
-			if (preference === this.hdrPreference && this.status.ready && !networkChange) return;
+			if (preference === this.hdrPreference && this.status.ready) return;
 			const time = this.initialized ? this.timeline : this.desiredTime;
 			const wasPaused = this.paused;
 			const generation = this.generation;
+			// Keep the last position even if the requested encoder cannot start,
+			// so an explicit recovery through Compatible resumes the same scene.
+			this.desiredTime = time;
 			this.remoteOperations++;
 			this.publish({ changing: true });
 			try {
 				this.hdrPreference = preference;
 				saveHDRPreference(preference);
-				if (preference === 'auto' && !networkChange) {
-					this.autoEncoded =
-						this.availableEncoders.length &&
-						(await slowNetwork(this.baseURL, this.raw!.parts[this.part], this.abort.signal))
-							? this.availableEncoders[0]
-							: undefined;
-				}
 				await this.loadPart(this.part, generation);
 				if (generation !== this.generation || this.destroyed) return;
 				// Warm the replacement renderer before seeking, then restore the local
@@ -999,37 +988,7 @@ export class RawProvider implements MediaProviderAdapter {
 				if (this.buffering) await this.audioEngine?.pause();
 			}).catch(() => {});
 		}
-		if (this.buffering) {
-			if (
-				this.hdrPreference === 'auto' &&
-				!this.encoded &&
-				this.availableEncoders.length &&
-				!this.networkCheck &&
-				performance.now() - this.lastProgress > 6000 &&
-				performance.now() - this.lastNetworkCheck > 30000
-			) {
-				this.networkCheck = true;
-				this.lastNetworkCheck = performance.now();
-				const generation = this.generation;
-				void slowNetwork(this.baseURL, this.raw!.parts[this.part], this.abort.signal)
-					.then(async (slow) => {
-						if (
-							slow &&
-							generation === this.generation &&
-							this.hdrPreference === 'auto' &&
-							!this.destroyed
-						) {
-							this.autoEncoded = this.availableEncoders[0];
-							await this.chooseHDR('auto', true);
-						}
-					})
-					.catch(() => {})
-					.finally(() => {
-						this.networkCheck = false;
-					});
-			}
-			return;
-		}
+		if (this.buffering) return;
 		this.encodedCaptions?.update(Number(this.engine.currentTime));
 		this.notify('time-change', time);
 		if (this.audioEngine && !this.paused && !this.driftCorrection) {

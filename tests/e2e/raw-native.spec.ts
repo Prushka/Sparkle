@@ -16,6 +16,7 @@ test('native HDR keeps decoded color and responds after distant and rapid paused
 	const errors: string[] = [];
 	page.on('pageerror', (error) => errors.push(error.message));
 	let transferred = 0;
+	await page.addInitScript(() => localStorage.setItem('sparkle.raw.hdr', 'compatible'));
 	page.on('response', (response) => {
 		if (response.url().includes('/parts/') && response.request().method() === 'GET')
 			transferred += Number(response.headers()['content-length'] || 0);

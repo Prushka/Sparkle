@@ -168,11 +168,13 @@ without reliable durations are explicitly rejected rather than synchronized to
 an invented timeline. Raw storyboards are optional and currently omitted;
 processed storyboards remain available.
 
-Native video/MSE is preferred for HDR, with color-managed browser conversion on
-SDR displays. Automatic mode first probes the exact Dolby codec/profile/level or
-HDR10+ ST2094-40 capability. The MSE MIME and MP4 sample entry agree with the Dolby
-configuration; generic HEVC support is never treated as Dolby support. Compatible
-HDR10/HLG playback is selected when necessary and identified in Video Settings.
+All active modes use native video/MSE, with color-managed browser conversion on
+SDR displays. Automatic always chooses supported NVENC AV1, then HEVC, independently
+of network conditions. It reports unavailable encoding instead of falling back to
+original playback. Only an explicit Compatible choice streams the original; its
+HDR10/HLG representation is identified in Video Settings. Encodes identify their
+output as HDR10, HLG, or SDR, without claiming preserved dynamic HDR. Generic HEVC
+support is never treated as Dolby support.
 
 The **Tone mapping** option and automatic software fallback are temporarily disabled
 pending performance rework. Saved tone-mapping selections migrate to **Compatible**.
