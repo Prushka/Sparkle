@@ -228,7 +228,7 @@ func (s *Store) scan(ctx context.Context) ([]map[string]any, error) {
 
 		job, err := s.loadJob(entry.Name())
 		if err != nil {
-			log.Print("skipping unreadable processed job")
+			log.Printf("skipping unreadable processed job: directory=%q", entry.Name())
 			continue
 		}
 		result = append(result, compactJob(job))
