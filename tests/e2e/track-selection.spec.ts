@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from '@playwright/test';
+import { devices, expect, test, type Page, type Route } from '@playwright/test';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import type { RawPlaybackStatus } from '../../lib/player/raw-types';
 
@@ -253,6 +253,181 @@ async function openVideoSettings(page: Page) {
 	await page.getByRole('button', { name: 'Settings', exact: true }).click();
 	await page.getByRole('menuitem', { name: /^Video Settings/ }).click();
 }
+
+for (const api of ['native', 'presentation'] as const) {
+	test(`Raw mobile fullscreen uses the active video with the iOS ${api} API`, async ({
+		page,
+		request
+	}, info) => {
+		test.skip(
+			!existsSync(`${root}/multilingual.mkv`),
+			'Run node scripts/tests/prepare-track-fixture.mjs'
+		);
+		await page.setViewportSize({ width: 390, height: 844 });
+		await page.addInitScript((api) => {
+			// Simulate iOS video-only fullscreen without claiming physical-device coverage.
+			Object.defineProperty(document, 'fullscreenEnabled', { get: () => false });
+			Object.defineProperty(document, 'webkitFullscreenEnabled', { get: () => false });
+			const proto = HTMLVideoElement.prototype as any;
+			if (api === 'native') {
+				Object.defineProperty(proto, 'webkitSupportsFullscreen', {
+					get() {
+						return this.readyState > 0;
+					}
+				});
+				proto.webkitEnterFullscreen = function () {
+					this.dataset.nativeFullscreen = 'true';
+					this.dispatchEvent(new Event('webkitbeginfullscreen'));
+				};
+				proto.webkitExitFullscreen = function () {
+					this.dataset.nativeFullscreen = 'false';
+					this.dispatchEvent(new Event('webkitendfullscreen'));
+				};
+			} else {
+				proto.webkitSupportsPresentationMode = function () {
+					return this.readyState > 0;
+				};
+				proto.webkitSetPresentationMode = function (mode: string) {
+					this.webkitPresentationMode = mode;
+					this.dataset.nativeFullscreen = String(mode === 'fullscreen');
+					this.dispatchEvent(new Event('webkitpresentationmodechanged'));
+				};
+			}
+		}, api);
+		await fixture(page);
+		const room = `fullscreen-${api}-${Date.now()}`;
+		expect((await request.post('/be/rooms', { data: { roomId: room, mediaId: rawId } })).ok()).toBe(
+			true
+		);
+		await page.goto(`/${room}/media/${rawId}`);
+		await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+		const player = page.locator('[data-media-player]');
+		const video = page.locator('.sparkle-raw-surface video');
+		await expect
+			.poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime))
+			.toBeGreaterThan(1);
+		await player.hover();
+		const fullscreen = page.getByRole('button', { name: 'Fullscreen', exact: true });
+		await expect(fullscreen).toBeVisible();
+		await expect(player.locator('.vds-controls')).toHaveCSS('opacity', '1');
+		const bounds = (await fullscreen.boundingBox())!;
+		expect(bounds.x).toBeGreaterThanOrEqual(0);
+		expect(bounds.x + bounds.width).toBeLessThanOrEqual(390);
+		await page.screenshot({ path: info.outputPath('mobile-fullscreen.png') });
+		await fullscreen.click();
+		await expect(video).toHaveAttribute('data-native-fullscreen', 'true');
+		await expect(player).toHaveAttribute('data-fullscreen', '');
+		// The native Done gesture, outside Sparkle's controls, must update Vidstack too.
+		await video.evaluate((v: any) => {
+			if (v.webkitExitFullscreen) v.webkitExitFullscreen();
+			else v.webkitSetPresentationMode('inline');
+		});
+		await expect(player).not.toHaveAttribute('data-fullscreen');
+		await page.setViewportSize({ width: 844, height: 390 });
+		await player.hover();
+		await expect(fullscreen).toBeVisible();
+		await fullscreen.click();
+		await expect(player).toHaveAttribute('data-fullscreen', '');
+		await player.hover();
+		await fullscreen.click();
+		await expect(player).not.toHaveAttribute('data-fullscreen');
+		await expect(video).toHaveAttribute('data-native-fullscreen', 'false');
+	});
+}
+
+test.describe('Android Chrome fullscreen', () => {
+	const { userAgent, viewport, screen, deviceScaleFactor, isMobile, hasTouch } = devices['Pixel 7'];
+	test.use({ userAgent, viewport, screen, deviceScaleFactor, isMobile, hasTouch });
+
+	for (const mode of ['compatible', 'av1', 'hevc', 'auto']) {
+		test(`Raw ${mode} keeps touch controls and overlays in whole-player fullscreen`, async ({
+			page,
+			request
+		}, info) => {
+			test.skip(!existsSync(`${root}/multilingual.mkv`), 'Prepare multilingual fixtures');
+			test.skip(
+				mode !== 'compatible' &&
+					!existsSync(`${root}/${mode === 'auto' ? 'av1' : mode}/master.m3u8`),
+				'Prepare the optional NVENC fixtures'
+			);
+			await fixture(page);
+			await page.addInitScript((mode) => localStorage.setItem('sparkle.raw.hdr', mode), mode);
+			const room = `fullscreen-android-${mode}-${Date.now()}`;
+			expect(
+				(await request.post('/be/rooms', { data: { roomId: room, mediaId: rawId } })).ok()
+			).toBe(true);
+			await page.goto(`/${room}/media/${rawId}`);
+			await page.getByRole('button', { name: 'Join Watch Room', exact: true }).tap();
+			const player = page.locator('[data-media-player]');
+			const video = page.locator('.sparkle-raw-surface video');
+			const fullscreen = page.getByRole('button', { name: 'Fullscreen', exact: true });
+			await expect
+				.poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime))
+				.toBeGreaterThan(1);
+			expect(await page.evaluate(() => matchMedia('(pointer: coarse)').matches)).toBe(true);
+			expect(await page.evaluate(() => document.fullscreenEnabled)).toBe(true);
+			const showControls = async () => {
+				if ((await player.locator('.vds-controls').getAttribute('data-visible')) === null) {
+					const bounds = (await player.boundingBox())!;
+					await player.tap({ position: { x: bounds.width / 4, y: bounds.height / 3 } });
+				}
+				await expect(fullscreen).toBeVisible();
+				await expect(player.locator('.vds-controls')).toHaveCSS('opacity', '1');
+			};
+			for (const viewport of [
+				{ width: 412, height: 839 },
+				{ width: 839, height: 412 }
+			]) {
+				await page.setViewportSize(viewport);
+				await showControls();
+				const bounds = (await fullscreen.boundingBox())!;
+				expect(bounds.x).toBeGreaterThanOrEqual(0);
+				expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width);
+				const before = await video.evaluate((v: HTMLVideoElement) => v.currentTime);
+				await fullscreen.tap();
+				await expect(player).toHaveAttribute('data-fullscreen', '');
+				await expect
+					.poll(() => player.evaluate((el) => document.fullscreenElement === el))
+					.toBe(true);
+				await expect(player).not.toHaveAttribute('data-paused');
+				await expect
+					.poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime))
+					.toBeGreaterThan(before);
+				// Use Chrome's actual Fullscreen API, not an Android/WebKit API stub.
+				expect(await video.evaluate((el) => document.fullscreenElement!.contains(el))).toBe(true);
+				const captions = player.locator('[data-raw-subtitle-composition="text"]').first();
+				expect(await captions.evaluate((el) => document.fullscreenElement!.contains(el))).toBe(
+					true
+				);
+				await showControls();
+				await page.getByRole('button', { name: 'Settings', exact: true }).tap();
+				const settings = page.getByRole('menuitem', { name: /^Video Settings/ });
+				await expect(settings).toBeVisible();
+				expect(await settings.evaluate((el) => document.fullscreenElement!.contains(el))).toBe(
+					true
+				);
+				await page.getByRole('button', { name: 'Settings', exact: true }).tap();
+				await expect(settings).toBeHidden();
+				await showControls();
+				await page.screenshot({
+					path: info.outputPath(`android-fullscreen-${viewport.width}.png`)
+				});
+				await fullscreen.tap();
+				await expect(player).not.toHaveAttribute('data-fullscreen');
+				await expect
+					.poll(() => page.evaluate(() => document.fullscreenElement === null))
+					.toBe(true);
+				await expect(fullscreen).toBeVisible();
+			}
+			// Browser-driven exit (for example Android Back) also resets the control state.
+			await fullscreen.tap();
+			await expect(player).toHaveAttribute('data-fullscreen', '');
+			await page.evaluate(() => document.exitFullscreen());
+			await expect(player).not.toHaveAttribute('data-fullscreen');
+			await expect(player).not.toHaveAttribute('data-paused');
+		});
+	}
+});
 
 for (const mode of ['compatible', 'av1', 'hevc', 'auto']) {
 	test(`Raw ${mode}: shared defaults, explicit persistence and local selection keep room sync`, async ({

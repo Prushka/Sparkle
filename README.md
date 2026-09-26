@@ -23,6 +23,8 @@ library from the same Library view.
   Large Plex libraries load on demand; confidently matched processed titles reuse Plex
   covers and descriptions.
 - Vidstack controls for playback, audio selection, subtitles, HDR options, and media versions.
+  Raw fullscreen includes an iOS native-video fallback; see the
+  [fullscreen limitations](docs/plex-raw-media.md#playback-and-hdr).
 - Shared Encoded/Raw track priorities: Japanese → English → Chinese audio, with only
   explicit choices saved; subtitles share format tabs, track toggles, language fallback,
   and per-format layer preferences across playback sources.

@@ -130,6 +130,13 @@ still synchronized to the room. Native video PiP is a fallback where available;
 it does not carry the custom subtitle overlays. Document PiP requires a top-level
 page and is not enabled inside Discord Activity iframes.
 
+Fullscreen uses the whole player when the browser supports element fullscreen,
+including Android Chrome, keeping controls, subtitles and chat overlays inside it.
+On iPhone/iPad browsers limited to native video fullscreen, the control targets
+libmedia's active video and follows native fullscreen entry/exit events. This
+fallback does not carry Sparkle's custom subtitle or chat overlays. Physical
+iOS/iPadOS playback qualification remains pending.
+
 Raw **Google Cast options** explains Chrome tab casting and the option to choose
 a compatible processed version. It is not a direct receiver-casting implementation:
 the raw provider's browser demuxer, audio decoder, and subtitle renderer cannot

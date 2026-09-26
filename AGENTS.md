@@ -160,6 +160,9 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
 - Keep room participation independent of decoding. Preserve chat, profiles, notifications,
   games/tabs, presence, and existing voice behavior on unsupported clients. Do not introduce
   global COOP/COEP isolation headers that break Discord Activities.
+  Raw fullscreen must target the active libmedia video when only iOS native fullscreen
+  is available, refresh support after metadata loads, and detach listeners on media changes.
+  Prefer whole-player element fullscreen on Android and desktop to retain controls and overlays.
 - Frontend public bases (`SERVER_BE`, `SERVER_STATIC`) and internal bases
   (`SERVER_INTERNAL_BE`, `SERVER_INTERNAL_STATIC`) are separate runtime settings. Preserve
   relative-path proxying and Discord Activity mappings; do not bake private hosts into bundles.

@@ -294,6 +294,12 @@ cache and are not distributed with the application.
 | Discord Activities           | Non-isolated browser decoding passes; actual embedded Activity/voice integration validation pending                                       |
 | Linux Docker                 | Backend cross-compiles; read-only mount example supplied, container runtime test pending                                                  |
 
+Android fullscreen regression coverage uses Pixel 7 touch/mobile emulation in
+Windows Chrome with the actual element Fullscreen API. Compatible, AV1, HEVC and
+Automatic pass touch entry/exit, browser-driven exit, portrait/landscape controls,
+continued playback, and settings/subtitle containment within the fullscreen player.
+This is browser automation evidence, not physical Android-device qualification.
+
 Media identities/revisions are attached to playback updates and backend tests
 reject stale generations. Decoder operations serialize, obsolete seeks coalesce,
 and remote suppression spans asynchronous operations. Two-client tests cover

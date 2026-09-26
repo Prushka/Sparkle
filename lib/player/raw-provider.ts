@@ -2,6 +2,7 @@ import { backendFetch } from '@/lib/plex-access';
 import {
 	VideoProviderLoader,
 	TimeRange,
+	canFullscreen,
 	type MediaContext,
 	type MediaProviderAdapter,
 	type MediaProviderLoader,
@@ -29,6 +30,7 @@ import {
 } from './raw-hdr';
 import { RawSubtitles } from './raw-subtitles';
 import { RawPictureInPicture } from './raw-pip';
+import { RawFullscreen } from './raw-fullscreen';
 import { AudioNormalization, reportNormalization } from './audio-normalization';
 import {
 	pickRawAudioTrack,
@@ -133,6 +135,13 @@ export class RawProvider implements MediaProviderAdapter {
 		return 'sparkle-raw';
 	}
 	readonly container = document.createElement('div');
+	readonly fullscreen = new RawFullscreen(
+		(active, trigger) => this.notify('fullscreen-change', active, trigger),
+		() => {
+			if (!this.destroyed)
+				this.ctx.$state.canFullscreen.set(canFullscreen() || this.fullscreen.supported);
+		}
+	);
 	readonly pictureInPicture = new RawPictureInPicture(
 		this.container,
 		() => this.container.querySelector('video'),
@@ -259,6 +268,7 @@ export class RawProvider implements MediaProviderAdapter {
 			values.bitrate = undefined;
 		}
 		this.status = { ...this.status, ...values };
+		this.fullscreen.attach(this.container.querySelector('video'));
 		this.ctx.$state.canPictureInPicture.set(this.pictureInPicture.supported);
 		this.ctx.player.el?.dispatchEvent(new CustomEvent(RAW_STATUS_EVENT, { detail: this.status }));
 	}
@@ -584,6 +594,7 @@ export class RawProvider implements MediaProviderAdapter {
 		this.driftSince = 0;
 		await engine.play({ video: true, audio: !this.audioEngine, subtitle: true });
 		if (engine !== this.engine || this.destroyed) return;
+		this.fullscreen.attach(this.container.querySelector('video'));
 		await this.audioEngine?.play({ video: false, audio: true, subtitle: false });
 		if (!this.initialized) {
 			this.initialized = true;
@@ -1035,6 +1046,8 @@ export class RawProvider implements MediaProviderAdapter {
 		this.encodedCaptions?.destroy();
 		this.encodedCaptions = undefined;
 		await this.pictureInPicture.exit().catch(() => {});
+		await this.fullscreen.exit().catch(() => {});
+		this.fullscreen.attach(null);
 		const engine = this.engine,
 			audio = this.audioEngine;
 		const subtitles = this.subtitles;
