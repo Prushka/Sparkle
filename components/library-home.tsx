@@ -4,15 +4,17 @@ import { CatalogBrowser } from '@/components/catalog-browser';
 import { RoomNavigationInput } from '@/components/room-navigation-input';
 import { Button } from '@/components/ui/button';
 import { useTheme } from '@/lib/theme';
-import { IconSparkles, IconMoon, IconSun } from '@tabler/icons-react';
+import { IconMessagePlus, IconMoon, IconSun } from '@tabler/icons-react';
 import { PlexAccountButton } from '@/components/plex-auth';
 export function LibraryHome({
 	staticBaseUrl,
 	backendBaseUrl,
+	requestUrl,
 	roomId
 }: {
 	staticBaseUrl: string;
 	backendBaseUrl?: string;
+	requestUrl?: string;
 	roomId?: string;
 }) {
 	const searchParams = useSearchParams();
@@ -29,15 +31,19 @@ export function LibraryHome({
 	return (
 		<main className="min-h-screen bg-background text-foreground">
 			<div className="mx-auto flex h-dvh min-h-[420px] max-w-[1600px] flex-col gap-3 overflow-hidden px-3 py-3 sm:px-6 lg:px-8">
-				<header className="flex shrink-0 flex-wrap items-center justify-between gap-2 sm:gap-4">
-					<div className="flex items-center gap-2">
-						<span className="rounded-lg bg-primary/10 p-2 text-primary">
-							<IconSparkles size={20} />
-						</span>
-						<h1 className="text-lg font-semibold tracking-tight">Library</h1>
-					</div>
-					<div className="flex min-w-0 flex-1 flex-wrap justify-end gap-2 sm:max-w-2xl">
+				<header className="grid shrink-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-2 sm:flex sm:gap-4">
+					{requestUrl && (
+						<Button asChild variant="outline" className="h-9">
+							<a href={requestUrl} target="_blank" rel="noopener noreferrer">
+								<IconMessagePlus size={19} aria-hidden="true" />
+								Request
+							</a>
+						</Button>
+					)}
+					<div className="col-start-2 min-w-0 justify-self-end sm:ml-auto">
 						<PlexAccountButton />
+					</div>
+					<div className="col-span-2 flex min-w-0 gap-2 sm:max-w-lg sm:flex-1">
 						<RoomNavigationInput inputId="library-room-navigation-input" className="h-9 flex-1" />
 						<Button
 							variant="outline"

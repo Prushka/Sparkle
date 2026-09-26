@@ -164,12 +164,17 @@ rebuilding the image. Restart the relevant service after changing its environmen
 | `SERVER_INTERNAL_BE`           | Private API base for SSR and the frontend proxy; `http://localhost:1323` |
 | `SERVER_INTERNAL_STATIC`       | Private static base; `http://localhost:1323/static`                      |
 | `PUBLIC_DISCORD_CLIENT_ID`     | Optional Discord application/OAuth2 client ID                            |
+| `PUBLIC_REQUEST_URL`           | Optional Library Request link; absolute public HTTP(S) URL               |
 | `SERVER_DISCORD_CLIENT_SECRET` | Optional server-only Discord OAuth2 secret                               |
 
 Public bases beginning with `http://` or `https://` remain absolute; other values
 are normalized to relative paths. Relative `/be` and `/static` requests are
 forwarded to their corresponding internal bases. Keep private addresses and
 credentials out of browser configuration.
+
+The Library's **Request** link opens `PUBLIC_REQUEST_URL` in a new tab, keeping the
+current room open. Leave it empty to hide the link. Invalid URLs and URLs containing
+a username or password are ignored.
 
 ### Backend
 

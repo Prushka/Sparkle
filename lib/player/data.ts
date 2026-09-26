@@ -16,6 +16,7 @@ export type RoomRecord = {
 export type RuntimeConfig = {
 	backendBaseUrl: string;
 	staticBaseUrl: string;
+	requestUrl?: string;
 };
 
 type RuntimeConfigPayload = Partial<RuntimeConfig>;
@@ -48,7 +49,8 @@ export async function loadRuntimeConfig(): Promise<RuntimeConfig> {
 				}
 				return {
 					backendBaseUrl: payload.backendBaseUrl,
-					staticBaseUrl: payload.staticBaseUrl
+					staticBaseUrl: payload.staticBaseUrl,
+					requestUrl: payload.requestUrl
 				};
 			}
 		);

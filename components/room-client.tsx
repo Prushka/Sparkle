@@ -598,6 +598,7 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 			<LibraryHome
 				staticBaseUrl={state.config.staticBaseUrl}
 				backendBaseUrl={state.config.backendBaseUrl}
+				requestUrl={state.config.requestUrl}
 				roomId={state.roomId}
 			/>
 		);

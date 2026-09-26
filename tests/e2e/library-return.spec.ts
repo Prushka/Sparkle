@@ -71,7 +71,7 @@ for (const joined of [false, true]) {
 			}
 			await returnButton.click();
 			for (const page of pages) {
-				await expect(page.getByRole('heading', { name: 'Library', exact: true })).toBeVisible();
+				await expect(page.getByRole('navigation', { name: 'Library hierarchy' })).toBeVisible();
 				expect(new URL(page.url()).pathname).toBe(`/${roomId}`);
 				expect(new URL(page.url()).searchParams.get('query')).toBe('fixture');
 				expect(new URL(page.url()).searchParams.has('mediaId')).toBe(false);
@@ -80,7 +80,7 @@ for (const joined of [false, true]) {
 			expect(record.roomId).toBe(roomId);
 			expect(record.mediaId).toBe('');
 			await pages[0].reload();
-			await expect(pages[0].getByRole('heading', { name: 'Library', exact: true })).toBeVisible();
+			await expect(pages[0].getByRole('navigation', { name: 'Library hierarchy' })).toBeVisible();
 		} finally {
 			await Promise.all(pages.map((page) => page.close()));
 		}

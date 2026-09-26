@@ -272,7 +272,7 @@ test('Raw room prompts, resumes the same room after sign-in and gates sign-out',
 	await expect(page.getByRole('heading', { name: 'Plex access required' })).toBeVisible();
 	await expect(page.getByRole('region', { name: 'Current media' })).toHaveCount(0);
 	await page.getByRole('button', { name: 'Leave room' }).click();
-	await expect(page.getByRole('heading', { name: 'Library', exact: true })).toBeVisible();
+	await expect(page.getByRole('navigation', { name: 'Library hierarchy' })).toBeVisible();
 	expect(f.roomWrites()).toBe(0);
 });
 

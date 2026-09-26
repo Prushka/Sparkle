@@ -20,6 +20,15 @@ const season = {
 };
 
 async function fixture(page: Page) {
+	await page.route('**/api/runtime-env', (route) =>
+		route.fulfill({
+			json: {
+				backendBaseUrl: process.env.SPARKLE_TEST_BACKEND_URL || '/be',
+				staticBaseUrl: '/static',
+				requestUrl: 'https://requests.example.test/'
+			}
+		})
+	);
 	await page.route('**/auth/plex/session', (route) =>
 		route.fulfill({
 			json: { enabled: true, authenticated: true, canAccessRaw: true, name: 'Library fixture' }
@@ -95,7 +104,11 @@ test('Library history preserves the room, filters and hierarchy on back, forward
 }) => {
 	await fixture(page);
 	await page.goto('/?keep=room-context');
-	await expect(page.getByRole('heading', { name: 'Library', exact: true })).toBeVisible();
+	await expect(page.getByRole('navigation', { name: 'Library hierarchy' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Library', exact: true })).toHaveCount(0);
+	const requestLink = page.getByRole('link', { name: 'Request', exact: true });
+	await expect(requestLink).toHaveAttribute('href', 'https://requests.example.test/');
+	await expect(requestLink).toHaveAttribute('target', '_blank');
 	const roomPath = new URL(page.url()).pathname;
 	await page.getByRole('combobox', { name: 'Sort library', exact: true }).click();
 	await page.getByRole('option', { name: 'Title A–Z', exact: true }).click();
@@ -215,6 +228,7 @@ test('Library controls and popups fit narrow mobile, tablet and desktop layouts'
 	await expect(search).toHaveValue('');
 	for (const width of [320, 390, 768, 1366]) {
 		await page.setViewportSize({ width, height: 844 });
+		await expect(page.getByRole('link', { name: 'Request', exact: true })).toBeInViewport();
 		await expect
 			.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth))
 			.toBeTruthy();
@@ -239,7 +253,9 @@ test('Library controls and popups fit narrow mobile, tablet and desktop layouts'
 		const filters = await page.getByLabel('Library filters', { exact: true }).boundingBox();
 		const nav = await page.getByRole('navigation', { name: 'Library hierarchy' }).boundingBox();
 		expect(nav!.y - (filters!.y + filters!.height)).toBeGreaterThanOrEqual(12);
-		await expect(page.getByRole('textbox', { name: 'Room URL or ID' })).toBeVisible();
+		const roomInput = page.getByRole('textbox', { name: 'Room URL or ID' });
+		await expect(roomInput).toBeVisible();
+		expect((await roomInput.boundingBox())!.width).toBeGreaterThan(100);
 		await expect(page.getByRole('button', { name: 'TV Shows', exact: true })).toBeVisible();
 	}
 });
