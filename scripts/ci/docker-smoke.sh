@@ -36,7 +36,7 @@ test "$(docker exec "$frontend" id -u)" = '1001'
 port="$(docker port "$frontend" 3000/tcp)"
 export SPARKLE_TEST_URL="http://$port"
 docker run -d --name "$api" --network "$network" --network-alias sparkle-api \
-  --read-only --tmpfs /data/pfp --tmpfs /cache/media \
+  --read-only --tmpfs /data/pfp --tmpfs /data/plex-auth --tmpfs /cache/media \
   -e PLEX_AUTH_ORIGINS="$SPARKLE_TEST_URL" \
   --mount "type=bind,source=$fixture_dir/output,target=/data/output,readonly" \
   "$LOCAL_API_IMAGE" >/dev/null

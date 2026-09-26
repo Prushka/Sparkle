@@ -57,7 +57,7 @@ namespace Sparkle.Backend.Windows
                     Check(app.LogWindow.LogText.Contains("Unicode \u65e5\u672c\u8a9e"), "UTF-8 output must survive redirection");
                     string configuration = File.ReadAllText(Path.Combine(args[0], "configuration.txt"));
                     Check(configuration.Contains("127.0.0.1:18991"), "root .env was not loaded");
-                    foreach (string directory in new[] { "fixture output", "fixture profiles", "fixture cache" })
+                    foreach (string directory in new[] { "fixture output", "fixture profiles", "fixture cache", "fixture sessions" })
                         Check(configuration.Contains(Path.Combine(args[0], directory)), "relative paths were not resolved against repository root");
                     Check(configuration.Contains("\"local\":\"X:/test media\""), "quoted mapping JSON was damaged");
                     Check(!currentLog.Contains("fixture-secret-not-for-logs") && !currentLog.Contains("X:/test media"), "launcher leaked private configuration");

@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"Sparkle/internal/jobs"
 	"Sparkle/internal/plex"
 	"context"
 	"encoding/json"
@@ -14,7 +15,51 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
+
+func TestFirstBrowseIncludesProcessedTitles(t *testing.T) {
+	output := t.TempDir()
+	dir := filepath.Join(output, "encoded-movie")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "job.json"), []byte(`{"id":"encoded-movie","input":"Existing Movie.mkv","state":"complete"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, source := range []string{"processed", "all"} {
+		t.Run(source, func(t *testing.T) {
+			// No warmup or retry: the very first response must include existing titles.
+			s := New(jobs.NewStore(output, time.Hour), nil, t.TempDir())
+			mux := http.NewServeMux()
+			s.Register(mux)
+			w := httptest.NewRecorder()
+			mux.ServeHTTP(w, httptest.NewRequest("GET", "/library/items?source="+source, nil))
+			var page Page
+			if err := json.Unmarshal(w.Body.Bytes(), &page); err != nil {
+				t.Fatal(err)
+			}
+			if w.Code != http.StatusOK || page.Total != 1 || len(page.Items) != 1 || page.Items[0].ID != "encoded-movie" {
+				t.Fatalf("first browse = %d %s", w.Code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestFirstBrowseReportsProcessedScanFailure(t *testing.T) {
+	s := New(jobs.NewStore(t.TempDir()+"\x00", time.Hour), nil, t.TempDir())
+	mux := http.NewServeMux()
+	s.Register(mux)
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("GET", "/library/items?source=processed", nil))
+	var body map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if w.Code != http.StatusServiceUnavailable || body["error"] != "processed library is unavailable" {
+		t.Fatalf("failed first browse = %d %s", w.Code, w.Body.String())
+	}
+}
 
 func fixture(t *testing.T) (*Service, *http.ServeMux, *atomic.Int32, string) {
 	t.Helper()

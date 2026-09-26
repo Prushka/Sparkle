@@ -14,6 +14,7 @@ services:
       PLEX_AUTH_ORIGINS: ${PLEX_AUTH_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
       PLEX_AUTH_COOKIE_SECURE: ${PLEX_AUTH_COOKIE_SECURE:-true}
       PLEX_AUTH_COOKIE_SAMESITE: ${PLEX_AUTH_COOKIE_SAMESITE:-lax}
+      PLEX_AUTH_SESSION_DIR: /data/plex-auth
       PLEX_LIBRARY_IDS: ${PLEX_LIBRARY_IDS}
       PLEX_PATH_MAPPINGS: '[{"plex":"/data/Managed-Videos","local":"/media/Managed-Videos"}]'
     ports:
@@ -22,6 +23,7 @@ services:
       - ./output:/data/output:ro
       - ${PLEX_MEDIA_HOST_ROOT:-/mnt/Managed-Videos}:/media/Managed-Videos:ro
       - ./data/pfp:/data/pfp
+      - ./data/plex-auth:/data/plex-auth
       - ./cache/media:/cache/media
 
   sparkle-next:

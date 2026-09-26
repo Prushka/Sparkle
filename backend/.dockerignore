@@ -3,5 +3,9 @@
 Dockerfile
 README.md
 output
+data
+cache
+.env
+.env.*
 tmp
 *.test

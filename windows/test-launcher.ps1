@@ -22,6 +22,7 @@ ADDR=127.0.0.1:$port
 OUTPUT=./output
 PFP_DIR=./profiles
 MEDIA_CACHE_DIR=./media-cache
+PLEX_AUTH_SESSION_DIR=./sessions
 PLEX_URL=
 PLEX_TOKEN=
 PLEX_PATH_MAPPINGS=

@@ -40,6 +40,10 @@ nested paths and existing symlink/junction aliases. Mapped files are opened
 read-only with Go's root-confined file API. The longest Plex directory prefix
 wins. Traversal, alternate streams, and symlink/junction escapes are rejected.
 
+Persistent [Plex sessions](plex-auth.md#session-handling) use `PLEX_AUTH_SESSION_DIR`
+(default `./data/plex-auth`), which must also stay outside mapped media roots and
+the public `OUTPUT` and `PFP_DIR` directories.
+
 New avatars go to `PFP_DIR`. Existing `OUTPUT/pfp/*.png` remain readable through
 the same `/static/pfp/` URLs. No migration or write into `OUTPUT` is required.
 
@@ -65,6 +69,13 @@ filter-bound source offsets. Each merged page uses bounded section requests;
 joining a room uses direct metadata lookup. No startup Plex scan or complete
 Plex index exists. Virtualization bounds rendered cards; loaded page metadata
 remains in the current browser view until filters/navigation change.
+
+The processed catalog starts one shared scan of `OUTPUT`. Initial `/library/items`
+and legacy `/all` requests wait for that scan instead of receiving an empty placeholder;
+canceling a request stops its wait without canceling the shared work. A failed initial
+scan returns an error and a later request can retry. After a successful scan (including
+an empty catalog), `JOBS_CACHE_TTL` expiration or cache pruning triggers a background
+refresh while the last successful catalog remains available, even if that refresh fails.
 
 Processed artwork enrichment only looks up items on the requested page or a direct
 media lookup. Movies require a filename title and year; episodes require the exact

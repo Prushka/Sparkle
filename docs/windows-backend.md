@@ -16,7 +16,7 @@ Windows bitmap scaling.
 Requirements: Windows with Windows PowerShell 5.1 and .NET Framework 4.x, plus Go 1.25+
 on `PATH` for the initial build. The build uses Windows' existing Framework C# compiler;
 neither Visual Studio nor a .NET SDK is required. The account must have access to the
-configured media, profile and cache directories.
+configured media, profile, session and cache directories.
 
 Preserve the repository's `.env`. Stop any manually launched copy of this backend
 before starting the tray copy, then run from the repository root:
@@ -43,11 +43,13 @@ is requested, with details in the log and a tray notification.
 
 **Stopping/restarting loses in-memory rooms, chat and playback state.** Media files and
 persisted profile/cache files remain governed by the existing backend configuration.
+Plex sign-ins survive in private `PLEX_AUTH_SESSION_DIR` storage until their original
+expiry, with fresh membership verification after restart.
 
 ## Configuration, logs and updates
 
 Each backend start uses `start-backend.ps1 -BackendExecutable ...`, which reads the
-root `.env` (or inherited `ENV_FILE`). Relative `OUTPUT`, `PFP_DIR` and `MEDIA_CACHE_DIR`
+root `.env` (or inherited `ENV_FILE`). Relative `OUTPUT`, `PFP_DIR`, `MEDIA_CACHE_DIR`, and `PLEX_AUTH_SESSION_DIR`
 paths resolve against the repository root, just as with a terminal launch. No
 credentials or media mappings are written into shortcuts. Go is not needed at runtime.
 Restart the backend after configuration changes. If media is on a mapped network

@@ -11,6 +11,7 @@ type Config struct {
 	PlexAuthOrigins        string
 	PlexAuthCookieSecure   bool
 	PlexAuthCookieSameSite string
+	PlexAuthSessionDir     string
 	EncodeEnabled          bool
 	FFmpeg                 string
 	FFprobe                string
@@ -42,6 +43,7 @@ func Load() (Config, error) {
 		PlexAuthOrigins:        getenv("PLEX_AUTH_ORIGINS", "http://localhost:3001,http://127.0.0.1:3001"),
 		PlexAuthCookieSecure:   true,
 		PlexAuthCookieSameSite: getenv("PLEX_AUTH_COOKIE_SAMESITE", "lax"),
+		PlexAuthSessionDir:     getenv("PLEX_AUTH_SESSION_DIR", "./data/plex-auth"),
 		FFmpeg:                 getenv("FFMPEG", "ffmpeg"),
 		FFprobe:                getenv("FFPROBE", "ffprobe"),
 		EncodeCacheBytes:       20 << 30,

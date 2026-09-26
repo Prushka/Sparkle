@@ -13,6 +13,7 @@ export ADDR='127.0.0.1:18991'
 OUTPUT='fixture output'
 PFP_DIR='./fixture profiles'
 MEDIA_CACHE_DIR='./fixture cache'
+PLEX_AUTH_SESSION_DIR='./fixture sessions'
 GO=missing-go-must-not-be-required
 PLEX_URL=
 PLEX_TOKEN=fixture-secret-not-for-logs

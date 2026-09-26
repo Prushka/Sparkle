@@ -120,7 +120,7 @@ requires FFmpeg/ffprobe and an NVIDIA GPU with the selected 10-bit NVENC encoder
    ```
 
 Open <http://localhost:3001>. The backend defaults to port `1323`. The startup
-scripts load the root `.env` and resolve relative output, profile, and cache
+scripts load the root `.env` and resolve relative output, profile, session, and cache
 paths from the repository root. Set `ENV_FILE` to use another backend environment
 file; the Bash script sources that file as shell code. Direct `go run ./cmd/api`
 from `backend/` requires exporting configuration yourself.
@@ -198,6 +198,7 @@ a username or password are ignored.
 | `PLEX_AUTH_ORIGINS`         | Exact trusted frontend origins; defaults to localhost and 127.0.0.1 on port 3001     |
 | `PLEX_AUTH_COOKIE_SECURE`   | Secure cookies; `true` by default, `false` allowed only for loopback development     |
 | `PLEX_AUTH_COOKIE_SAMESITE` | `lax` by default; `none` enables Secure partitioned cookies for cross-site embedding |
+| `PLEX_AUTH_SESSION_DIR`     | Private persistent Plex sessions; `./data/plex-auth`, outside public/media roots     |
 
 Windows mapping example:
 
@@ -217,9 +218,14 @@ scripts, its processed-cache default is `30m` and relative paths use the process
 working directory. Rooms and their live state are held in backend memory and
 are not persisted across a backend restart.
 
-Plex account tokens remain in backend memory behind an HttpOnly session cookie;
-they are never stored in browser localStorage. Sessions last up to 14 days but
-backend restarts sign everyone out. Signed-in room profiles use the Plex name and
+The first Encoded catalog request waits for the shared startup scan of `OUTPUT`.
+After a successful scan, requests serve the cached catalog while expired or pruned
+entries refresh in the background. `JOBS_CACHE_TTL` controls that expiration.
+
+Plex account tokens remain server-side in a private session database behind an
+HttpOnly cookie; they are never stored in browser localStorage. Sessions last up to
+14 days and survive backend restarts, with a fresh Plex membership check before
+restored access. Preserve `PLEX_AUTH_SESSION_DIR` across deployments. Signed-in room profiles use the Plex name and
 avatar; clicking your badge opens the Plex account dialog. Sign-out restores your
 saved guest profile. Use HTTPS and configure the actual frontend
 origin for deployment; see [Plex sign-in](docs/plex-auth.md) for proxy and Activity settings.
@@ -230,8 +236,8 @@ mapping confinement, cache limits, and the catalog/streaming API.
 ## Docker
 
 [compose.example.yml](compose.example.yml) defines the frontend and backend,
-with processed output and original media mounted read-only. Avatars and artwork
-cache have separate writable mounts.
+with processed output and original media mounted read-only. Avatars, private Plex
+sessions, and artwork cache have separate writable mounts.
 
 Configure `.env`, set `PLEX_MEDIA_HOST_ROOT` to the host's media directory, and
 adjust the Compose mapping's `plex` root to match Plex. Its `local` root must

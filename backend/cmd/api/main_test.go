@@ -1,6 +1,8 @@
 package main
 
 import (
+	"Sparkle/internal/jobs"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,6 +11,34 @@ import (
 	"testing"
 	"time"
 )
+
+func TestFirstAllResponseIncludesProcessedTitlesAndValidator(t *testing.T) {
+	output := t.TempDir()
+	dir := filepath.Join(output, "encoded-movie")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "job.json"), []byte(`{"id":"encoded-movie","input":"Existing Movie.mkv","state":"complete"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	handler := handleAll(jobs.NewStore(output, time.Hour))
+	w := httptest.NewRecorder()
+	handler(w, httptest.NewRequest("GET", "/all", nil))
+	var records []map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &records); err != nil {
+		t.Fatal(err)
+	}
+	if w.Code != http.StatusOK || len(records) != 1 || records[0]["Id"] != "encoded-movie" || w.Header().Get("ETag") == "" {
+		t.Fatalf("first /all = %d %s, ETag = %q", w.Code, w.Body.String(), w.Header().Get("ETag"))
+	}
+	r := httptest.NewRequest("GET", "/all", nil)
+	r.Header.Set("If-None-Match", w.Header().Get("ETag"))
+	w = httptest.NewRecorder()
+	handler(w, r)
+	if w.Code != http.StatusNotModified || w.Body.Len() != 0 {
+		t.Fatalf("conditional /all = %d %s", w.Code, w.Body.String())
+	}
+}
 
 type deadlineRecorder struct {
 	*httptest.ResponseRecorder

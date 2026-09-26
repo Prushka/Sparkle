@@ -85,17 +85,23 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   metadata and poster/backdrop GET/HEAD requests are public for full link previews;
   `/share/rooms/{room}` exposes only the current media identity. Keep files, derivatives,
   hierarchy, room mutations and WebSockets protected; never forward sessions into previews.
+  Persist sessions in private `PLEX_AUTH_SESSION_DIR` storage before acknowledging login
+  or logout. Restarts preserve the original expiry and must reverify membership before
+  access; temporary upstream failures deny access but allow later revalidation.
 - Plex access is read-only and endpoint-allowlisted. Do not add watched-state updates,
   scans, Plex transcoding, media modifications, or whole-original-file caching.
   Server decoding is confined to the optional encoded mode; Compatible playback remains client-side.
 - Resolve the longest matching mapping prefix and use root-confined file access. Retain
   traversal, symlink/junction, alternate-stream, and allowed-section protections. Keep
-  `PFP_DIR` and `MEDIA_CACHE_DIR` outside mapped media roots; legacy avatars remain readable.
+  `PFP_DIR`, `MEDIA_CACHE_DIR`, and `PLEX_AUTH_SESSION_DIR` outside mapped media roots;
+  session storage must also stay outside `OUTPUT` and `PFP_DIR`. Legacy avatars remain readable.
 - Keep Plex tokens, credential-bearing URLs, and local filesystem paths out of browser
   payloads and logs. Never expose backend secrets through public environment variables.
 - Use `/library/items` paging and direct `/media/{id}` lookup. Never enumerate Plex to build
   a complete index or refresh the picker through `/all`; `/all` is processed-only legacy
   compatibility. Preserve processed IDs/links and version-specific Plex identities.
+  Initial processed catalog reads must wait for the shared first scan, with per-request
+  cancellation; only a successful scan result may be served during background refreshes.
 - Processed/Plex artwork matching must remain conservative and bounded: compare title/year
   or series/season/episode identity, reject ambiguity, and enrich only requested items.
   Library URL state must preserve room context without remounting or reconnecting the room.

@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
@@ -34,6 +35,9 @@ type Options struct {
 	Origins  string
 	Secure   bool
 	SameSite string
+	// Empty SessionDir is for ephemeral managers (tests/embedded callers).
+	SessionDir string
+	PublicDirs []string
 }
 
 type session struct {
@@ -44,6 +48,8 @@ type session struct {
 	access              bool
 	ctx                 context.Context
 	cancel              context.CancelFunc
+	privateCtx          context.Context
+	privateCancel       context.CancelFunc
 }
 type pending struct {
 	mu                sync.Mutex
@@ -67,6 +73,8 @@ type Manager struct {
 	pins     map[[32]byte]*pending
 	rates    map[string]rate
 	avatars  map[string]*avatarEntry
+	store    *sessionStore
+	closed   bool
 }
 type status struct {
 	Enabled       bool   `json:"enabled"`
@@ -102,6 +110,18 @@ func New(opts Options) (*Manager, error) {
 			return nil, errors.New("insecure Plex cookies are only supported on loopback origins; use HTTPS")
 		}
 		m.origins[u.Scheme+"://"+u.Host] = true
+	}
+	if opts.SessionDir != "" {
+		var err error
+		m.store, err = openSessionStore(opts.SessionDir, opts.PublicDirs)
+		if err != nil {
+			return nil, err
+		}
+		m.sessions, err = m.store.load()
+		if err != nil {
+			m.store.close()
+			return nil, err
+		}
 	}
 	return m, nil
 }
@@ -160,9 +180,12 @@ func (m *Manager) Register(mux *http.ServeMux) {
 }
 func (m *Manager) state(ctx context.Context) status {
 	v := status{Enabled: m.identity != nil}
-	if s, ok := ctx.Value(contextKey{}).(*session); ok && time.Now().Before(s.expires) {
+	if s, ok := ctx.Value(contextKey{}).(*session); ok {
 		s.mu.Lock()
 		defer s.mu.Unlock()
+		if s.ctx.Err() != nil || !time.Now().Before(s.expires) {
+			return v
+		}
 		v.Authenticated, v.Name, v.CanAccessRaw = true, s.name, s.access && s.ctx.Err() == nil && time.Since(s.checked) < accessTTL
 		v.ProfileID = s.profileID
 	}
@@ -180,18 +203,44 @@ func (m *Manager) CanAccess(ctx context.Context, mediaID string) bool {
 func (m *Manager) refresh(ctx context.Context, s *session) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if time.Since(s.checked) < accessTTL || s.ctx.Err() != nil {
+	if s.ctx.Err() != nil || !time.Now().Before(s.expires) || time.Since(s.checked) < accessTTL {
 		return
 	}
 	profile, access, err := m.verify(ctx, s.token, s.client)
+	if ctx.Err() != nil || s.ctx.Err() != nil {
+		return
+	}
 	s.checked = time.Now()
 	s.access = err == nil && access
 	if err == nil {
 		s.name, s.profileID, s.avatar = profile.name, profile.id, profile.avatar
 	}
-	if !s.access {
-		s.cancel()
+	if !s.access && s.privateCancel != nil {
+		// Cancel existing streams without destroying the login. A later valid
+		// membership check can issue a new private context under this session.
+		s.privateCancel()
+		s.privateCtx, s.privateCancel = nil, nil
 	}
+}
+
+func (s *session) revoke() {
+	// The lifetime cancel function never changes, so logout/expiry can stop
+	// streams immediately without waiting for a network check holding s.mu.
+	s.cancel()
+}
+
+func (s *session) privateContext() context.Context {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.access || s.ctx.Err() != nil || !time.Now().Before(s.expires) || time.Since(s.checked) >= accessTTL {
+		ctx, cancel := context.WithCancel(s.ctx)
+		cancel()
+		return ctx
+	}
+	if s.privateCtx == nil {
+		s.privateCtx, s.privateCancel = context.WithCancel(s.ctx)
+	}
+	return s.privateCtx
 }
 func (m *Manager) RequireMedia(w http.ResponseWriter, r *http.Request, mediaID string) bool {
 	if m.CanAccess(r.Context(), mediaID) {
@@ -278,11 +327,17 @@ func (m *Manager) verify(ctx context.Context, token, client string) (accountProf
 // Pruning and hard caps keep unauthenticated PIN creation and sessions bounded.
 func (m *Manager) pruneLocked() {
 	now := time.Now()
+	var expired [][32]byte
 	for k, s := range m.sessions {
-		if now.After(s.expires) {
-			s.cancel()
+		if !now.Before(s.expires) {
+			s.revoke()
 			delete(m.sessions, k)
+			expired = append(expired, k)
 		}
+	}
+	if err := m.store.remove(expired...); err != nil {
+		// Expired records remain unusable after restart even if cleanup fails.
+		log.Print("Unable to prune expired Plex sessions")
 	}
 	for k, p := range m.pins {
 		if now.After(p.expires) {
@@ -317,7 +372,7 @@ func (m *Manager) start(w http.ResponseWriter, r *http.Request) {
 	}
 	limit.count++
 	m.rates[host] = limit
-	full := len(m.pins) >= 128 || len(m.sessions) >= 2048 || len(m.rates) > 1024 || limit.count > 10
+	full := m.closed || len(m.pins) >= 128 || len(m.sessions) >= maxSessions || len(m.rates) > 1024 || limit.count > 10
 	m.mu.Unlock()
 	if full {
 		reply(w, 429, map[string]string{"error": "Too many sign-in attempts. Try again later."})
@@ -339,7 +394,7 @@ func (m *Manager) start(w http.ResponseWriter, r *http.Request) {
 	id := randomID()
 	m.mu.Lock()
 	delete(m.pins, sha256.Sum256([]byte(cookieID(r, pendingCookie))))
-	if len(m.pins) >= 128 {
+	if m.closed || len(m.pins) >= 128 {
 		m.mu.Unlock()
 		reply(w, 429, map[string]string{"error": "Too many sign-in attempts"})
 		return
@@ -414,19 +469,26 @@ func (m *Manager) poll(w http.ResponseWriter, r *http.Request) {
 	sessionContext, cancel := context.WithDeadline(context.Background(), expires)
 	s := &session{token: pin.AuthToken, client: p.client, name: profile.name, profileID: profile.id, avatar: profile.avatar, access: access, checked: time.Now(), expires: expires, ctx: sessionContext, cancel: cancel}
 	m.mu.Lock()
-	if m.pins[key] != p || len(m.sessions) >= 2048 {
+	if m.closed || m.pins[key] != p || len(m.sessions) >= maxSessions {
 		m.mu.Unlock()
 		cancel()
 		reply(w, 409, map[string]string{"error": "Sign-in changed. Please try again."})
 		return
 	}
-	delete(m.pins, key)
 	old := sha256.Sum256([]byte(cookieID(r, sessionCookie)))
+	newKey := sha256.Sum256([]byte(id))
+	if err := m.store.replace(newKey, old, s); err != nil {
+		m.mu.Unlock()
+		cancel()
+		reply(w, 503, map[string]string{"error": "Unable to save Plex sign-in. Please try again."})
+		return
+	}
+	delete(m.pins, key)
 	if previous := m.sessions[old]; previous != nil {
-		previous.cancel()
+		previous.revoke()
 		delete(m.sessions, old)
 	}
-	m.sessions[sha256.Sum256([]byte(id))] = s
+	m.sessions[newKey] = s
 	m.mu.Unlock()
 	m.cookie(w, pendingCookie, "", -time.Hour)
 	m.cookie(w, sessionCookie, id, sessionTTL)
@@ -439,9 +501,14 @@ func (m *Manager) logout(w http.ResponseWriter, r *http.Request) {
 	m.mu.Lock()
 	key := sha256.Sum256([]byte(cookieID(r, sessionCookie)))
 	if s := m.sessions[key]; s != nil {
-		s.cancel()
-		delete(m.sessions, key)
+		s.revoke()
 	}
+	if err := m.store.remove(key); err != nil {
+		m.mu.Unlock()
+		reply(w, 503, map[string]string{"error": "Unable to save Plex sign-out. Please try again."})
+		return
+	}
+	delete(m.sessions, key)
 	delete(m.pins, sha256.Sum256([]byte(cookieID(r, pendingCookie))))
 	m.mu.Unlock()
 	m.cookie(w, sessionCookie, "", -time.Hour)
@@ -483,13 +550,22 @@ func (m *Manager) Middleware(next http.Handler) http.Handler {
 			return
 		}
 		m.mu.Lock()
+		if m.closed {
+			m.mu.Unlock()
+			reply(w, 503, map[string]string{"error": "Plex sign-in is unavailable"})
+			return
+		}
 		m.pruneLocked()
 		s := m.sessions[sha256.Sum256([]byte(cookieID(r, sessionCookie)))]
 		m.mu.Unlock()
+		// Logout needs only the opaque cookie, not a membership check or the
+		// session lock held by an in-flight Plex request. Its handler checks CSRF.
+		if r.URL.Path == "/auth/plex/logout" {
+			next.ServeHTTP(w, r)
+			return
+		}
 		if s != nil && m.identity != nil {
-			if r.URL.Path != "/auth/plex/logout" {
-				m.refresh(r.Context(), s)
-			}
+			m.refresh(r.Context(), s)
 			r = r.WithContext(context.WithValue(r.Context(), contextKey{}, s))
 		}
 		allowed := m.state(r.Context()).CanAccessRaw
@@ -519,7 +595,7 @@ func (m *Manager) Middleware(next http.Handler) http.Handler {
 		}
 		if protected && s != nil {
 			ctx, cancel := context.WithCancel(r.Context())
-			stop := context.AfterFunc(s.ctx, cancel)
+			stop := context.AfterFunc(s.privateContext(), cancel)
 			defer cancel()
 			defer stop()
 			r = r.WithContext(ctx)
@@ -547,12 +623,18 @@ func (w *privateWriter) Write(data []byte) (int, error) {
 func (m *Manager) Close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if m.closed {
+		return
+	}
+	m.closed = true
 	for _, s := range m.sessions {
-		s.cancel()
+		s.revoke()
 	}
 	m.sessions = map[[32]byte]*session{}
 	m.pins = map[[32]byte]*pending{}
 	m.avatars = map[string]*avatarEntry{}
+	// Every mutation was already committed; shutdown only releases resources.
+	m.store.close()
 }
 
 // String deliberately avoids any credentials when inspected by diagnostics.

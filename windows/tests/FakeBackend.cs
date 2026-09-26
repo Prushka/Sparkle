@@ -21,6 +21,7 @@ internal static class FakeBackend
         File.WriteAllText(Path.Combine(directory, "configuration.txt"), String.Join("\n", new[] {
             Environment.GetEnvironmentVariable("ADDR"), Environment.GetEnvironmentVariable("OUTPUT"),
             Environment.GetEnvironmentVariable("PFP_DIR"), Environment.GetEnvironmentVariable("MEDIA_CACHE_DIR"),
+            Environment.GetEnvironmentVariable("PLEX_AUTH_SESSION_DIR"),
             Environment.GetEnvironmentVariable("PLEX_PATH_MAPPINGS")
         }));
         File.WriteAllText(Path.Combine(directory, "backend-console.txt"), GetConsoleWindow().ToInt64().ToString());

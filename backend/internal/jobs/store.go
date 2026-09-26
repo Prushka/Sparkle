@@ -60,13 +60,17 @@ type Store struct {
 	expiresAt  time.Time
 	cached     []byte
 	etag       string
-	refreshing bool
+	refreshing *refreshCall
+}
+
+type refreshCall struct {
+	done chan struct{}
+	err  error // Published by closing done.
 }
 
 func NewStore(outputDir string, ttl time.Duration) *Store {
-	store := &Store{outputDir: outputDir, ttl: ttl}
-	store.setPayload([]map[string]any{}, time.Time{})
-	return store
+	// A nil cache means no scan has succeeded yet; a scanned empty library is [].
+	return &Store{outputDir: outputDir, ttl: ttl}
 }
 
 func (s *Store) Prune() {
@@ -129,55 +133,69 @@ func (s *Store) Job(ctx context.Context, target string) ([]byte, string, error) 
 }
 
 func (s *Store) Payload(ctx context.Context) ([]byte, string, error) {
-	now := time.Now()
+	if err := ctx.Err(); err != nil {
+		return nil, "", err
+	}
 
-	s.mu.RLock()
+	s.mu.Lock()
 	cached := append([]byte(nil), s.cached...)
 	etag := s.etag
-	expired := !now.Before(s.expiresAt)
-	s.mu.RUnlock()
-
-	if expired {
-		s.RefreshAsync(ctx)
+	var pending *refreshCall
+	if cached == nil || !time.Now().Before(s.expiresAt) {
+		pending = s.refreshLocked(ctx)
 	}
-	return cached, etag, nil
+	s.mu.Unlock()
+
+	// Only an actual scan result can be served while revalidating. Cold readers
+	// join the startup scan (or start it) instead of returning a placeholder [].
+	if cached != nil {
+		return cached, etag, nil
+	}
+	select {
+	case <-ctx.Done():
+		return nil, "", ctx.Err()
+	case <-pending.done:
+		if pending.err != nil {
+			return nil, "", pending.err
+		}
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]byte(nil), s.cached...), s.etag, nil
 }
 
 func (s *Store) RefreshAsync(ctx context.Context) {
 	s.mu.Lock()
-	if s.refreshing {
-		s.mu.Unlock()
-		return
-	}
-	s.refreshing = true
-	s.mu.Unlock()
-
-	go s.refresh(context.WithoutCancel(ctx))
+	defer s.mu.Unlock()
+	s.refreshLocked(ctx)
 }
 
-func (s *Store) refresh(ctx context.Context) {
-	defer func() {
-		s.mu.Lock()
-		s.refreshing = false
-		s.mu.Unlock()
-	}()
+// refreshLocked coalesces startup, cold reads and background refreshes. The
+// caller must hold mu; canceling a reader must not cancel the shared scan.
+func (s *Store) refreshLocked(ctx context.Context) *refreshCall {
+	if s.refreshing == nil {
+		s.refreshing = &refreshCall{done: make(chan struct{})}
+		go s.refresh(context.WithoutCancel(ctx), s.refreshing)
+	}
+	return s.refreshing
+}
 
+func (s *Store) refresh(ctx context.Context, pending *refreshCall) {
 	jobs, err := s.scan(ctx)
-	if err != nil {
-		select {
-		case <-ctx.Done():
-			if errors.Is(err, ctx.Err()) {
-				return
-			}
-		default:
-		}
-		log.Print("job scan failed; serving stale cache")
-		return
+	if err == nil {
+		err = s.setPayload(jobs, time.Now())
 	}
 
-	if err := s.setPayload(jobs, time.Now()); err != nil {
-		log.Print("job scan failed to update cache")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err != nil {
+		// Payload errors also reach /all; never expose local filesystem paths.
+		log.Print("job scan failed; catalog cache unchanged")
+		pending.err = errors.New("processed library is unavailable")
 	}
+	s.refreshing = nil
+	close(pending.done)
 }
 
 func (s *Store) setPayload(jobs []map[string]any, now time.Time) error {

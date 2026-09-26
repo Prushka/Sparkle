@@ -47,7 +47,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("configuration error: %v", err)
 	}
-	for _, dir := range []string{cfg.PFPDir, cfg.MediaCacheDir} {
+	for _, dir := range []string{cfg.PFPDir, cfg.MediaCacheDir, cfg.PlexAuthSessionDir} {
 		if err := plexClient.ValidateWritable(dir); err != nil {
 			log.Fatalf("configuration error: %v", err)
 		}
@@ -57,7 +57,8 @@ func main() {
 	if plexClient != nil {
 		identity = plexClient.MachineIdentifier
 	}
-	auth, err := plexauth.New(plexauth.Options{Identity: identity, Origins: cfg.PlexAuthOrigins, Secure: cfg.PlexAuthCookieSecure, SameSite: cfg.PlexAuthCookieSameSite})
+	auth, err := plexauth.New(plexauth.Options{Identity: identity, Origins: cfg.PlexAuthOrigins, Secure: cfg.PlexAuthCookieSecure, SameSite: cfg.PlexAuthCookieSameSite,
+		SessionDir: cfg.PlexAuthSessionDir, PublicDirs: []string{cfg.OutputDir, cfg.PFPDir}})
 	if err != nil {
 		log.Fatalf("authentication configuration error: %v", err)
 	}

@@ -20,6 +20,7 @@ type fixture struct {
 	claimed        atomic.Bool
 	member         atomic.Bool
 	upstreamFailed atomic.Bool
+	revoked        atomic.Bool
 	checks         atomic.Int32
 }
 
@@ -51,7 +52,7 @@ func TestLogoutCancelsActivePrivateStream(t *testing.T) {
 	}
 }
 
-func setup(t *testing.T) *fixture {
+func setup(t *testing.T, sessionDir ...string) *fixture {
 	t.Helper()
 	f := &fixture{}
 	f.member.Store(true)
@@ -80,6 +81,10 @@ func setup(t *testing.T) *fixture {
 			}
 		case "/user":
 			f.checks.Add(1)
+			if f.revoked.Load() {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
 			if r.Header.Get("X-Plex-Token") != "account-secret" {
 				t.Error("incorrect server-side account token")
 			}
@@ -96,12 +101,22 @@ func setup(t *testing.T) *fixture {
 		}
 	}))
 	t.Cleanup(upstream.Close)
-	m, err := New(Options{Identity: func(context.Context) (string, error) { return "configured-server", nil }, Origins: "https://sparkle.test", Secure: true})
+	opts := Options{Identity: func(context.Context) (string, error) { return "configured-server", nil }, Origins: "https://sparkle.test", Secure: true}
+	if len(sessionDir) > 0 {
+		opts.SessionDir = sessionDir[0]
+	}
+	m, err := New(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.m = m
 	m.api = upstream.URL
+	f.useManager(t, m)
+	return f
+}
+
+func (f *fixture) useManager(t *testing.T, m *Manager) {
+	t.Helper()
+	f.m = m
 	mux := http.NewServeMux()
 	m.Register(mux)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -109,7 +124,6 @@ func setup(t *testing.T) *fixture {
 	})
 	f.h = m.Middleware(mux)
 	t.Cleanup(m.Close)
-	return f
 }
 func call(h http.Handler, method, path string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
 	r := httptest.NewRequest(method, "https://sparkle.test"+path, nil)
@@ -302,8 +316,8 @@ func TestNonMemberExpiryRevocationAndUpstreamFailure(t *testing.T) {
 			if w := call(f.h, "GET", "/media/plex-test/parts/1/file", c); w.Code != 401 {
 				t.Fatal("unauthorized bytes allowed", w.Code)
 			}
-			if mode != "nonmember" && s.ctx.Err() == nil {
-				t.Fatal("existing streams were not cancelled")
+			if s.privateContext().Err() == nil {
+				t.Fatal("private access context was not cancelled")
 			}
 			if w := call(f.h, "GET", "/media/public", c); w.Code != 200 {
 				t.Fatal("encoded access blocked")

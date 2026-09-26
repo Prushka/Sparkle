@@ -66,10 +66,14 @@ if (-not [System.IO.Path]::IsPathRooted($env:OUTPUT)) {
 }
 $env:OUTPUT = [System.IO.Path]::GetFullPath($env:OUTPUT)
 
-foreach ($directoryKey in @('PFP_DIR', 'MEDIA_CACHE_DIR')) {
+foreach ($directoryKey in @('PFP_DIR', 'MEDIA_CACHE_DIR', 'PLEX_AUTH_SESSION_DIR')) {
     $directoryValue = [Environment]::GetEnvironmentVariable($directoryKey, 'Process')
     if ([string]::IsNullOrWhiteSpace($directoryValue)) {
-        $directoryValue = if ($directoryKey -eq 'PFP_DIR') { './data/pfp' } else { './cache/media' }
+        $directoryValue = switch ($directoryKey) {
+            'PFP_DIR' { './data/pfp' }
+            'MEDIA_CACHE_DIR' { './cache/media' }
+            'PLEX_AUTH_SESSION_DIR' { './data/plex-auth' }
+        }
     }
     if (-not [System.IO.Path]::IsPathRooted($directoryValue)) {
         $directoryValue = Join-Path $rootDir $directoryValue

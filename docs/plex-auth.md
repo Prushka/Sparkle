@@ -47,6 +47,7 @@ There is no browser Plex token, client secret or redirect callback to configure.
 PLEX_AUTH_ORIGINS=https://watch.example.com
 PLEX_AUTH_COOKIE_SECURE=true
 PLEX_AUTH_COOKIE_SAMESITE=lax
+PLEX_AUTH_SESSION_DIR=./data/plex-auth
 ```
 
 `PLEX_AUTH_ORIGINS` is a comma-separated list of exact **frontend origins**,
@@ -92,10 +93,33 @@ requiring an exact match to the configured server's machine identifier and a
 server access token. It never trusts a browser-provided account token or server ID.
 
 The browser receives a random 256-bit, host-only HttpOnly session cookie. Plex
-tokens stay in backend memory, never localStorage, browser responses or logs.
-The cookie survives browser restarts for up to 14 days; **backend restarts sign
-everyone out**, because session credentials are deliberately not persisted to
-disk. The stable client-identifier cookie is not an access credential.
+tokens stay server-side, never in localStorage, browser responses or logs. Sessions
+survive browser and backend restarts until their original 14-day expiry; restarting
+does not extend it. The stable client-identifier cookie is not an access credential.
+
+`PLEX_AUTH_SESSION_DIR` defaults to `./data/plex-auth`. Startup scripts resolve it
+against the repository root; direct API execution uses the working directory.
+Its `sessions.db` stores account tokens, client identifiers, verified profiles and
+expiry under hashes of the random cookie IDs. Raw cookie IDs and cached membership
+decisions are not persisted. Each restored session rechecks the account and the
+currently configured server before private media access, even if the previous
+process had just checked membership. Pending PIN flows remain temporary.
+
+This directory contains credentials: keep it on persistent local storage outside
+`OUTPUT`, `PFP_DIR`, and mapped Plex media roots. Unix permissions are 0700 for the
+directory and 0600 for the database; Windows uses a protected ACL granting only the
+backend account and Local System access. Tokens are not encrypted within the database;
+protect its backups as credentials. The Compose example mounts `./data/plex-auth`
+separately so container recreation preserves sign-ins. A single backend owns the
+store; a second process sharing it is rejected. An inaccessible or corrupt store
+fails startup instead of silently dropping sessions. Stop the backend and remove
+the database to deliberately reset all sign-ins.
+
+Sign-in, session replacement and sign-out commit synchronously using the local
+transactional database, including before an abrupt process exit. A storage failure
+returns an error instead of acknowledging a login or logout that would be lost on
+restart. Expired records are pruned. On upgrade from memory-only sessions, users
+must sign in once with the new backend; subsequent restarts retain their sessions.
 
 Plex avatar URLs and tokens remain server-side. A hashed profile identifier uses
 the existing room-avatar route, so other participants can see the picture without
@@ -105,8 +129,11 @@ and non-image/oversized responses, and use a memory
 cache capped at 64 images of 512 KiB each. No avatar is written to mapped media.
 
 Membership is rechecked after five minutes on subsequent requests and active
-Raw-room socket checks. Plex verification failures fail closed. Sign-out revokes
-the session, cancels its in-flight private requests and removes its cookie.
+Raw-room socket checks. Plex verification failures fail closed and cancel private
+requests, while keeping the saved login available for a later successful check.
+Sign-out durably revokes the session, cancels its in-flight private requests and
+removes its cookie. Failed sign-out storage writes still stop current access and
+report an error; retry sign-out to commit the removal.
 Room sockets check access before reading/writing messages and on their heartbeat.
 Already received or buffered bytes cannot be recalled. The frontend also refreshes
 session state on focus and once per minute while visible, covering other tabs.
@@ -120,7 +147,9 @@ Plex sign-in PINs and reads identity/resources; catalog access stays read-only.
 
 `go test ./...` includes mocked Plex flows, non-members, forged and expired
 cookies, CSRF/origin rejection, access revocation, private route guards and
-two-client WebSocket room changes. `go test -race ./...` checks concurrency.
+two-client WebSocket room changes. Persistence tests cover restarts, abrupt process
+exit, expiry, concurrent login/logout, replacement, membership/token revocation,
+storage failures and private filesystem permissions. `go test -race ./...` checks concurrency.
 
 With the frontend and backend running:
 

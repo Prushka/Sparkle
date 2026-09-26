@@ -167,7 +167,17 @@ func TestStorePayloadCompactsModernJobJSON(t *testing.T) {
 		"dominantColors": ["#514940"]
 	}`)
 
-	jobs := waitForPayloadJobs(t, NewStore(outputDir, time.Minute), 1)
+	payload, etag, err := NewStore(outputDir, time.Minute).Payload(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var jobs []map[string]any
+	if err := json.Unmarshal(payload, &jobs); err != nil {
+		t.Fatal(err)
+	}
+	if len(jobs) != 1 || etag == "" {
+		t.Fatalf("first payload = %s, ETag = %q; want one job and a validator", payload, etag)
+	}
 	job := jobs[0]
 	if got := job["Id"]; got != "s6IKH" {
 		t.Fatalf("Id = %v, want s6IKH", got)
