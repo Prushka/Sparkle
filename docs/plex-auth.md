@@ -1,9 +1,11 @@
 # Plex sign-in and access
 
 Use **Sign in with Plex** in Library or the room's Media section. Sparkle opens
-Plex's hosted sign-in window; passwords stay with Plex. The same account button
-offers **Sign out of Plex**. A Raw room presents sign-in and leave actions until
-the account is authorized. Leaving this prompt does not change the shared room.
+Plex's hosted sign-in window; passwords stay with Plex. Once sign-in succeeds,
+the open Sparkle account popup updates with the verified Plex name and profile
+picture, and offers **Sign out of Plex**. A Raw room presents sign-in and leave
+actions until the account is authorized. Leaving this prompt does not change the
+shared room.
 
 While signed in, room badges, chat and other participants use the verified Plex
 name and profile picture. Clicking your room badge opens **Plex account** instead

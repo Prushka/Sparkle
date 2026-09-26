@@ -9,7 +9,7 @@ const plexProfileId = 'plex-0123456789abcdef0123456789abcdef';
 async function fixture(
 	page: Page,
 	member = true,
-	options: { cookiesBlocked?: boolean; manualAuthorization?: boolean } = {}
+	options: { cookiesBlocked?: boolean; manualAuthorization?: boolean; name?: string } = {}
 ) {
 	let signedIn = false;
 	let authorized = false;
@@ -21,7 +21,7 @@ async function fixture(
 		enabled: true,
 		authenticated: signedIn,
 		canAccessRaw: signedIn && member,
-		...(signedIn ? { name: 'Test member', profileId: plexProfileId } : {})
+		...(signedIn ? { name: options.name || 'Test member', profileId: plexProfileId } : {})
 	});
 	await page.route('**/api/runtime-env', (route) =>
 		route.fulfill({ json: { backendBaseUrl: '/be', staticBaseUrl: '/static' } })
@@ -173,9 +173,19 @@ async function signIn(page: Page) {
 	if (!authWindow.isClosed()) await authWindow.close();
 }
 
+async function expectAccountIdentity(page: Page, name = 'Test member') {
+	const identity = page.getByRole('dialog').getByRole('status').filter({ hasText: 'Signed in as' });
+	await expect(identity.getByText(name, { exact: true })).toBeVisible();
+	const avatar = identity.getByRole('img');
+	await expect(avatar).toHaveAttribute('src', new RegExp(`/pfp/${plexProfileId}\\.png`));
+	await expect
+		.poll(() => avatar.evaluate((img: HTMLImageElement) => img.naturalWidth))
+		.toBeGreaterThan(0);
+}
+
 test('guest Library, member sign-in, cookie privacy and sign-out work on desktop and mobile', async ({
 	page
-}) => {
+}, testInfo) => {
 	const f = await fixture(page);
 	await page.goto('/public-room');
 	await expect(page.getByRole('link', { name: /Public movie/ })).toBeVisible({ timeout: 30_000 });
@@ -198,6 +208,19 @@ test('guest Library, member sign-in, cookie privacy and sign-out work on desktop
 	await page.getByRole('button', { name: 'Sign in with Plex', exact: true }).click();
 	await signIn(page);
 	await expect(page.getByRole('button', { name: 'Sign out of Plex' })).toBeVisible();
+	// The original dialog updates without closing it, navigating or reloading.
+	await expectAccountIdentity(page);
+	for (const width of [320, 390, 1280]) {
+		await page.setViewportSize({ width, height: 844 });
+		const dialog = page.getByRole('dialog');
+		const bounds = await dialog.boundingBox();
+		expect(bounds!.x).toBeGreaterThanOrEqual(0);
+		expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+		expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+			true
+		);
+		await dialog.screenshot({ path: testInfo.outputPath(`plex-account-${width}.png`) });
+	}
 	await page.keyboard.press('Escape');
 	await expect(page.getByRole('link', { name: /Private movie/ })).toBeVisible();
 	expect(await page.evaluate(() => document.cookie)).not.toContain('sparkle_plex_session');
@@ -207,8 +230,11 @@ test('guest Library, member sign-in, cookie privacy and sign-out work on desktop
 	await page.reload();
 	await expect(page.getByRole('button', { name: 'Plex account', exact: true })).toBeVisible();
 	await page.getByRole('button', { name: 'Plex account', exact: true }).click();
+	await expectAccountIdentity(page);
 	await page.getByRole('button', { name: 'Sign out of Plex' }).click();
 	await expect(page.getByRole('button', { name: 'Continue with Plex' })).toBeVisible();
+	await expect(page.getByRole('dialog').getByText('Test member', { exact: true })).toHaveCount(0);
+	await expect(page.getByRole('dialog').locator('img')).toHaveCount(0);
 	await page.keyboard.press('Escape');
 	await expect(page.getByRole('link', { name: /Private movie/ })).toHaveCount(0);
 	await expect(page.getByRole('combobox', { name: 'Source', exact: true })).toContainText(
@@ -241,6 +267,7 @@ test('Raw room prompts, resumes the same room after sign-in and gates sign-out',
 		page.getByRole('dialog').getByRole('heading', { name: 'Plex account' })
 	).toBeVisible();
 	await expect(page.getByRole('dialog').getByRole('textbox')).toHaveCount(0);
+	await expectAccountIdentity(page);
 	await page.getByRole('button', { name: 'Sign out of Plex' }).click();
 	await expect(page.getByRole('heading', { name: 'Plex access required' })).toBeVisible();
 	await expect(page.getByRole('region', { name: 'Current media' })).toHaveCount(0);
@@ -258,7 +285,26 @@ test('an authenticated Plex account without server membership cannot enter a Raw
 	await signIn(page);
 	await expect(page.getByRole('dialog').getByRole('alert')).toContainText('does not have access');
 	await expect(page.getByRole('button', { name: 'Sign out of Plex' })).toBeVisible();
+	await expectAccountIdentity(page);
 	await expect(page.getByRole('region', { name: 'Current media' })).toHaveCount(0);
+});
+
+test('account popup keeps a long name and avatar fallback readable on mobile', async ({ page }) => {
+	const name = 'LongPlexUsername'.repeat(8);
+	await fixture(page, true, { name });
+	await page.route(`**/static/pfp/${plexProfileId}.png*`, (route) =>
+		route.fulfill({ status: 404 })
+	);
+	await page.setViewportSize({ width: 320, height: 844 });
+	await page.goto('/public-room');
+	await page.getByRole('button', { name: 'Sign in with Plex', exact: true }).click();
+	await signIn(page);
+	const dialog = page.getByRole('dialog');
+	await expect(dialog.getByText(name, { exact: true })).toBeVisible();
+	await expect(dialog.getByRole('img', { name: `${name} pfp`, exact: true })).toHaveText('L');
+	await expect(dialog.locator('img')).toHaveCount(0);
+	expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+	expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
 
 test('Plex profile overrides an Encoded room and sign-out restores guest customization', async ({
@@ -295,6 +341,7 @@ test('Plex profile overrides an Encoded room and sign-out restores guest customi
 	await expect(profile).toContainText('Saved guest');
 	await page.getByRole('button', { name: 'Sign in with Plex', exact: true }).click();
 	await signIn(page);
+	await expectAccountIdentity(page);
 	await page.keyboard.press('Escape');
 	await expect(profile).toContainText('Test member');
 	await profile.click();
@@ -353,6 +400,7 @@ test('delayed authorization survives a closed popup handle and a stale focus ref
 	expect(pending.status()).toBe(202);
 	f.authorize();
 	await expect(page.getByRole('button', { name: 'Sign out of Plex' })).toBeVisible();
+	await expectAccountIdentity(page);
 	const staleResponse = page.waitForResponse('**/be/auth/plex/session');
 	releaseRefresh();
 	await staleResponse;

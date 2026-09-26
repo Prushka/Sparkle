@@ -13,6 +13,7 @@ import {
 import { IconChevronRight, IconLoader2, IconLogout } from '@tabler/icons-react';
 import { Button } from '@/components/ui/button';
 import * as Dialog from '@/components/ui/dialog';
+import { Pfp } from '@/components/player/Pfp';
 import { joinBackendPath, loadRuntimeConfig } from '@/lib/player/data';
 import { plexAccessRequiredEvent } from '@/lib/plex-access';
 
@@ -201,7 +202,9 @@ export function PlexAccountButton({ children }: { children?: ReactElement } = {}
 					<Dialog.Title>Plex account</Dialog.Title>
 					<Dialog.Description>
 						{auth.authenticated
-							? `Signed in as ${auth.name || 'a Plex user'}. ${auth.canAccessRaw ? 'Raw media is available.' : 'This account needs access to this Plex server.'}`
+							? auth.canAccessRaw
+								? 'Raw media is available.'
+								: 'This account needs access to this Plex server.'
 							: 'Sign in with a server member’s Plex account to browse and play Raw media. Encoded media is available without signing in.'}
 					</Dialog.Description>
 				</Dialog.DialogHeader>
@@ -211,10 +214,47 @@ export function PlexAccountButton({ children }: { children?: ReactElement } = {}
 	);
 }
 
+function PlexAccountIdentity() {
+	const auth = usePlexAuth();
+	const [staticBaseUrl, setStaticBaseUrl] = useState('');
+	useEffect(() => {
+		let cancelled = false;
+		void loadRuntimeConfig()
+			.then((config) => {
+				if (!cancelled) setStaticBaseUrl(config.staticBaseUrl);
+			})
+			.catch(() => {
+				// Keep the name/initial visible if the avatar service is unavailable.
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, []);
+	const name = auth.name || 'Plex user';
+	return (
+		<div
+			role="status"
+			className="flex min-w-0 items-center gap-3 rounded-lg border bg-muted/40 p-4"
+		>
+			<Pfp
+				id={staticBaseUrl ? auth.profileId || '' : ''}
+				name={name}
+				staticBaseUrl={staticBaseUrl}
+				className="size-14 shrink-0 text-xl"
+			/>
+			<div className="min-w-0">
+				<p className="text-sm text-muted-foreground">Signed in as</p>
+				<p className="font-semibold [overflow-wrap:anywhere]">{name}</p>
+			</div>
+		</div>
+	);
+}
+
 function PlexAuthActions() {
 	const auth = usePlexAuth();
 	return (
 		<>
+			{auth.authenticated && <PlexAccountIdentity />}
 			{auth.error && (
 				<p role="alert" className="text-sm text-destructive">
 					{auth.error}
