@@ -138,14 +138,26 @@ storage; matching uses the track within the same media, then title/language acro
 media. Automatic fallbacks never overwrite the saved choice. Existing explicit
 Raw audio choices remain supported until a new shared choice is made.
 
-Subtitles share the Encoded default format/language priorities in every Raw mode:
+Subtitles share the Encoded selection and persistence policy in every Raw mode:
 ASS/SSA, VTT, SRT, then
 PGS/SUP on desktop, with VTT ahead of ASS on iOS/Android; prefer English within
-the selected format. Each source retains its own saved subtitle choices and Off
-state; preference matching, track ordering, and layer behavior are not yet identical.
-Raw audio and subtitle choices stay local. Up to three embedded subtitle layers
-share one demuxer and clock; layer preferences are stored separately from the
-existing processed subtitle preferences. Media-version choices are room-wide.
+the selected format. Saved choices retain their language when the exact track is
+missing. Both sources use `subtitleSelection`, `subtitleLanguage`, and per-format
+`subtitleLayers`; Off and explicit selections carry between sources. Automatic
+fallbacks do not overwrite the saved primary preference. Raw identities include
+the media version and original stream index, so duplicate titles restore correctly
+across Compatible, Encoded AV1, and Encoded HEVC. Legacy Raw preferences are used
+when no shared preference exists; legacy title-only choices cannot identify which
+of two identically titled tracks was previously selected.
+
+Both menus use the same format tabs and track toggles: Styled (ASS/SSA), Native
+(VTT), Text (SRT), and Image (PGS/SUP), showing only available formats. ASS and VTT
+support same-format companions. Changing formats restores that format's layers;
+turning off the primary promotes its next companion. Raw retains its bounded
+maximum of three simultaneous tracks. SRT and PGS select one track at a time.
+Raw packets and extracted Encoded files use their respective renderers, with
+shared catalog construction, preference matching, toggle transitions, and storage.
+Audio and subtitle choices stay local. Media-version choices are room-wide.
 Multipart positions are converted to one seconds-based room timeline. Parts
 without reliable durations are explicitly rejected rather than synchronized to
 an invented timeline. Raw storyboards are optional and currently omitted;

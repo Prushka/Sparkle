@@ -111,6 +111,10 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   Keep Encoded and Raw defaults in `lib/player/track-selection.ts`: audio prefers Japanese,
   English, then Chinese; subtitle format/language priorities are shared. Persist audio only
   after explicit selection, never while applying defaults or falling back from missing tracks.
+  Keep subtitle catalog construction, toggles, matching and per-format layer persistence
+  shared in `lib/player/subtitle-selection.ts` and `SubtitlesMenuSection.tsx`. Preserve
+  Encoded's format/language policy and layout; Raw uses version/stream identities rather
+  than titles and caps same-format ASS/VTT playback at three simultaneous tracks.
 - Audio normalization is a local control beside Captions. Preserve the PCM hook before
   user volume and the native element's clock, volume and mute. Downmix to stereo before
   measuring loudness; link left/right gain and guard peaks after mixing. Keep bounded

@@ -31,12 +31,23 @@ import {
 import { RawSubtitles } from './raw-subtitles';
 import { RawPictureInPicture } from './raw-pip';
 import { AudioNormalization, reportNormalization } from './audio-normalization';
-import { pickRawAudioTrack, pickRawSubtitleTrack, rawSelectionStream } from './raw-track-selection';
 import {
-	readTrackPreference,
-	saveStoredAudioSelection,
-	writeTrackPreference
-} from './track-selection';
+	pickRawAudioTrack,
+	getRawSubtitleTracks,
+	restoreRawSubtitleLayers,
+	rawSelectionStream
+} from './raw-track-selection';
+import {
+	getSubtitleFormatSelection,
+	getToggledSubtitleSelection,
+	getStoredSubtitleLayerSrcs,
+	getSubtitleLayerTracks,
+	sanitizeSubtitleLayerSelection,
+	persistSubtitleTrackSelection,
+	type SubtitleTrackInfo,
+	type SubtitleSelectionState
+} from './subtitle-selection';
+import { saveStoredAudioSelection, type SubtitleTrackFormat } from './track-selection';
 
 export const RAW_MEDIA_TYPE = 'video/x-sparkle-raw';
 export const RAW_STATUS_EVENT = 'sparkle-raw-status';
@@ -133,7 +144,8 @@ export class RawProvider implements MediaProviderAdapter {
 			else void this.ctx.player.pause().catch(() => {});
 		}
 	);
-	private captionRestore?: { subtitle: number; layers: number[] };
+	private captionRestore?: { src: string; layers: string[] };
+	subtitleSelectionTracks: (SubtitleTrackInfo & { id: number })[] = [];
 	private audioContainer = document.createElement('div');
 	private engine?: Engine;
 	private mediaId = '';
@@ -548,6 +560,8 @@ export class RawProvider implements MediaProviderAdapter {
 							String(s.metadata.title || s.metadata.language || `${type} ${s.index + 1}`)
 					};
 				});
+		const subtitleTracks = this.encoded?.subtitleTracks ?? list('subtitle');
+		this.subtitleSelectionTracks = getRawSubtitleTracks(subtitleTracks, this.mediaId);
 		this.publish({
 			output: plan?.output ?? 'SDR',
 			renderer: plan?.renderer ?? (nativeVideo ? 'native' : undefined),
@@ -555,7 +569,7 @@ export class RawProvider implements MediaProviderAdapter {
 				? `${this.hdrPreference === 'auto' ? 'Slow connection · ' : ''}Shared NVENC ${this.encoded.codec.toUpperCase()}${/Dolby|HDR10\+/.test(originalHDR) ? ` · ${this.encoded.output} conversion` : ''}.`
 				: plan?.reason,
 			audioTracks: list('audio'),
-			subtitleTracks: this.encoded?.subtitleTracks ?? list('subtitle'),
+			subtitleTracks,
 			ready: true,
 			changing: false
 		});
@@ -581,7 +595,7 @@ export class RawProvider implements MediaProviderAdapter {
 		if (!this.initialized) {
 			this.initialized = true;
 			const audio = pickRawAudioTrack(this.status.audioTracks, this.mediaId);
-			const subtitle = pickRawSubtitleTrack(this.status.subtitleTracks);
+			const subtitle = this.subtitleSelectionTracks.find((track) => track.default);
 			if (audio) await (this.audioEngine ?? engine).selectAudio(audio.id, false, !!this.encoded);
 			if (subtitle && !this.encoded) await engine.selectSubtitle(subtitle.id);
 			engine.setSubtitleEnable(!!subtitle);
@@ -589,23 +603,18 @@ export class RawProvider implements MediaProviderAdapter {
 				audio: (this.audioEngine ?? engine).getSelectedAudioStreamId(),
 				subtitle: subtitle?.id ?? -1
 			});
-			this.encodedCaptions?.select([this.status.subtitle ?? -1]);
-			try {
-				const names: unknown = JSON.parse(
-					readTrackPreference('sparkle.raw.subtitleLayers') || '[]'
-				);
-				if (Array.isArray(names)) {
-					const ids = names
-						.slice(0, 2)
-						.map((name) => this.status.subtitleTracks.find((t) => t.title === name)?.id ?? -1);
-					if (ids.length) {
-						await this.applySubtitleLayers(ids);
-						if (!this.encoded) await engine.seek(engine.currentTime);
-					}
-				}
-			} catch {
-				/* Invalid local preferences do not prevent playback. */
-			}
+			const layerSrcs = subtitle
+				? restoreRawSubtitleLayers(
+						this.subtitleSelectionTracks,
+						subtitle,
+						this.status.subtitleTracks
+					)
+				: [];
+			const ids = this.subtitleSelectionTracks
+				.filter((track) => layerSrcs.includes(track.src))
+				.map((track) => track.id);
+			await this.applySubtitleLayers(ids);
+			if (ids.length && !this.encoded) await engine.seek(engine.currentTime);
 		}
 		this.setVolume(this.volume);
 		engine.setPlaybackRate(this.rate);
@@ -703,84 +712,133 @@ export class RawProvider implements MediaProviderAdapter {
 		this.audioRate = rate;
 	}
 	async selectTrack(kind: 'audio' | 'subtitle', id: number) {
+		if (kind === 'subtitle')
+			return this.subtitleCommand((tracks) => {
+				const primaryTrack = tracks.find((track) => track.id === id) ?? null;
+				if (id >= 0 && !primaryTrack) return null;
+				return {
+					primaryTrack,
+					layerTracks: primaryTrack
+						? getSubtitleLayerTracks(getStoredSubtitleLayerSrcs(tracks, primaryTrack), tracks)
+						: []
+				};
+			});
 		const expectedEngine = this.engine;
 		if (!this.status.ready || this.status.changing || !this.initialized) return;
 		return this.enqueue(async () => {
 			if (!this.engine || this.engine !== expectedEngine || !this.initialized) return;
-			const tracks = kind === 'audio' ? this.status.audioTracks : this.status.subtitleTracks;
-			if ((id < 0 && kind === 'audio') || (id >= 0 && !tracks.some((t) => t.id === id))) return;
-			if (this.status[kind] === id) {
-				if (kind === 'audio')
-					saveStoredAudioSelection(
-						rawSelectionStream(
-							tracks.find((t) => t.id === id)!,
-							'audio'
-						),
-						this.mediaId
-					);
-				return;
-			}
-			if (kind === 'subtitle' && this.encodedCaptions) {
-				this.publish({ subtitle: id, subtitleLayers: [] });
-				this.encodedCaptions.select([id]);
-				localStorage.setItem(
-					'sparkle.raw.subtitle',
-					id < 0 ? 'off' : (tracks.find((t) => t.id === id)?.title ?? '')
-				);
-				localStorage.setItem('sparkle.raw.subtitleLayers', '[]');
-				return;
-			}
-			this.publish({ changing: true });
-			const wasPaused = this.paused,
-				time = this.timeline;
-			await this.engine.pause();
-			await this.audioEngine?.pause();
-			this.normalizers.forEach((normalizer) => normalizer.reset());
-			if (kind === 'audio')
+			const track = this.status.audioTracks.find((track) => track.id === id);
+			if (!track) return;
+			if (this.status.audio !== id) {
+				this.publish({ changing: true });
+				const wasPaused = this.paused,
+					time = this.timeline;
+				await this.engine.pause();
+				await this.audioEngine?.pause();
+				this.normalizers.forEach((normalizer) => normalizer.reset());
 				await (this.audioEngine ?? this.engine).selectAudio(id, false, !!this.encoded);
-			else {
-				await this.applySubtitleLayers([]);
-				localStorage.setItem('sparkle.raw.subtitleLayers', '[]');
-				this.engine.setSubtitleEnable(id >= 0);
-				if (id >= 0) await this.engine.selectSubtitle(id);
+				if (this.engine !== expectedEngine || this.destroyed) return;
+				const ms = BigInt(Math.round((time - this.raw!.parts[this.part].start) * 1000));
+				await this.engine.seek(ms);
+				await this.audioEngine?.seek(ms);
+				if (!wasPaused) await this.start();
+				if (this.engine !== expectedEngine || this.destroyed) return;
+				this.publish({ audio: id, changing: false });
 			}
-			const ms = BigInt(Math.round((time - this.raw!.parts[this.part].start) * 1000));
-			await this.engine.seek(ms);
-			await this.audioEngine?.seek(ms);
-			if (!wasPaused) await this.start();
-			const title = (kind === 'audio' ? this.status.audioTracks : this.status.subtitleTracks).find(
-				(t) => t.id === id
-			)?.title;
-			if (kind === 'audio')
-				saveStoredAudioSelection(
-					rawSelectionStream(
-						tracks.find((t) => t.id === id)!,
-						'audio'
-					),
-					this.mediaId
-				);
-			else writeTrackPreference('sparkle.raw.subtitle', id < 0 ? 'off' : (title ?? ''));
-			this.publish({ [kind]: id, changing: false });
+			saveStoredAudioSelection(rawSelectionStream(track, 'audio'), this.mediaId);
 		});
 	}
-	async toggleSubtitles() {
-		if (!this.status.ready || this.status.changing || !this.initialized) return;
-		const subtitle = this.status.subtitle ?? -1,
-			layers = this.status.subtitleLayers ?? [];
-		if (subtitle >= 0 || layers.some((id) => id >= 0)) {
-			this.captionRestore = { subtitle, layers: [...layers] };
-			if (subtitle >= 0) await this.selectTrack('subtitle', -1);
-			else await this.selectSubtitleLayers([]);
-		} else {
-			const restore = this.captionRestore;
-			await this.selectTrack(
-				'subtitle',
-				restore?.subtitle ??
-					pickRawSubtitleTrack(this.status.subtitleTracks, undefined, null)?.id ??
-					-1
-			);
-			if (restore?.layers.length) await this.selectSubtitleLayers(restore.layers);
-		}
+	changeSubtitleFormat(format: SubtitleTrackFormat) {
+		return this.subtitleCommand((tracks) => getSubtitleFormatSelection(tracks, format));
+	}
+	toggleSubtitleTrack(src: string, checked: boolean) {
+		return this.subtitleCommand((tracks) => {
+			const track = tracks.find((track) => track.src === src);
+			if (!track) return null;
+			const primary = tracks.find((track) => track.id === this.status.subtitle) ?? null;
+			const layers = tracks
+				.filter((track) => this.status.subtitleLayers?.includes(track.id))
+				.map((track) => track.src);
+			return getToggledSubtitleSelection(tracks, primary, layers, track, checked, 2);
+		});
+	}
+	toggleSubtitles() {
+		return this.subtitleCommand((tracks) => {
+			const primaryTrack = tracks.find((track) => track.id === this.status.subtitle);
+			if (primaryTrack) {
+				this.captionRestore = {
+					src: primaryTrack.src,
+					layers: tracks
+						.filter((track) => this.status.subtitleLayers?.includes(track.id))
+						.map((track) => track.src)
+				};
+				return { primaryTrack: null, layerTracks: [] };
+			}
+			const primary =
+				tracks.find((track) => track.src === this.captionRestore?.src) ??
+				getRawSubtitleTracks(this.status.subtitleTracks, this.mediaId, undefined, null).find(
+					(track) => track.default
+				) ??
+				null;
+			return {
+				primaryTrack: primary,
+				layerTracks: primary
+					? getSubtitleLayerTracks(
+							this.captionRestore?.layers ?? getStoredSubtitleLayerSrcs(tracks, primary),
+							tracks
+						)
+					: []
+			};
+		});
+	}
+	private subtitleCommand(
+		resolve: (tracks: (SubtitleTrackInfo & { id: number })[]) => SubtitleSelectionState | null
+	) {
+		const engine = this.engine;
+		if (!engine || !this.status.ready || !this.initialized) return Promise.resolve();
+		return this.enqueue(async () => {
+			if (this.engine !== engine || !this.initialized) return;
+			const tracks = this.subtitleSelectionTracks;
+			const next = resolve(tracks);
+			if (!next) return;
+			const primary = next.primaryTrack;
+			const id = tracks.find((track) => track.src === primary?.src)?.id ?? -1;
+			const layerSrcs = sanitizeSubtitleLayerSelection(
+				next.layerTracks.map((track) => track.src),
+				tracks,
+				primary
+			).slice(0, 2);
+			const layers = layerSrcs.map((src) => tracks.find((track) => track.src === src)!.id);
+			const same =
+				id === this.status.subtitle &&
+				layers.length === (this.status.subtitleLayers?.length ?? 0) &&
+				layers.every((id, i) => id === this.status.subtitleLayers?.[i]);
+			if (!same) {
+				this.publish({ changing: true });
+				if (this.encodedCaptions) {
+					this.encodedCaptions.select([id, ...layers]);
+				} else {
+					const wasPaused = this.paused,
+						time = engine.currentTime;
+					await engine.pause();
+					await this.audioEngine?.pause();
+					if (this.engine !== engine || this.destroyed) return;
+					await this.applySubtitleLayers([]);
+					engine.setSubtitleEnable(id >= 0);
+					if (id >= 0) await engine.selectSubtitle(id);
+					if (this.engine !== engine || this.destroyed) return;
+					this.publish({ subtitle: id });
+					await this.applySubtitleLayers(layers);
+					await engine.seek(time);
+					await this.audioEngine?.seek(time);
+					if (this.engine !== engine || this.destroyed) return;
+					if (!wasPaused) await this.start();
+				}
+				if (this.engine !== engine || this.destroyed) return;
+			}
+			persistSubtitleTrackSelection(tracks, primary, getSubtitleLayerTracks(layerSrcs, tracks));
+			this.publish({ subtitle: id, subtitleLayers: layers, changing: false });
+		});
 	}
 	private async applySubtitleLayers(ids: number[]) {
 		if (!this.engine) return;
@@ -821,41 +879,10 @@ export class RawProvider implements MediaProviderAdapter {
 		this.publish({ subtitleLayers: selected });
 	}
 	selectSubtitleLayers(ids: number[]) {
-		const expectedEngine = this.engine;
-		if (!this.status.ready || this.status.changing || !this.initialized) return Promise.resolve();
-		return this.enqueue(async () => {
-			if (!this.engine || this.engine !== expectedEngine || !this.initialized) return;
-			if (this.encodedCaptions) {
-				await this.applySubtitleLayers(ids);
-				localStorage.setItem(
-					'sparkle.raw.subtitleLayers',
-					JSON.stringify(
-						this.status.subtitleLayers?.map(
-							(id) => this.status.subtitleTracks.find((track) => track.id === id)?.title ?? null
-						)
-					)
-				);
-				return;
-			}
-			const time = this.engine.currentTime,
-				wasPaused = this.paused;
-			this.publish({ changing: true });
-			await this.engine.pause();
-			await this.audioEngine?.pause();
-			await this.applySubtitleLayers(ids);
-			await this.engine.seek(time);
-			await this.audioEngine?.seek(time);
-			if (!wasPaused) await this.start();
-			localStorage.setItem(
-				'sparkle.raw.subtitleLayers',
-				JSON.stringify(
-					this.status.subtitleLayers?.map(
-						(id) => this.status.subtitleTracks.find((t) => t.id === id)?.title ?? null
-					)
-				)
-			);
-			this.publish({ changing: false });
-		});
+		return this.subtitleCommand((tracks) => ({
+			primaryTrack: tracks.find((track) => track.id === this.status.subtitle) ?? null,
+			layerTracks: ids.flatMap((id) => tracks.find((track) => track.id === id) ?? [])
+		}));
 	}
 	async chooseCompatibleHDR() {
 		return this.chooseHDR('compatible');

@@ -15,7 +15,11 @@ const audio = ['eng', 'chi', 'jpn'].map((Language, i) => ({
 const subtitleStreams = [
 	{ Index: 4, Language: 'chi', Title: 'Chinese text', Location: '4.srt', CodecType: 'subtitle' },
 	{ Index: 5, Language: 'jpn', Title: 'Japanese styled', Location: '5.ass', CodecType: 'subtitle' },
-	{ Index: 6, Language: 'eng', Title: 'English styled', Location: '6.ass', CodecType: 'subtitle' }
+	{ Index: 6, Language: 'eng', Title: 'English styled', Location: '6.ass', CodecType: 'subtitle' },
+	{ Index: 7, Language: 'eng', Title: 'English styled', Location: '7.ass', CodecType: 'subtitle' },
+	{ Index: 8, Language: 'chi', Title: 'Chinese styled', Location: '8.ass', CodecType: 'subtitle' },
+	{ Index: 9, Language: 'eng', Title: 'English text', Location: '9.vtt', CodecType: 'subtitle' },
+	{ Index: 10, Language: 'chi', Title: 'Chinese text', Location: '10.vtt', CodecType: 'subtitle' }
 ];
 
 function serveBytes(route: Route, bytes: Buffer, contentType = 'application/octet-stream') {
@@ -144,7 +148,31 @@ async function fixture(page: Page) {
 					segmentSeconds: 6
 				}
 			});
-		if (file.startsWith('subtitles-')) return route.fulfill({ json: { tracks: [], packets: [] } });
+		if (file.startsWith('subtitles-'))
+			return route.fulfill({
+				json: {
+					tracks: subtitleStreams.map((s, id) => ({
+						id,
+						codec: s.Location.endsWith('.ass')
+							? 0x17016
+							: s.Location.endsWith('.srt')
+								? 0x17011
+								: 0x17012,
+						header: s.Location.endsWith('.ass')
+							? readFileSync(`${root}/captions.ass`).toString('base64')
+							: null
+					})),
+					packets: subtitleStreams.map((s, id) => ({
+						key: `subtitle-${id}`,
+						id,
+						pts: 0,
+						duration: 47_000,
+						data: Buffer.from(
+							s.Location.endsWith('.ass') ? `0,0,Default,,0,0,0,,${s.Title}` : s.Title
+						).toString('base64')
+					}))
+				}
+			});
 		if (!existsSync(`${root}/${codec}/${file}`)) return route.fulfill({ status: 404 });
 		return serveBytes(
 			route,
@@ -161,8 +189,13 @@ async function fixture(page: Page) {
 			});
 		if (file.endsWith('.ass'))
 			return route.fulfill({
-				body: '[Script Info]\nScriptType: v4.00+\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n',
+				body: readFileSync(`${root}/captions.ass`),
 				contentType: 'text/plain'
+			});
+		if (file.endsWith('.vtt'))
+			return route.fulfill({
+				body: 'WEBVTT\n\n00:00:00.000 --> 00:00:47.000\nTrack selection fixture\n',
+				contentType: 'text/vtt'
 			});
 		if (!existsSync(`${root}/${file}`)) return route.fulfill({ status: 404 });
 		return serveBytes(route, readFileSync(`${root}/${file}`), 'video/mp4');
@@ -285,6 +318,14 @@ for (const mode of ['compatible', 'av1', 'hevc']) {
 					return Math.abs(times[0] - times[1]);
 				})
 				.toBeLessThan(1.5);
+			await openSubtitles(first);
+			await rawToggle(first, 8, true);
+			await rawToggle(first, 6, false);
+			await expect.poll(() => rawSubtitleIndex(first)).toBe(8);
+			expect(await rawSubtitleIndex(peer)).toBe(6);
+			await expect(peer.locator('[data-media-player]')).toHaveAttribute('data-paused', '');
+			await first.keyboard.press('Escape');
+			await first.keyboard.press('Escape');
 			await first.locator('[data-media-player]').focus();
 			await first.keyboard.press('k');
 			await expect(peer.locator('[data-media-player]')).not.toHaveAttribute('data-paused', '');
@@ -384,3 +425,227 @@ test('Encoded and Raw audio save only explicit choices and restore them across s
 	await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
 	await expect.poll(() => encodedSource(page)).toMatch(/2-chi\.mp4/);
 });
+
+async function openSubtitles(page: Page) {
+	await page.locator('[data-media-player]').hover();
+	await page.getByRole('button', { name: 'Settings', exact: true }).click();
+	await page.getByRole('menuitem', { name: /^Subtitles/ }).click();
+}
+
+async function rawSubtitleIndex(page: Page) {
+	const s = await status(page);
+	return s?.subtitleTracks.find((t) => t.id === s.subtitle)?.index ?? -1;
+}
+
+async function rawToggle(page: Page, index: number, checked: boolean) {
+	const label = await page.evaluate((index) => {
+		const p = (window as any).trackTestProvider;
+		const id = p.status.subtitleTracks.find((t: any) => t.index === index).id;
+		return p.subtitleSelectionTracks.find((t: any) => t.id === id).settingsLabel as string;
+	}, index);
+	await page.getByRole('menuitemcheckbox', { name: label, exact: true }).setChecked(checked);
+	await expect.poll(async () => (await status(page))?.changing).toBe(false);
+}
+
+for (const mode of ['compatible', 'av1', 'hevc']) {
+	test(`Raw ${mode}: subtitle toggles, missing preference, format layers and duplicate identity`, async ({
+		page,
+		request,
+		baseURL
+	}) => {
+		test.skip(
+			!existsSync(`${root}/captions.ass`) ||
+				(mode !== 'compatible' && !existsSync(`${root}/${mode}/master.m3u8`)),
+			'Prepare multilingual/NVENC fixtures'
+		);
+		await fixture(page);
+		await page.addInitScript((mode) => {
+			localStorage.setItem('sparkle.raw.hdr', mode);
+			if (!sessionStorage.getItem('seeded-subtitle-preference')) {
+				localStorage.setItem(
+					'subtitleSelection',
+					JSON.stringify({
+						language: 'zh-CN',
+						format: 'ass',
+						label: 'Missing track',
+						src: 'missing.ass'
+					})
+				);
+				sessionStorage.setItem('seeded-subtitle-preference', 'true');
+			}
+		}, mode);
+		const room = `subtitle-${mode}-${Date.now()}`;
+		await request.post('/be/rooms', { data: { roomId: room, mediaId: rawId } });
+		await page.goto(`${baseURL}/${room}/media/${rawId}`);
+		await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+		await expect.poll(() => rawSubtitleIndex(page)).toBe(8);
+		expect(
+			await page.evaluate(() => JSON.parse(localStorage.getItem('subtitleSelection')!).label)
+		).toBe('Missing track');
+		await page.locator('[data-media-player]').press('k');
+		await expect(page.locator('[data-media-player]')).toHaveAttribute('data-paused', '');
+		const time = await page
+			.locator('.sparkle-raw-surface video')
+			.evaluate((v: HTMLVideoElement) => v.currentTime);
+		await openSubtitles(page);
+		await expect(page.getByRole('radiogroup', { name: 'Subtitle format' })).toBeVisible();
+		await rawToggle(page, 7, true);
+		await rawToggle(page, 8, false);
+		await expect.poll(() => rawSubtitleIndex(page)).toBe(7);
+		await rawToggle(page, 8, true);
+		await page.getByRole('radio', { name: 'Native', exact: true }).click();
+		await expect.poll(() => rawSubtitleIndex(page)).toBe(9);
+		await rawToggle(page, 10, true);
+		await expect.poll(async () => (await status(page)).subtitleLayers?.length).toBe(1);
+		await page.getByRole('radio', { name: 'Styled', exact: true }).click();
+		await expect
+			.poll(async () => {
+				const s = await status(page);
+				return s.subtitleTracks.filter((t) => s.subtitleLayers?.includes(t.id)).map((t) => t.index);
+			})
+			.toEqual([8]);
+		await page.getByRole('radio', { name: 'Native', exact: true }).click();
+		await expect
+			.poll(async () => {
+				const s = await status(page);
+				return s.subtitleTracks.filter((t) => s.subtitleLayers?.includes(t.id)).map((t) => t.index);
+			})
+			.toEqual([10]);
+		if (mode !== 'compatible')
+			await expect(
+				page.locator('.sparkle-raw-surface').getByText('English text', { exact: true })
+			).toBeVisible();
+		await page.getByRole('radio', { name: 'Styled', exact: true }).click();
+		// Remove every other selected track so duplicate #2 is the primary.
+		if ((await rawSubtitleIndex(page)) !== 7) {
+			await rawToggle(page, 7, true);
+			await rawToggle(page, 6, false);
+			await rawToggle(page, 8, false);
+			await rawToggle(page, 8, true);
+		}
+		await expect.poll(() => rawSubtitleIndex(page)).toBe(7);
+		await expect(page.locator('[data-media-player]')).toHaveAttribute('data-paused', '');
+		expect(
+			Math.abs(
+				(await page
+					.locator('.sparkle-raw-surface video')
+					.evaluate((v: HTMLVideoElement) => v.currentTime)) - time
+			)
+		).toBeLessThan(0.6);
+		if (
+			mode === 'compatible' &&
+			existsSync(`${root}/av1/master.m3u8`) &&
+			existsSync(`${root}/hevc/master.m3u8`)
+		) {
+			await page.keyboard.press('Escape');
+			await page.keyboard.press('Escape');
+			await openVideoSettings(page);
+			for (const codec of ['av1', 'hevc']) {
+				await page
+					.getByRole('menuitemradio', { name: `Encoded ${codec.toUpperCase()}`, exact: true })
+					.click();
+				await expect(page.locator('[data-media-player]')).toHaveAttribute(
+					'data-raw-encoding',
+					codec
+				);
+				await expect.poll(() => rawSubtitleIndex(page)).toBe(7);
+				await expect.poll(async () => (await status(page)).subtitleLayers?.length).toBe(1);
+			}
+		}
+		await page.reload();
+		await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+		await expect.poll(() => rawSubtitleIndex(page)).toBe(7);
+		await expect.poll(async () => (await status(page)).subtitleLayers?.length).toBe(1);
+		await page.locator('[data-media-player]').hover();
+		await page.getByRole('button', { name: 'Closed captions', exact: true }).click();
+		await expect.poll(() => rawSubtitleIndex(page)).toBe(-1);
+		await page.reload();
+		await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+		await expect.poll(() => rawSubtitleIndex(page)).toBe(-1);
+		await page.locator('[data-media-player]').hover();
+		await page.getByRole('button', { name: 'Closed captions', exact: true }).click();
+		await expect.poll(() => rawSubtitleIndex(page)).toBe(6);
+		await expect.poll(async () => (await status(page)).subtitleLayers?.length).toBe(1);
+	});
+}
+
+test('Encoded keeps its subtitle layout and per-format choices; preferences cross source boundaries', async ({
+	page,
+	request,
+	baseURL
+}) => {
+	test.skip(!existsSync(`${root}/captions.ass`), 'Prepare multilingual fixtures');
+	await fixture(page);
+	const room = `subtitle-encoded-${Date.now()}`;
+	await request.post('/be/rooms', { data: { roomId: room, mediaId: encodedId } });
+	await page.goto(`${baseURL}/${room}/media/${encodedId}`);
+	await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+	await openSubtitles(page);
+	await expect(
+		page.getByRole('menuitemcheckbox', { name: /English styled/ }).first()
+	).toBeVisible();
+	const chinese = page.getByRole('menuitemcheckbox', { name: /Chinese.*styled/ });
+	await chinese.check();
+	await page.getByRole('radio', { name: 'Native', exact: true }).click();
+	await page.getByRole('menuitemcheckbox', { name: /Chinese/ }).check();
+	await page.getByRole('radio', { name: 'Styled', exact: true }).click();
+	await expect(chinese).toBeChecked();
+	await page
+		.getByRole('menuitemcheckbox', { name: /English styled/ })
+		.first()
+		.uncheck();
+	await expect
+		.poll(() =>
+			page.evaluate(() => JSON.parse(localStorage.getItem('subtitleSelection')!).language)
+		)
+		.toBe('zh-CN');
+	await request.put(`/be/rooms/${room}`, { data: { mediaId: rawId } });
+	await page.goto(`${baseURL}/${room}/media/${rawId}`);
+	await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+	await expect.poll(() => rawSubtitleIndex(page)).toBe(8);
+	await page.locator('[data-media-player]').hover();
+	await page.getByRole('button', { name: 'Closed captions', exact: true }).click();
+	await expect.poll(() => rawSubtitleIndex(page)).toBe(-1);
+	await expect
+		.poll(() =>
+			page.evaluate(() => JSON.parse(localStorage.getItem('subtitleSelection')!).disabled)
+		)
+		.toBe(true);
+	await request.put(`/be/rooms/${room}`, { data: { mediaId: encodedId } });
+	await page.goto(`${baseURL}/${room}/media/${encodedId}`);
+	await expect
+		.poll(() =>
+			page.evaluate(() => JSON.parse(localStorage.getItem('subtitleSelection')!).disabled)
+		)
+		.toBe(true);
+	await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+	await openSubtitles(page);
+	await expect(page.getByRole('menuitemcheckbox', { checked: true })).toHaveCount(0);
+});
+
+for (const source of ['raw', 'encoded']) {
+	test(`${source} subtitle menu fits a narrow mobile viewport`, async ({
+		page,
+		request,
+		baseURL
+	}) => {
+		test.skip(!existsSync(`${root}/captions.ass`), 'Prepare multilingual fixtures');
+		await page.setViewportSize({ width: 375, height: 812 });
+		await fixture(page);
+		const id = source === 'raw' ? rawId : encodedId,
+			room = `subtitle-mobile-${source}-${Date.now()}`;
+		await request.post('/be/rooms', { data: { roomId: room, mediaId: id } });
+		await page.goto(`${baseURL}/${room}/media/${id}`);
+		await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+		if (source === 'raw') await expect.poll(() => rawSubtitleIndex(page)).toBe(6);
+		await openSubtitles(page);
+		const tabs = page.getByRole('radiogroup', { name: 'Subtitle format' });
+		await expect(tabs).toBeVisible();
+		const box = await tabs.boundingBox();
+		expect(box!.x).toBeGreaterThanOrEqual(0);
+		expect(box!.x + box!.width).toBeLessThanOrEqual(375);
+		await page.getByRole('radio', { name: 'Native', exact: true }).click();
+		await expect(page.getByRole('menuitemcheckbox', { name: /English/ })).toBeChecked();
+		await page.screenshot({ path: test.info().outputPath(`${source}-mobile-subtitles.png`) });
+	});
+}

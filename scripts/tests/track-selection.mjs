@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 const bundle = await build({
 	stdin: {
 		contents:
-			"export * from './lib/player/track-selection'; export * from './lib/player/raw-track-selection';",
+			"export * from './lib/player/track-selection'; export * from './lib/player/raw-track-selection'; export * from './lib/player/subtitle-selection';",
 		resolveDir: process.cwd()
 	},
 	bundle: true,
@@ -20,14 +20,24 @@ const {
 	pickPrioritySubtitleStream,
 	pickRawAudioTrack,
 	pickRawSubtitleTrack,
-	rawSubtitleFormat
+	rawSubtitleFormat,
+	getRawSubtitleTracks,
+	createSubtitleTracks,
+	getSubtitleFormatSelection,
+	getToggledSubtitleSelection,
+	getStoredSubtitleLayerSrcs,
+	persistSubtitleTrackSelection,
+	getStoredSubtitleSelection,
+	saveStoredSubtitleSelection,
+	saveStoredSubtitleSelectionOff
 } = await import(
 	`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`
 );
 const storage = new Map();
 globalThis.localStorage = {
 	getItem: (key) => storage.get(key) ?? null,
-	setItem: (key, value) => storage.set(key, value)
+	setItem: (key, value) => storage.set(key, value),
+	removeItem: (key) => storage.delete(key)
 };
 const stream = (Language, Index, format = '', Title = '') => ({
 	Language,
@@ -143,6 +153,126 @@ assert.equal(rawSubtitleFormat(String(0x17006)), 'sup');
 assert.equal(rawSubtitleFormat('subrip'), 'srt');
 assert.equal(rawSubtitleFormat(String(0x17011)), 'srt');
 assert.equal(rawSubtitleFormat('webvtt'), 'vtt');
+
+storage.clear();
+const duplicates = [
+	{ id: 15, index: 5, title: 'English', language: 'eng', codec: 'ass' },
+	{ id: 16, index: 6, title: 'English', language: 'eng', codec: 'ass' },
+	{ id: 17, index: 7, title: 'Chinese old title', language: 'chi', codec: 'ass' },
+	{ id: 18, index: 8, title: 'Japanese', language: 'jpn', codec: 'ass' },
+	{ id: 19, index: 9, title: 'English', language: 'eng', codec: 'webvtt' },
+	{ id: 20, index: 10, title: 'Chinese old title', language: 'chi', codec: 'webvtt' }
+];
+let tracks = getRawSubtitleTracks(duplicates, 'version-A');
+saveStoredSubtitleSelection(tracks.find((t) => t.id === 16));
+for (const offset of [0, 100, 200]) {
+	const modeTracks = getRawSubtitleTracks(
+		duplicates.map((t) => ({ ...t, id: t.id + offset })),
+		'version-A'
+	);
+	assert.equal(
+		modeTracks.find((t) => t.default).id,
+		16 + offset,
+		'restore original stream identity across transport IDs'
+	);
+}
+assert.notEqual(
+	tracks.find((t) => t.id === 15).settingsLabel,
+	tracks.find((t) => t.id === 16).settingsLabel
+);
+saveStoredSubtitleSelection(tracks.find((t) => t.id === 17));
+const missing = duplicates.map((t) => ({ ...t, title: t.title.replace('old title', 'new title') }));
+const preferenceBeforeFallback = storage.get('subtitleSelection');
+assert.equal(getRawSubtitleTracks(missing, 'version-B').find((t) => t.default).id, 17);
+assert.equal(
+	storage.get('subtitleSelection'),
+	preferenceBeforeFallback,
+	'fallback must retain saved language and detailed preference'
+);
+const encodedStreams = duplicates.map((t) =>
+	stream(t.language, t.index, t.codec === 'webvtt' ? 'vtt' : t.codec, t.title)
+);
+assert.equal(
+	createSubtitleTracks(encodedStreams).find((t) => t.default).language,
+	'zh-CN',
+	'Raw preference also applies to Encoded'
+);
+saveStoredSubtitleSelection(
+	createSubtitleTracks(encodedStreams).find((t) => t.language === 'ja-JP')
+);
+assert.equal(
+	getRawSubtitleTracks(duplicates, 'version-A').find((t) => t.default).id,
+	18,
+	'Encoded preference also applies to Raw'
+);
+
+const primary = tracks.find((t) => t.id === 16),
+	companion = tracks.find((t) => t.id === 17);
+persistSubtitleTrackSelection(tracks, primary, [companion]);
+let state = getSubtitleFormatSelection(tracks, 'vtt');
+assert.equal(state.primaryTrack.format, 'vtt');
+persistSubtitleTrackSelection(tracks, state.primaryTrack, [tracks.find((t) => t.id === 20)]);
+state = getSubtitleFormatSelection(tracks, 'ass');
+assert.deepEqual(
+	state.layerTracks.map((t) => t.id),
+	[17],
+	'switching formats restores the saved companion'
+);
+persistSubtitleTrackSelection(tracks, primary, [companion]);
+state = getToggledSubtitleSelection(tracks, primary, [companion.src], primary, false);
+assert.equal(state.primaryTrack.id, 17, 'removing primary promotes its companion');
+assert.deepEqual(state.layerTracks, []);
+state = getToggledSubtitleSelection(
+	tracks,
+	primary,
+	[companion.src],
+	tracks.find((t) => t.id === 18),
+	true
+);
+assert.equal(state.primaryTrack.id, 16);
+assert.deepEqual(
+	state.layerTracks.map((t) => t.id),
+	[17, 18]
+);
+assert.equal(
+	getToggledSubtitleSelection(
+		tracks,
+		primary,
+		state.layerTracks.map((t) => t.src),
+		tracks.find((t) => t.id === 15),
+		true,
+		2
+	),
+	null,
+	'Raw decoder layer limit'
+);
+saveStoredSubtitleSelectionOff();
+assert.equal(getStoredSubtitleSelection().disabled, true);
+assert.equal(
+	getRawSubtitleTracks(duplicates, 'version-A').find((t) => t.default),
+	undefined
+);
+assert.equal(
+	createSubtitleTracks(encodedStreams).find((t) => t.default),
+	undefined
+);
+assert.deepEqual(
+	getStoredSubtitleLayerSrcs(tracks, primary),
+	[companion.src],
+	'Off preserves format layers'
+);
+
+// The initial ordering and mobile/desktop choice are identical for both adapters.
+storage.clear();
+for (const mobile of [false, true]) {
+	const raw = getRawSubtitleTracks([...duplicates].reverse(), 'version-A', mobile);
+	const encoded = createSubtitleTracks([...encodedStreams].reverse(), '', {}, null, mobile);
+	assert.deepEqual(
+		raw.map((t) => t.label),
+		encoded.map((t) => t.label)
+	);
+	assert.equal(raw.find((t) => t.default).label, encoded.find((t) => t.default).label);
+}
 
 globalThis.localStorage = {
 	getItem() {

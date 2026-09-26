@@ -12,6 +12,8 @@ import { RAW_STATUS_EVENT, RawProvider } from '@/lib/player/raw-provider';
 import type { RawMedia, RawPlaybackStatus } from '@/lib/player/raw-types';
 import type { HDRPreference } from '@/lib/player/raw-types';
 import { SOFTWARE_TONE_MAPPING_ENABLED } from '@/lib/player/raw-hdr';
+import { SubtitlesMenuSection } from './SubtitlesMenuSection';
+import { getSubtitleFormatName } from '@/lib/player/t';
 
 function formatBitrate(bits?: number) {
 	if (bits === undefined || !Number.isFinite(bits) || bits < 0) return 'Measuring…';
@@ -90,13 +92,14 @@ export function RawPlaybackObserver({
 	}, [player, provider]);
 	useEffect(() => {
 		if (!player?.el || !status) return;
-		player.el.dataset.rawReady = String(status.ready);
-		player.el.dataset.rawOutput = status.output;
-		player.el.dataset.rawHdr = status.sourceHDR;
-		player.el.dataset.rawRenderer = status.renderer ?? '';
-		player.el.dataset.rawEncoding = status.encodedCodec ?? '';
-		player.el.dataset.rawBlocked = String(
-			!status.changing && !status.ready && status.output === 'unsupported'
+		player.el.setAttribute('data-raw-ready', String(status.ready));
+		player.el.setAttribute('data-raw-output', status.output);
+		player.el.setAttribute('data-raw-hdr', status.sourceHDR);
+		player.el.setAttribute('data-raw-renderer', status.renderer ?? '');
+		player.el.setAttribute('data-raw-encoding', status.encodedCodec ?? '');
+		player.el.setAttribute(
+			'data-raw-blocked',
+			String(!status.changing && !status.ready && status.output === 'unsupported')
 		);
 	}, [player, status]);
 	return status?.reason && !status.changing && status.output === 'unsupported' ? (
@@ -126,7 +129,7 @@ export function RawCaptionButton() {
 				aria-label="Closed captions"
 				aria-pressed={!!enabled}
 				aria-keyshortcuts="c"
-				disabled={!status.ready || status.changing}
+				disabled={!status.ready || status.changing || status.subtitle === undefined}
 				onClick={() => void provider?.toggleSubtitles().catch(() => {})}
 			>
 				<Icon className="vds-icon" />
@@ -280,52 +283,34 @@ export function RawVideoSettings({
 
 export function RawSubtitleSettings() {
 	const { status, provider } = useRawPlayback();
-	const tracks = status?.subtitleTracks ?? [];
-	const selected = tracks.find((t) => t.id === status?.subtitle)?.title ?? 'Off';
-	const options = [
-		{ value: '-1', label: 'Off' },
-		...tracks.map((t) => ({ value: String(t.id), label: t.title }))
-	];
+	const tracks = provider?.subtitleSelectionTracks ?? [];
+	const selected = tracks.find((track) => track.id === status?.subtitle) ?? null;
+	const layerSrcs = (status?.subtitleLayers ?? []).flatMap(
+		(id) => tracks.find((track) => track.id === id)?.src ?? []
+	);
+	const summary = selected
+		? `${1 + layerSrcs.length} ${getSubtitleFormatName(selected.format)}`
+		: 'Off';
 	return (
 		<Menu.Root className="vds-player-settings-menu vds-subtitles-settings-menu vds-menu">
 			<DefaultMenuButton
 				label="Subtitles"
-				disabled={!status?.ready || status.changing || !tracks.length}
-				hint={selected}
+				disabled={!status?.ready || status.subtitle === undefined || !tracks.length}
+				hint={summary}
 				Icon={defaultLayoutIcons.Menu.Captions}
 			/>
 			<Menu.Items className="vds-menu-items">
-				<DefaultMenuSection label="Primary subtitles" value={selected}>
-					<DefaultMenuRadioGroup
-						value={String(status?.subtitle ?? -1)}
-						options={options}
-						onChange={(value) =>
-							void provider?.selectTrack('subtitle', Number(value)).catch(() => {})
-						}
-					/>
-				</DefaultMenuSection>
-				{tracks.length > 1 &&
-					[0, 1].map((layer) => (
-						<DefaultMenuSection key={layer} label={`Subtitle layer ${layer + 2}`}>
-							<DefaultMenuRadioGroup
-								value={String(status?.subtitleLayers?.[layer] ?? -1)}
-								options={options.filter(
-									(t) =>
-										t.value === '-1' ||
-										(Number(t.value) !== status?.subtitle &&
-											!(status?.subtitleLayers ?? []).some(
-												(id, i) => i !== layer && id === Number(t.value)
-											))
-								)}
-								onChange={(value) => {
-									const ids = [...(status?.subtitleLayers ?? [])];
-									ids[layer] = Number(value);
-									void provider?.selectSubtitleLayers(ids).catch(() => {});
-								}}
-							/>
-						</DefaultMenuSection>
-					))}
-				<p className="px-3 py-2 text-xs opacity-70">Audio and subtitles change only for you.</p>
+				<SubtitlesMenuSection
+					activeFormat={selected?.format ?? null}
+					extraSubtitleLayerSrcs={layerSrcs}
+					onFormatChange={(format) => void provider?.changeSubtitleFormat(format).catch(() => {})}
+					onToggleTrack={(track, checked) =>
+						void provider?.toggleSubtitleTrack(track.src, checked).catch(() => {})
+					}
+					selectedTrack={selected}
+					tracks={tracks}
+					maxLayers={2}
+				/>
 			</Menu.Items>
 		</Menu.Root>
 	);

@@ -361,7 +361,10 @@ and `npm run build` at the root. Browser tests use `SPARKLE_TEST_URL` (default
   Run `npx playwright test tests/e2e/track-selection.spec.ts` against the running app
   to check shared track priorities, explicit-only audio persistence, captions,
   local track changes while playing/paused, reconnects, source transitions and
-  two-client synchronization. These use real decoders and synthetic metadata/file
+  two-client synchronization. Subtitle cases cover missing saved tracks, duplicate
+  titles across Compatible/AV1/HEVC and reloads, shared Off state, per-format ASS/VTT
+  layers, promotion of companion tracks, rendered text packets, and matching
+  Encoded/Raw controls at desktop and 375 px widths. These use real decoders and synthetic metadata/file
   routes without Plex credentials. Omit `--nvenc` without a supported GPU; the
   AV1/HEVC cases skip when those fixtures are absent. Subtitle policy also has
   desktop/mobile unit coverage in `npm run test:player`; this is not physical

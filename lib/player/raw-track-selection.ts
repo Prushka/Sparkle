@@ -1,11 +1,21 @@
 import type { RawPlaybackTrack } from './raw-types';
 import type { Stream } from './t';
 import {
+	createSubtitleTracks,
+	getStoredSubtitleLayerSrcs,
+	saveStoredSubtitleLayerSelections,
+	isStackableSubtitleFormat,
+	type SubtitleTrackInfo
+} from './subtitle-selection';
+import {
 	getStoredAudioSelection,
+	getStoredSubtitleSelection,
+	getSubtitleSelectionCandidateFromStream,
 	isIOSOrAndroidDevice,
 	pickPreferredAudioStream,
-	pickPrioritySubtitleStream,
 	readTrackPreference,
+	removeTrackPreference,
+	type StoredSubtitleSelection,
 	type SubtitleTrackFormat
 } from './track-selection';
 
@@ -47,12 +57,74 @@ export function pickRawAudioTrack(tracks: RawPlaybackTrack[], mediaId: string) {
 export function pickRawSubtitleTrack(
 	tracks: RawPlaybackTrack[],
 	preferMobileNative = isIOSOrAndroidDevice(),
-	preference = readTrackPreference('sparkle.raw.subtitle')
+	preference?: string | null,
+	mediaId = ''
 ) {
-	if (preference === 'off') return null;
-	const saved = tracks.find((track) => track.title === preference);
-	if (saved) return saved;
-	const streams = tracks.map((track) => rawSelectionStream(track, 'subtitle'));
-	const selected = pickPrioritySubtitleStream(streams, null, preferMobileNative);
-	return selected ? tracks[streams.indexOf(selected)] : null;
+	const selected = getRawSubtitleTracks(tracks, mediaId, preferMobileNative, preference).find(
+		(track) => track.default
+	);
+	return tracks.find((track) => track.id === selected?.id) ?? null;
+}
+
+/** Transport IDs differ between original MKV and NVENC subtitle packets.
+ * Persist the original stream index scoped to this version-specific media ID. */
+export function getRawSubtitleTracks(
+	tracks: RawPlaybackTrack[],
+	mediaId: string,
+	preferMobileNative = isIOSOrAndroidDevice(),
+	legacyPreference?: string | null
+) {
+	const streams = tracks.map((track) => ({
+		...rawSelectionStream(track, 'subtitle'),
+		Location: `raw-${encodeURIComponent(mediaId)}-track-${track.index ?? track.id}.${rawSubtitleFormat(track.codec)}`
+	}));
+	let selection: StoredSubtitleSelection | null =
+		legacyPreference === null ? null : getStoredSubtitleSelection();
+	if (!selection && legacyPreference !== null) {
+		const legacy = legacyPreference ?? readTrackPreference('sparkle.raw.subtitle');
+		const index = tracks.findIndex((track) => track.title === legacy);
+		selection =
+			legacy === 'off'
+				? { disabled: true }
+				: index < 0
+					? null
+					: getSubtitleSelectionCandidateFromStream(streams[index]);
+	}
+	return createSubtitleTracks(streams, '', {}, selection, preferMobileNative).map((track) => ({
+		...track,
+		id: tracks[streams.findIndex((stream) => stream.Location === track.src)].id
+	}));
+}
+
+export function restoreRawSubtitleLayers(
+	tracks: (SubtitleTrackInfo & { id: number })[],
+	primary: SubtitleTrackInfo,
+	originals: RawPlaybackTrack[]
+) {
+	const legacy = readTrackPreference('sparkle.raw.subtitleLayers');
+	if (legacy) {
+		try {
+			const titles: unknown = JSON.parse(legacy);
+			if (
+				!getStoredSubtitleSelection() &&
+				!readTrackPreference('subtitleLayers') &&
+				Array.isArray(titles)
+			) {
+				for (const format of ['ass', 'vtt'] as const) {
+					const layers = tracks.filter(
+						(track) =>
+							track.format === format &&
+							titles.some((title) => originals.find((raw) => raw.id === track.id)?.title === title)
+					);
+					if (layers.length) saveStoredSubtitleLayerSelections(format, layers.slice(0, 2));
+				}
+			}
+		} catch {
+			/* Invalid legacy choices do not prevent playback. */
+		}
+		removeTrackPreference('sparkle.raw.subtitleLayers');
+	}
+	return isStackableSubtitleFormat(primary.format)
+		? getStoredSubtitleLayerSrcs(tracks, primary).slice(0, 2)
+		: [];
 }

@@ -73,6 +73,14 @@ export function writeTrackPreference(key: string, value: string) {
 	}
 }
 
+export function removeTrackPreference(key: string) {
+	try {
+		localStorage.removeItem(key);
+	} catch {
+		// Playback remains usable when storage is blocked.
+	}
+}
+
 export function getStoredAudioSelection(): StoredAudioSelection | null {
 	try {
 		const value = JSON.parse(readTrackPreference('audioSelection') || 'null');
@@ -172,17 +180,14 @@ export function getSubtitleSrcName(src: string) {
 }
 
 export function readStoredSubtitleLanguage() {
-	if (typeof window === 'undefined') {
-		return null;
-	}
-	return window.localStorage.getItem(SUBTITLE_LANGUAGE_STORAGE_KEY);
+	return readTrackPreference(SUBTITLE_LANGUAGE_STORAGE_KEY);
 }
 
 export function saveStoredSubtitleLanguage(language: string) {
-	if (typeof window === 'undefined' || !language) {
+	if (!language) {
 		return;
 	}
-	window.localStorage.setItem(SUBTITLE_LANGUAGE_STORAGE_KEY, language);
+	writeTrackPreference(SUBTITLE_LANGUAGE_STORAGE_KEY, language);
 }
 
 export function normalizeStoredSubtitleSelection(value: unknown): StoredSubtitleSelection | null {
@@ -252,10 +257,7 @@ export function normalizeStoredSubtitleSelection(value: unknown): StoredSubtitle
 }
 
 export function getStoredSubtitleSelection() {
-	if (typeof window === 'undefined') {
-		return null;
-	}
-	const storedSelection = window.localStorage.getItem(SUBTITLE_SELECTION_STORAGE_KEY);
+	const storedSelection = readTrackPreference(SUBTITLE_SELECTION_STORAGE_KEY);
 	if (storedSelection) {
 		try {
 			const selection = normalizeStoredSubtitleSelection(JSON.parse(storedSelection));
@@ -289,10 +291,7 @@ export function getStoredSubtitleSelectionForTrack(
 }
 
 export function saveStoredSubtitleSelection(track: SubtitleSelectionTrack) {
-	if (typeof window === 'undefined') {
-		return;
-	}
-	window.localStorage.setItem(
+	writeTrackPreference(
 		SUBTITLE_SELECTION_STORAGE_KEY,
 		JSON.stringify(getStoredSubtitleSelectionForTrack(track))
 	);
@@ -300,11 +299,8 @@ export function saveStoredSubtitleSelection(track: SubtitleSelectionTrack) {
 }
 
 export function saveStoredSubtitleSelectionOff() {
-	if (typeof window === 'undefined') {
-		return;
-	}
-	window.localStorage.setItem(SUBTITLE_SELECTION_STORAGE_KEY, JSON.stringify({ disabled: true }));
-	window.localStorage.removeItem(SUBTITLE_LANGUAGE_STORAGE_KEY);
+	writeTrackPreference(SUBTITLE_SELECTION_STORAGE_KEY, JSON.stringify({ disabled: true }));
+	removeTrackPreference(SUBTITLE_LANGUAGE_STORAGE_KEY);
 }
 
 export function getSubtitleFormatPriority(format: SubtitleTrackFormat) {
