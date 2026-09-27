@@ -14,6 +14,17 @@ test.afterEach(async ({ page }, info) => {
 			const captions = provider?.encodedCaptions;
 			const group = (captions?.renderers[0] ?? provider?.subtitles)?.composition;
 			return {
+				playback: provider && {
+					status: provider.status,
+					initialized: provider.initialized,
+					starting: provider.starting,
+					pendingSeek: provider.pendingSeek,
+					remoteOperations: provider.remoteOperations,
+					canPublishPlayback: provider.canPublishPlayback,
+					canPlay: provider.ctx.player.state.canPlay,
+					paused: provider.ctx.player.state.paused,
+					error: provider.ctx.player.state.error
+				},
 				selected: captions?.selected,
 				chunks: captions && [...captions.chunks.keys()],
 				failures: captions && [...captions.failures],
@@ -33,8 +44,10 @@ test.afterEach(async ({ page }, info) => {
 			};
 		})
 		.catch(() => ({}));
-	await info.attach('subtitle-rendering-diagnostics', {
-		body: JSON.stringify(diagnostics, null, 2),
+	const path = info.outputPath('player-diagnostics.json');
+	writeFileSync(path, JSON.stringify(diagnostics, null, 2));
+	await info.attach('player-diagnostics', {
+		path,
 		contentType: 'application/json'
 	});
 });
@@ -1313,6 +1326,134 @@ test('same-room Plex media switch escapes an unfinished seek', async ({ page, re
 	await expect
 		.poll(() => page.evaluate(() => !!(window as any).retiredProvider.engine))
 		.toBe(false);
+});
+
+test('unavailable AI HDR reports failure and disabling it restores playback controls', async ({
+	page,
+	request
+}) => {
+	test.skip(!existsSync(`${root}/hevc/master.m3u8`), 'Prepare multilingual/NVENC fixtures');
+	await fixture(page);
+	await page.addInitScript(() => localStorage.setItem('sparkle.raw.hdr', 'hevc'));
+	await page.route('**/encoding/capabilities', (route) =>
+		route.fulfill({ json: { codecs: ['hevc'], aiHDREnabled: true, aiHDRCodecs: ['hevc'] } })
+	);
+	await page.route('**/encoded/hevc/manifest?aiHDR=1', (route) => route.fulfill({ status: 422 }));
+	const sent: any[] = [];
+	page.on('websocket', (socket) => {
+		if (!socket.url().includes('/sync/') || socket.url().includes('/media_')) return;
+		socket.on('framesent', ({ payload }) => sent.push(JSON.parse(String(payload))));
+	});
+	const room = `ai-hdr-rejected-${Date.now()}`;
+	await request.post('/be/rooms', { data: { roomId: room, mediaId: rawId } });
+	await page.goto(`/${room}/media/${rawId}`);
+	await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+	await expect.poll(() => audioTitle(page), { timeout: 30000 }).toBe('Japanese');
+	const player = page.locator('[data-media-player]');
+	await player.press('k');
+	await expect(player).toHaveAttribute('data-paused');
+	await seekRaw(page, 12);
+	await expect
+		.poll(() => sent.some((message) => message.type === 'time' && message.time === 12))
+		.toBe(true);
+	await player.hover();
+	await page.getByRole('button', { name: 'AI HDR', exact: true }).click();
+	await expect(page.getByText('Playback interrupted', { exact: true })).toBeVisible();
+	await expect(page.getByText(/AI HDR is unavailable for this media/)).toBeVisible();
+	await page.getByRole('button', { name: 'AI HDR', exact: true }).click();
+	await expect(player).toHaveAttribute('data-raw-ready', 'true', { timeout: 30000 });
+	await expect
+		.poll(() => page.evaluate(() => (window as any).trackTestProvider.canPublishPlayback))
+		.toBe(true);
+	await expect(player).toHaveAttribute('data-paused');
+	await expect
+		.poll(() => page.evaluate(() => Math.round((window as any).trackTestProvider.timeline)))
+		.toBe(12);
+	await seekRaw(page, 18);
+	await player.press('k');
+	await expect(player).not.toHaveAttribute('data-paused');
+});
+
+test('online recovery restores two-client pause and seek after a decoder network failure', async ({
+	browser,
+	request,
+	baseURL
+}) => {
+	test.skip(!existsSync(`${root}/hevc/master.m3u8`), 'Prepare multilingual/NVENC fixtures');
+	const context = await browser.newContext({ ...devices['iPhone 13'] });
+	const mobile = await context.newPage(),
+		peer = await browser.newPage();
+	const room = `online-controls-${Date.now()}`;
+	const messages: unknown[] = [];
+	await request.post('/be/rooms', { data: { roomId: room, mediaId: rawId } });
+	try {
+		for (const page of [mobile, peer]) {
+			page.on('websocket', (socket) => {
+				if (!socket.url().includes(`/sync/${room}/`) || socket.url().includes('/media_')) return;
+				for (const event of ['framesent', 'framereceived'] as const)
+					socket.on(event, ({ payload }) => {
+						const message = JSON.parse(String(payload));
+						if (['time', 'pause', 'playback', 'new player', 'state'].includes(message.type))
+							messages.push({ page: page === mobile ? 'mobile' : 'peer', event, message });
+					});
+			});
+			await fixture(page);
+			await page.addInitScript(() => localStorage.setItem('sparkle.raw.hdr', 'hevc'));
+			await page.goto(`${baseURL}/${room}/media/${rawId}`);
+			await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+			await expect.poll(() => audioTitle(page), { timeout: 30000 }).toBe('Japanese');
+		}
+		await context.setOffline(true);
+		await mobile.evaluate(() => {
+			const p = (window as any).trackTestProvider;
+			// Simulate the libmedia error delivered while Safari's connection is offline.
+			p.fail(new Error('Playback decoding failed.'));
+		});
+		await expect(mobile.locator('[data-media-player]')).toHaveAttribute('data-raw-blocked', 'true');
+		await context.setOffline(false);
+		await expect(mobile.locator('[data-media-player]')).toHaveAttribute('data-raw-ready', 'true', {
+			timeout: 30000
+		});
+		await expect
+			.poll(() => mobile.evaluate(() => (window as any).trackTestProvider.canPublishPlayback))
+			.toBe(true);
+		await mobile.locator('[data-media-player]').press('k');
+		await expect(mobile.locator('[data-media-player]')).toHaveAttribute('data-paused');
+		await expect(peer.locator('[data-media-player]')).toHaveAttribute('data-paused');
+		await seekRaw(mobile, 18);
+		await expect
+			.poll(() => peer.evaluate(() => Math.round((window as any).trackTestProvider.timeline)))
+			.toBe(18);
+		await mobile.locator('[data-media-player]').press('k');
+		await expect(peer.locator('[data-media-player]')).not.toHaveAttribute('data-paused');
+	} finally {
+		const states = await Promise.all(
+			[mobile, peer].map((page) =>
+				page.evaluate(() => {
+					const p = (window as any).trackTestProvider;
+					return {
+						status: p?.status,
+						timeline: p?.timeline,
+						canPublish: p?.canPublishPlayback,
+						remoteOperations: p?.remoteOperations,
+						pendingSeek: p?.pendingSeek,
+						starting: p?.starting,
+						buffering: p?.buffering,
+						initialized: p?.initialized,
+						paused: p?.ctx.player.state.paused,
+						canPlay: p?.ctx.player.state.canPlay
+					};
+				})
+			)
+		);
+		const path = test.info().outputPath('recovery-controls-diagnostics.json');
+		writeFileSync(path, JSON.stringify({ messages, states }, null, 2));
+		await test
+			.info()
+			.attach('recovery-controls-diagnostics', { path, contentType: 'application/json' });
+		await context.close();
+		await peer.close();
+	}
 });
 
 test('encoded playback recovers a stuck seek and restores working controls', async ({

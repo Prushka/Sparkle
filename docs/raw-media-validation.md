@@ -438,8 +438,13 @@ They simulate an app-suspended native video, an unfinished decoder seek, a socke
 that reports open while dropping traffic, and a failed encoding manifest. Coverage
 includes automatic recovery, explicit retry without original-file fallback, accurate
 paused seeks, two-client pause/play after reconnect, and retiring an unfinished decoder
-when changing Plex media in the same room. Pixel 7 emulation covers the returning
-viewer; physical Safari/iOS and Android app-switch qualification remains pending.
+when changing Plex media in the same room. iPhone 13 emulation also combines offline
+mode with an injected decoder failure: deferred room snapshots must not replay over
+local pause/seek commands after recovery, and those controls must reach the other
+viewer. A rejected AI HDR manifest must show an interruption reason; turning AI HDR
+off restores ordinary encoding, the paused room position, and working playback controls.
+Pixel 7 emulation covers the returning viewer with a half-open socket. These are Chrome
+simulations; physical Safari/iOS and Android app-switch qualification remains pending.
 
 Room timeline regressions also simulate a background native clock resetting to zero,
 a delayed viewer joining at a paused position, and conflicting in-flight room seeks.

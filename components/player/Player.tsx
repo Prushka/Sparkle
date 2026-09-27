@@ -5959,6 +5959,17 @@ export function Player({
 			) {
 				return true;
 			}
+			// Consume the deferred snapshot together with the newest update. Leaving
+			// it queued after recovery lets the polling timer replay old play/time
+			// state over a subsequent local pause or seek.
+			const pending = pendingRemotePlaybackSyncRef.current;
+			if (
+				pending?.roomId === currentRoomRef.current &&
+				pending.mediaId === currentMediaIdRef.current
+			) {
+				sync = { ...pending, ...sync };
+			}
+			pendingRemotePlaybackSyncRef.current = null;
 			const player = playerElementRef.current;
 			if (!player || !getPlayerVideoElement(player)) {
 				queueRemotePlaybackSync(sync);

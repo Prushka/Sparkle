@@ -311,7 +311,9 @@ export class RawProvider implements MediaProviderAdapter {
 		return command;
 	}
 	private fail(error: unknown) {
-		if (this.destroyed || (!this.status.ready && !this.status.changing)) return;
+		// An output switch can finish its cleanup before its rejection reaches
+		// the queue. Only an aborted generation has already handled its failure.
+		if (this.destroyed || this.abort.signal.aborted) return;
 		if (!this.status.changing && this.initialized) this.desiredTime = this.timeline;
 		if (this.initialized)
 			void Promise.allSettled([this.engine?.pause(), this.audioEngine?.pause()]);
