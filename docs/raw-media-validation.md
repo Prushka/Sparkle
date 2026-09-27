@@ -258,7 +258,7 @@ PCM check in the [server encoding guide](server-encoding.md#validation).
 
 See [server encoding](server-encoding.md) for opt-in configuration and reproduction.
 
-The AI HDR GPU pipeline was qualified on September 26, 2026 with Windows,
+The AI HDR GPU pipeline was qualified on September 26–27, 2026 with Windows,
 RTX 5090, NVEncC 9.35 and p3/CQ 24, using 12-second segments:
 
 - SDR TrueHDR, PQ expansion and HLG conversion passed AV1/HEVC native Chrome
@@ -273,6 +273,36 @@ RTX 5090, NVEncC 9.35 and p3/CQ 24, using 12-second segments:
   12-second segment, including audio, in 3.7 seconds (AV1) and 3.3 seconds (HEVC).
   Sampled color comparisons against the reference passed. This is a bounded
   single-job measurement, not sustained or concurrent throughput qualification.
+
+Real-source qualification additionally covers both AV1 and HEVC for the following
+inputs. Every output was decoded and checked for 10-bit BT.2020/PQ, 1,600-nit
+mastering metadata and absence of residual Dolby Vision/HDR10+ signaling:
+
+| Source                                                 | AI HDR processing                              | AV1 / HEVC  |
+| ------------------------------------------------------ | ---------------------------------------------- | ----------- |
+| ZENSHU S01E01, untagged 1080p 8-bit H.264              | Checked Rec.709 SDR assumption, NVIDIA TrueHDR | Pass / Pass |
+| Avatar, HDR10 with 1,000-nit mastering and zero MaxCLL | Adaptive PQ expansion                          | Pass / Pass |
+| Weathering with You, HDR10 with MaxCLL 992             | Adaptive PQ expansion                          | Pass / Pass |
+| Avatar: Fire and Ash, HDR10+ with MaxCLL 274           | Adaptive PQ expansion from the HDR10 signal    | Pass / Pass |
+| Dune: Part One, Dolby Vision Profile 7                 | Adaptive expansion from the HDR10 base layer   | Pass / Pass |
+| Dolby reference Profile 5                              | Dolby reshaping, then PQ expansion             | Pass / Pass |
+| Dolby reference Profile 8.1                            | Adaptive expansion from the PQ base signal     | Pass / Pass |
+| Dolby reference Profile 8.4                            | HLG-to-PQ adaptive mapping                     | Pass / Pass |
+
+The untagged SDR check reproduces a source previously rejected with “AI HDR
+unavailable.” Its stream and decoded frames lack color tags, so it uses the
+documented narrow HD AVC assumption; regression tests still reject untagged
+10-bit, wide-gamut, full-range and conflicting HDR metadata. Qualified GPU-path
+sources also passed sampled decoded RGB comparisons against the normalized
+reference grade. The real-source comparison decodes the reference from the start
+before discarding pre-roll: input-side FFmpeg seeks in the Profile 8 MP4 reference
+files lost HEVC parameter sets and otherwise compared different scenes.
+
+Authenticated Chrome playback on the running backend verified ZENSHU, Avatar,
+Avatar: Fire and Ash and Dune: Part One with AI HDR in both AV1 and HEVC, native decoded video and
+advancing clocks across segment boundaries. ZENSHU also passed with Compatible
+selected while AI HDR supplied AV1; Avatar passed a seek in HEVC. These checks
+cover selected playback windows, not complete feature-length files.
 
 These checks do not qualify physical peak luminance, Dolby Vision/HDR10+ dynamic
 metadata preservation or additional display/browser models. See the

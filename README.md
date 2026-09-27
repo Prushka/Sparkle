@@ -72,6 +72,8 @@ for Plex media. It uses NVIDIA TrueHDR for SDR and adaptive HDR expansion up to
 [AI HDR setup](docs/server-encoding.md#ai-hdr) for the required NVEncC/NGX dependencies.
 Supported 4:2:0 sources keep decoding, enhancement and encoding on the GPU; other
 formats retain the same enhancement through the reference pipeline.
+Conventional untagged 8-bit HD H.264 sources use a checked Rec.709 SDR assumption;
+conflicting or ambiguous HDR metadata is rejected.
 Encoded audio and video share a native playback clock on compatible browsers.
 HDR output settings show live bitrate for the active playback mode.
 Software tone mapping is temporarily disabled; Compatible and AV1/HEVC playback use

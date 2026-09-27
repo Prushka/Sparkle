@@ -50,6 +50,52 @@ func TestHDRClassification(t *testing.T) {
 	}
 }
 
+func TestHDRUntaggedHDAVC(t *testing.T) {
+	base := Stream{Codec: "h264", PixelFormat: "yuv420p", Width: 1920, Height: 1080}
+	for _, tc := range []struct {
+		name   string
+		change func(*Stream, *Stream)
+		want   bool
+	}{
+		{"untagged", func(v, f *Stream) {}, true},
+		{"partial-709", func(v, f *Stream) { v.Primaries = "bt709"; f.Space = "bt709" }, true},
+		{"unknown-tags", func(v, f *Stream) { v.Transfer = "unknown"; f.Primaries = "unspecified" }, true},
+		{"720p", func(v, f *Stream) { v.Width = 1280; v.Height = 720 }, true},
+		{"10-bit", func(v, f *Stream) { v.PixelFormat = "yuv420p10le" }, false},
+		{"decoded-10-bit", func(v, f *Stream) { f.PixelFormat = "yuv420p10le" }, false},
+		{"missing-decoded-format", func(v, f *Stream) { f.PixelFormat = "" }, false},
+		{"bit-depth-conflict", func(v, f *Stream) { v.BitDepth = "10" }, false},
+		{"HEVC", func(v, f *Stream) { v.Codec = "hevc" }, false},
+		{"UHD", func(v, f *Stream) { v.Width = 3840; v.Height = 2160 }, false},
+		{"SD", func(v, f *Stream) { v.Width = 720; v.Height = 480 }, false},
+		{"wide-gamut", func(v, f *Stream) { f.Primaries = "bt2020" }, false},
+		{"other-matrix", func(v, f *Stream) { v.Space = "smpte170m" }, false},
+		{"full-range", func(v, f *Stream) { f.Range = "pc" }, false},
+		{"zero-mastering", func(v, f *Stream) { f.SideData = []HDRSideData{{Type: "Mastering display metadata"}} }, false},
+		{"zero-CLL", func(v, f *Stream) { v.SideData = []HDRSideData{{Type: "Content light level metadata"}} }, false},
+		{"dynamic-HDR", func(v, f *Stream) { f.SideData = []HDRSideData{{Type: "HDR Dynamic Metadata SMPTE2094-40 (HDR10+)"}} }, false},
+		{"conflicting-colors", func(v, f *Stream) { v.Primaries = "bt709"; f.Primaries = "bt2020" }, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			v, frame := base, Stream{PixelFormat: "yuv420p"}
+			tc.change(&v, &frame)
+			plan, err := planHDR(v, []Stream{frame})
+			if !tc.want {
+				if err == nil {
+					t.Fatalf("accepted ambiguous color metadata: %+v", plan)
+				}
+				return
+			}
+			if err != nil || !plan.AssumedSDR || plan.Mode != "nvidia-truehdr" || plan.Transfer != "bt709" || plan.Primaries != "bt709" || plan.Matrix != "bt709" || plan.Range != "tv" {
+				t.Fatalf("SDR assumption: %+v %v", plan, err)
+			}
+		})
+	}
+	if _, err := planHDR(base, nil); err == nil {
+		t.Fatal("inferred SDR without decoded-frame evidence")
+	}
+}
+
 // Opt-in: uses synthetic local frames, never Plex or the user's originals.
 func TestAIHDRGPU(t *testing.T) {
 	nvencc := os.Getenv("SPARKLE_TEST_NVENCC")
@@ -246,7 +292,7 @@ func TestAIHDRSource(t *testing.T) {
 	if input == "" || nvencc == "" {
 		t.Skip("requires explicit source and NVIDIA executable")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	opts := Options{FFmpeg: "ffmpeg", FFprobe: "ffprobe", NVEncC: nvencc, Profile: Profile{24, "p3", 144}}
 	f, err := os.Open(input)
@@ -268,30 +314,46 @@ func TestAIHDRSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	duration, _ := strconv.ParseFloat(p.Format.Duration, 64)
-	t.Logf("source %dx%d; mode %s; mastering %.1f MaxCLL %.1f MaxFALL %.1f; Dolby %d; dynamic %v", p.video().Width, p.video().Height, plan.Mode, plan.MasteringPeak, plan.ContentPeak, plan.AveragePeak, plan.DolbyProfile, plan.Dynamic)
+	segment := min(120/SegmentSeconds, max(0, int(duration/SegmentSeconds)-1))
+	t.Logf("source %dx%d; mode %s; mastering %.1f MaxCLL %.1f MaxFALL %.1f; Dolby %d; dynamic %v; assumed SDR %v", p.video().Width, p.video().Height, plan.Mode, plan.MasteringPeak, plan.ContentPeak, plan.AveragePeak, plan.DolbyProfile, plan.Dynamic, plan.AssumedSDR)
 	for _, codec := range []string{"av1", "hevc"} {
 		dir := t.TempDir()
 		began := time.Now()
-		fast := gpuHDRSource(p.video(), plan)
-		if fast {
-			// Exercise the fast path directly so a fallback cannot hide a broken
-			// optimization during real-source qualification.
-			if err := runGPUHDR(ctx, opts, url, dir, codec, 120/SegmentSeconds, duration, p, plan); err != nil {
-				t.Fatal(err)
-			}
-			if err := writeHDRMastering(filepath.Join(dir, "video.mp4")); err != nil {
-				t.Fatal(err)
-			}
-			if err := runAIHDRAudio(ctx, opts, url, dir, codec, 120/SegmentSeconds, duration, p); err != nil {
-				t.Fatal(err)
-			}
-		} else if err := runAIHDR(ctx, opts, url, dir, codec, 120/SegmentSeconds, duration, p, plan); err != nil {
+		// Qualify the production selector, including bounded-window/decoder
+		// fallback. TestAIHDRGPUResident exercises the fast path independently.
+		if err := runAIHDR(ctx, opts, url, dir, codec, segment, duration, p, plan); err != nil {
 			t.Fatal(err)
 		}
-		t.Logf("%s %d seconds rendered in %s (GPU resident: %v)", codec, SegmentSeconds, time.Since(began), fast)
-		if fast {
+		t.Logf("%s %d seconds rendered in %s", codec, SegmentSeconds, time.Since(began))
+		out, err := probe(ctx, opts.FFprobe, filepath.Join(dir, "video.mp4"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		grade, err := probeHDR(ctx, opts.FFprobe, filepath.Join(dir, "video.mp4"), out.video())
+		if err != nil || out.video().Codec != codec || out.video().PixelFormat != "yuv420p10le" || grade.Transfer != "smpte2084" || grade.Primaries != "bt2020" || grade.Matrix != "bt2020nc" || grade.MasteringPeak != 1600 || grade.DolbyProfile != 0 || grade.Dynamic {
+			t.Fatalf("invalid enhanced HDR10 output: %+v %v", grade, err)
+		}
+		if gpuHDRSource(p.video(), plan) {
 			reference := t.TempDir()
-			if err := runAIHDRReferenceVideo(ctx, opts, url, reference, codec, 120/SegmentSeconds, duration, p, plan); err != nil {
+			decode, filter, encode := aiHDRCommands(url, reference, codec, segment, duration, opts.Profile, plan)
+			// This independent pixel oracle decodes from the beginning before
+			// discarding the pre-roll. Input-side seeking in some HEVC MP4
+			// reference files loses parameter sets and can compare
+			// a later scene even though the production GPU window is correct.
+			for i, arg := range decode {
+				if arg == "-ss" {
+					seek := append([]string{}, decode[i:i+2]...)
+					decode = append(decode[:i], decode[i+2:]...)
+					for j, arg := range decode {
+						if arg == "-i" {
+							decode = append(append(append([]string{}, decode[:j+2]...), seek...), decode[j+2:]...)
+							break
+						}
+					}
+					break
+				}
+			}
+			if err := runPipeline(ctx, []processStep{{opts.FFmpeg, decode}, {opts.NVEncC, filter}, {opts.FFmpeg, encode}}); err != nil {
 				t.Fatal(err)
 			}
 			for _, at := range []string{"1.5", "6", "11.5"} {

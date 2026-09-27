@@ -94,8 +94,15 @@ the supplied Linux Docker image does not include NVIDIA NGX/TrueHDR.
 
 The backend reads stream metadata and a bounded sample of decoded frame metadata:
 transfer function, primaries, matrix, range, mastering maximum, MaxCLL/MaxFALL,
-Dolby Vision profile/base compatibility and dynamic-metadata indicators. Missing or
-contradictory color information fails closed. A mastering-display maximum is only a
+Dolby Vision profile/base compatibility and dynamic-metadata indicators. Contradictory
+color information fails closed. A narrow exception handles conventional untagged HD
+SDR releases: H.264, 8-bit 4:2:0, 1280–1920 pixels wide and 720–1088 high may fill
+missing transfer/primaries/matrix with Rec.709 and missing range with limited range.
+Decoded frames must also be 8-bit 4:2:0; every declared color tag must agree with
+limited-range Rec.709, and no HDR mastering, light-level or dynamic metadata may be
+present. This is an SDR interpretation, not proof of an untagged source's original
+grade. Other missing-color cases, including untagged 10-bit material, remain rejected.
+A mastering-display maximum is only a
 fallback seed, never proof that the movie contains highlights at that brightness.
 
 - Recognized SDR is normalized to limited-range Rec.709 and processed by
@@ -146,6 +153,12 @@ The tests cover SDR/PQ/HLG in AV1/HEVC, MP4 HDR signaling, first/middle/final se
 timestamps, fractional frame rates, VFR fallback, decoded HDR pixel expansion and
 reference color comparisons around bright/dark scene transitions. They skip when
 the executable is not supplied.
+For a confined, read-only real-source check, also set `SPARKLE_AI_HDR_SOURCE` to
+the source file and run `go test ./internal/encode -run '^TestAIHDRSource$' -v`.
+It exercises both codecs through the production selector, validates decoded HDR10
+signaling and compares eligible GPU output against the normalized reference grade.
+The comparison decodes from the beginning to avoid source-specific reference seek
+errors, so this optional test can take several minutes. It never saves decoded frames.
 Set `SPARKLE_AI_HDR_FIXTURE_DIR` to an absolute ignored directory during the GPU
 test to export synthetic segments, then run `node scripts/tests/qualify-ai-hdr.mjs`
 from the repository root with the same variable. It checks two Chrome providers,

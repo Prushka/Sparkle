@@ -160,7 +160,10 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   access. AI HDR is a local Plex toggle before audio normalization; its encoded variant
   must have separate URLs/cache identity and preserve the saved ordinary output choice.
   SDR uses NVIDIA TrueHDR; PQ/HLG use frame-adaptive expansion to a 1600-nit HDR10
-  ceiling. Inspect container and decoded color metadata; reject ambiguous sources.
+  ceiling. Inspect container and decoded color metadata; reject conflicting HDR signals.
+  Untagged 8-bit 4:2:0 AVC at HD dimensions may use the conventional limited-range
+  Rec.709 SDR assumption after decoded-frame checks and absence of all HDR metadata.
+  Keep other ambiguous/high-bit-depth/wide-gamut sources rejected.
   Keep canonical 4:2:0 decode/filter/encode frames on the GPU when timestamp checks
   pass; retain the normalized reference path for other colors/formats and VFR.
   Both paths must share scene analysis, tone/gamut mapping and the two-second lead-in.

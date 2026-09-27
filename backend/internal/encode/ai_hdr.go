@@ -61,6 +61,7 @@ type hdrPlan struct {
 	MasteringPeak, ContentPeak, AveragePeak float64
 	DolbyProfile                            int
 	Dynamic, Enhancement                    bool
+	AssumedSDR                              bool
 }
 
 func rational(value string) float64 {
@@ -160,6 +161,18 @@ func planHDR(video Stream, frames []Stream) (hdrPlan, error) {
 	} else if p.DolbyProfile == 7 && !knownColor(p.Transfer) {
 		p.Transfer = "smpte2084"
 	}
+	if inferHDRec709(video, frames, p) {
+		// Conventional 8-bit AVC HD releases often omit VUI color tags. Apply
+		// the ordinary HD SDR interpretation only after checking decoded frames
+		// and all HDR side data; never apply this assumption to high-bit-depth,
+		// wide-gamut, full-range or otherwise conflicting material.
+		for _, field := range []*string{&p.Transfer, &p.Primaries, &p.Matrix} {
+			if !knownColor(*field) {
+				*field = "bt709"
+				p.AssumedSDR = true
+			}
+		}
+	}
 	switch p.Transfer {
 	case "smpte2084", "arib-std-b67":
 		p.Mode = "hdr-expansion"
@@ -202,6 +215,38 @@ func planHDR(video Stream, frames []Stream) (hdrPlan, error) {
 		p.SourcePeak = p.ContentPeak
 	}
 	return p, nil
+}
+
+func inferHDRec709(video Stream, frames []Stream, p hdrPlan) bool {
+	if video.Codec != "h264" || video.PixelFormat != "yuv420p" ||
+		(video.BitDepth != "" && video.BitDepth != "0" && video.BitDepth != "8") ||
+		video.Width < 1280 || video.Width > 1920 || video.Height < 720 || video.Height > 1088 ||
+		len(frames) == 0 || p.DolbyProfile != 0 || p.Dynamic ||
+		p.MasteringPeak != 0 || p.ContentPeak != 0 || p.AveragePeak != 0 {
+		return false
+	}
+	for _, field := range []string{p.Transfer, p.Primaries, p.Matrix} {
+		if knownColor(field) && field != "bt709" {
+			return false
+		}
+	}
+	if knownColor(p.Range) && p.Range != "tv" {
+		return false
+	}
+	for _, frame := range frames {
+		if frame.PixelFormat != "yuv420p" {
+			return false
+		}
+	}
+	for _, frame := range append([]Stream{video}, frames...) {
+		for _, side := range frame.SideData {
+			kind := strings.ToLower(side.Type)
+			if strings.Contains(kind, "hdr") || strings.Contains(kind, "mastering") || strings.Contains(kind, "content light") {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func probeHDR(ctx context.Context, binary, input string, video Stream) (hdrPlan, error) {
