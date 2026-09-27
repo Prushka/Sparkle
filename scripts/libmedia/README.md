@@ -87,6 +87,8 @@ The Matroska seek patch lets audio-only playback use interleaved video-cue
 clusters, including the final cue, instead of scanning forward through the file.
 The MSE seek patch buffers through the requested timestamp after landing on an
 earlier HLS keyframe, so a paused seek does not stop at the end of its preroll buffer.
+Delayed MSE startup alignment is invalidated by subsequent seeks, preventing a
+late source-open callback from moving a restored paused position backwards.
 Native Dolby playback uses the selected Dolby codec in both MSE and the MP4
 sample entry. `hdr-sdr.ts` supplies the tested integer-frame PQ/HLG → sRGB shader;
 `dovi-sdr.ts` adds bounded per-frame Profile 5 RPU polynomial/MMR and color transforms.

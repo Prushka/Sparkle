@@ -316,6 +316,13 @@ paused seeks, two-client pause/play after reconnect, and retiring an unfinished 
 when changing Plex media in the same room. Pixel 7 emulation covers the returning
 viewer; physical Safari/iOS and Android app-switch qualification remains pending.
 
+Room timeline regressions also simulate a background native clock resetting to zero,
+a delayed viewer joining at a paused position, and conflicting in-flight room seeks.
+Media replacement tests use different 48-second and 24-second durations with the old
+media playing or paused. Two-client iPhone 13 and Pixel 7 emulation checks return from
+a backgrounded old source to a delayed replacement paused at 12 seconds, then verify
+shared play/pause. These Chrome simulations do not qualify physical Safari or Android.
+
 Media identities/revisions are attached to playback updates and backend tests
 reject stale generations. Decoder operations serialize, obsolete seeks coalesce,
 and remote suppression spans asynchronous operations. Two-client tests cover

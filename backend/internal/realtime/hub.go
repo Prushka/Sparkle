@@ -3159,8 +3159,14 @@ func (r *Room) syncTime(sender *Player, next *float64, identity ...ClientPayload
 	mediaID, mediaUpdated = r.mediaID, r.mediaUpdatedAt
 	sender.state.LastSeen = time.Now().Unix()
 	sender.state.Time = *next
+	// Suspended native clocks can reset or deliver delayed updates. They may
+	// describe this participant, but must never replace the shared timeline.
+	if sender.state.InBg {
+		r.mu.Unlock()
+		return
+	}
 	if math.Abs(r.state.Time-sender.state.Time) > roomTimeSyncThresholdSeconds && r.lastSeek.Add(time.Second).Before(time.Now()) {
-		shouldBroadcast = !sender.state.InBg
+		shouldBroadcast = true
 		r.lastSeek = time.Now()
 	}
 	r.state.Time = sender.state.Time
@@ -3198,13 +3204,15 @@ func (r *Room) syncPause(sender *Player, paused *bool, identity ...ClientPayload
 	mediaID, mediaUpdated = r.mediaID, r.mediaUpdatedAt
 	sender.state.LastSeen = time.Now().Unix()
 	sender.state.Paused = *paused
+	if sender.state.InBg {
+		r.mu.Unlock()
+		return
+	}
 	r.state.Paused = *paused
 	firedBy = sender.state
-	if !sender.state.InBg {
-		targets = r.otherPlayersLocked(sender)
-		for _, player := range targets {
-			player.state.Paused = *paused
-		}
+	targets = r.otherPlayersLocked(sender)
+	for _, player := range targets {
+		player.state.Paused = *paused
 	}
 	r.mu.Unlock()
 

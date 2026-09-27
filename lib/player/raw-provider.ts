@@ -197,6 +197,7 @@ export class RawProvider implements MediaProviderAdapter {
 	private generation = 0;
 	private commands = Promise.resolve();
 	private seekSequence = 0;
+	private pendingSeek = 0;
 	private abort = new AbortController();
 	private recovering?: Promise<void>;
 	private recoveryAttempts = 0;
@@ -249,6 +250,7 @@ export class RawProvider implements MediaProviderAdapter {
 			!this.starting &&
 			!this.status.changing &&
 			!this.destroyed &&
+			this.pendingSeek === 0 &&
 			this.remoteOperations === 0
 		);
 	}
@@ -310,6 +312,7 @@ export class RawProvider implements MediaProviderAdapter {
 			void Promise.allSettled([this.engine?.pause(), this.audioEngine?.pause()]);
 		this.abort.abort();
 		++this.generation;
+		this.pendingSeek = 0;
 		this.starting = false;
 		this.buffering = false;
 		this.container
@@ -389,6 +392,7 @@ export class RawProvider implements MediaProviderAdapter {
 		this.hdrPreference = readHDRPreference();
 		this.availableEncoders = [];
 		this.desiredTime = 0;
+		this.pendingSeek = 0;
 		this.part = 0;
 		this.captionRestore = undefined;
 		this.paused = true;
@@ -765,7 +769,10 @@ export class RawProvider implements MediaProviderAdapter {
 		// including delayed starts and seeks that outlive the UI's usual timeout.
 		this.remoteOperations++;
 		try {
-			if (typeof sync.time === 'number' && Math.abs(this.timeline - sync.time) > 1)
+			if (
+				typeof sync.time === 'number' &&
+				(this.pendingSeek !== 0 || Math.abs(this.timeline - sync.time) > 1)
+			)
 				this.setCurrentTime(sync.time);
 			if (sync.paused === true) await this.pause();
 			else if (sync.paused === false) await this.play();
@@ -778,6 +785,7 @@ export class RawProvider implements MediaProviderAdapter {
 		if (!Number.isFinite(time)) return;
 		this.desiredTime = Math.max(0, Math.min(time, this.duration));
 		const sequence = ++this.seekSequence;
+		this.pendingSeek = sequence;
 		void this.enqueue(async () => {
 			if (sequence !== this.seekSequence || !this.raw) return;
 			const target = this.desiredTime;
@@ -790,7 +798,13 @@ export class RawProvider implements MediaProviderAdapter {
 			this.normalizers.forEach((normalizer) => normalizer.reset());
 			if (index !== this.part) {
 				await this.loadPart(index, this.generation);
-				if (!this.paused) await this.start();
+			}
+			// libmedia cannot seek a merely loaded engine. Prime both clocks first,
+			// including when joining a paused room or seeking into an unplayed part.
+			// Keep the whole operation private until the requested frame is ready.
+			if (!this.initialized) {
+				await this.start();
+				if (this.paused) await Promise.all([this.engine?.pause(), this.audioEngine?.pause()]);
 			}
 			const ms = BigInt(Math.round((target - this.raw.parts[index].start) * 1000));
 			// Start both indexed seeks together; do not let video finish before the
@@ -804,7 +818,11 @@ export class RawProvider implements MediaProviderAdapter {
 			this.publish({ changing: false });
 			this.notify('time-change', target);
 			this.notify('seeked', target);
-		}).catch(() => {});
+		})
+			.finally(() => {
+				if (this.pendingSeek === sequence) this.pendingSeek = 0;
+			})
+			.catch(() => {});
 	}
 	setMuted(muted: boolean) {
 		this.muted = muted;

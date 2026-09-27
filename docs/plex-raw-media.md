@@ -153,6 +153,13 @@ the selected output and refreshes the room timeline without publishing stale pos
 Automatic retries are bounded; **Retry playback** remains available after an error.
 Original playback still requires explicitly selecting **Compatible**.
 
+Background participants cannot overwrite the shared playback position or pause state.
+On return, the current room snapshot restores playback, including paused positions
+before a decoder's first play. A newer room seek supersedes unfinished seeks even if
+the native clock has not yet moved away from that newer target.
+Automatic connections after media replacement preserve the room's reset position
+and pause state. Delayed native decoder startup cannot overwrite a completed seek.
+
 Raw **Google Cast options** explains Chrome tab casting and the option to choose
 a compatible processed version. It is not a direct receiver-casting implementation:
 the raw provider's browser demuxer, audio decoder, and subtitle renderer cannot

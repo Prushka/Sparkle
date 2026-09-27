@@ -12,6 +12,7 @@ library from the same Library view.
 - Shared play/pause, seeking, media changes, reconnects, profiles, chat, and notifications.
   Returning from another app refreshes room playback; stalled Plex playback can rebuild
   its selected output automatically or through **Retry playback**.
+  Suspended background clocks cannot overwrite room progress or its pause state.
 - Plex sign-in in Library and the player. Server members can access every configured
   Raw library; anonymous visitors can use existing Encoded media. Raw rooms prompt
   visitors to sign in or leave. Shared Raw links render full titles, descriptions and

@@ -4635,12 +4635,9 @@ export function Player({
 
 	const send = useCallback((data: any) => {
 		if (data.type === SyncTypes.TimeSync || data.type === SyncTypes.PauseSync) {
+			if (document.hidden || inBgRef.current || awaitingInitialPlaybackSyncRef.current) return;
 			const provider = playerElementRef.current?.provider as unknown;
-			if (
-				provider instanceof RawProvider &&
-				(!provider.canPublishPlayback || awaitingInitialPlaybackSyncRef.current)
-			)
-				return;
+			if (provider instanceof RawProvider && !provider.canPublishPlayback) return;
 			data = {
 				...data,
 				mediaId: currentMediaIdRef.current,
@@ -5710,6 +5707,7 @@ export function Player({
 	);
 
 	const updateTime = useCallback(() => {
+		if (document.hidden || inBgRef.current) return;
 		if (awaitingInitialPlaybackSyncRef.current || suppressNextPlaybackSyncRef.current) return;
 		const provider = playerElementRef.current?.provider as unknown;
 		if (provider instanceof RawProvider && !provider.canPublishPlayback) return;
@@ -5903,6 +5901,7 @@ export function Player({
 	}, [clearPlaybackSyncSuppression]);
 
 	const shouldSendPlaybackSync = useCallback(() => {
+		if (document.hidden || inBgRef.current) return false;
 		const provider = playerElementRef.current?.provider as unknown;
 		if (provider instanceof RawProvider && !provider.canPublishPlayback) return false;
 		if (awaitingInitialPlaybackSyncRef.current) {
@@ -6133,7 +6132,10 @@ export function Player({
 			exitedRef.current = false;
 			setInteracted(true);
 			setExited(false);
-			const recoveringConnection = replace || reconnectAttemptRef.current > 0;
+			// Automatic mounting after a media change is still the same room visit.
+			// Only an explicit first join should request the solo-room autoplay policy.
+			const recoveringConnection = !forceInteracted || replace || reconnectAttemptRef.current > 0;
+			awaitingInitialPlaybackSyncRef.current = true;
 			const socket = new WebSocket(socketUrl);
 			setSocketConnected(false);
 			socketLastMessageRef.current = Date.now();

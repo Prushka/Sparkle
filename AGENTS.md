@@ -149,6 +149,11 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   Foreground/online recovery must request the current room timeline without resuming
   a paused room. Bound decoder commands and teardown, cancel obsolete generations,
   and recover the selected output without broadcasting a stale local position.
+  Background clock updates must not change the shared timeline. Prime unstarted
+  decoders before restoring paused positions, and let the latest room seek replace
+  an unfinished seek even when the native clock still matches the latest target.
+  Automatic connections after media replacement preserve room pause state; only
+  an explicit initial join may request the solo-room autoplay policy.
 - Software tone mapping is temporarily disabled by `SOFTWARE_TONE_MAPPING_ENABLED`.
   Preserve its implementation for rework, migrate saved `sdr` choices to Compatible,
   and require native video for active raw/encoded modes on SDR and HDR displays.

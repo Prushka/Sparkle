@@ -187,6 +187,26 @@ patch(
 // A mode switch can close MSE while its loop awaits a demux packet. Cancel
 // those pulls, then let the loops finish before releasing their muxer buffers.
 const msePipeline = 'packages/avplayer/src/mse/MSEPipeline.ts';
+// Source-open buffering finishes asynchronously after play resolves. Its initial
+// clock alignment must not undo an explicit seek completed during that window.
+patch(msePipeline, '  seeking: boolean', '  seeking: boolean\n  seekGeneration: number');
+patch(msePipeline, '      seeking: false,', '      seeking: false,\n      seekGeneration: 0,');
+patch(
+	msePipeline,
+	'      await new Sleep(0.1)\n\n      let min = 0',
+	`      await new Sleep(0.1)
+      if (task.closed || task.seekGeneration !== seekGeneration) return
+
+      let min = 0`
+);
+patch(
+	msePipeline,
+	'  public async beforeSeek(taskId: string) {\n    const task = this.tasks.get(taskId)\n    if (task) {',
+	`  public async beforeSeek(taskId: string) {
+    const task = this.tasks.get(taskId)
+    if (task) {
+      task.seekGeneration++`
+);
 // HLS seeks can land on an earlier keyframe. Buffer through the requested time,
 // including while paused, rather than clamping the native clock to the end of
 // the three-second preroll window before the actual target.
@@ -1011,6 +1031,7 @@ patch(
 	`  private getSourceOpenHandler(task: SelfTask, startTimestamp: int64 = 0n) {
     return async () => {`,
 	`  private getSourceOpenHandler(task: SelfTask, startTimestamp: int64 = 0n) {
+    const seekGeneration = task.seekGeneration
     let initialized = false
     return async () => {
       if (initialized) return

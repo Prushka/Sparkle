@@ -2053,3 +2053,20 @@ func TestPlaybackSnapshotDoesNotResumeSoloRoom(t *testing.T) {
 	room.handlePayload(player, ClientPayload{Type: PlaybackSync})
 	assertNoQueuedPayload(t, player)
 }
+
+func TestBackgroundPlaybackCannotOverwriteRoomTimeline(t *testing.T) {
+	room := newRoom("room", "media")
+	viewer := testPlayer("viewer", "Viewer", 8)
+	room.players[viewer.state.Id] = viewer
+	room.state = VideoState{Time: 18, Paused: true}
+	room.setForegroundState(viewer, "bg", nil)
+	zero, playing := 0.0, false
+	room.syncTime(viewer, &zero)
+	room.syncPause(viewer, &playing)
+	room.setForegroundState(viewer, "fg", nil)
+	room.sendPlaybackState(viewer)
+	position, pause := readQueuedPayload(t, viewer), readQueuedPayload(t, viewer)
+	if position.Time == nil || *position.Time != 18 || pause.Paused == nil || !*pause.Paused {
+		t.Fatalf("background clock corrupted resume snapshot: time=%#v pause=%#v", position, pause)
+	}
+}
