@@ -4,6 +4,7 @@ import type { RawPlaybackStatus } from '../../lib/player/raw-types';
 
 const root = 'cache/track-selection';
 const rawId = 'track-raw-fixture',
+	rawNextId = 'track-raw-next-fixture',
 	encodedId = 'track-encoded-fixture';
 test.afterEach(async ({ page }, info) => {
 	if (info.status === info.expectedStatus) return;
@@ -101,26 +102,26 @@ async function fixture(page: Page) {
 		])
 	);
 	const bytes = readFileSync(`${root}/multilingual.mkv`);
-	for (const id of [rawId, encodedId]) {
+	for (const id of [rawId, rawNextId, encodedId]) {
 		await page.route(`**/be/media/${id}`, (route) =>
 			route.fulfill({
 				json: {
 					Id: id,
 					Title: { title: 'Track fixture', titleId: 'track-fixture', id, modTime: 1 },
-					Source: id === rawId ? 'plex' : 'processed',
+					Source: id !== encodedId ? 'plex' : 'processed',
 					Input: 'Track fixture.mkv',
 					State: 'complete',
 					Duration: 48,
 					width: 320,
 					height: 180,
 					Files: files,
-					EncodedCodecs: id === rawId ? [] : ['h264-8bit'],
+					EncodedCodecs: id !== encodedId ? [] : ['h264-8bit'],
 					MappedAudio: { 'h264-8bit': audio },
 					Streams: subtitleStreams,
 					Chapters: [],
 					DominantColors: [],
 					JobModTime: 1,
-					...(id === rawId
+					...(id !== encodedId
 						? {
 								Raw: {
 									container: 'mkv',
@@ -1168,3 +1169,215 @@ for (const source of ['raw', 'encoded']) {
 		await page.screenshot({ path: test.info().outputPath(`${source}-mobile-subtitles.png`) });
 	});
 }
+
+for (const codec of ['av1', 'hevc']) {
+	test(`encoded ${codec} recovers a native video suspended by mobile app switching`, async ({
+		page,
+		request
+	}) => {
+		test.skip(!existsSync(`${root}/${codec}/master.m3u8`), 'Prepare multilingual/NVENC fixtures');
+		await fixture(page);
+		await page.addInitScript((mode) => localStorage.setItem('sparkle.raw.hdr', mode), codec);
+		const room = `resume-${codec}-${Date.now()}`;
+		await request.post('/be/rooms', { data: { roomId: room, mediaId: rawId } });
+		await page.goto(`/${room}/media/${rawId}`);
+		await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+		const video = page.locator('.sparkle-raw-surface video');
+		await expect
+			.poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime), { timeout: 30000 })
+			.toBeGreaterThan(2);
+		const stopped = await page.evaluate(() => {
+			Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+			document.dispatchEvent(new Event('visibilitychange'));
+			const video = document.querySelector('.sparkle-raw-surface video') as HTMLVideoElement;
+			video.pause(); // Safari may suspend its native media clock without a room pause.
+			return video.currentTime;
+		});
+		await page.evaluate(() => {
+			Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+			document.dispatchEvent(new Event('visibilitychange'));
+		});
+		await expect
+			.poll(() => video.evaluate((v: HTMLVideoElement) => v.currentTime), { timeout: 15000 })
+			.toBeGreaterThan(stopped + 1);
+		await page.locator('[data-media-player]').press('k');
+		await expect(page.locator('[data-media-player]')).toHaveAttribute('data-paused');
+	});
+}
+
+test('same-room Plex media switch escapes an unfinished seek', async ({ page, request }) => {
+	test.skip(!existsSync(`${root}/hevc/master.m3u8`), 'Prepare multilingual/NVENC fixtures');
+	await fixture(page);
+	await page.addInitScript(() => localStorage.setItem('sparkle.raw.hdr', 'hevc'));
+	const room = `stuck-seek-${Date.now()}`;
+	await request.post('/be/rooms', { data: { roomId: room, mediaId: rawId } });
+	await page.goto(`/${room}/media/${rawId}`);
+	await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+	await expect.poll(() => audioTitle(page), { timeout: 30000 }).toBe('Japanese');
+	await page.evaluate(() => {
+		const provider = (window as any).trackTestProvider;
+		(window as any).retiredProvider = provider;
+		provider.engine.seek = () => new Promise(() => {});
+		provider.setCurrentTime(20);
+	});
+	await expect(page.locator('[data-media-player]')).toHaveAttribute('data-seeking');
+	await request.put(`/be/rooms/${room}`, { data: { mediaId: rawNextId } });
+	await expect(page).toHaveURL(new RegExp(`/media/${rawNextId}$`), { timeout: 20000 });
+	await expect(page.locator('[data-media-player]')).toHaveAttribute('data-raw-ready', 'true', {
+		timeout: 15000
+	});
+	await page.locator('[data-media-player]').press('k');
+	await expect
+		.poll(
+			() =>
+				page.locator('.sparkle-raw-surface video').evaluate((v: HTMLVideoElement) => v.currentTime),
+			{ timeout: 15000 }
+		)
+		.toBeGreaterThan(1);
+	await expect
+		.poll(() => page.evaluate(() => !!(window as any).retiredProvider.engine))
+		.toBe(false);
+});
+
+test('encoded playback recovers a stuck seek and restores working controls', async ({
+	page,
+	request
+}) => {
+	test.skip(!existsSync(`${root}/hevc/master.m3u8`), 'Prepare multilingual/NVENC fixtures');
+	await fixture(page);
+	await page.addInitScript(() => localStorage.setItem('sparkle.raw.hdr', 'hevc'));
+	const room = `seek-recovery-${Date.now()}`;
+	await request.post('/be/rooms', { data: { roomId: room, mediaId: rawId } });
+	await page.goto(`/${room}/media/${rawId}`);
+	await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+	await expect.poll(() => audioTitle(page), { timeout: 30000 }).toBe('Japanese');
+	const player = page.locator('[data-media-player]');
+	await player.press('k');
+	await expect(player).toHaveAttribute('data-paused');
+	await page.evaluate(() => {
+		const p = (window as any).trackTestProvider;
+		(window as any).stuckEngine = p.engine;
+		p.engine.seek = () => new Promise(() => {});
+		p.setCurrentTime(20);
+	});
+	await expect(player).toHaveAttribute('data-seeking');
+	await expect
+		.poll(
+			() =>
+				page.evaluate(() => {
+					const p = (window as any).trackTestProvider;
+					return p.engine !== (window as any).stuckEngine && p.canPublishPlayback;
+				}),
+			{ timeout: 60000 }
+		)
+		.toBe(true);
+	await expect(player).not.toHaveAttribute('data-seeking');
+	await expect(player).toHaveAttribute('data-paused');
+	await page.evaluate(() => (window as any).trackTestProvider.setCurrentTime(12));
+	await expect
+		.poll(() => page.evaluate(() => Math.round((window as any).trackTestProvider.timeline)))
+		.toBe(12);
+	await player.press('k');
+	await expect(player).not.toHaveAttribute('data-paused');
+	await expect
+		.poll(() =>
+			page.locator('.sparkle-raw-surface video').evaluate((v: HTMLVideoElement) => v.currentTime)
+		)
+		.toBeGreaterThan(13);
+});
+
+test('returning mobile viewer replaces a half-open room connection and adopts peer controls', async ({
+	browser,
+	request,
+	baseURL
+}) => {
+	test.skip(!existsSync(`${root}/hevc/master.m3u8`), 'Prepare multilingual/NVENC fixtures');
+	const room = `socket-recovery-${Date.now()}`;
+	await request.post('/be/rooms', { data: { roomId: room, mediaId: rawId } });
+	const mobile = await browser.newContext({ ...devices['Pixel 7'] });
+	const page = await mobile.newPage();
+	const peer = await browser.newPage();
+	let drop = false;
+	let connections = 0;
+	try {
+		for (const client of [page, peer]) {
+			await fixture(client);
+			await client.addInitScript(() => localStorage.setItem('sparkle.raw.hdr', 'hevc'));
+		}
+		await page.routeWebSocket(`**/sync/${room}/*`, (socket) => {
+			const server = socket.connectToServer();
+			if (socket.url().split('/').at(-1)!.startsWith('media_')) return;
+			const number = ++connections;
+			server.onMessage((message) => {
+				if (!drop || number > 1) socket.send(message);
+			});
+			socket.onMessage((message) => {
+				if (!drop || number > 1) server.send(message);
+			});
+		});
+		for (const client of [page, peer]) {
+			await client.goto(`${baseURL}/${room}/media/${rawId}`);
+			await client.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+			await expect.poll(() => audioTitle(client), { timeout: 30000 }).toBe('Japanese');
+		}
+		drop = true; // Socket still reports OPEN, but the suspended connection carries no data.
+		await page.evaluate(() => {
+			Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+			document.dispatchEvent(new Event('visibilitychange'));
+		});
+		await peer.locator('[data-media-player]').press('k');
+		await expect(peer.locator('[data-media-player]')).toHaveAttribute('data-paused');
+		await peer.evaluate(() => (window as any).trackTestProvider.setCurrentTime(18));
+		await expect
+			.poll(() => peer.evaluate(() => Math.round((window as any).trackTestProvider.timeline)))
+			.toBe(18);
+		await page.evaluate(() => {
+			Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+			document.dispatchEvent(new Event('visibilitychange'));
+		});
+		await expect.poll(() => connections, { timeout: 20000 }).toBeGreaterThan(1);
+		await expect(page.locator('[data-media-player]')).toHaveAttribute('data-paused');
+		await expect
+			.poll(() => page.evaluate(() => Math.round((window as any).trackTestProvider.timeline)))
+			.toBe(18);
+		await expect(peer.locator('[data-media-player]')).toHaveAttribute('data-paused');
+		await page.locator('[data-media-player]').press('k');
+		await expect(peer.locator('[data-media-player]')).not.toHaveAttribute('data-paused');
+	} finally {
+		await mobile.close();
+		await peer.close();
+	}
+});
+
+test('encoded failure offers retry without falling back to original playback', async ({
+	page,
+	request
+}) => {
+	test.skip(!existsSync(`${root}/hevc/master.m3u8`), 'Prepare multilingual/NVENC fixtures');
+	await fixture(page);
+	await page.addInitScript(() => localStorage.setItem('sparkle.raw.hdr', 'hevc'));
+	let failing = true;
+	await page.route('**/encoded/hevc/manifest', (route) =>
+		failing ? route.fulfill({ status: 503 }) : route.fallback()
+	);
+	const originals: string[] = [];
+	page.on('request', (request) => {
+		if (/\/parts\/[^/]+\/file$/.test(request.url())) originals.push(request.url());
+	});
+	const room = `retry-${Date.now()}`;
+	await request.post('/be/rooms', { data: { roomId: room, mediaId: rawId } });
+	await page.goto(`/${room}/media/${rawId}`);
+	await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+	await expect(page.getByRole('button', { name: 'Retry playback', exact: true })).toBeVisible();
+	await expect
+		.poll(() => page.evaluate(() => !!(window as any).trackTestProvider.recovering))
+		.toBe(false);
+	failing = false;
+	await page.getByRole('button', { name: 'Retry playback', exact: true }).click();
+	await expect(page.locator('[data-media-player]')).toHaveAttribute('data-raw-ready', 'true', {
+		timeout: 30000
+	});
+	await expect.poll(() => audioTitle(page)).toBe('Japanese');
+	await expect(page.getByRole('button', { name: 'Retry playback', exact: true })).toHaveCount(0);
+	expect(originals).toEqual([]);
+});

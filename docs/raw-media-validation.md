@@ -308,6 +308,14 @@ AV1 and HEVC exercise merged English/Chinese captions, native-track activation b
 entry, cue changes/gaps, forward/backward seeks, exit to inline overlays, layer removal
 and captions off. These tests do not qualify Safari's system player or physical devices.
 
+Recovery checks use the production build in Chrome with generated AV1/HEVC fixtures.
+They simulate an app-suspended native video, an unfinished decoder seek, a socket
+that reports open while dropping traffic, and a failed encoding manifest. Coverage
+includes automatic recovery, explicit retry without original-file fallback, accurate
+paused seeks, two-client pause/play after reconnect, and retiring an unfinished decoder
+when changing Plex media in the same room. Pixel 7 emulation covers the returning
+viewer; physical Safari/iOS and Android app-switch qualification remains pending.
+
 Media identities/revisions are attached to playback updates and backend tests
 reject stale generations. Decoder operations serialize, obsolete seeks coalesce,
 and remote suppression spans asynchronous operations. Two-client tests cover

@@ -1532,7 +1532,7 @@ func TestNewSoloPlayerStartsPlayback(t *testing.T) {
 	}
 	room.players[player.state.Id] = player
 
-	room.newPlayer(player)
+	room.newPlayer(player, false)
 
 	if room.state.Paused {
 		t.Fatal("solo join left room paused, want resumed")
@@ -1576,7 +1576,7 @@ func TestNewPlayerAdoptsExistingRoomPause(t *testing.T) {
 	room.players[existing.state.Id] = existing
 	room.players[joining.state.Id] = joining
 
-	room.newPlayer(joining)
+	room.newPlayer(joining, false)
 
 	if !room.state.Paused {
 		t.Fatal("non-solo join resumed paused room")
@@ -1859,7 +1859,7 @@ func TestNewPlayerBroadcastsJoinSystemMessage(t *testing.T) {
 	room.players[joining.state.Id] = joining
 	joining.joinMessagePending = true
 
-	room.newPlayer(joining)
+	room.newPlayer(joining, false)
 
 	_ = readQueuedPayload(t, joining)
 	_ = readQueuedPayload(t, joining)
@@ -1922,7 +1922,7 @@ func TestNewPlayerReceivesFullChatHistory(t *testing.T) {
 	joining := testPlayer("joining", "Joining", 8)
 	room.players[joining.state.Id] = joining
 
-	room.newPlayer(joining)
+	room.newPlayer(joining, false)
 
 	_ = readQueuedPayload(t, joining)
 	_ = readQueuedPayload(t, joining)
@@ -2024,4 +2024,32 @@ func assertNoQueuedPayload(t *testing.T, player *Player) {
 		t.Fatalf("unexpected queued payload: %s", string(raw))
 	default:
 	}
+}
+
+func TestPlaybackSnapshotDoesNotResumeSoloRoom(t *testing.T) {
+	room := &Room{id: "room", mediaID: "media", mediaUpdatedAt: 123, players: make(map[string]*Player), state: VideoState{Time: 42, Paused: true}}
+	player := testPlayer("viewer", "Viewer", 8)
+	room.players[player.state.Id] = player
+	room.handlePayload(player, ClientPayload{Type: PlaybackSync})
+	position := readQueuedPayload(t, player)
+	pause := readQueuedPayload(t, player)
+	if position.Type != TimeSync || position.Time == nil || *position.Time != 42 || position.MediaID != "media" || position.MediaUpdated != 123 {
+		t.Fatalf("incorrect timeline snapshot: %#v", position)
+	}
+	if pause.Type != PauseSync || pause.Paused == nil || !*pause.Paused || !room.state.Paused {
+		t.Fatalf("snapshot changed paused room: %#v", pause)
+	}
+	assertNoQueuedPayload(t, player)
+	room.handlePayload(player, ClientPayload{Type: NewPlayer, Recover: true})
+	_ = readQueuedPayload(t, player)
+	rejoined := readQueuedPayload(t, player)
+	if rejoined.Paused == nil || !*rejoined.Paused || !room.state.Paused {
+		t.Fatal("reconnecting solo viewer resumed the paused room")
+	}
+	for len(player.send) > 0 {
+		<-player.send
+	}
+	delete(room.players, player.state.Id)
+	room.handlePayload(player, ClientPayload{Type: PlaybackSync})
+	assertNoQueuedPayload(t, player)
 }

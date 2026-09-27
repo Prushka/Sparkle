@@ -829,10 +829,28 @@ func (r *Room) handlePayload(current *Player, payload ClientPayload) {
 	case ExitSync:
 		r.kickPlayer(current, payload.TargetID)
 	case NewPlayer:
-		r.newPlayer(current)
+		r.newPlayer(current, payload.Recover)
+	case PlaybackSync:
+		r.sendPlaybackState(current)
 	default:
 		log.Printf("[%s] ignored unknown sync type %q", current.state.Id, payload.Type)
 	}
+}
+
+// A foregrounded client needs an authoritative snapshot without rejoining or
+// changing the room's pause state (including a paused room with one viewer).
+func (r *Room) sendPlaybackState(player *Player) {
+	r.mu.RLock()
+	if r.players[player.state.Id] != player {
+		r.mu.RUnlock()
+		return
+	}
+	mediaID, revision := r.mediaID, r.mediaUpdatedAt
+	position, paused := r.state.Time, r.state.Paused
+	r.mu.RUnlock()
+	now := time.Now().UnixMilli()
+	player.sendJSON(SendPayload{Type: TimeSync, MediaID: mediaID, MediaUpdated: revision, Time: &position, Timestamp: now})
+	player.sendJSON(SendPayload{Type: PauseSync, MediaID: mediaID, MediaUpdated: revision, Paused: &paused, Timestamp: now})
 }
 
 func (r *Room) kickPlayer(sender *Player, targetID string) {
@@ -3197,7 +3215,7 @@ func (r *Room) syncPause(sender *Player, paused *bool, identity ...ClientPayload
 	sendPayloadToPlayers(targets, payload)
 }
 
-func (r *Room) newPlayer(sender *Player) {
+func (r *Room) newPlayer(sender *Player, recovering bool) {
 	var mediaID string
 	var mediaUpdated int64
 	var roomTime float64
@@ -3219,7 +3237,7 @@ func (r *Room) newPlayer(sender *Player) {
 	roomTime = r.state.Time
 	mediaID, mediaUpdated = r.mediaID, r.mediaUpdatedAt
 	roomPaused = r.state.Paused
-	if len(r.players) == 1 {
+	if len(r.players) == 1 && !recovering {
 		roomPaused = false
 		r.state.Paused = false
 	}

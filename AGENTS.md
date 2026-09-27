@@ -146,6 +146,9 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   media-generation checks, stale-message rejection, and remote-event suppression through
   readiness, seeks, buffering, track changes, recovery, and teardown. Loading must not emit
   accidental pauses or stale positions.
+  Foreground/online recovery must request the current room timeline without resuming
+  a paused room. Bound decoder commands and teardown, cancel obsolete generations,
+  and recover the selected output without broadcasting a stale local position.
 - Software tone mapping is temporarily disabled by `SOFTWARE_TONE_MAPPING_ENABLED`.
   Preserve its implementation for rework, migrate saved `sdr` choices to Compatible,
   and require native video for active raw/encoded modes on SDR and HDR displays.

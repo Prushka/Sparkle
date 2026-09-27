@@ -139,3 +139,45 @@ func TestCacheEvictionKeepsActiveResponsesAndDoesNotTraverse(t *testing.T) {
 		t.Fatal("accepted traversal")
 	}
 }
+
+func TestCacheReturningViewerRetriesAbandonedBuild(t *testing.T) {
+	c := testCache(t)
+	started := make(chan struct{})
+	canceled := make(chan struct{})
+	finish := make(chan struct{})
+	var calls atomic.Int32
+	build := func(ctx context.Context, dir string) error {
+		if calls.Add(1) == 1 {
+			close(started)
+			<-ctx.Done()
+			close(canceled)
+			<-finish // FFmpeg teardown can outlive a returning browser's request.
+			return ctx.Err()
+		}
+		return os.WriteFile(filepath.Join(dir, "video.mp4"), []byte("recovered"), 0644)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	first := make(chan error, 1)
+	go func() { _, _, err := c.acquire(ctx, key("returning"), build); first <- err }()
+	<-started
+	cancel()
+	<-first
+	<-canceled
+	returned := make(chan error, 1)
+	go func() {
+		_, release, err := c.acquire(context.Background(), key("returning"), build)
+		if release != nil {
+			release()
+		}
+		returned <- err
+	}()
+	// Let the new request attach before allowing the cancelled process to exit.
+	time.Sleep(30 * time.Millisecond)
+	close(finish)
+	if err := <-returned; err != nil {
+		t.Fatalf("returning viewer inherited cancelled encode: %v", err)
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("builds = %d, want exactly one replacement", calls.Load())
+	}
+}

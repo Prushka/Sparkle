@@ -31,6 +31,7 @@ import {
 import { RawSubtitles } from './raw-subtitles';
 import { RawPictureInPicture } from './raw-pip';
 import { RawFullscreen } from './raw-fullscreen';
+import { playbackOperation, recoverableEngine } from './playback-operation';
 import { AudioNormalization, reportNormalization } from './audio-normalization';
 import {
 	pickRawAudioTrack,
@@ -52,6 +53,7 @@ import { saveStoredAudioSelection, type SubtitleTrackFormat } from './track-sele
 
 export const RAW_MEDIA_TYPE = 'video/x-sparkle-raw';
 export const RAW_STATUS_EVENT = 'sparkle-raw-status';
+export const RAW_RECOVERY_EVENT = 'sparkle-raw-recovered';
 type Stream = {
 	id: number;
 	index: number;
@@ -196,6 +198,11 @@ export class RawProvider implements MediaProviderAdapter {
 	private commands = Promise.resolve();
 	private seekSequence = 0;
 	private abort = new AbortController();
+	private recovering?: Promise<void>;
+	private recoveryAttempts = 0;
+	private stalledSince = 0;
+	private engineContainer?: HTMLDivElement;
+	private engineAudioContainer?: HTMLDivElement;
 	private timer?: ReturnType<typeof setInterval>;
 	private observer?: ResizeObserver;
 	private initialized = false;
@@ -297,16 +304,82 @@ export class RawProvider implements MediaProviderAdapter {
 		return command;
 	}
 	private fail(error: unknown) {
-		// Stop both local clocks if native video fails while WASM audio is still
-		// decoding. Do not emit a pause request into the shared room timeline.
+		if (this.destroyed || (!this.status.ready && !this.status.changing)) return;
+		if (!this.status.changing && this.initialized) this.desiredTime = this.timeline;
 		if (this.initialized)
 			void Promise.allSettled([this.engine?.pause(), this.audioEngine?.pause()]);
+		this.abort.abort();
+		++this.generation;
+		this.starting = false;
+		this.buffering = false;
+		this.container
+			.querySelectorAll('video,audio')
+			.forEach((element) => (element as HTMLMediaElement).pause());
+		// Stop both local clocks if native video fails while WASM audio is still
+		// decoding. Do not emit a pause request into the shared room timeline.
 		const message =
 			error instanceof Error && !/\[packages|https?:|[A-Z]:[\\/]/.test(error.message)
 				? error.message
 				: 'This media cannot play on this client. Choose another track or media version.';
 		this.publish({ ready: false, changing: false, output: 'unsupported', reason: message });
+		this.notify('seeked', this.desiredTime);
 		this.notify('error', { code: 4, message });
+		if (!document.hidden && navigator.onLine && this.recoveryAttempts < 2 && !this.recovering) {
+			this.recoveryAttempts++;
+			queueMicrotask(() => {
+				if (!this.destroyed) void this.recoverPlayback().catch(() => {});
+			});
+		}
+	}
+	// Rebuild the same selected output; never silently fall back to original playback.
+	recoverPlayback() {
+		if (this.recovering) return this.recovering;
+		if (!this.currentSrc || this.destroyed) return Promise.resolve();
+		const time = this.status.changing || !this.status.ready ? this.desiredTime : this.timeline;
+		const paused = this.paused;
+		this.remoteOperations++;
+		const loading = this.loadSource(this.currentSrc);
+		this.desiredTime = time;
+		this.paused = paused;
+		const generation = this.generation;
+		const recovery = loading
+			.then(() =>
+				this.enqueue(async () => {
+					if (generation !== this.generation || !this.status.ready) return;
+					this.starting = true;
+					try {
+						await this.start();
+						const index = Math.max(
+							0,
+							this.raw!.parts.findLastIndex((part) => part.start <= time)
+						);
+						if (index !== this.part) {
+							await this.loadPart(index, generation);
+							await this.start();
+						}
+						const ms = BigInt(Math.round(Math.max(0, time - this.raw!.parts[index].start) * 1000));
+						await Promise.all([this.engine?.seek(ms), this.audioEngine?.seek(ms)]);
+						if (paused) await Promise.all([this.engine?.pause(), this.audioEngine?.pause()]);
+						this.paused = paused;
+						this.desiredTime = time;
+						this.lastTime = -1;
+						this.lastProgress = performance.now();
+						this.notify('time-change', time);
+						this.notify('seeked', time);
+						this.notify(paused ? 'pause' : 'playing');
+					} finally {
+						if (generation === this.generation) this.starting = false;
+					}
+				})
+			)
+			.finally(() => {
+				this.remoteOperations--;
+				if (this.recovering === recovery) this.recovering = undefined;
+				if (generation === this.generation && this.status.ready && !this.destroyed)
+					this.ctx.player.el?.dispatchEvent(new Event(RAW_RECOVERY_EVENT));
+			});
+		this.recovering = recovery;
+		return recovery;
 	}
 	async loadSource(src: Src) {
 		const generation = ++this.generation;
@@ -319,26 +392,29 @@ export class RawProvider implements MediaProviderAdapter {
 		this.part = 0;
 		this.captionRestore = undefined;
 		this.paused = true;
+		this.stalledSince = 0;
 		this.publish({ ready: false, changing: true, reason: undefined });
 		this.notify('load-start');
 		const loading = this.commands.then(async () => {
 			if (this.destroyed || generation !== this.generation) return;
 			await this.releaseEngines();
+			if (generation !== this.generation || this.destroyed) return;
 			try {
 				const url = new URL(String(src.src), location.href);
 				this.baseURL = url.href.slice(0, url.href.indexOf('/media/'));
-				const response = await backendFetch(url, { signal: this.abort.signal, cache: 'no-store' });
+				const response = await playbackOperation(
+					backendFetch(url, { signal: this.abort.signal, cache: 'no-store' }),
+					this.abort.signal
+				);
 				if (!response.ok) throw new Error('This Plex item is unavailable.');
-				const job: Job = await response.json();
+				const job: Job = await playbackOperation(response.json(), this.abort.signal);
 				if (generation !== this.generation) return;
 				if (!job.Raw?.parts.length) throw new Error('No mapped media parts are available.');
 				this.raw = job.Raw;
 				this.mediaId = job.Id;
 				this.duration = job.Duration;
-				this.availableEncoders = await encodedCapabilities(
-					this.baseURL,
-					job.width ?? 0,
-					job.height ?? 0,
+				this.availableEncoders = await playbackOperation(
+					encodedCapabilities(this.baseURL, job.width ?? 0, job.height ?? 0, this.abort.signal),
 					this.abort.signal
 				);
 				if (generation !== this.generation) return;
@@ -394,7 +470,11 @@ export class RawProvider implements MediaProviderAdapter {
 				throw new Error(
 					`Encoded ${encode.toUpperCase()} is unavailable on this server or browser. Choose Automatic or Compatible.`
 				);
-			this.encoded = await loadEncodedPart(this.baseURL, part, encode, this.abort.signal);
+			this.encoded = await playbackOperation(
+				loadEncodedPart(this.baseURL, part, encode, this.abort.signal),
+				this.abort.signal,
+				150_000
+			);
 			if (generation !== this.generation || this.destroyed) return;
 			if (video)
 				video = {
@@ -415,25 +495,33 @@ export class RawProvider implements MediaProviderAdapter {
 			this.encodedCaptions = new EncodedSubtitles(this.container, this.encoded);
 			this.publish({ encodedCodec: encode });
 		}
-		const Constructor = await loadEngine();
+		const Constructor = await playbackOperation(loadEngine(), this.abort.signal);
 		if (generation !== this.generation || this.destroyed) return;
 		this.subtitles = new RawSubtitles(this.container);
-		this.engine = new Constructor({
-			audioFilter: this.audioFilter,
-			nativeAudioFilter: this.nativeAudioFilter,
-			container: this.container,
-			wasmBaseUrl: '/vendor/libmedia/1.3.1',
-			enableWorker: true,
-			enableHardware: true,
-			enableWebCodecs: true,
-			enableWebGPU: false,
-			enableAudioWorklet: true,
-			// Two bounded ~53 ms PCM blocks at 48 kHz tolerate decoder/GC jitter.
-			// libmedia accounts for these buffers in its audio presentation clock.
-			audioWorkletBufferLength: 20,
-			preLoadTime: this.encoded ? 24 : 4,
-			subtitleSink: this.subtitles.sink
-		});
+		this.engineContainer = document.createElement('div');
+		Object.assign(this.engineContainer.style, { position: 'absolute', inset: '0' });
+		this.container.prepend(this.engineContainer);
+		this.engineAudioContainer = document.createElement('div');
+		this.audioContainer.append(this.engineAudioContainer);
+		this.engine = recoverableEngine(
+			new Constructor({
+				audioFilter: this.audioFilter,
+				nativeAudioFilter: this.nativeAudioFilter,
+				container: this.engineContainer,
+				wasmBaseUrl: '/vendor/libmedia/1.3.1',
+				enableWorker: true,
+				enableHardware: true,
+				enableWebCodecs: true,
+				enableWebGPU: false,
+				enableAudioWorklet: true,
+				// Two bounded ~53 ms PCM blocks at 48 kHz tolerate decoder/GC jitter.
+				// libmedia accounts for these buffers in its audio presentation clock.
+				audioWorkletBufferLength: 20,
+				preLoadTime: this.encoded ? 24 : 4,
+				subtitleSink: this.subtitles.sink
+			}),
+			this.abort.signal
+		);
 		const engine = this.engine!;
 		const active = () =>
 			generation === this.generation && engine === this.engine && !this.destroyed;
@@ -539,18 +627,21 @@ export class RawProvider implements MediaProviderAdapter {
 			this.encoded?.playlist === 'master.m3u8' &&
 			(plan?.renderer === 'software' || supportsNativeVideo('audio/mp4; codecs="opus"'));
 		if (nativeVideo && !combinedAudio && part.streams.some((s) => s.streamType === 2)) {
-			this.audioEngine = new Constructor({
-				audioFilter: this.audioFilter,
-				nativeAudioFilter: this.nativeAudioFilter,
-				container: this.audioContainer,
-				wasmBaseUrl: '/vendor/libmedia/1.3.1',
-				enableWorker: true,
-				enableHardware: true,
-				enableAudioWorklet: true,
-				audioWorkletBufferLength: 20,
-				checkUseMSE: () => false,
-				preLoadTime: this.encoded ? 24 : 4
-			});
+			this.audioEngine = recoverableEngine(
+				new Constructor({
+					audioFilter: this.audioFilter,
+					nativeAudioFilter: this.nativeAudioFilter,
+					container: this.engineAudioContainer,
+					wasmBaseUrl: '/vendor/libmedia/1.3.1',
+					enableWorker: true,
+					enableHardware: true,
+					enableAudioWorklet: true,
+					audioWorkletBufferLength: 20,
+					checkUseMSE: () => false,
+					preLoadTime: this.encoded ? 24 : 4
+				}),
+				this.abort.signal
+			);
 			await this.audioEngine!.load(
 				this.encoded ? encodedURL(this.encoded, 'audio.m3u8') : `${this.baseURL}${part.url}`,
 				options
@@ -642,6 +733,10 @@ export class RawProvider implements MediaProviderAdapter {
 	}
 	play() {
 		return this.enqueue(async () => {
+			// Safari can pause the native element while libmedia still reports PLAYED.
+			// Move both clocks through pause so play actually restarts the pipeline.
+			if (this.initialized && !this.paused && this.video.paused)
+				await Promise.all([this.engine?.pause(), this.audioEngine?.pause()]);
 			this.paused = false;
 			this.starting = true;
 			try {
@@ -658,6 +753,7 @@ export class RawProvider implements MediaProviderAdapter {
 	pause() {
 		return this.enqueue(async () => {
 			this.paused = true;
+			this.buffering = false;
 			if (this.initialized) {
 				await Promise.all([this.engine?.pause(), this.audioEngine?.pause()]);
 			}
@@ -672,7 +768,7 @@ export class RawProvider implements MediaProviderAdapter {
 			if (typeof sync.time === 'number' && Math.abs(this.timeline - sync.time) > 1)
 				this.setCurrentTime(sync.time);
 			if (sync.paused === true) await this.pause();
-			else if (sync.paused === false && this.paused) await this.play();
+			else if (sync.paused === false) await this.play();
 			await this.commands;
 		} finally {
 			this.remoteOperations--;
@@ -905,6 +1001,10 @@ export class RawProvider implements MediaProviderAdapter {
 	}
 	async chooseHDR(preference: HDRPreference) {
 		preference = normalizeHDRPreference(preference);
+		if (this.abort.signal.aborted) {
+			saveHDRPreference(preference);
+			return this.recoverPlayback();
+		}
 		if (
 			(preference === 'av1' || preference === 'hevc') &&
 			!this.availableEncoders.includes(preference)
@@ -964,6 +1064,16 @@ export class RawProvider implements MediaProviderAdapter {
 		)
 			return;
 		const time = this.timeline;
+		if (!document.hidden && !this.paused && !this.recovering && navigator.onLine) {
+			if (time !== this.lastTime) this.stalledSince = 0;
+			else {
+				this.stalledSince ||= performance.now();
+				if (performance.now() - this.stalledSince > 45_000) {
+					this.fail(new Error('Playback stopped responding. Retry playback to reconnect.'));
+					return;
+				}
+			}
+		} else this.stalledSince = 0;
 		if (
 			!this.paused &&
 			!this.buffering &&
@@ -1059,13 +1169,23 @@ export class RawProvider implements MediaProviderAdapter {
 	private async releaseEngines() {
 		this.encodedCaptions?.destroy();
 		this.encodedCaptions = undefined;
-		await this.pictureInPicture.exit().catch(() => {});
-		await this.fullscreen.exit().catch(() => {});
+		const exits = Promise.allSettled([this.pictureInPicture.exit(), this.fullscreen.exit()]);
 		this.fullscreen.attach(null);
 		const engine = this.engine,
 			audio = this.audioEngine;
+		void Promise.allSettled([engine?.pause(), audio?.pause()]);
+		for (const surface of [this.engineContainer, this.engineAudioContainer])
+			surface
+				?.querySelectorAll('video,audio')
+				.forEach((element) => (element as HTMLMediaElement).pause());
 		const subtitles = this.subtitles;
 		const layers = this.subtitleLayers;
+		// Each engine owns detached surfaces. A late destroy must never remove a
+		// replacement engine's video or captions after a suspended worker returns.
+		this.engineContainer?.remove();
+		this.engineAudioContainer?.remove();
+		this.engineContainer = undefined;
+		this.engineAudioContainer = undefined;
 		this.subtitleLayers = [];
 		this.engine = undefined;
 		this.audioEngine = undefined;
@@ -1074,7 +1194,6 @@ export class RawProvider implements MediaProviderAdapter {
 		this.initialized = false;
 		this.audioWaiting = false;
 		this.driftSince = 0;
-		await Promise.allSettled([engine?.destroy(), audio?.destroy()]);
 		this.normalizers.forEach((normalizer) => normalizer.dispose());
 		this.normalizers.clear();
 		subtitles?.destroy();
@@ -1083,6 +1202,11 @@ export class RawProvider implements MediaProviderAdapter {
 			this.container.replaceChildren();
 			this.audioContainer.replaceChildren();
 		}
+		await playbackOperation(
+			Promise.allSettled([exits, engine?.destroy(), audio?.destroy()]),
+			new AbortController().signal,
+			2000
+		).catch(() => {});
 	}
 	destroy() {
 		this.pictureInPicture.destroy();

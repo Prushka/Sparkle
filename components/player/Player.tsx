@@ -167,7 +167,12 @@ import {
 	type YouTubeSyncState
 } from '@/lib/player/t';
 import SUPtitles from '@/lib/suptitles/suptitles';
-import { RawProvider, RawProviderLoader, RAW_MEDIA_TYPE } from '@/lib/player/raw-provider';
+import {
+	RawProvider,
+	RawProviderLoader,
+	RAW_MEDIA_TYPE,
+	RAW_RECOVERY_EVENT
+} from '@/lib/player/raw-provider';
 import {
 	RawPlaybackObserver,
 	RawCaptionButton,
@@ -3756,6 +3761,8 @@ export function Player({
 	const socketAccountRef = useRef('');
 	const reconnectTimerRef = useRef<number | null>(null);
 	const reconnectAttemptRef = useRef(0);
+	const socketLastMessageRef = useRef(0);
+	const playbackSnapshotAtRef = useRef(0);
 	const youtubeSocketRef = useRef<WebSocket | null>(null);
 	const pendingYouTubeStateRef = useRef<YouTubeSyncState | null>(null);
 	const chessSocketRef = useRef<WebSocket | null>(null);
@@ -3769,7 +3776,9 @@ export function Player({
 	const chessStateStorageKeyRef = useRef('');
 	const wordleStateRef = useRef<WordleSyncState>(DEFAULT_WORDLE_SYNC_STATE);
 	const wordleStateStorageKeyRef = useRef('');
-	const connectRef = useRef<((_forceInteracted?: boolean) => void) | null>(null);
+	const connectRef = useRef<((_forceInteracted?: boolean, _replace?: boolean) => void) | null>(
+		null
+	);
 	const roomMediaCheckRef = useRef<Promise<boolean> | null>(null);
 	const profileSyncedRef = useRef(false);
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -4127,7 +4136,7 @@ export function Player({
 			try {
 				const response = await backendFetch(
 					joinBackendPath(backendBaseUrl, `/rooms/${encodeURIComponent(room)}`),
-					{ cache: 'no-store' }
+					{ cache: 'no-store', signal: AbortSignal.timeout(10_000) }
 				);
 				if (response.status === 404) {
 					router.replace('/');
@@ -4137,7 +4146,12 @@ export function Player({
 					throw new Error(`Room media check failed: ${response.status}`);
 				}
 				const record = (await response.json()) as { mediaId?: string; mediaUpdated?: number };
-				if (typeof record.mediaId === 'string' && record.mediaId !== job.Id) {
+				if (
+					currentRoomRef.current !== room ||
+					(record.mediaUpdated && record.mediaUpdated < mediaRevisionRef.current)
+				)
+					return false;
+				if (typeof record.mediaId === 'string' && record.mediaId !== currentMediaIdRef.current) {
 					await onRoomMediaChangedRef.current?.(record.mediaId, record.mediaUpdated);
 					return true;
 				}
@@ -5958,7 +5972,19 @@ export function Player({
 					queueRemotePlaybackSync(sync);
 					return false;
 				}
-				void rawProvider.applyRoomState(sync).catch(() => queueRemotePlaybackSync(sync));
+				const target = {
+					...sync,
+					roomId: currentRoomRef.current,
+					mediaId: currentMediaIdRef.current
+				};
+				void rawProvider.applyRoomState(sync).catch(() => {
+					if (
+						target.roomId === currentRoomRef.current &&
+						target.mediaId === currentMediaIdRef.current &&
+						(playerElementRef.current?.provider as unknown) === rawProvider
+					)
+						queueRemotePlaybackSync(target);
+				});
 				return true;
 			}
 			if (typeof sync.time === 'number') {
@@ -6078,7 +6104,7 @@ export function Player({
 	}, [clearPlaybackSyncSuppression]);
 
 	const connect = useCallback(
-		(forceInteracted = false) => {
+		(forceInteracted = false, replace = false) => {
 			const player = playerElementRef.current;
 			if ((!forceInteracted && !interactedRef.current) || !player || !playerId) {
 				return;
@@ -6086,6 +6112,7 @@ export function Player({
 			const socketUrl = getBackendWebSocketUrl(backendBaseUrl, `/sync/${room}/${playerId}`);
 			const existingSocket = socketRef.current;
 			if (
+				!replace &&
 				existingSocket &&
 				socketUrlRef.current === socketUrl &&
 				socketAccountRef.current === socketAccount &&
@@ -6106,7 +6133,11 @@ export function Player({
 			exitedRef.current = false;
 			setInteracted(true);
 			setExited(false);
+			const recoveringConnection = replace || reconnectAttemptRef.current > 0;
 			const socket = new WebSocket(socketUrl);
+			setSocketConnected(false);
+			socketLastMessageRef.current = Date.now();
+			playbackSnapshotAtRef.current = Date.now();
 			socketRef.current = socket;
 			socketUrlRef.current = socketUrl;
 			socketAccountRef.current = socketAccount;
@@ -6123,7 +6154,7 @@ export function Player({
 				setSocketConnected(true);
 				profileSyncedRef.current = sendProfileRef.current();
 				awaitingInitialPlaybackSyncRef.current = true;
-				send({ type: SyncTypes.NewPlayer });
+				send({ type: SyncTypes.NewPlayer, recover: recoveringConnection });
 				sendSettingsRef.current();
 				const pendingMediaID = pendingMediaSwitchRef.current;
 				if (pendingMediaID && pendingMediaID !== job.Id) {
@@ -6148,6 +6179,7 @@ export function Player({
 					return;
 				}
 				const broadcast = state.broadcast;
+				socketLastMessageRef.current = Date.now();
 				if (state.type === SyncTypes.TimeSync || state.type === SyncTypes.PauseSync) {
 					if (state.mediaId && state.mediaId !== currentMediaIdRef.current) {
 						void refreshRoomMediaRef.current();
@@ -6266,6 +6298,7 @@ export function Player({
 						break;
 					}
 					case SyncTypes.PauseSync:
+						playbackSnapshotAtRef.current = 0;
 						awaitingInitialPlaybackSyncRef.current = false;
 						if (typeof state.paused === 'boolean') {
 							applyRemotePlaybackSyncRef.current({ paused: state.paused });
@@ -6408,6 +6441,44 @@ export function Player({
 	useEffect(() => {
 		connectRef.current = connect;
 	}, [connect]);
+
+	const requestPlaybackSnapshot = useCallback(() => {
+		if (!interactedRef.current || exitedRef.current || document.hidden) return;
+		const socket = socketRef.current;
+		if (socket?.readyState === WebSocket.OPEN) {
+			if (playbackSnapshotAtRef.current) return;
+			awaitingInitialPlaybackSyncRef.current = true;
+			playbackSnapshotAtRef.current = Date.now();
+			send({ type: SyncTypes.PlaybackSync });
+		} else if (!socket || socket.readyState !== WebSocket.CONNECTING) {
+			connectRef.current?.(true, true);
+		}
+	}, [send]);
+
+	useEffect(() => {
+		// A source can change while the same socket remains open. Ask for its
+		// current timeline after the new media identity has been installed.
+		playbackSnapshotAtRef.current = 0;
+		requestPlaybackSnapshot();
+	}, [job.Id, requestPlaybackSnapshot]);
+
+	useEffect(() => {
+		const check = () => {
+			if (document.hidden || !navigator.onLine || !interactedRef.current || exitedRef.current)
+				return;
+			const socket = socketRef.current;
+			const now = Date.now();
+			if (
+				socket &&
+				(now - socketLastMessageRef.current > 15_000 ||
+					(playbackSnapshotAtRef.current && now - playbackSnapshotAtRef.current > 8000))
+			) {
+				connectRef.current?.(true, true);
+			}
+		};
+		const timer = window.setInterval(check, 1000);
+		return () => window.clearInterval(timer);
+	}, []);
 
 	useEffect(() => {
 		// Reconnect with the new HttpOnly session after sign-in/out. Keep the
@@ -6778,9 +6849,17 @@ export function Player({
 				inBgRef.current = false;
 				void refreshRoomMedia();
 				send({ state: 'fg', type: SyncTypes.StateSync, paused: paused ?? true });
+				requestPlaybackSnapshot();
+				const provider = player.provider;
+				if (provider instanceof RawProvider && !provider.status.ready && !provider.status.changing)
+					void provider.recoverPlayback().catch(() => {});
 			}
 		};
 		document.addEventListener('visibilitychange', visibilityChange);
+		window.addEventListener('pageshow', visibilityChange);
+		window.addEventListener('online', visibilityChange);
+		document.addEventListener('resume', visibilityChange);
+		player.el?.addEventListener(RAW_RECOVERY_EVENT, requestPlaybackSnapshot);
 		const pictureInPictureControlActivation = (event: Event) => {
 			if (
 				!isPictureInPictureControlEvent(event, player.el) ||
@@ -6926,6 +7005,10 @@ export function Player({
 		return () => {
 			window.clearInterval(interval);
 			document.removeEventListener('visibilitychange', visibilityChange);
+			window.removeEventListener('pageshow', visibilityChange);
+			window.removeEventListener('online', visibilityChange);
+			document.removeEventListener('resume', visibilityChange);
+			player.el?.removeEventListener(RAW_RECOVERY_EVENT, requestPlaybackSnapshot);
 			player.el?.removeEventListener('pointerup', pictureInPictureControlActivation, true);
 			player.el?.removeEventListener('click', pictureInPictureControlActivation, true);
 			player.el?.removeEventListener('keydown', pictureInPictureControlKeyDown, true);
@@ -6939,6 +7022,7 @@ export function Player({
 		mediaProviderEl,
 		playerEl,
 		refreshRoomMedia,
+		requestPlaybackSnapshot,
 		resetPendingMediaProgress,
 		send,
 		updateLastTicked,

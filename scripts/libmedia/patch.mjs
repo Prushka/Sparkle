@@ -187,6 +187,55 @@ patch(
 // A mode switch can close MSE while its loop awaits a demux packet. Cancel
 // those pulls, then let the loops finish before releasing their muxer buffers.
 const msePipeline = 'packages/avplayer/src/mse/MSEPipeline.ts';
+// HLS seeks can land on an earlier keyframe. Buffer through the requested time,
+// including while paused, rather than clamping the native clock to the end of
+// the three-second preroll window before the actual target.
+patch(
+	msePipeline,
+	'      const realTimestamp = bigint.max(audioRealTimestamp, videoRealTimestamp)',
+	`      audioRealTimestamp = bigint.max(timestamp, audioRealTimestamp)
+      videoRealTimestamp = bigint.max(timestamp, videoRealTimestamp)
+      const realTimestamp = bigint.max(audioRealTimestamp, videoRealTimestamp)`
+);
+patch(
+	msePipeline,
+	'      // 缓存一定的 buffer\n      while (true) {',
+	`      // Fill both tracks through the seek target; packet rates can differ.
+      let audioBuffered = !task.audio || task.audio.packetEnded
+      let videoBuffered = !task.video || task.video.packetEnded
+      while (!audioBuffered || !videoBuffered) {`
+);
+for (const [kind, other] of [
+	['audio', 'video'],
+	['video', 'audio']
+]) {
+	patch(
+		msePipeline,
+		`        if (task.${kind} && !task.${kind}.packetEnded) {`,
+		`        if (task.${kind} && !${kind}Buffered) {`
+	);
+	patch(
+		msePipeline,
+		`            if (!task.${other} || task.${other}.packetEnded) {
+              break
+            }`,
+		`            ${kind}Buffered = true
+            continue`
+	);
+	patch(
+		msePipeline,
+		`            task.${kind}.backPacket = nullptr
+          }
+          else {
+            break
+          }`,
+		`            task.${kind}.backPacket = nullptr
+          }
+          else {
+            ${kind}Buffered = true
+          }`
+	);
+}
 patch(msePipeline, '  seeking: boolean', '  closed?: boolean\n  seeking: boolean');
 patch(
 	msePipeline,

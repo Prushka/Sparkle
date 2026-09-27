@@ -22,10 +22,11 @@ type cached struct {
 	readers int
 }
 type work struct {
-	done    chan struct{}
-	cancel  context.CancelFunc
-	waiters int
-	err     error
+	done      chan struct{}
+	cancel    context.CancelFunc
+	waiters   int
+	err       error
+	abandoned bool
 }
 type cache struct {
 	ctx      context.Context
@@ -126,6 +127,10 @@ func (c *cache) acquire(ctx context.Context, key string, build func(context.Cont
 	if !cacheName.MatchString(key) {
 		return "", nil, errEncode
 	}
+retry:
+	if err := ctx.Err(); err != nil {
+		return "", nil, err
+	}
 	c.mu.Lock()
 	if c.ctx.Err() != nil {
 		c.mu.Unlock()
@@ -138,6 +143,17 @@ func (c *cache) acquire(ctx context.Context, key string, build func(context.Cont
 		return filepath.Join(c.dir, key), func() { c.mu.Lock(); f.readers--; c.mu.Unlock() }, nil
 	}
 	j := c.jobs[key]
+	if j != nil && j.abandoned {
+		// A cancelled FFmpeg process may still be releasing its directory and
+		// GPU slot. Wait for cleanup, then share a fresh job with other returners.
+		c.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return "", nil, ctx.Err()
+		case <-j.done:
+			goto retry
+		}
+	}
 	if j == nil {
 		c.prune(maxJobBytes)
 		if len(c.jobs) >= 32 || c.bytes+c.reserved+maxJobBytes > c.maxBytes {
@@ -166,6 +182,7 @@ func (c *cache) acquire(ctx context.Context, key string, build func(context.Cont
 			c.mu.Lock()
 			defer c.mu.Unlock()
 			if c.jobs[key] == j && j.waiters == 0 {
+				j.abandoned = true
 				j.cancel()
 			}
 		})

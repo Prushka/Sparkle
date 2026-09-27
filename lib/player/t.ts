@@ -368,6 +368,7 @@ export function getSupportedCodecs(codecs: string[]) {
 }
 
 export enum SyncTypes {
+	PlaybackSync = 'playback',
 	NewPlayer = 'new player',
 	ProfileSync = 'profile',
 	TimeSync = 'time',

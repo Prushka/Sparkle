@@ -107,8 +107,15 @@ export function RawPlaybackObserver({
 			className="pointer-events-none absolute inset-x-6 top-6 z-20 mx-auto max-w-xl rounded-xl bg-black/85 p-4 text-sm text-white"
 			role="status"
 		>
-			<p className="font-semibold">Playback unavailable on this device</p>
+			<p className="font-semibold">Playback interrupted</p>
 			<p className="mt-1">{status.reason}</p>
+			<button
+				type="button"
+				className="pointer-events-auto mt-3 rounded-md bg-white px-3 py-2 font-semibold text-black"
+				onClick={() => void provider?.recoverPlayback().catch(() => {})}
+			>
+				Retry playback
+			</button>
 			<p className="mt-2 text-white/70">
 				Open Settings → Video Settings for playback options. You can still use the room and chat.
 			</p>

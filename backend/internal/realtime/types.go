@@ -7,6 +7,7 @@ import (
 
 const (
 	NewPlayer         = "new player"
+	PlaybackSync      = "playback"
 	ProfileSync       = "profile"
 	TimeSync          = "time"
 	PauseSync         = "pause"
@@ -281,6 +282,7 @@ type ChatEmojiRef struct {
 }
 
 type ClientPayload struct {
+	Recover      bool           `json:"recover,omitempty"`
 	MediaID      string         `json:"mediaId,omitempty"`
 	MediaUpdated int64          `json:"mediaUpdated,omitempty"`
 	Type         string         `json:"type"`

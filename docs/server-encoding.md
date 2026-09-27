@@ -24,6 +24,11 @@ in Automatic. Original-file playback requires explicitly selecting Compatible, w
 is also saved across reloads. Constant quality is not adaptive bitrate: extremely slow
 connections can still buffer.
 
+Playback recovery retries the selected encoded output and offers **Retry playback**
+after an interruption. A returning request waits for a cancelled encode job to finish
+cleaning up, then shares a fresh job; it does not inherit the abandoned job's failure.
+Room recovery refreshes the authoritative timeline without changing its pause state.
+
 ## Setup
 
 Compatible playback remains available without FFmpeg or a GPU. To enable encoding on

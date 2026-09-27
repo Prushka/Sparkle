@@ -142,6 +142,17 @@ This works for Compatible and server-encoded AV1/HEVC playback of Plex media.
 ASS/PGS and chat still require the page overlays and are unavailable in iOS
 native-video fullscreen. Physical iOS/iPadOS playback qualification remains pending.
 
+Returning to the page, restoring a suspended page, or regaining connectivity requests
+the room's current media/time/pause state. Unresponsive room connections are replaced.
+If Safari suspends the native video while the decoder still considers it playing,
+the provider restarts both clocks before applying the room state. Decoder commands
+have a 45-second deadline (150 seconds for loading); stalled foreground playback
+also triggers recovery after 45 seconds. Source replacement cancels obsolete work,
+and teardown can hold up a replacement for at most two seconds. Recovery rebuilds
+the selected output and refreshes the room timeline without publishing stale positions.
+Automatic retries are bounded; **Retry playback** remains available after an error.
+Original playback still requires explicitly selecting **Compatible**.
+
 Raw **Google Cast options** explains Chrome tab casting and the option to choose
 a compatible processed version. It is not a direct receiver-casting implementation:
 the raw provider's browser demuxer, audio decoder, and subtitle renderer cannot
