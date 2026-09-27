@@ -249,6 +249,10 @@ test('Library controls and popups fit narrow mobile, tablet and desktop layouts'
 			expect(box!.x).toBeGreaterThanOrEqual(0);
 			expect(box!.x + box!.width).toBeLessThanOrEqual(width);
 			await page.keyboard.press('Escape');
+			// Base UI keeps the closing listbox mounted during its exit transition.
+			// Wait before opening another select so the listbox locator stays unique.
+			await expect(list).toBeHidden();
+			await expect(select).toBeFocused();
 		}
 		const filters = await page.getByLabel('Library filters', { exact: true }).boundingBox();
 		const nav = await page.getByRole('navigation', { name: 'Library hierarchy' }).boundingBox();
