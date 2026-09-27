@@ -77,6 +77,15 @@ HDR output settings show live bitrate for the active playback mode.
 Software tone mapping is temporarily disabled; Compatible and AV1/HEVC playback use
 native video on SDR and HDR displays. Saved Tone mapping selections switch to Compatible.
 
+Compatible Plex playback sends decoded PCM to the browser's reported speaker layout,
+up to 7.1. Stereo outputs receive a client-side downmix with center and surround
+content preserved; surround outputs retain their speaker positions. Configure the
+Windows playback device for the connected speakers before starting Chrome.
+Mono, stereo, quad, 5.1 and 7.1 are supported; intermediate reported channel counts
+use the next smaller supported layout.
+This is PCM output; compressed Dolby/DTS/Atmos passthrough is not implemented.
+Processed media and Encoded AV1/HEVC retain their intended stereo output.
+
 The waveform button beside Captions enables [audio normalization](docs/audio-normalization.md).
 It downmixes multichannel audio to stereo before adjusting loudness in an AudioWorklet,
 preserves stereo balance and the playback clock, and restores the original samples and

@@ -132,6 +132,14 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   AudioWorklet processing and an exact original-channel bypass when disabled; never
   seek, reload or broadcast playback events for a normalization toggle. See
   [audio normalization](docs/audio-normalization.md) for assets, lifecycle and checks.
+- Compatible Plex audio explicitly configures the browser speaker destination and
+  remixes decoded channel layouts to that output in libmedia before Web Audio. Preserve
+  center/side/back content when downmixing to stereo and speaker positions on surround
+  outputs. Quad requires an explicit FL/FR/BL/BR layout; FFmpeg's default four-channel
+  layout has center/back-center positions. Restore the shared context when the last
+  original-media player stops.
+  Processed media and Encoded AV1/HEVC keep their existing stereo behavior; this option
+  is original-media-only. Output is decoded PCM, not Dolby/DTS/Atmos bitstream passthrough.
 - Server encodes use 12-second segments, including AI HDR; bump the profile revision when
   duration changes. Share cache keys by source fingerprint, codec, profile and time segment,
   never by participant. Preserve cancellation, GPU limits, byte/count cache bounds, original

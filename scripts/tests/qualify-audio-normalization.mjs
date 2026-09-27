@@ -413,7 +413,7 @@ try {
 				container.append(placeholder);
 				const ctx = {
 					player: { el: container, play: () => provider.play(), pause: () => provider.pause() },
-					$state: { canPictureInPicture: { set() {} } },
+					$state: { canPictureInPicture: { set() {} }, canFullscreen: { set() {} } },
 					notify() {},
 					delegate: { async ready() {} }
 				};

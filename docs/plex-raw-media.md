@@ -266,6 +266,28 @@ drift is corrected with small audio-rate adjustments instead of repeated seeks.
 Audio-only Matroska reads reuse video-indexed cluster positions, including the
 last cue, so a distant seek does not scan from the beginning of a large file.
 
+Compatible original audio is decoded to PCM and remixed by libmedia using each
+decoded frame's channel layout. The browser destination is explicitly configured
+to an accepted mono, stereo, quad, 5.1 or 7.1 layout, capped by its reported device
+capacity. Stereo conversion folds center, side and back channels into the main
+pair instead of relying on Chrome's implicit eight-channel conversion, which can
+discard those channels. The standard stereo downmix omits LFE; full-range bass in
+the main channels remains. Surround output preserves speaker positions, including
+the distinction between 5.1 side and back surrounds on a 7.1 device.
+Quad explicitly uses front-left/front-right/back-left/back-right, rather than
+FFmpeg's four-channel center/back-center default. Reported capacities of three,
+five and seven channels fall back to stereo, quad and 5.1 respectively. These
+preserve the downmixed main-channel content but do not provide native 2.1/3.0,
+3.1, 5.0, 6.1 or height-speaker mapping: browser channel capacity alone does not
+identify those physical layouts.
+
+Configure the Windows playback endpoint for the connected speakers before starting
+Chrome; after changing devices/layouts, restart playback (or Chrome if its reported
+capacity is stale). Audio normalization intentionally produces stereo while enabled.
+The original speaker route returns when it is disabled. This is decoded PCM, without
+compressed Dolby/DTS/Atmos passthrough. Processed media and server Encoded AV1/HEVC
+continue using their stereo sources. See [surround qualification](raw-media-validation.md#compatible-surround-audio).
+
 ## Validation
 
 ```powershell

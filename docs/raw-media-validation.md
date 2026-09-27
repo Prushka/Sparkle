@@ -1,6 +1,6 @@
 # Raw-media validation record
 
-Validated September 22–26, 2026 on Windows using the configured Plex server and
+Validated September 22–27, 2026 on Windows using the configured Plex server and
 read-only mapped files. This records implementation evidence, not certification
 of every codec, browser, display, or Dolby profile.
 
@@ -48,6 +48,81 @@ exercise across distant offsets, including the end of the file, increased API
 RSS from 55.09 MiB to a measured peak of 55.38 MiB. This is a bounded-memory
 range test, not a complete 74 GB transfer. No raw-file copy or derivative was
 created. Test evidence and build artifacts are under ignored `cache/`.
+
+## Compatible surround audio
+
+Validated September 27, 2026 in Chrome **154.0.8037.58** on Windows with the
+playback endpoint configured for 7.1; Chrome reported eight available channels.
+Compatible retains native video and uses the original audio's client decoder.
+Its destination now explicitly accepts the device width, and libmedia remixes
+the decoded speaker layout before Web Audio can perform an implicit conversion.
+
+The expanded `npm run test:surround` passed **64 codec/capacity combinations**:
+AAC, AC-3, E-AC-3, DTS and FLAC 5.1, plus AAC, FLAC and TrueHD 7.1, each with
+reported capacities from one through eight channels. These generated originals
+carry a different frequency in every speaker channel. Spectral checks verify
+center/side/back routing, LFE preservation on 5.1/7.1 outputs, its standard
+omission from mono/stereo/quad, absence of signals in
+unrelated speakers, playback after seeking, and destination restoration on teardown.
+The lower-capacity cases constrain the test AudioContext's reported capacity; the
+Windows speaker configuration remains 7.1 throughout. These are browser PCM
+checks, not acoustic measurements of physical speakers.
+
+| Reported capacity | Selected PCM output |
+| ----------------- | ------------------- |
+| 1                 | Mono                |
+| 2 or 3            | Stereo              |
+| 4 or 5            | Quad (FL/FR/BL/BR)  |
+| 6 or 7            | 5.1                 |
+| 8                 | 7.1                 |
+
+The expanded checks exposed and fixed the four-channel output default: FFmpeg
+selected FL/FR/FC/BC, so the browser interpreted dialogue as a rear channel.
+The resampler now receives an explicit quad mask matching
+[Web Audio's speaker order](https://www.w3.org/TR/webaudio/#channel-ordering).
+The pre-fix FLAC 7.1 → quad test failed its center-to-front assertion; the corrected
+output preserves separate left/right surrounds and folds center into both fronts.
+Odd capacities exercise fallback downmixes, not native 2.1/3.0, 3.1, 5.0, 6.1 or
+height-speaker output. The API reports capacity, without identifying those physical
+arrangements. Lifecycle unit tests additionally cover reported capacities 0, 9,
+16 and 32, the eight-channel ceiling, and restoring a pre-existing surround bus.
+
+The pinned FFmpeg FLAC decoder labels six-channel FLAC as 5.1(side), while newer
+FFprobe versions label the same assignment 5.1(back). The tests assert the actual
+decoded layout and distinguish side/back positions on the eight-channel output.
+Separate lifecycle tests cover shared-context ownership, driver layout rejection,
+capacity changes between bindings, and restoration of the previous destination.
+
+Authenticated Plex playback additionally exercised **X 4** (DTS 7.1),
+**Lilo & Stitch (2002)** (TrueHD 7.1 and E-AC-3 5.1 track switching), and
+**The Relative Worlds** (AC-3 5.1) with
+normalization disabled and native video. These checks establish loading, selected
+tracks and advancing playback clocks; the synthetic per-speaker signals provide
+the channel-routing assertions. They do not certify Atmos or compressed bitstream
+passthrough, receiver channel labels, physical speaker wiring or lip-sync.
+
+The existing decoder/normalization qualification passed, including exact bypass,
+volume/mute, seek, track changes and stereo AV1/HEVC output. Five focused two-client
+track/transition tests passed, covering local tracks, pause/seek, delayed join,
+reconnect, rapid processed/raw transitions and Automatic AV1/HEVC selection.
+TypeScript, the player unit suite and the production build passed.
+
+The four normalization room tests were also run against an isolated current
+backend and the production frontend. The processed test passed. Compatible,
+AV1 and HEVC passed playback/toggle/seek/reconnect assertions, then failed the
+final simulated native-decoder-error check because the video did not pause.
+The same Compatible failure was reproduced while serving the unchanged HEAD
+player bundle. This pre-existing error-handling issue remains outside the
+speaker-routing change; the full normalization room suite is not recorded as passing.
+
+To reproduce, install FFmpeg/FFprobe with the listed encoders and Chrome, then run
+`npm run test:surround`. It uses an isolated loopback fixture server and writes
+reports under ignored `cache/surround-audio/`; no Plex credentials or real media
+copies are needed. `SPARKLE_AUDIO_CASE` filters by fixture name,
+`SPARKLE_AUDIO_OUTPUTS=1,4,5` restricts reported capacities, and
+`SPARKLE_TEST_CHANNEL` selects the browser. Stereo-only hosts exercise stereo
+fallback; the full matrix requires an eight-channel device. Filtered runs write
+`partial-report.json` without replacing the full `report.json`.
 
 ## Client audio normalization
 

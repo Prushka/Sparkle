@@ -32,6 +32,113 @@ function patch(file, before, after, all = false) {
 	writeFileSync(path, all ? original.replaceAll(before, after) : original.replace(before, after));
 }
 const player = 'packages/avplayer/src/AVPlayer.ts';
+writeFileSync(
+	resolve(root, 'packages/avplayer/src/audio-output.ts'),
+	readFileSync('scripts/libmedia/audio-output.ts')
+);
+patch(
+	player,
+	'export interface AVPlayerOptions {',
+	`import { acquireSpeakerOutput } from './audio-output'
+
+export interface AVPlayerOptions {
+  speakerOutput?: boolean`
+);
+patch(
+	player,
+	'  private playChannels: number',
+	'  private playChannels: number\n  private speakerOutputRelease?: () => void'
+);
+patch(
+	player,
+	"      let resamplerResource = await this.getResource('resampler')",
+	`      if (this.options.speakerOutput && !this.isMediaStreamMode()) {
+        this.speakerOutputRelease?.()
+        const output = acquireSpeakerOutput(AVPlayer.audioContext)
+        this.speakerOutputRelease = output.release
+        this.playChannels = output.channels
+      }
+
+      let resamplerResource = await this.getResource('resampler')`
+);
+patch(
+	player,
+	'          playChannels: this.playChannels,',
+	'          playChannels: this.playChannels,\n          speakerOutput: !!this.options.speakerOutput,'
+);
+patch(
+	player,
+	'    this.audioRender2AudioWorkletChannel = null',
+	`    this.audioRender2AudioWorkletChannel = null
+    this.speakerOutputRelease?.()
+    this.speakerOutputRelease = undefined`
+);
+// Speaker conversion belongs before Web Audio and uses decoded layout metadata,
+// not just channel counts (5.1 side/back and 7.1 wide are not interchangeable).
+const speakerRender = 'packages/avpipeline/src/AudioRenderPipeline.ts';
+patch(speakerRender, '  playChannels: int32', '  playChannels: int32\n  speakerOutput?: boolean');
+patch(speakerRender, '  resampler: Resampler', '  resampler: Resampler\n  speakerLayout?: string');
+patch(
+	speakerRender,
+	'        if (audioFrame.sampleRate !== task.playSampleRate',
+	`        const speakerLayout = task.speakerOutput
+          ? String(audioFrame.chLayout.order) + ':' + String(audioFrame.chLayout.nbChannels) + ':' + String(audioFrame.chLayout.u.mask)
+          : undefined
+        if (task.speakerOutput || audioFrame.sampleRate !== task.playSampleRate`
+);
+patch(
+	speakerRender,
+	'            if (current.format !== audioFrame.format',
+	'            if (speakerLayout !== task.speakerLayout || current.format !== audioFrame.format'
+);
+patch(
+	speakerRender,
+	'            await task.resampler.open(',
+	'            task.speakerLayout = speakerLayout\n            await task.resampler.open('
+);
+patch(
+	speakerRender,
+	'                channels: audioFrame.chLayout.nbChannels',
+	`                channels: audioFrame.chLayout.nbChannels,
+                layout: task.speakerOutput ? addressof(audioFrame.chLayout) : nullptr`
+);
+// FFmpeg's default four-channel layout is FL/FR/FC/BC, whereas browser
+// quad is FL/FR/BL/BR. A count alone must not choose the output positions.
+patch(
+	speakerRender,
+	'  AVSampleFormat,',
+	'  AVSampleFormat,\n  AVChannelLayout,\n  AVChannelLayoutType,\n  AVChannelOrder,'
+);
+patch(
+	speakerRender,
+	'  speakerLayout?: string',
+	'  speakerLayout?: string\n  quadOutputLayout?: AVChannelLayout'
+);
+patch(
+	speakerRender,
+	'            task.speakerLayout = speakerLayout',
+	`            if (task.speakerOutput && task.playChannels === 4 && !task.quadOutputLayout) {
+              task.quadOutputLayout = make<AVChannelLayout>()
+              task.quadOutputLayout.order = AVChannelOrder.AV_CHANNEL_ORDER_NATIVE
+              task.quadOutputLayout.nbChannels = 4
+              task.quadOutputLayout.u.mask = static_cast<uint64>(AVChannelLayoutType.AV_CHANNEL_LAYOUT_QUAD as uint32)
+            }
+            task.speakerLayout = speakerLayout`
+);
+patch(
+	speakerRender,
+	'                channels: task.playChannels',
+	`                channels: task.playChannels,
+                layout: task.quadOutputLayout ? addressof(task.quadOutputLayout) : nullptr`
+);
+patch(
+	speakerRender,
+	'      this.tasks.delete(taskId)',
+	`      if (task.quadOutputLayout) {
+        unmake(task.quadOutputLayout)
+      }
+      this.tasks.delete(taskId)`
+);
 // Native decode failures must reach the provider instead of silently leaving
 // its clock running over a paused MSE element. Do not expose browser diagnostics.
 patch(

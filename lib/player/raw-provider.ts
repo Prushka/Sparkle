@@ -546,6 +546,7 @@ export class RawProvider implements MediaProviderAdapter {
 		this.audioContainer.append(this.engineAudioContainer);
 		this.engine = recoverableEngine(
 			new Constructor({
+				speakerOutput: !this.encoded,
 				audioFilter: this.audioFilter,
 				nativeAudioFilter: this.nativeAudioFilter,
 				container: this.engineContainer,
@@ -670,6 +671,7 @@ export class RawProvider implements MediaProviderAdapter {
 		if (nativeVideo && !combinedAudio && part.streams.some((s) => s.streamType === 2)) {
 			this.audioEngine = recoverableEngine(
 				new Constructor({
+					speakerOutput: !this.encoded,
 					audioFilter: this.audioFilter,
 					nativeAudioFilter: this.nativeAudioFilter,
 					container: this.engineAudioContainer,

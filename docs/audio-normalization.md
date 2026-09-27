@@ -34,8 +34,12 @@ pairs into their respective stereo side at −3 dB. Mono is duplicated to stereo
 These use canonical speaker ordering, not arbitrary discrete channel arrangements.
 Unknown channel counts report unavailable and keep the original audio route.
 
-The decoder/browser may already downmix to the output device's channel count;
-the normalizer then measures that stereo result without downmixing it again.
+Compatible Plex playback explicitly remixes the decoded speaker layout to the
+browser's accepted output width in libmedia. Stereo devices therefore receive a
+complete stereo mix before the normalizer, while surround devices supply canonical
+multichannel PCM. The normalizer measures an existing stereo mix without downmixing
+it again. Disabling restores this device-mapped PCM route; the source may have more
+channels than the device can reproduce.
 The AV1/HEVC server modes already deliver stereo Opus. The feature does not recover
 discarded channels or preserve compressed bitstream/Atmos passthrough.
 

@@ -3,12 +3,13 @@
   "commit": "152f629d3021fd8013efa464fcb7b55f9fbe7753",
   "ffmpeg": "3a14ab29692763e561610412cdeb1985da4e3cd8",
   "emscripten": "4.0.10",
-  "patchHash": "c430dbe9c58fb18921fe1e19cb3171becfdcf73653034c3bbac8a78087068d0c",
+  "patchHash": "82179134138e50943e5e9ad1111a4ee7e347a00077ae3db5f3dcee8755c02c98",
   "sources": {
     "hdr-sdr.ts": "7145cc1cb27cf75cdae17ef1c6f4cc3121289dad6fbe7edecb9f3ef8db350c6b",
     "dovi-sdr.ts": "d4a572d72c175bba9fff94adcf0ec72a2b306c341e87877876b4d5cbb68cdb74",
     "hdr-metadata.ts": "aa6a67b3940d7a4bca2b91ff004bdd1bbc2467a146964726410c29a802057114",
-    "playback-bitrate.ts": "f08686866a4cbb2a42515dde2066623ae97c6ecfce037d10cd9b1af77f27905c"
+    "playback-bitrate.ts": "f08686866a4cbb2a42515dde2066623ae97c6ecfce037d10cd9b1af77f27905c",
+    "audio-output.ts": "7ce8d7848155d265bad80e8fe552b7ea703ecf2be7b6e4829cf9ac3976076c7e"
   },
   "artifacts": {
     "truehd.wasm": "acc4d68e8af00b65c32e41ed0c48b39fcee96df38ccce74b39ca23c7fe93e45b",
@@ -43,7 +44,7 @@
     "avplayer/888.avplayer.js": "636f045b692045666610992c2b8782d87fff87fc1f2a0a125e0da47e574ea176",
     "avplayer/933.avplayer.js": "76920cb417b6359bf5481339e6f8ddb1e3b395ddd4909740c98cb89b34d70ab1",
     "avplayer/977.avplayer.js": "89a9e0df3097ccdeca218b4419f327015368940f31e36f5c7061a00cdb564754",
-    "avplayer/avplayer.js": "c305a90a886761f663ae857d290595b63476f919030e1d8ac2291c44cd6345b6"
+    "avplayer/avplayer.js": "ab25d8bb83dcdbf71c0d9e9c155df70f7fec919d703dcfe880ca6b1efba0ee7b"
   },
   "codecs": {
     "decode/aac-atomic.wasm": "45e90ba204af8295db460adb50e929dd38c3ed8d27422973149737613cc4f584",
