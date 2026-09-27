@@ -73,6 +73,11 @@ reload the frontend configuration, then reload the page and start a new sign-in.
 Secure cookies are enabled by default. Use HTTPS for deployed instances. For
 local development only, `PLEX_AUTH_COOKIE_SECURE=false` is accepted when every
 configured origin is loopback. Do not use that setting for a LAN/public host.
+An HTTP LAN address cannot carry Secure cookies, even with the same-origin
+`/be` proxy and an allowed origin. Sparkle explains this before opening a popup
+or starting a PIN. Open the site's HTTPS URL instead, or use
+`http://localhost:3001` on the computer running Sparkle. Allowing cookies in the
+browser does not make Secure cookies work over LAN HTTP.
 
 Discord Activities or other cross-site embedding may need
 `PLEX_AUTH_COOKIE_SAMESITE=none`, which requires Secure and sets Partitioned.

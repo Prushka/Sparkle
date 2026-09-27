@@ -224,6 +224,11 @@ a username or password are ignored.
 | `PLEX_AUTH_COOKIE_SAMESITE` | `lax` by default; `none` enables Secure partitioned cookies for cross-site embedding |
 | `PLEX_AUTH_SESSION_DIR`     | Private persistent Plex sessions; `./data/plex-auth`, outside public/media roots     |
 
+Plex sign-in requires HTTPS for LAN/public addresses. On the computer running
+Sparkle, use `http://localhost:3001` for local development. An HTTP LAN URL cannot
+carry Secure sign-in cookies, even through `/be`; Sparkle explains this before
+opening the Plex popup. See [Plex sign-in configuration](docs/plex-auth.md#configuration).
+
 Windows mapping example:
 
 ```dotenv

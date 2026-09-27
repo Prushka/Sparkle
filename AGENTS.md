@@ -88,6 +88,8 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   Persist sessions in private `PLEX_AUTH_SESSION_DIR` storage before acknowledging login
   or logout. Restarts preserve the original expiry and must reverify membership before
   access; temporary upstream failures deny access but allow later revalidation.
+  Require HTTPS for LAN/public sign-in and explain HTTP network addresses before
+  opening a popup or allocating a PIN; preserve loopback development support.
 - Plex access is read-only and endpoint-allowlisted. Do not add watched-state updates,
   scans, Plex transcoding, media modifications, or whole-original-file caching.
   Server decoding is confined to the optional encoded mode; Compatible playback remains client-side.

@@ -359,6 +359,54 @@ test('Plex profile overrides an Encoded room and sign-out restores guest customi
 	).toEqual({ name: 'Saved guest', id: 'saved-guest-avatar' });
 });
 
+test('HTTP network addresses explain HTTPS before opening a popup or starting a PIN', async ({
+	page,
+	baseURL
+}) => {
+	// Serve the real frontend under a non-loopback origin without requiring a
+	// LAN interface or DNS entry. Auth and catalog requests use the fixture below.
+	const origin = 'http://192.0.2.1';
+	// Next's development runtime also needs its real HMR connection to hydrate.
+	await page.routeWebSocket('**/_next/hmr**', (route) => {
+		const target = new URL(route.url());
+		const server = new URL(baseURL!);
+		target.host = server.host;
+		target.protocol = server.protocol === 'https:' ? 'wss:' : 'ws:';
+		const socket = new WebSocket(target);
+		socket.binaryType = 'arraybuffer';
+		socket.addEventListener('message', (event) =>
+			route.send(typeof event.data === 'string' ? event.data : Buffer.from(event.data))
+		);
+		route.onMessage((message) => {
+			if (socket.readyState === WebSocket.OPEN) socket.send(message);
+		});
+		route.onClose(() => socket.close());
+	});
+	await page.route(`${origin}/**`, async (route) => {
+		const url = new URL(route.request().url());
+		const response = await page.request.get(new URL(url.pathname + url.search, baseURL!).href);
+		await route.fulfill({ response });
+	});
+	const f = await fixture(page);
+	const mutations: string[] = [];
+	page.on('request', (request) => {
+		if (request.method() === 'POST' && request.url().includes('/auth/plex/'))
+			mutations.push(request.url());
+	});
+	let popups = 0;
+	page.on('popup', () => popups++);
+	await page.goto(`${origin}/public-room`);
+	await page.getByRole('button', { name: 'Sign in with Plex', exact: true }).click();
+	await page.getByRole('button', { name: 'Continue with Plex' }).click();
+	const alert = page.getByRole('dialog').getByRole('alert');
+	await expect(alert).toContainText('requires HTTPS on a network address');
+	await expect(alert).toContainText('localhost');
+	await expect(page.getByRole('button', { name: 'Continue with Plex' })).toBeEnabled();
+	expect(popups).toBe(0);
+	expect(mutations).toEqual([]);
+	expect(f.authorizationsOpened()).toBe(0);
+});
+
 test('blocked cookies are reported before opening Plex authorization', async ({ page }) => {
 	const f = await fixture(page, true, { cookiesBlocked: true });
 	await page.goto('/public-room');

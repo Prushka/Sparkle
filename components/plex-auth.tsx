@@ -96,6 +96,17 @@ export function PlexAuthProvider({ children }: { children: ReactNode }) {
 	}, [refresh]);
 	const signIn = useCallback(async () => {
 		if (active.current) return;
+		// LAN HTTP cannot carry the Secure cookies required outside loopback.
+		// Check before opening the popup or allocating a Plex PIN.
+		if (
+			window.location.protocol === 'http:' &&
+			!['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)
+		) {
+			setError(
+				'Plex sign-in requires HTTPS on a network address. Open Sparkle using its HTTPS URL, or use localhost if you are on the computer running Sparkle.'
+			);
+			return;
+		}
 		// Open synchronously from the user's click so browsers do not block it.
 		const popup = window.open('about:blank', '_blank', 'popup,width=640,height=760');
 		if (!popup) {
