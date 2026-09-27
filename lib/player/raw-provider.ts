@@ -15,6 +15,8 @@ import {
 	encodedURL,
 	loadEncodedPart,
 	readHDRPreference,
+	readAIHDRPreference,
+	saveAIHDRPreference,
 	saveHDRPreference,
 	supportsNativeVideo,
 	type EncodedPart
@@ -220,6 +222,8 @@ export class RawProvider implements MediaProviderAdapter {
 	private audioRate = NaN;
 	private remoteOperations = 0;
 	private hdrPreference: HDRPreference = 'auto';
+	private aiHDR = false;
+	private aiHDRCodecs: EncodedCodec[] = [];
 	private encoded?: EncodedPart;
 	private encodedCaptions?: EncodedSubtitles;
 	private availableEncoders: EncodedCodec[] = [];
@@ -391,6 +395,8 @@ export class RawProvider implements MediaProviderAdapter {
 		this.abort = new AbortController();
 		this.currentSrc = src as Src<string>;
 		this.hdrPreference = readHDRPreference();
+		this.aiHDR = false;
+		this.aiHDRCodecs = [];
 		this.availableEncoders = [];
 		this.desiredTime = 0;
 		this.pendingSeek = 0;
@@ -398,7 +404,14 @@ export class RawProvider implements MediaProviderAdapter {
 		this.captionRestore = undefined;
 		this.paused = true;
 		this.stalledSince = 0;
-		this.publish({ ready: false, changing: true, reason: undefined });
+		this.publish({
+			ready: false,
+			changing: true,
+			reason: undefined,
+			aiHDRAllowed: false,
+			aiHDRAvailable: [],
+			aiHDR: false
+		});
 		this.notify('load-start');
 		const loading = this.commands.then(async () => {
 			if (this.destroyed || generation !== this.generation) return;
@@ -418,11 +431,28 @@ export class RawProvider implements MediaProviderAdapter {
 				this.raw = job.Raw;
 				this.mediaId = job.Id;
 				this.duration = job.Duration;
+				let capabilitiesKnown = false;
 				this.availableEncoders = await playbackOperation(
-					encodedCapabilities(this.baseURL, job.width ?? 0, job.height ?? 0, this.abort.signal),
+					encodedCapabilities(
+						this.baseURL,
+						job.width ?? 0,
+						job.height ?? 0,
+						this.abort.signal,
+						(allowed, codecs) => {
+							if (generation !== this.generation) return;
+							capabilitiesKnown = true;
+							this.aiHDR = allowed && readAIHDRPreference();
+							this.aiHDRCodecs = codecs;
+							this.publish({ aiHDRAllowed: allowed, aiHDRAvailable: codecs, aiHDR: this.aiHDR });
+						}
+					),
 					this.abort.signal
 				);
 				if (generation !== this.generation) return;
+				if (!capabilitiesKnown && readAIHDRPreference())
+					throw new Error(
+						'Cannot check AI HDR availability. Retry playback to reconnect to the server.'
+					);
 				this.publish({ encodedAvailable: this.availableEncoders });
 				await this.loadPart(0, generation);
 			} catch (e) {
@@ -447,6 +477,7 @@ export class RawProvider implements MediaProviderAdapter {
 			part: index,
 			sourceHDR: sourceHDR(video),
 			hdrPreference: this.hdrPreference,
+			aiHDR: this.aiHDR,
 			ready: false,
 			changing: true,
 			encodedCodec: undefined,
@@ -459,13 +490,18 @@ export class RawProvider implements MediaProviderAdapter {
 			audioTracks: [],
 			subtitleTracks: []
 		});
+		const encoders = this.aiHDR ? this.aiHDRCodecs : this.availableEncoders;
 		const encode =
 			this.hdrPreference === 'av1' || this.hdrPreference === 'hevc'
 				? this.hdrPreference
-				: this.hdrPreference === 'auto'
-					? this.availableEncoders[0]
+				: this.hdrPreference === 'auto' || this.aiHDR
+					? encoders[0]
 					: undefined;
 		this.encoded = undefined;
+		if (this.aiHDR && (!encode || !encoders.includes(encode)))
+			throw new Error(
+				'AI HDR is unavailable for the selected codec. Turn off AI HDR or choose Automatic.'
+			);
 		if (this.hdrPreference === 'auto' && !encode)
 			throw new Error(
 				'Automatic requires Encoded AV1 or HEVC support on this server and browser. Select Compatible to play the original.'
@@ -476,7 +512,7 @@ export class RawProvider implements MediaProviderAdapter {
 					`Encoded ${encode.toUpperCase()} is unavailable on this server or browser. Choose Automatic or Compatible.`
 				);
 			this.encoded = await playbackOperation(
-				loadEncodedPart(this.baseURL, part, encode, this.abort.signal),
+				loadEncodedPart(this.baseURL, part, encode, this.abort.signal, this.aiHDR),
 				this.abort.signal,
 				150_000
 			);
@@ -680,7 +716,7 @@ export class RawProvider implements MediaProviderAdapter {
 			output: plan?.output ?? 'SDR',
 			renderer: plan?.renderer ?? (nativeVideo ? 'native' : undefined),
 			reason: this.encoded
-				? `${this.hdrPreference === 'auto' ? 'Automatic · ' : ''}Shared NVENC ${this.encoded.codec.toUpperCase()}${/Dolby|HDR10\+/.test(originalHDR) ? ` · ${this.encoded.output} conversion` : ''}.`
+				? `${this.aiHDR ? 'AI HDR · 1600 nits · ' : this.hdrPreference === 'auto' ? 'Automatic · ' : ''}Shared NVENC ${this.encoded.codec.toUpperCase()}${/Dolby|HDR10\+/.test(originalHDR) ? ` · ${this.encoded.output} conversion` : ''}.`
 				: plan?.reason,
 			audioTracks: list('audio'),
 			subtitleTracks,
@@ -1020,9 +1056,17 @@ export class RawProvider implements MediaProviderAdapter {
 		return this.chooseHDR('compatible');
 	}
 	async chooseHDR(preference: HDRPreference) {
+		return this.chooseOutput(preference, this.aiHDR);
+	}
+	async chooseAIHDR(enabled: boolean) {
+		if (enabled && (!this.status.aiHDRAllowed || !this.aiHDRCodecs.length)) return;
+		return this.chooseOutput(this.hdrPreference, enabled);
+	}
+	private async chooseOutput(preference: HDRPreference, aiHDR: boolean) {
 		preference = normalizeHDRPreference(preference);
 		if (this.abort.signal.aborted) {
 			saveHDRPreference(preference);
+			saveAIHDRPreference(aiHDR);
 			return this.recoverPlayback();
 		}
 		if (
@@ -1035,7 +1079,7 @@ export class RawProvider implements MediaProviderAdapter {
 			return;
 		}
 		return this.enqueue(async () => {
-			if (preference === this.hdrPreference && this.status.ready) return;
+			if (preference === this.hdrPreference && aiHDR === this.aiHDR && this.status.ready) return;
 			const time = this.initialized ? this.timeline : this.desiredTime;
 			const wasPaused = this.paused;
 			const generation = this.generation;
@@ -1046,6 +1090,8 @@ export class RawProvider implements MediaProviderAdapter {
 			this.publish({ changing: true });
 			try {
 				this.hdrPreference = preference;
+				this.aiHDR = aiHDR;
+				saveAIHDRPreference(aiHDR);
 				saveHDRPreference(preference);
 				await this.loadPart(this.part, generation);
 				if (generation !== this.generation || this.destroyed) return;

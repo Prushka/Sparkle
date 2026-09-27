@@ -44,7 +44,7 @@ type cache struct {
 }
 
 func newCache(ctx context.Context, dir string, maxBytes int64, ttl time.Duration, concurrent int) (*cache, error) {
-	if maxBytes < maxJobBytes*2 || concurrent < 1 || concurrent > 8 || ttl <= 0 {
+	if maxBytes < maxJobBytes*2 || concurrent < 1 || concurrent > 32 || ttl <= 0 {
 		return nil, errors.New("invalid encoder cache limits")
 	}
 	if err := os.MkdirAll(dir, 0755); err != nil {

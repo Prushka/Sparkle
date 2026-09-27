@@ -73,6 +73,7 @@ func TestEncodingRequiresAllowedPlexSectionAndHidesPaths(t *testing.T) {
 		t.Fatal("manifest must announce fonts without downloading attachments")
 	}
 	var manifest struct {
+		SegmentSeconds int `json:"segmentSeconds"`
 		SubtitleTracks []struct {
 			ID   int    `json:"id"`
 			Size *int64 `json:"size"`
@@ -84,6 +85,9 @@ func TestEncodingRequiresAllowedPlexSectionAndHidesPaths(t *testing.T) {
 	if len(manifest.SubtitleTracks) != 3 {
 		t.Fatalf("unexpected subtitle tracks: %s", allowed.Body)
 	}
+	if manifest.SegmentSeconds != 12 {
+		t.Fatalf("segment duration: %d", manifest.SegmentSeconds)
+	}
 	for i, want := range []int64{100, 1000, 0} {
 		track := manifest.SubtitleTracks[i]
 		if track.ID != i || (want == 0 && track.Size != nil) || (want > 0 && (track.Size == nil || *track.Size != want)) {
@@ -91,6 +95,59 @@ func TestEncodingRequiresAllowedPlexSectionAndHidesPaths(t *testing.T) {
 		}
 	}
 	encodedFingerprint := s.fingerprint(s.sources[fingerprint])
+	oldFingerprint := fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("nvenc-segments-v5:%s:%s:%+v", s.revision, fingerprint, s.options.Profile))))
+	old := httptest.NewRecorder()
+	mux.ServeHTTP(old, httptest.NewRequest("GET", "/media/"+id+"/parts/20/encoded/av1/video.m3u8?v="+oldFingerprint, nil))
+	if old.Code != http.StatusConflict {
+		t.Fatal("accepted a six-second cache fingerprint")
+	}
+	s.sources[fingerprint].duration = 25
+	playlist := httptest.NewRecorder()
+	mux.ServeHTTP(playlist, httptest.NewRequest("GET", "/media/"+id+"/parts/20/encoded/av1/video.m3u8", nil))
+	if playlist.Code != 200 || !strings.Contains(playlist.Body.String(), "#EXT-X-TARGETDURATION:12\n") || strings.Count(playlist.Body.String(), "#EXTINF:12.000000,") != 2 || !strings.Contains(playlist.Body.String(), "#EXTINF:1.000000,\nvideo-2.m4s") || strings.Contains(playlist.Body.String(), "video-3.m4s") {
+		t.Fatalf("twelve-second playlist: %d %s", playlist.Code, playlist.Body)
+	}
+	outside := httptest.NewRecorder()
+	mux.ServeHTTP(outside, httptest.NewRequest("GET", "/media/"+id+"/parts/20/encoded/av1/video-3.m4s", nil))
+	if outside.Code != 404 {
+		t.Fatal("accepted an out-of-bounds segment")
+	}
+	s.sources[fingerprint].duration = 7200
+	// The feature flag gates every resource before Plex, probing or cache access.
+	for _, resource := range []string{"manifest", "fonts.json", "master.m3u8", "video.m3u8", "audio.m3u8", "video-init.mp4", "video-0.m4s", "audio-0.m4s", "subtitles-0.json"} {
+		blocked := httptest.NewRecorder()
+		mux.ServeHTTP(blocked, httptest.NewRequest("GET", "/media/"+id+"/parts/20/encoded/av1/"+resource+"?aiHDR=1", nil))
+		if blocked.Code != 422 {
+			t.Fatalf("disabled AI HDR %s: %d", resource, blocked.Code)
+		}
+	}
+	s.options.AIHDREnabled = true
+	s.aiHDRCodecs = []string{"av1"}
+	s.aiHDRRevision = aiHDRVersion
+	s.sources[fingerprint].hdr = &hdrPlan{Mode: "hdr-expansion"}
+	for _, resource := range []string{"manifest", "master.m3u8", "video.m3u8"} {
+		enhanced := httptest.NewRecorder()
+		mux.ServeHTTP(enhanced, httptest.NewRequest("GET", "/media/"+id+"/parts/20/encoded/av1/"+resource+"?aiHDR=1", nil))
+		if enhanced.Code != 200 {
+			t.Fatalf("AI HDR %s: %d", resource, enhanced.Code)
+		}
+		body := enhanced.Body.String()
+		if strings.Contains(body, encodedFingerprint) {
+			t.Fatal("enhanced output reused original fingerprint")
+		}
+		if resource == "manifest" {
+			if !strings.Contains(body, `"aiHDR":true`) || !strings.Contains(body, `"output":"HDR10"`) {
+				t.Fatal(body)
+			}
+		} else {
+			for _, line := range strings.Split(body, "\n") {
+				if strings.Contains(line, "?v=") && !strings.Contains(line, "&aiHDR=1") {
+					t.Fatalf("missing variant: %s", line)
+				}
+			}
+		}
+	}
+	s.options.AIHDREnabled = false
 	for _, audio := range []bool{false, true} {
 		if audio {
 			s.sources[fingerprint].probe.Streams = append(s.sources[fingerprint].probe.Streams, Stream{Type: "audio", Codec: "opus"})

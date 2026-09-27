@@ -132,10 +132,12 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   AudioWorklet processing and an exact original-channel bypass when disabled; never
   seek, reload or broadcast playback events for a normalization toggle. See
   [audio normalization](docs/audio-normalization.md) for assets, lifecycle and checks.
-- Server encodes share cache keys by source fingerprint, codec, profile and time segment,
+- Server encodes use 12-second segments, including AI HDR; bump the profile revision when
+  duration changes. Share cache keys by source fingerprint, codec, profile and time segment,
   never by participant. Preserve cancellation, GPU limits, byte/count cache bounds, original
   read-only handles and timestamp continuity. Use NVENC exclusively for AV1/HEVC video
-  encoding, with fast p3 and CQ 24 by default, using the documented NVENC rate-control mapping.
+  encoding. `ENCODE_CONCURRENCY` accepts 1–32 shared pipelines and defaults to 2. Use
+  fast p3 and CQ 24 by default, using the documented NVENC rate-control mapping.
   CPU source decoding must never substitute a software video encoder.
   Automatic always prefers browser-supported Encoded AV1, then HEVC, independent of
   network conditions. Unavailable or failed encoding must not fall back to original
@@ -144,6 +146,16 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   mounted during provider changes; Vidstack hides sibling menus when opening a submenu.
   Bitrate means bounded compressed packet bytes over media time, not network throughput.
   Keep encoded output labeled HDR10/HLG/SDR; do not claim preserved dynamic HDR.
+  `AI_HDR_ENABLED` defaults off and gates every enhanced resource before probing or cache
+  access. AI HDR is a local Plex toggle before audio normalization; its encoded variant
+  must have separate URLs/cache identity and preserve the saved ordinary output choice.
+  SDR uses NVIDIA TrueHDR; PQ/HLG use frame-adaptive expansion to a 1600-nit HDR10
+  ceiling. Inspect container and decoded color metadata; reject ambiguous sources.
+  Keep canonical 4:2:0 decode/filter/encode frames on the GPU when timestamp checks
+  pass; retain the normalized reference path for other colors/formats and VFR.
+  Both paths must share scene analysis, tone/gamut mapping and the two-second lead-in.
+  Bound and remove compressed job intermediates; never persist decoded frames.
+  Never substitute a metadata-only relabel or ordinary encode after enhancement fails.
   NVENC tests need a GPU; CI exercises the scheduling/cache contracts with temporary fixtures.
 - Room time is seconds; libmedia time is milliseconds. Preserve serialized provider commands,
   media-generation checks, stale-message rejection, and remote-event suppression through

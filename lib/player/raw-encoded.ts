@@ -3,6 +3,20 @@ import type { EncodedCodec, HDRPreference, RawPart, RawPlaybackTrack } from './r
 import { normalizeHDRPreference } from './raw-hdr';
 
 const preferenceKey = 'sparkle.raw.hdr';
+export function readAIHDRPreference(): boolean {
+	try {
+		return localStorage.getItem('sparkle.raw.aiHDR') === 'true';
+	} catch {
+		return false;
+	}
+}
+export function saveAIHDRPreference(enabled: boolean) {
+	try {
+		localStorage.setItem('sparkle.raw.aiHDR', String(enabled));
+	} catch {
+		/* Local storage is optional. */
+	}
+}
 export function readHDRPreference(): HDRPreference {
 	try {
 		const value = localStorage.getItem(preferenceKey);
@@ -25,6 +39,8 @@ export function saveHDRPreference(value: HDRPreference) {
 }
 
 export interface EncodedPart {
+	aiHDR?: boolean;
+	aiHDRMode?: 'nvidia-truehdr' | 'hdr-expansion';
 	base: string;
 	fingerprint: string;
 	playlist?: 'master.m3u8';
@@ -39,7 +55,7 @@ export interface EncodedPart {
 	segmentSeconds: number;
 }
 export function encodedURL(part: EncodedPart, resource: string) {
-	return `${part.base}/${resource}?v=${encodeURIComponent(part.fingerprint)}`;
+	return `${part.base}/${resource}?v=${encodeURIComponent(part.fingerprint)}${part.aiHDR ? '&aiHDR=1' : ''}`;
 }
 export function supportsNativeVideo(contentType: string) {
 	const mse =
@@ -51,7 +67,8 @@ export async function encodedCapabilities(
 	base: string,
 	width: number,
 	height: number,
-	signal: AbortSignal
+	signal: AbortSignal,
+	onAIHDR?: (allowed: boolean, codecs: EncodedCodec[]) => void
 ): Promise<EncodedCodec[]> {
 	try {
 		const response = await backendFetch(`${base}/encoding/capabilities`, { signal });
@@ -82,6 +99,10 @@ export async function encodedCapabilities(
 			}
 			available.push(codec);
 		}
+		onAIHDR?.(
+			data.aiHDREnabled === true,
+			available.filter((codec) => data.aiHDRCodecs?.includes(codec))
+		);
 		return available;
 	} catch {
 		return [];
@@ -92,15 +113,23 @@ export async function loadEncodedPart(
 	base: string,
 	part: RawPart,
 	codec: EncodedCodec,
-	signal: AbortSignal
+	signal: AbortSignal,
+	aiHDR = false
 ): Promise<EncodedPart> {
 	const url = `${base}${part.url.replace(/\/file$/, '')}/encoded/${codec}`;
-	const response = await backendFetch(`${url}/manifest`, { signal, cache: 'no-store' });
+	const response = await backendFetch(`${url}/manifest${aiHDR ? '?aiHDR=1' : ''}`, {
+		signal,
+		cache: 'no-store'
+	});
 	if (!response.ok)
 		throw new Error(
-			'Server encoding is unavailable for this media. Choose another encoded mode or select Compatible.'
+			aiHDR
+				? 'AI HDR is unavailable for this media or its color metadata. Turn off AI HDR to resume normal playback.'
+				: 'Server encoding is unavailable for this media. Choose another encoded mode or select Compatible.'
 		);
 	const result: EncodedPart = { ...(await response.json()), base: url };
+	if (!!result.aiHDR !== aiHDR || (aiHDR && result.output !== 'HDR10'))
+		throw new Error('The server did not return the requested HDR output.');
 	const subtitles = part.streams.filter((s) => s.streamType === 3);
 	result.subtitleTracks = result.subtitleTracks.map((track, index) => ({
 		...track,

@@ -61,6 +61,9 @@ export interface RawPlaybackStatus {
 	sourceHDR: string;
 	output: HDROutput;
 	hdrPreference?: HDRPreference;
+	aiHDRAllowed?: boolean;
+	aiHDRAvailable?: EncodedCodec[];
+	aiHDR?: boolean;
 	encodedCodec?: EncodedCodec;
 	encodedAvailable?: EncodedCodec[];
 	bitrate?: { video?: number; audio?: number };

@@ -175,6 +175,7 @@ import {
 } from '@/lib/player/raw-provider';
 import {
 	RawPlaybackObserver,
+	RawAIHDRButton,
 	RawCaptionButton,
 	RawCastButton,
 	RawVideoSettings,
@@ -7426,6 +7427,7 @@ export function Player({
 										beforeCaptionButton: (
 											<>
 												{renderControlsChat(false, 'large')}
+												{job.Raw && <RawAIHDRButton />}
 												<AudioNormalizationButton />
 											</>
 										)
@@ -7434,6 +7436,7 @@ export function Player({
 										beforeCaptionButton: (
 											<>
 												{renderControlsChat(true, 'small')}
+												{job.Raw && <RawAIHDRButton />}
 												<AudioNormalizationButton />
 											</>
 										)

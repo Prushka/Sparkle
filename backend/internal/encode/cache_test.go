@@ -22,6 +22,59 @@ func testCache(t *testing.T) *cache {
 	return c
 }
 func key(n string) string { return fmt.Sprintf("%x", sha256.Sum256([]byte(n))) }
+func TestCacheAllows32ConcurrentBuilds(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	for _, invalid := range []int{0, 33} {
+		c, err := newCache(ctx, t.TempDir(), maxJobBytes*33, time.Hour, invalid)
+		if err == nil {
+			c.close()
+			t.Fatalf("accepted concurrency %d", invalid)
+		}
+	}
+	c, err := newCache(ctx, t.TempDir(), maxJobBytes*33, time.Hour, 32)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { cancel(); c.close() })
+	started := make(chan struct{}, 32)
+	finish := make(chan struct{})
+	done := make(chan error, 32)
+	build := func(ctx context.Context, dir string) error {
+		started <- struct{}{}
+		select {
+		case <-finish:
+			return os.WriteFile(filepath.Join(dir, "video.mp4"), []byte("encoded"), 0644)
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	for n := range 32 {
+		go func() {
+			_, release, err := c.acquire(ctx, key(fmt.Sprint(n)), build)
+			if release != nil {
+				release()
+			}
+			done <- err
+		}()
+	}
+	for n := range 32 {
+		select {
+		case <-started:
+		case <-ctx.Done():
+			t.Fatalf("only %d of 32 builds started", n)
+		}
+	}
+	if _, _, err := c.acquire(ctx, key("overflow"), build); err != errBusy {
+		t.Fatalf("expected bounded admission, got %v", err)
+	}
+	close(finish)
+	for range 32 {
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
+	}
+}
 func TestCacheSharesBuildAndSurvivesFirstWaiterCancellation(t *testing.T) {
 	c := testCache(t)
 	var calls atomic.Int32

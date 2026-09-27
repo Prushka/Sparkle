@@ -100,7 +100,7 @@ try {
 			};
 		}, `http://127.0.0.1:${server.address().port}/${codec}/master.m3u8`);
 		console.log(JSON.stringify({ codec, ...result }));
-		assert.ok(result.end > 24, 'playback did not cross four segment boundaries');
+		assert.ok(result.end > 24, 'playback did not cross two twelve-second segment boundaries');
 		assert.ok(result.count > 1000, 'insufficient PCM sampling');
 		assert.deepEqual(result.low, [], 'encoded audio dropped out at a fragment boundary');
 		assert.ok(Math.abs(result.before.hz - 440) < 30, 'first audio track is incorrect');

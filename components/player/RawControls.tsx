@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useEffect, useRef, useSyncExternalStore } from 'react';
 import { Menu, useMediaPlayer } from '@vidstack/react';
+import { IconSparkles } from '@tabler/icons-react';
 import {
 	DefaultMenuButton,
 	DefaultMenuRadioGroup,
@@ -63,6 +64,34 @@ function useRawPlayback(onTracks?: (status: RawPlaybackStatus) => void) {
 	return { status, provider: provider instanceof RawProvider ? provider : undefined, player };
 }
 
+export function RawAIHDRButton() {
+	const { status, provider } = useRawPlayback();
+	if (!status?.aiHDRAllowed) return null;
+	const enabled = !!status.aiHDR;
+	const available = !!status.aiHDRAvailable?.length;
+	const label = enabled
+		? 'Disable AI HDR'
+		: available
+			? 'AI HDR · expand highlights up to 1600 nits'
+			: 'AI HDR unavailable on this server or browser';
+	return (
+		<DefaultTooltip content={label} placement="top">
+			<button
+				type="button"
+				className="vds-button sparkle-ai-hdr-button"
+				aria-label="AI HDR"
+				aria-pressed={enabled}
+				title={label}
+				data-active={enabled ? '' : undefined}
+				disabled={status.changing || (!enabled && !available)}
+				onClick={() => void provider?.chooseAIHDR(!enabled).catch(() => {})}
+			>
+				<IconSparkles className="vds-icon" style={{ opacity: enabled ? 1 : 0.6 }} />
+			</button>
+		</DefaultTooltip>
+	);
+}
+
 // Reporting stays mounted while Vidstack lazily mounts closed menus.
 export function RawPlaybackObserver({
 	onTracks
@@ -97,6 +126,7 @@ export function RawPlaybackObserver({
 		player.el.setAttribute('data-raw-hdr', status.sourceHDR);
 		player.el.setAttribute('data-raw-renderer', status.renderer ?? '');
 		player.el.setAttribute('data-raw-encoding', status.encodedCodec ?? '');
+		player.el.setAttribute('data-raw-ai-hdr', String(!!status.aiHDR));
 		player.el.setAttribute(
 			'data-raw-blocked',
 			String(!status.changing && !status.ready && status.output === 'unsupported')

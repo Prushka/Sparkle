@@ -8,7 +8,15 @@ const bundle = await build({
 	format: 'esm',
 	platform: 'node'
 });
-const { readHDRPreference, saveHDRPreference, encodedCapabilities } = await import(
+const {
+	readHDRPreference,
+	saveHDRPreference,
+	readAIHDRPreference,
+	saveAIHDRPreference,
+	encodedCapabilities,
+	encodedURL,
+	loadEncodedPart
+} = await import(
 	`data:text/javascript;base64,${Buffer.from(bundle.outputFiles[0].text).toString('base64')}`
 );
 const preferences = new Map();
@@ -20,6 +28,15 @@ for (const mode of ['auto', 'compatible', 'av1', 'hevc']) {
 	saveHDRPreference(mode);
 	assert.equal(readHDRPreference(), mode);
 }
+assert.equal(readAIHDRPreference(), false);
+saveAIHDRPreference(true);
+assert.equal(readAIHDRPreference(), true);
+saveAIHDRPreference(false);
+assert.equal(readAIHDRPreference(), false);
+assert.equal(
+	encodedURL({ base: '/test', fingerprint: 'a b', aiHDR: true }, 'video-init.mp4'),
+	'/test/video-init.mp4?v=a%20b&aiHDR=1'
+);
 preferences.set('sparkle.raw.hdr', 'sdr');
 assert.equal(readHDRPreference(), 'compatible');
 assert.equal(preferences.get('sparkle.raw.hdr'), 'compatible', 'migrate persisted software mode');
@@ -66,4 +83,31 @@ assert.deepEqual(
 );
 globalThis.fetch = async () => ({ ok: false });
 assert.deepEqual(await encodedCapabilities('', 1920, 1080, new AbortController().signal), []);
+globalThis.fetch = async () => ({
+	ok: true,
+	json: async () => ({ codecs: ['av1', 'hevc'], aiHDREnabled: true, aiHDRCodecs: ['hevc'] })
+});
+let enhancement;
+await encodedCapabilities(
+	'',
+	1920,
+	1080,
+	new AbortController().signal,
+	(allowed, codecs) => (enhancement = { allowed, codecs })
+);
+assert.deepEqual(enhancement, { allowed: true, codecs: ['hevc'] });
+globalThis.fetch = async (url) => {
+	assert.ok(url.endsWith('/manifest?aiHDR=1'));
+	return { ok: true, json: async () => ({ output: 'HDR10', aiHDR: false, subtitleTracks: [] }) };
+};
+await assert.rejects(
+	loadEncodedPart(
+		'',
+		{ url: '/parts/1/file', streams: [] },
+		'hevc',
+		new AbortController().signal,
+		true
+	),
+	/requested HDR output/
+);
 console.log('Encoded preference, native AV1/HEVC priority, and unavailable codec checks passed.');

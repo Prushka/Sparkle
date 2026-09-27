@@ -58,13 +58,20 @@ library from the same Library view.
 | Plex raw | Plex metadata plus the original files through local folder mappings   | Original-file range requests; client-side demuxing and decoding through pinned libmedia AVPlayer 1.3.1 |
 
 Raw playback reads original files and decodes in the browser. With `ENCODE_ENABLED=true`,
-the backend can also create NVENC AV1/HEVC segments on demand for Plex media, using
+the backend can also create 12-second NVENC AV1/HEVC segments on demand for Plex media, using
 the fast `p3` preset by default with no software video encoding fallback. Identical
 requests share one GPU job and cache, including across rooms. Original media stays read-only;
 Sparkle never starts a Plex transcoding session or changes Plex watched state. No complete
 original file is cached. Artwork has a 512 MiB budget; encoded segments default to 40 GiB
 with a 12-hour idle expiry. Server-encoded playback targets a 24-second preload.
+`ENCODE_CONCURRENCY` accepts 1–32 simultaneous pipelines and defaults to 2.
 See [server encoding](docs/server-encoding.md) for GPU setup, settings and limits.
+Optional `AI_HDR_ENABLED=true` adds an **AI HDR** toggle before audio normalization
+for Plex media. It uses NVIDIA TrueHDR for SDR and adaptive HDR expansion up to
+1,600 nits for HDR, through a separate server encode. See
+[AI HDR setup](docs/server-encoding.md#ai-hdr) for the required NVEncC/NGX dependencies.
+Supported 4:2:0 sources keep decoding, enhancement and encoding on the GPU; other
+formats retain the same enhancement through the reference pipeline.
 Encoded audio and video share a native playback clock on compatible browsers.
 HDR output settings show live bitrate for the active playback mode.
 Software tone mapping is temporarily disabled; Compatible and AV1/HEVC playback use

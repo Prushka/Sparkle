@@ -30,7 +30,7 @@ func TestEncoderUsesFastNVENCWithReferenceQualityOnEveryAttempt(t *testing.T) {
 				if strings.Contains(command, "-s12m_tc 0") != (codec == "av1") {
 					t.Fatal("AV1 timecode workaround missing or applied to another codec")
 				}
-				for _, want := range []string{"-ss 23.926500", "-ss 0.073500", "-t 6.000000", "-t 6.073500", "noise=drop='lt(n,4)+gte(n,304)'", "-c:v " + codec + "_nvenc", "-preset p3", "-rc vbr -cq 22 -b:v 0", "-init_qpP 22 -init_qpI 20 -init_qpB 24", "-pix_fmt p010le", "-c:a libopus -b:a 144k -ac 2", "type=DOVI_METADATA", "type=DYNAMIC_HDR_PLUS"} {
+				for _, want := range []string{"-ss 47.926500", "-ss 0.073500", "-t 12.000000", "-t 12.073500", "noise=drop='lt(n,4)+gte(n,604)'", "-c:v " + codec + "_nvenc", "-preset p3", "-rc vbr -cq 22 -b:v 0", "-init_qpP 22 -init_qpI 20 -init_qpB 24", "-pix_fmt p010le", "-c:a libopus -b:a 144k -ac 2", "type=DOVI_METADATA", "type=DYNAMIC_HDR_PLUS"} {
 					if !strings.Contains(command, want) {
 						t.Errorf("missing %s", want)
 					}
@@ -202,11 +202,11 @@ func TestWarmedOpusHasNoRepeatedPreSkip(t *testing.T) {
 
 func TestAudioLeadInAndFinalPartialSegment(t *testing.T) {
 	source := Probe{Streams: []Stream{{Type: "video"}, {Type: "audio"}}}
-	first := strings.Join(encodeArgs("fixture", t.TempDir(), "av1", 0, 6.45, Profile{22, "p3", 144}, source), " ")
+	first := strings.Join(encodeArgs("fixture", t.TempDir(), "av1", 0, 12.45, Profile{22, "p3", 144}, source), " ")
 	if !strings.Contains(first, "-ss 0.000000 -i") || !strings.Contains(first, "adelay=3528S:all=1") {
 		t.Fatal("missing first-segment lead-in")
 	}
-	last := strings.Join(encodeArgs("fixture", t.TempDir(), "hevc", 1, 6.45, Profile{22, "p3", 144}, source), " ")
+	last := strings.Join(encodeArgs("fixture", t.TempDir(), "hevc", 1, 12.45, Profile{22, "p3", 144}, source), " ")
 	if !strings.Contains(last, "-t 0.523500") || !strings.Contains(last, "gte(n,27)") || strings.Contains(last, "adelay") {
 		t.Fatal("incorrect final-segment Opus packet window")
 	}

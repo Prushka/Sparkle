@@ -13,13 +13,13 @@ import (
 	"time"
 )
 
-const SegmentSeconds = 6
-const profileVersion = "nvenc-segments-v5"
+const SegmentSeconds = 12
+const profileVersion = "nvenc-segments-v6"
 
 // Four 20 ms Opus packets minus libopus's 312-sample encoder lookahead.
 // Encode a short lead-in, then discard it so each cached clip starts with
 // warmed audio and contains exactly its timeline's packets, without a repeated
-// priming/padding packet at every six-second boundary.
+// priming/padding packet at every segment boundary.
 const audioLead = 0.0735
 
 type Profile struct {
@@ -28,21 +28,21 @@ type Profile struct {
 	AudioKbps int
 }
 type Stream struct {
-	Index     int               `json:"index"`
-	Codec     string            `json:"codec_name"`
-	Type      string            `json:"codec_type"`
-	Width     int               `json:"width"`
-	Height    int               `json:"height"`
-	Transfer  string            `json:"color_transfer"`
-	Primaries string            `json:"color_primaries"`
-	Space     string            `json:"color_space"`
-	Range     string            `json:"color_range"`
-	Extra     string            `json:"extradata"`
-	Tags      map[string]string `json:"tags"`
-	SideData  []struct {
-		Type    string `json:"side_data_type"`
-		Profile int    `json:"dv_profile"`
-	} `json:"side_data_list"`
+	Index       int               `json:"index"`
+	Codec       string            `json:"codec_name"`
+	Type        string            `json:"codec_type"`
+	Width       int               `json:"width"`
+	Height      int               `json:"height"`
+	Transfer    string            `json:"color_transfer"`
+	Primaries   string            `json:"color_primaries"`
+	Space       string            `json:"color_space"`
+	Range       string            `json:"color_range"`
+	PixelFormat string            `json:"pix_fmt"`
+	FrameRate   string            `json:"avg_frame_rate"`
+	BitDepth    string            `json:"bits_per_raw_sample"`
+	Extra       string            `json:"extradata"`
+	Tags        map[string]string `json:"tags"`
+	SideData    []HDRSideData     `json:"side_data_list"`
 }
 type Probe struct {
 	Streams []Stream `json:"streams"`

@@ -65,11 +65,108 @@ mounts. Graphics/Vulkan support is required for Profile 5. Normal Docker/CI runs
 not enable encoding and do not require a GPU. Physical GPU/container qualification
 is separate from a successful image build.
 
+## AI HDR
+
+`AI_HDR_ENABLED=false` (the default) hides the **AI HDR** button and rejects every
+enhanced API request, including already cached segments. With the flag enabled,
+Plex players show the button immediately before audio normalization. The choice is
+local (`sparkle.raw.aiHDR`); it does not change anyone else's room playback setting.
+Turning it on uses an enhanced AV1/HEVC encode, including from Compatible mode.
+Turning it off restores the saved ordinary output choice, position and pause state.
+Missing GPU/filter support leaves the button disabled. Processing failures are
+reported, without silently substituting ordinary video.
+
+On Windows, run `./scripts/install-ai-hdr.ps1` (requires 7-Zip). It installs portable,
+SHA-256-checked NVEncC 9.35 and its NVIDIA NGX dependency into ignored `bin/` and prints
+the backend settings to add to your existing `.env`:
+
+```dotenv
+ENCODE_ENABLED=true
+AI_HDR_ENABLED=true
+NVENCC=C:/path/to/Sparkle/bin/nvencc-9.35/NVEncC64.exe
+```
+
+Restart the backend. `NVENCC` defaults to `NVEncC64` on PATH. Keep the distribution's
+DLLs, licenses and notices together. FFmpeg also needs `zscale`, `libplacebo`, and the
+existing NVENC/Opus support. Startup tests both TrueHDR and libplacebo through each
+encoder before advertising support. This integration is qualified on Windows;
+the supplied Linux Docker image does not include NVIDIA NGX/TrueHDR.
+
+The backend reads stream metadata and a bounded sample of decoded frame metadata:
+transfer function, primaries, matrix, range, mastering maximum, MaxCLL/MaxFALL,
+Dolby Vision profile/base compatibility and dynamic-metadata indicators. Missing or
+contradictory color information fails closed. A mastering-display maximum is only a
+fallback seed, never proof that the movie contains highlights at that brightness.
+
+- Recognized SDR is normalized to limited-range Rec.709 and processed by
+  [NVIDIA TrueHDR through NVEncC](https://github.com/rigaya/NVEnc/blob/master/NVEncC_Options.en.md#--vpp-ngx-truehdr).
+- PQ and HLG use libplacebo frame peak detection and temporally smoothed spline
+  inverse tone mapping. A two-second lead-in settles analysis before a requested
+  segment; those frames are discarded. Restrained HDR grades can expand even when
+  their mastering tags say 1,000 nits. Brighter sources are compressed to the target.
+- The target is **1,600 nits**, not a requirement that every scene reach that peak.
+  Output is 10-bit BT.2020/PQ HDR10 with new mastering and light-level MP4 boxes.
+  The target ceiling is recorded as MaxCLL; MaxFALL remains unknown (zero).
+  The display and browser still determine physical luminance.
+
+Dolby Vision Profile 5 is reshaped through FFmpeg/libplacebo before expansion.
+Profiles 7/8 use their compatible base signal; Profile 7 enhancement layers and
+preservation of Dolby Vision/HDR10+ artistic dynamic metadata are not claimed.
+Output is an optional new grade, not recovered highlight detail or a faithful
+reconstruction of the studio master. Scene boundaries can still expose differences
+between independent filter invocations; the bounded lead-in reduces this risk.
+
+For canonical limited-range 4:2:0 sources (10-bit BT.2020 PQ/HLG or 8-bit Rec.709
+SDR), NVEncC keeps NVDEC decoding, the same enhancement filters and NVENC encoding
+on GPU surfaces. FFmpeg copies a bounded compressed video window from the confined
+source handle, then copies the enhanced segment into fragmented MP4. It does not
+transfer decoded frames between processes. Input windows are capped at 128 MiB,
+stay inside the existing job byte budget and are removed before caching completes.
+Packet timestamps, frame counts and the segment's keyframe are checked before use.
+Fractional constant frame rates are supported without rounding to an integer rate.
+
+Other color spaces, full-range sources, Dolby Vision Profile 5, variable frame rates
+and unsupported GPU decoders retain the normalized reference pipeline. That path
+streams raw frames through bounded OS pipes without decoded files on disk. Both
+paths share the exact TrueHDR/libplacebo parameters, scene detection, two-second
+analysis lead-in and Opus audio processing. Mastering metadata is written after
+filtering so it cannot change libplacebo's target gamut. The optimized NVENC QVBR
+path uses a generous 500 Mbps ceiling to avoid NVEncC's implicit low bitrate cap;
+it retains p3/CQ 24, dimensions and frame rate. Different GPU chroma conversion and
+encoder wrappers can produce small pixel differences from the reference encode.
+
+Both paths share GPU concurrency, cancellation, cache size/TTL and original file
+confinement. Enhanced profile revision v2 separates optimized output from older
+cached derivatives. Performance depends on source decoding, resolution, GPU,
+storage and concurrent streams; a single sample cannot establish sustained throughput.
+
+For repeatable synthetic GPU qualification, set `SPARKLE_TEST_NVENCC` to the absolute
+executable and run `go test ./internal/encode -run 'TestAIHDR' -v` from `backend/`.
+The tests cover SDR/PQ/HLG in AV1/HEVC, MP4 HDR signaling, first/middle/final segment
+timestamps, fractional frame rates, VFR fallback, decoded HDR pixel expansion and
+reference color comparisons around bright/dark scene transitions. They skip when
+the executable is not supplied.
+Set `SPARKLE_AI_HDR_FIXTURE_DIR` to an absolute ignored directory during the GPU
+test to export synthetic segments, then run `node scripts/tests/qualify-ai-hdr.mjs`
+from the repository root with the same variable. It checks two Chrome providers,
+local on/off choices, timeline changes/recovery, flag-off behavior and the actual
+Vidstack button in desktop/mobile layouts. Fixtures do not exercise Plex authentication
+or full watch-party WebSocket transport, which retain their separate test suites.
+
+On the qualified RTX 5090 host, a 4K Avatar sample with 1,000-nit mastering metadata
+and zero MaxCLL/MaxFALL took about **3.7 seconds for AV1 and 3.3 seconds for HEVC**
+per 12-second enhanced segment, including audio, through the optimized path. The
+reference pipeline previously took 12.7 and 12.1 seconds respectively. Sampled
+decoded RGB comparisons against the reference passed (mean absolute normalized
+code-value error below 0.002); scene-transition fixtures also passed. A synthetic
+103-nit PQ highlight expanded to approximately 1,587 nits in decoded AV1 and HEVC.
+These are signal/throughput measurements, not physical-display HDR qualification.
+
 ## Encoder profile and HDR
 
 The defaults use constant quality **24**, **10-bit**, variable frame rate, source
 dimensions/color range, and **144 kbps stereo Opus** for all audio tracks. Both video
-outputs exclusively use **NVENC** (`av1_nvenc` / `hevc_nvenc`) with **p3 (fast)** by
+outputs exclusively use **NVENC** (FFmpeg or NVEncC) with **p3 (fast)** by
 default. Quality and speed override the reference Sparkle-Transcoder's quality 22
 and slower presets. There is no software video encoding fallback: an
 unavailable NVIDIA encoder makes that encoded mode unavailable. Source decoding
@@ -87,8 +184,8 @@ AV1 disables S12M timecode insertion (`-s12m_tc 0`) to avoid the
 [FFmpeg/NVENC malformed timecode metadata bug](https://forums.developer.nvidia.com/t/ffmpeg-av1-nvenc-encoder-sometimes-generates-undecodeable-bitstreams/364011),
 which can make Chrome stop with a native decode error. This removes only timecode
 insertion; it retains HDR color, mastering and light-level metadata. Encode profile
-revision v5 prevents reuse of affected older cached segments. Native decoder
-failures reach the player's error state instead of leaving it buffering; users
+revision v6 also separates the current 12-second segments from older cache entries.
+Native decoder failures reach the player's error state instead of leaving it buffering; users
 can choose another output mode while staying in the room.
 
 PQ and HLG retain 10-bit color signaling and use native video/MSE, including browser
@@ -101,7 +198,8 @@ full Dolby Vision or HDR10+. Source format remains visible separately in setting
 
 ## Segments, safety, and limits
 
-- Six-second independently encoded fragments form one seekable HLS/fMP4 timeline.
+- Twelve-second independently encoded segments form one seekable HLS/fMP4 timeline,
+  for ordinary and AI HDR output. The final segment is shortened to the remaining duration.
   The player targets a 24-second preload; the backend encodes requested segments
   on demand without an independent lookahead loop.
   A master playlist joins separate video/audio playlists in one player. On browsers
@@ -111,14 +209,17 @@ full Dolby Vision or HDR10+. Source format remains visible separately in setting
   time. Distant seeks generate only the requested segments.
 - Audio fragments use 48 kHz, 20 ms Opus packets, with a short discarded encoder
   warm-up. Encoder lookahead and end padding are removed before timestamp rebasing;
-  full fragments contain exactly 300 packets per track without boundary overlaps.
+  full segments contain exactly 600 packets per track without boundary overlaps.
   Embedded track switches flush the previous native audio buffer before resuming.
 - Cache keys include source identity/size/modification time, selected codec,
   encoder settings, tool build/profile revision and segment position. Concurrent requests
   share one job. Complete segments survive restarts; incomplete ones are discarded.
   Manifest/playlist fingerprints include the profile and tool revision too, so browser
   caches cannot reuse fragments generated by an older encoder configuration.
-- Default bounds: two GPU jobs, 32 pending jobs, 40 GiB disk budget, 12-hour idle
+- `ENCODE_CONCURRENCY` accepts 1–32 simultaneous pipelines (default 2), shared by
+  ordinary and AI HDR encodes. The admission limit is 32 jobs total, including running
+  and queued jobs; available cache reservations can impose a lower limit.
+- Default bounds: 40 GiB disk budget, 12-hour idle
   expiry, 4,096 cache entries, 256 MiB reservation per job and a two-minute job
   deadline. Active responses are pinned against eviction. Abandoned requests cancel
   unused jobs after a one-second grace period. No work runs simply from browsing Library.
@@ -156,7 +257,7 @@ npx playwright test tests/e2e/encoded.spec.ts --workers=1
 
 The opt-in audio fixture test generates two continuous tones, encodes both modes,
 and verifies every audio packet's timestamp and duration. The browser check samples
-decoded PCM across four fragment boundaries and checks the frequency after changing
+decoded PCM across two twelve-second segment boundaries and checks the frequency after changing
 tracks. Use an absolute, disposable fixture directory outside mapped media roots:
 
 ```powershell

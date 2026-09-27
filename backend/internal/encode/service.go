@@ -21,6 +21,8 @@ import (
 
 type Options struct {
 	Enabled              bool
+	AIHDREnabled         bool
+	NVEncC               string
 	FFmpeg, FFprobe, Dir string
 	MaxBytes             int64
 	TTL                  time.Duration
@@ -28,6 +30,8 @@ type Options struct {
 	Profile              Profile
 }
 type source struct {
+	hdrMu    sync.Mutex
+	hdr      *hdrPlan
 	probe    Probe
 	duration float64
 	key      string
@@ -35,16 +39,18 @@ type source struct {
 	bytes    int
 }
 type Service struct {
-	options     Options
-	plex        *plex.Client
-	cache       *cache
-	codecs      []string
-	revision    string
-	cancel      context.CancelFunc
-	mu          sync.Mutex
-	sources     map[string]*source
-	sourceBytes int
-	probes      chan struct{}
+	options       Options
+	plex          *plex.Client
+	cache         *cache
+	codecs        []string
+	aiHDRCodecs   []string
+	aiHDRRevision string
+	revision      string
+	cancel        context.CancelFunc
+	mu            sync.Mutex
+	sources       map[string]*source
+	sourceBytes   int
+	probes        chan struct{}
 }
 
 func New(ctx context.Context, p *plex.Client, opts Options) (*Service, error) {
@@ -69,6 +75,10 @@ func New(ctx context.Context, p *plex.Client, opts Options) (*Service, error) {
 	s.cache = c
 	s.revision = toolRevision(ctx, opts.FFmpeg) + toolRevision(ctx, opts.FFprobe)
 	s.codecs = capabilities(ctx, opts.FFmpeg, opts.Dir)
+	if opts.AIHDREnabled {
+		s.aiHDRRevision = aiHDRVersion + aiHDRToolRevision(opts.NVEncC)
+		s.aiHDRCodecs = aiHDRCapabilities(ctx, opts, s.codecs)
+	}
 	return s, nil
 }
 func (s *Service) Close() {
@@ -82,7 +92,7 @@ func (s *Service) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /media/{id}/parts/{partId}/encoded/{codec}/{resource}", s.serve)
 }
 func (s *Service) capabilities(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]any{"codecs": s.codecs, "segmentSeconds": SegmentSeconds, "quality": s.options.Profile.Quality, "preset": s.options.Profile.Preset, "audioKbps": s.options.Profile.AudioKbps})
+	writeJSON(w, map[string]any{"codecs": s.codecs, "aiHDREnabled": s.options.AIHDREnabled, "aiHDRCodecs": s.aiHDRCodecs, "segmentSeconds": SegmentSeconds, "quality": s.options.Profile.Quality, "preset": s.options.Profile.Preset, "audioKbps": s.options.Profile.AudioKbps})
 }
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -194,6 +204,16 @@ func (s *Service) fingerprint(source *source) string {
 
 func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 	codec := r.PathValue("codec")
+	variant := r.URL.Query().Get("aiHDR")
+	if variant != "" && variant != "0" && variant != "1" {
+		http.Error(w, "Invalid AI HDR selection", http.StatusBadRequest)
+		return
+	}
+	aiHDR := variant == "1"
+	if aiHDR && (!s.options.AIHDREnabled || !containsCodec(s.aiHDRCodecs, codec)) {
+		failure(w, errAIHDR)
+		return
+	}
 	allowed := false
 	for _, c := range s.codecs {
 		if c == codec {
@@ -218,6 +238,15 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 	fingerprint := s.fingerprint(source)
+	var enhancement hdrPlan
+	if aiHDR {
+		enhancement, err = s.hdrPlan(r.Context(), source, file)
+		if err != nil {
+			failure(w, err)
+			return
+		}
+		fingerprint = fmt.Sprintf("%x", sha256.Sum256([]byte(fingerprint+s.aiHDRRevision)))
+	}
 	if requested := r.URL.Query().Get("v"); requested != "" && requested != fingerprint {
 		http.Error(w, "Media changed; reload playback", 409)
 		return
@@ -274,10 +303,17 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		video := source.probe.video()
-		writeJSON(w, map[string]any{"fingerprint": fingerprint, "playlist": "master.m3u8", "codec": codec, "output": source.probe.output(), "duration": source.duration, "width": video.Width, "height": video.Height, "audio": source.probe.count("audio") > 0, "subtitleTracks": tracks, "hasFonts": hasFonts, "segmentSeconds": SegmentSeconds})
+		output := source.probe.output()
+		if aiHDR {
+			output = "HDR10"
+		}
+		writeJSON(w, map[string]any{"fingerprint": fingerprint, "playlist": "master.m3u8", "codec": codec, "aiHDR": aiHDR, "aiHDRMode": enhancement.Mode, "output": output, "duration": source.duration, "width": video.Width, "height": video.Height, "audio": source.probe.count("audio") > 0, "subtitleTracks": tracks, "hasFonts": hasFonts, "segmentSeconds": SegmentSeconds})
 		return
 	}
 	if strings.HasSuffix(resource, ".m3u8") {
+		if aiHDR {
+			fingerprint += "&aiHDR=1"
+		}
 		if resource == "master.m3u8" {
 			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 			w.Header().Set("Cache-Control", "private, no-cache")
@@ -316,6 +352,9 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	cacheCodec := codec
+	if aiHDR {
+		cacheCodec += s.aiHDRRevision
+	}
 	if kind == "subtitles" {
 		cacheCodec = "subtitles"
 	}
@@ -344,13 +383,19 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		if kind == "subtitles" {
 			return subtitleJSON(ctx, s.options.FFprobe, url, dir, float64(number*SegmentSeconds), source.probe)
 		}
-		args := encodeArgs(url, dir, codec, number, source.duration, s.options.Profile, source.probe)
-		if err = run(ctx, s.options.FFmpeg, args, nil); err != nil {
-			if ctx.Err() != nil {
+		if aiHDR {
+			if err = runAIHDR(ctx, s.options, url, dir, codec, number, source.duration, source.probe, enhancement); err != nil {
 				return err
 			}
-			if err = run(ctx, s.options.FFmpeg, softwareDecodeInput(args), nil); err != nil {
-				return err
+		} else {
+			args := encodeArgs(url, dir, codec, number, source.duration, s.options.Profile, source.probe)
+			if err = run(ctx, s.options.FFmpeg, args, nil); err != nil {
+				if ctx.Err() != nil {
+					return err
+				}
+				if err = run(ctx, s.options.FFmpeg, softwareDecodeInput(args), nil); err != nil {
+					return err
+				}
 			}
 		}
 		index := chunkIndex{}
@@ -414,6 +459,9 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func errEncodePublic(err error) error {
+	if errors.Is(err, errAIHDR) {
+		return errAIHDR
+	}
 	if errors.Is(err, errBusy) {
 		return errBusy
 	}

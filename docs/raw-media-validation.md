@@ -183,6 +183,26 @@ PCM check in the [server encoding guide](server-encoding.md#validation).
 
 See [server encoding](server-encoding.md) for opt-in configuration and reproduction.
 
+The AI HDR GPU pipeline was qualified on September 26, 2026 with Windows,
+RTX 5090, NVEncC 9.35 and p3/CQ 24, using 12-second segments:
+
+- SDR TrueHDR, PQ expansion and HLG conversion passed AV1/HEVC native Chrome
+  playback, two-provider seek/pause/play, local enhancement choices, delayed
+  readiness/recovery and desktop/mobile controls. These fixtures do not exercise
+  Plex authentication or full room WebSocket transport.
+- Direct GPU tests passed first/middle/final segments, fractional frame rates,
+  H.264/HEVC/AV1 source decoding and VFR reference fallback. Colored scene-change
+  fixtures passed decoded pixel comparisons against the normalized reference
+  pipeline. A synthetic 103-nit highlight expanded to about 1,587 nits.
+- A 4K Avatar sample with 1,000-nit mastering and zero MaxCLL/MaxFALL rendered a
+  12-second segment, including audio, in 3.7 seconds (AV1) and 3.3 seconds (HEVC).
+  Sampled color comparisons against the reference passed. This is a bounded
+  single-job measurement, not sustained or concurrent throughput qualification.
+
+These checks do not qualify physical peak luminance, Dolby Vision/HDR10+ dynamic
+metadata preservation or additional display/browser models. See the
+[AI HDR pipeline and reproduction instructions](server-encoding.md#ai-hdr).
+
 ## Native HDR and dynamic HDR
 
 Native AV1 MP4 **PQ and HLG** samples played at 3840×2160. MSE initialization

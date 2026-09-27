@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -39,7 +40,7 @@ func TestNVENCAudioContinuityFixture(t *testing.T) {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			t.Fatal(err)
 		}
-		for segment := 0; segment < 5; segment++ {
+		for segment := 0; segment*SegmentSeconds < 30; segment++ {
 			chunk := t.TempDir()
 			if err := run(ctx, ffmpeg, encodeArgs(input, chunk, codec, segment, 30, Profile{22, "p3", 144}, p), nil); err != nil {
 				t.Fatal(err)
@@ -80,7 +81,8 @@ func TestNVENCAudioContinuityFixture(t *testing.T) {
 						}
 						counts[packet.Track]++
 					}
-					if counts[0] != 300 || counts[1] != 300 {
+					packetsPerTrack := int(math.Min(SegmentSeconds, 30-float64(segment*SegmentSeconds)) * 50)
+					if counts[0] != packetsPerTrack || counts[1] != packetsPerTrack {
 						t.Fatalf("unexpected audio packet count: %v", counts)
 					}
 				}
@@ -99,9 +101,9 @@ func TestNVENCAudioContinuityFixture(t *testing.T) {
 			}
 		}
 		for _, kind := range []string{"video", "audio"} {
-			playlist := fmt.Sprintf("#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:6\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"%s-init.mp4\"\n", kind)
-			for n := 0; n < 5; n++ {
-				playlist += fmt.Sprintf("#EXTINF:6,\n%s-%d.m4s\n", kind, n)
+			playlist := fmt.Sprintf("#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:%d\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-MAP:URI=\"%s-init.mp4\"\n", SegmentSeconds, kind)
+			for n := 0; n*SegmentSeconds < 30; n++ {
+				playlist += fmt.Sprintf("#EXTINF:%.6f,\n%s-%d.m4s\n", math.Min(SegmentSeconds, 30-float64(n*SegmentSeconds)), kind, n)
 			}
 			if err := os.WriteFile(filepath.Join(dir, kind+".m3u8"), []byte(playlist+"#EXT-X-ENDLIST\n"), 0644); err != nil {
 				t.Fatal(err)

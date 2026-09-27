@@ -209,7 +209,7 @@ const server = createServer(async (req, res) => {
 			audio: true,
 			subtitleTracks: [],
 			hasFonts: false,
-			segmentSeconds: 6
+			segmentSeconds: 12
 		});
 	if (path === '/capture.js')
 		return res.writeHead(200, { 'Content-Type': 'text/javascript' }).end(collector);
@@ -489,8 +489,8 @@ try {
 			const on = { ...normalizer.status },
 				end = clock();
 			const steadyCorrections = corrections.slice(correctionsStart);
-			// The NVENC fixture is 30 seconds. Seek back after sampling four
-			// fragment boundaries so the remaining volume/track tests cannot end it.
+			// The NVENC fixture is 30 seconds. Seek back after sampling
+			// segment boundaries so the remaining volume/track tests cannot end it.
 			if (fixture.mode === 'native') {
 				provider.setCurrentTime(6);
 				await provider.commands;

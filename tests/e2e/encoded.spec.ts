@@ -104,7 +104,7 @@ for (const codec of ['av1', 'hevc']) {
 			(v as any).testWaits = 0;
 			v.addEventListener('waiting', () => (v as any).testWaits++);
 		});
-		// Cross at least five six-second fragment boundaries with no audio-only
+		// Cross at least two twelve-second segment boundaries with no audio-only
 		// rate adjustments or recovery seeks competing with the native clock.
 		await expect
 			.poll(() => video.evaluate((v) => (v as HTMLVideoElement).currentTime), { timeout: 55_000 })

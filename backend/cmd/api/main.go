@@ -79,7 +79,7 @@ func main() {
 	if err := lifecycle.WatchShutdown(ctx, stop); err != nil {
 		log.Fatal("could not connect to Windows launcher shutdown event")
 	}
-	encoder, err := encode.New(ctx, plexClient, encode.Options{Enabled: cfg.EncodeEnabled, FFmpeg: cfg.FFmpeg, FFprobe: cfg.FFprobe, Dir: filepath.Join(cfg.MediaCacheDir, "encoded"), MaxBytes: cfg.EncodeCacheBytes, TTL: cfg.EncodeCacheTTL, Concurrency: int(cfg.EncodeConcurrency), Profile: encode.Profile{Quality: int(cfg.EncodeQuality), Preset: cfg.EncodePreset, AudioKbps: int(cfg.EncodeAudioKbps)}})
+	encoder, err := encode.New(ctx, plexClient, encode.Options{Enabled: cfg.EncodeEnabled, AIHDREnabled: cfg.AIHDREnabled, NVEncC: cfg.NVEncC, FFmpeg: cfg.FFmpeg, FFprobe: cfg.FFprobe, Dir: filepath.Join(cfg.MediaCacheDir, "encoded"), MaxBytes: cfg.EncodeCacheBytes, TTL: cfg.EncodeCacheTTL, Concurrency: int(cfg.EncodeConcurrency), Profile: encode.Profile{Quality: int(cfg.EncodeQuality), Preset: cfg.EncodePreset, AudioKbps: int(cfg.EncodeAudioKbps)}})
 	if err != nil {
 		log.Fatalf("encoder configuration error: %v", err)
 	}

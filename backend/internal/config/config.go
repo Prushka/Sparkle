@@ -13,6 +13,8 @@ type Config struct {
 	PlexAuthCookieSameSite string
 	PlexAuthSessionDir     string
 	EncodeEnabled          bool
+	AIHDREnabled           bool
+	NVEncC                 string
 	FFmpeg                 string
 	FFprobe                string
 	EncodeCacheBytes       int64
@@ -46,6 +48,7 @@ func Load() (Config, error) {
 		PlexAuthSessionDir:     getenv("PLEX_AUTH_SESSION_DIR", "./data/plex-auth"),
 		FFmpeg:                 getenv("FFMPEG", "ffmpeg"),
 		FFprobe:                getenv("FFPROBE", "ffprobe"),
+		NVEncC:                 getenv("NVENCC", "NVEncC64"),
 		EncodeCacheBytes:       40 << 30,
 		EncodeCacheTTL:         12 * time.Hour,
 		EncodeConcurrency:      2,
@@ -88,6 +91,12 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("ENCODE_ENABLED must be true or false")
 		}
 	}
+	if value := os.Getenv("AI_HDR_ENABLED"); value != "" {
+		cfg.AIHDREnabled, err = strconv.ParseBool(value)
+		if err != nil {
+			return Config{}, fmt.Errorf("AI_HDR_ENABLED must be true or false")
+		}
+	}
 	for name, target := range map[string]*int64{"ENCODE_CACHE_BYTES": &cfg.EncodeCacheBytes, "ENCODE_CONCURRENCY": &cfg.EncodeConcurrency, "ENCODE_QUALITY": &cfg.EncodeQuality, "ENCODE_AUDIO_KBPS": &cfg.EncodeAudioKbps} {
 		*target, err = int64Env(name, *target)
 		if err != nil {
@@ -97,7 +106,7 @@ func Load() (Config, error) {
 	if cfg.EncodeCacheTTL, err = durationEnv("ENCODE_CACHE_TTL", cfg.EncodeCacheTTL); err != nil {
 		return Config{}, err
 	}
-	if cfg.EncodeCacheBytes < 512<<20 || cfg.EncodeConcurrency < 1 || cfg.EncodeConcurrency > 8 || cfg.EncodeQuality < 0 || cfg.EncodeQuality > 51 || cfg.EncodeAudioKbps < 32 || cfg.EncodeAudioKbps > 512 || len(cfg.EncodePreset) != 2 || cfg.EncodePreset[0] != 'p' || cfg.EncodePreset[1] < '1' || cfg.EncodePreset[1] > '7' {
+	if cfg.EncodeCacheBytes < 512<<20 || cfg.EncodeConcurrency < 1 || cfg.EncodeConcurrency > 32 || cfg.EncodeQuality < 0 || cfg.EncodeQuality > 51 || cfg.EncodeAudioKbps < 32 || cfg.EncodeAudioKbps > 512 || len(cfg.EncodePreset) != 2 || cfg.EncodePreset[0] != 'p' || cfg.EncodePreset[1] < '1' || cfg.EncodePreset[1] > '7' {
 		return Config{}, fmt.Errorf("invalid encoder settings")
 	}
 	if cfg.JobsCacheTTL, err = durationEnv("JOBS_CACHE_TTL", cfg.JobsCacheTTL); err != nil {
