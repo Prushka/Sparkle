@@ -137,6 +137,20 @@ run([
 	'0',
 	`${root}/multilingual.mkv`
 ]);
+// Muxer statistics exercise size selection without reading every subtitle packet.
+run([
+	'-i',
+	`${root}/multilingual.mkv`,
+	'-map',
+	'0',
+	'-c',
+	'copy',
+	'-metadata:s:s:2',
+	'NUMBER_OF_BYTES=100',
+	'-metadata:s:s:3',
+	'NUMBER_OF_BYTES=1000',
+	`${root}/multilingual-sized.mkv`
+]);
 run(['-i', `${root}/multilingual.mkv`, '-map', '0:s:1', '-c', 'copy', `${root}/captions.ass`]);
 for (const [index, language] of ['eng', 'chi', 'jpn'].entries()) {
 	run([

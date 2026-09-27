@@ -15,9 +15,19 @@ import {
 	pickPreferredAudioStream,
 	readTrackPreference,
 	removeTrackPreference,
+	subtitleByteSize,
 	type StoredSubtitleSelection,
 	type SubtitleTrackFormat
 } from './track-selection';
+
+/** Matroska stream statistics, when supplied by the muxer; never scan packets for a size. */
+export function rawSubtitleByteSize(metadata: Record<string, unknown>) {
+	for (const key of ['NUMBER_OF_BYTES', 'NUMBER_OF_BYTES-eng']) {
+		const size = subtitleByteSize(metadata[key]);
+		if (size !== undefined) return size;
+	}
+	return undefined;
+}
 
 // Original subtitle codecs use the same format priorities as extracted tracks.
 export function rawSubtitleFormat(codec = ''): SubtitleTrackFormat {
@@ -33,6 +43,7 @@ export function rawSelectionStream(track: RawPlaybackTrack, kind: 'audio' | 'sub
 		CodecType: kind,
 		Language: track.language || '',
 		Title: track.title,
+		Size: kind === 'subtitle' ? subtitleByteSize(track.size) : undefined,
 		Location: kind === 'subtitle' ? `${track.id}.${rawSubtitleFormat(track.codec)}` : ''
 	};
 }

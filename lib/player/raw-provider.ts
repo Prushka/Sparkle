@@ -37,6 +37,7 @@ import {
 	pickRawAudioTrack,
 	getRawSubtitleTracks,
 	restoreRawSubtitleLayers,
+	rawSubtitleByteSize,
 	rawSelectionStream
 } from './raw-track-selection';
 import {
@@ -667,6 +668,7 @@ export class RawProvider implements MediaProviderAdapter {
 						language:
 							original?.languageCode || String(s.metadata.language || original?.language || ''),
 						codec: original?.codec || String(s.codecparProxy.codecId),
+						size: type === 'subtitle' ? rawSubtitleByteSize(s.metadata) : undefined,
 						title:
 							original?.displayTitle ||
 							String(s.metadata.title || s.metadata.language || `${type} ${s.index + 1}`)

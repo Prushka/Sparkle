@@ -92,6 +92,18 @@ func (p Probe) count(kind string) int {
 	}
 	return n
 }
+
+// Use existing Matroska statistics only; missing sizes must not trigger a packet scan.
+func (s Stream) subtitleBytes() int64 {
+	for _, key := range []string{"NUMBER_OF_BYTES", "NUMBER_OF_BYTES-eng"} {
+		size, err := strconv.ParseUint(strings.TrimSpace(s.Tags[key]), 10, 64)
+		if err == nil && size > 0 && size <= 1<<53-1 {
+			return int64(size)
+		}
+	}
+	return 0
+}
+
 func (s Stream) dolby5() bool {
 	for _, d := range s.SideData {
 		if d.Profile == 5 {

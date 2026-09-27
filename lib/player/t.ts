@@ -498,6 +498,7 @@ export interface Stream {
 	Location: string;
 	Language: string;
 	Title: string;
+	Size?: number;
 }
 
 type CueForgeSubtitleInfo = {

@@ -17,7 +17,7 @@ export type StoredSubtitleSelection = {
 export type SubtitleSelectionCandidate = Required<
 	Pick<StoredSubtitleSelection, 'annotated' | 'cueForge' | 'format' | 'language' | 'style'>
 > &
-	Pick<StoredSubtitleSelection, 'label' | 'src' | 'srcName'>;
+	Pick<StoredSubtitleSelection, 'label' | 'src' | 'srcName'> & { size?: number };
 
 export const SUBTITLE_SELECTION_STORAGE_KEY = 'subtitleSelection';
 
@@ -173,6 +173,39 @@ export function isSubtitleTrackFormat(value: string): value is SubtitleTrackForm
 
 export function getSubtitleSelectionStyle(format: SubtitleTrackFormat) {
 	return format;
+}
+
+export function subtitleByteSize(value: unknown): number | undefined {
+	const size = typeof value === 'string' && /^\d+$/.test(value.trim()) ? Number(value) : value;
+	return typeof size === 'number' && Number.isSafeInteger(size) && size > 0 ? size : undefined;
+}
+
+function isLargerEquivalentSubtitle(
+	candidate: SubtitleSelectionCandidate,
+	current: SubtitleSelectionCandidate
+) {
+	return (
+		candidate.format === current.format &&
+		isSameSubtitleLanguage(candidate.language, current.language) &&
+		candidate.cueForge === current.cueForge &&
+		candidate.annotated === current.annotated &&
+		candidate.style === current.style &&
+		(subtitleByteSize(candidate.size) ?? 0) > (subtitleByteSize(current.size) ?? 0)
+	);
+}
+
+/** Refine an automatic choice without changing its format/language or subtitle category. */
+export function pickLargestEquivalentSubtitle<T>(
+	items: T[],
+	preferred: T | null,
+	getCandidate: (item: T) => SubtitleSelectionCandidate
+) {
+	if (!preferred) return null;
+	let best: T = preferred;
+	for (const item of items) {
+		if (isLargerEquivalentSubtitle(getCandidate(item), getCandidate(best))) best = item;
+	}
+	return best;
 }
 
 export function getSubtitleSrcName(src: string) {
@@ -357,7 +390,8 @@ export function getSubtitleSelectionCandidateFromStream(
 		language: getSubtitleLanguage(stream),
 		src: stream.Location,
 		srcName: getSubtitleSrcName(stream.Location),
-		style: getSubtitleSelectionStyle(format)
+		style: getSubtitleSelectionStyle(format),
+		size: subtitleByteSize(stream.Size)
 	};
 }
 
@@ -372,7 +406,8 @@ export function getSubtitleSelectionCandidateFromTrack(
 		language: track.language,
 		src: track.src,
 		srcName: getSubtitleSrcName(track.src),
-		style: track.style || getSubtitleSelectionStyle(track.format)
+		style: track.style || getSubtitleSelectionStyle(track.format),
+		size: subtitleByteSize(track.size)
 	};
 }
 
@@ -437,7 +472,8 @@ export function findSubtitleByStoredSelection<T>(
 	items: T[],
 	selection: StoredSubtitleSelection | null,
 	getCandidate: (item: T) => SubtitleSelectionCandidate,
-	usedSrcs: string[] = []
+	usedSrcs: string[] = [],
+	preferLargest = false
 ) {
 	if (!selection) {
 		return null;
@@ -450,7 +486,14 @@ export function findSubtitleByStoredSelection<T>(
 			continue;
 		}
 		const score = getSubtitleSelectionScore(candidate, selection);
-		if (score > bestScore) {
+		if (
+			score > bestScore ||
+			(preferLargest &&
+				score >= 0 &&
+				score === bestScore &&
+				bestItem !== null &&
+				isLargerEquivalentSubtitle(candidate, getCandidate(bestItem)))
+		) {
 			bestItem = item;
 			bestScore = score;
 		}
@@ -474,6 +517,8 @@ export function pickPrioritySubtitleStreamBySelection(
 	streams: Stream[],
 	storedSelection: StoredSubtitleSelection | null
 ) {
+	const largest = (preferred: Stream | null) =>
+		pickLargestEquivalentSubtitle(streams, preferred, getSubtitleSelectionCandidateFromStream);
 	if (isStoredSubtitleSelectionDisabled(storedSelection)) {
 		return null;
 	}
@@ -481,7 +526,9 @@ export function pickPrioritySubtitleStreamBySelection(
 		const storedMatch = findSubtitleByStoredSelection(
 			streams,
 			storedSelection,
-			getSubtitleSelectionCandidateFromStream
+			getSubtitleSelectionCandidateFromStream,
+			[],
+			true
 		);
 		if (storedMatch) {
 			return storedMatch;
@@ -491,7 +538,7 @@ export function pickPrioritySubtitleStreamBySelection(
 				isSameSubtitleLanguage(getSubtitleLanguage(stream), storedSelection.language || '')
 			);
 			if (storedLanguageMatch) {
-				return storedLanguageMatch;
+				return largest(storedLanguageMatch);
 			}
 		}
 	}
@@ -501,11 +548,11 @@ export function pickPrioritySubtitleStreamBySelection(
 			(stream) => getSubtitleLanguageBase(getSubtitleLanguage(stream)) === language
 		);
 		if (priorityMatch) {
-			return priorityMatch;
+			return largest(priorityMatch);
 		}
 	}
 
-	return streams[0] ?? null;
+	return largest(streams[0] ?? null);
 }
 
 export function pickPrioritySubtitleStream(
@@ -520,7 +567,9 @@ export function pickPrioritySubtitleStream(
 		const storedMatch = findSubtitleByStoredSelection(
 			streams,
 			storedSelection,
-			getSubtitleSelectionCandidateFromStream
+			getSubtitleSelectionCandidateFromStream,
+			[],
+			true
 		);
 		if (storedMatch) {
 			return storedMatch;
@@ -571,4 +620,4 @@ export function getSubtitleFormat(src: string): SubtitleTrackFormat {
 export type SubtitleSelectionTrack = Pick<
 	SubtitleSelectionCandidate,
 	'annotated' | 'cueForge' | 'format' | 'language' | 'style'
-> & { label: string; src: string };
+> & { label: string; src: string; size?: number };

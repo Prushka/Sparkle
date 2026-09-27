@@ -265,7 +265,11 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 				if title == "" {
 					title = fmt.Sprintf("Subtitle %d", index+1)
 				}
-				tracks = append(tracks, map[string]any{"id": index, "title": title})
+				subtitle := map[string]any{"id": index, "title": title}
+				if size := track.subtitleBytes(); size > 0 {
+					subtitle["size"] = size
+				}
+				tracks = append(tracks, subtitle)
 				index++
 			}
 		}

@@ -53,6 +53,7 @@ export interface RawPlaybackTrack {
 	index?: number;
 	language?: string;
 	codec?: string;
+	size?: number;
 }
 export interface RawPlaybackStatus {
 	ready: boolean;

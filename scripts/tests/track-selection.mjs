@@ -21,6 +21,7 @@ const {
 	pickRawAudioTrack,
 	pickRawSubtitleTrack,
 	rawSubtitleFormat,
+	rawSubtitleByteSize,
 	getRawSubtitleTracks,
 	restoreRawSubtitleLayers,
 	createSubtitleTracks,
@@ -124,6 +125,152 @@ assert.equal(
 	'Encoded policy is format first'
 );
 assert.equal(pickPrioritySubtitleStream([], null), null);
+
+// Size is an automatic tie-breaker, never a substitute for a saved identity or priority.
+for (const format of ['ass', 'vtt', 'srt', 'sup']) {
+	const streams = [
+		stream('eng', 1, format, 'A signs'),
+		stream('eng', 2, format, 'B dialogue'),
+		stream('eng', 3, format, 'Z full'),
+		stream('jpn', 4, format, 'Japanese')
+	];
+	const files = {
+		[`1.${format}`]: 10,
+		[`2.${format}`]: 100,
+		[`3.${format}`]: 1000,
+		[`4.${format}`]: 10000
+	};
+	const tracks = createSubtitleTracks(streams, '/static/movie/', files, null, false);
+	assert.equal(tracks.find((t) => t.default).src, `/static/movie/3.${format}`);
+	assert.deepEqual(
+		tracks.map((t) => t.src),
+		createSubtitleTracks(streams, '/static/movie/', {}, null, false).map((t) => t.src),
+		'size selection must not reorder menu tracks'
+	);
+	assert.equal(
+		getSubtitleFormatSelection(tracks, format).primaryTrack.src,
+		`/static/movie/3.${format}`
+	);
+	assert.equal(storage.size, 0, 'automatic size selection must not persist');
+	saveStoredSubtitleSelection(tracks[0]);
+	const saved = storage.get('subtitleSelection');
+	assert.equal(JSON.parse(saved).size, undefined, 'size is not part of persistent identity');
+	assert.equal(
+		createSubtitleTracks(streams, '/static/movie/', files).find((t) => t.default).src,
+		tracks[0].src
+	);
+	assert.equal(getSubtitleFormatSelection(tracks, format).primaryTrack.src, tracks[0].src);
+	assert.equal(
+		createSubtitleTracks(streams.slice(1), '/static/movie/', files).find((t) => t.default).src,
+		`/static/movie/3.${format}`,
+		'missing saved primary falls back to the largest otherwise equivalent track'
+	);
+	assert.equal(storage.get('subtitleSelection'), saved);
+	saveStoredSubtitleSelectionOff();
+	assert.equal(
+		createSubtitleTracks(streams, '', files).some((t) => t.default),
+		false
+	);
+	storage.clear();
+}
+const sized = [
+	{ ...stream('eng', 1, 'ass', 'Signs'), Size: 10 },
+	{ ...stream('eng', 2, 'ass', 'Full'), Size: 1000 },
+	{ ...stream('eng', 3, 'vtt'), Size: 10000 },
+	{ ...stream('jpn', 4, 'ass'), Size: 100000 }
+];
+assert.equal(pickPrioritySubtitleStream(sized, null).Index, 2);
+assert.equal(pickPrioritySubtitleStream(sized, null, true).Index, 3);
+assert.equal(pickPrioritySubtitleStream(sized, { language: 'ja-JP' }).Index, 4);
+assert.equal(pickPrioritySubtitleStream(sized, { language: 'en-US' }).Index, 2);
+assert.equal(
+	pickPrioritySubtitleStream(sized, {
+		language: 'en-US',
+		format: 'ass',
+		label: '1-English - Signs'
+	}).Index,
+	1
+);
+assert.equal(pickPrioritySubtitleStream(sized, { language: 'en-US', format: 'vtt' }).Index, 3);
+assert.equal(
+	pickPrioritySubtitleStream(
+		sized.map((s) => ({ ...s, Size: 10 })),
+		null
+	).Index,
+	1,
+	'equal sizes retain the previous tie order'
+);
+for (const size of [undefined, 0, -1, NaN, Infinity, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+	assert.equal(
+		pickPrioritySubtitleStream(
+			[
+				{ ...sized[0], Size: 1 },
+				{ ...sized[1], Size: size }
+			],
+			null
+		).Index,
+		1
+	);
+}
+const chineseVariants = [
+	{ ...stream('chi', 1, 'ass', 'Traditional'), Size: 10 },
+	{ ...stream('chi', 2, 'ass', 'Simplified'), Size: 1000 }
+];
+assert.equal(
+	pickPrioritySubtitleStream(chineseVariants, null).Index,
+	1,
+	'size cannot change Chinese variants'
+);
+const cueForgeStreams = [
+	{ ...stream('eng', 1, 'ass', 'cueforge_eng'), Size: 10 },
+	{ ...stream('eng', 2, 'ass', 'cueforge_eng_annotated'), Size: 1000 },
+	{ ...stream('eng', 3, 'ass', 'Full'), Size: 10000 }
+];
+assert.equal(
+	createSubtitleTracks(cueForgeStreams, '', {}, null).find((t) => t.default).src,
+	'1.ass'
+);
+const layerTracks = createSubtitleTracks(sized, '', {}, null);
+persistSubtitleTrackSelection(
+	layerTracks,
+	layerTracks.find((t) => t.src === '2.ass'),
+	[layerTracks.find((t) => t.src === '1.ass')]
+);
+assert.deepEqual(
+	getSubtitleFormatSelection(layerTracks, 'ass').layerTracks.map((t) => t.src),
+	['1.ass']
+);
+storage.clear();
+for (const [metadata, size] of [
+	[{ NUMBER_OF_BYTES: ' 12345 ' }, 12345],
+	[{ 'NUMBER_OF_BYTES-eng': '45678' }, 45678],
+	[{ NUMBER_OF_BYTES: '12', 'NUMBER_OF_BYTES-eng': '34' }, 12],
+	[{ NUMBER_OF_BYTES: '-1', 'NUMBER_OF_BYTES-eng': '34' }, 34],
+	[{}, undefined],
+	[{ BPS: '12345', NUMBER_OF_FRAMES: '99' }, undefined],
+	[{ NUMBER_OF_BYTES: '1e5' }, undefined],
+	[{ NUMBER_OF_BYTES: '+100' }, undefined],
+	[{ NUMBER_OF_BYTES: 'Infinity' }, undefined]
+])
+	assert.equal(rawSubtitleByteSize(metadata), size);
+const sizedRaw = sized.map((s) => ({
+	id: s.Index,
+	index: s.Index,
+	title: s.Title,
+	language: s.Language,
+	codec: s.Location.split('.')[1],
+	size: s.Size
+}));
+assert.equal(getRawSubtitleTracks(sizedRaw, 'movie').find((t) => t.default).id, 2);
+saveStoredSubtitleSelection(getRawSubtitleTracks(sizedRaw, 'movie').find((t) => t.id === 1));
+assert.equal(
+	getRawSubtitleTracks(
+		sizedRaw.map((t) => ({ ...t, id: t.id + 100 })),
+		'movie'
+	).find((t) => t.default).id,
+	101
+);
+storage.clear();
 
 const rawSubtitles = subtitles.map((s) => ({
 	id: s.Index,

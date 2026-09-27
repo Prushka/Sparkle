@@ -21,7 +21,9 @@ import {
 	isStoredSubtitleSelectionDisabled,
 	getSubtitleSelectionCandidateFromTrack,
 	findSubtitleByStoredSelection,
+	pickLargestEquivalentSubtitle,
 	pickPrioritySubtitleStream,
+	subtitleByteSize,
 	getSubtitleFormat,
 	isIOSOrAndroidDevice,
 	readTrackPreference,
@@ -42,6 +44,7 @@ export type SubtitleTrackInfo = {
 	default: boolean;
 	format: SubtitleTrackFormat;
 	style: string;
+	size?: number;
 };
 
 export type SelectedSubtitleTrack = Pick<
@@ -96,13 +99,17 @@ export function pickSubtitleTrackForFormat(
 	storedSelection: StoredSubtitleSelection | null = getStoredSubtitleSelection()
 ) {
 	const formatTracks = getSubtitleTracksByFormat(tracks, format);
+	const largest = (preferred: SubtitleTrackInfo | null) =>
+		pickLargestEquivalentSubtitle(formatTracks, preferred, getSubtitleSelectionCandidateFromTrack);
 	if (formatTracks.length === 0 || isStoredSubtitleSelectionDisabled(storedSelection)) {
 		return null;
 	}
 	const exactStoredMatch = findSubtitleByStoredSelection(
 		formatTracks,
 		storedSelection,
-		getSubtitleSelectionCandidateFromTrack
+		getSubtitleSelectionCandidateFromTrack,
+		[],
+		true
 	);
 	if (exactStoredMatch) {
 		return exactStoredMatch;
@@ -112,7 +119,7 @@ export function pickSubtitleTrackForFormat(
 			isSameSubtitleLanguage(track.language, storedSelection.language || '')
 		);
 		if (languageMatch) {
-			return languageMatch;
+			return largest(languageMatch);
 		}
 	}
 	for (const language of SUBTITLE_LANGUAGE_PRIORITY) {
@@ -120,10 +127,10 @@ export function pickSubtitleTrackForFormat(
 			(track) => getSubtitleLanguageBase(track.language) === language
 		);
 		if (priorityMatch) {
-			return priorityMatch;
+			return largest(priorityMatch);
 		}
 	}
-	return formatTracks[0] ?? null;
+	return largest(formatTracks[0] ?? null);
 }
 
 export function readStoredSubtitleLayerSelectionMap(): StoredSubtitleLayerSelections {
@@ -429,6 +436,7 @@ export function createSubtitleTracks(
 ): SubtitleTrackInfo[] {
 	const sorted = streams
 		.filter((s) => s.CodecType === 'subtitle')
+		.map((stream) => ({ ...stream, Size: subtitleByteSize(files[stream.Location] ?? stream.Size) }))
 		.sort((a, b) => compareSubtitleStreams(a, b, files));
 	const preferred = pickPrioritySubtitleStream(sorted, selection, preferMobileNative);
 	return withSubtitleSettingsLabels(
@@ -447,7 +455,8 @@ export function createSubtitleTracks(
 				language: getSubtitleLanguage(stream),
 				default: stream === preferred,
 				format,
-				style: getSubtitleSelectionStyle(format)
+				style: getSubtitleSelectionStyle(format),
+				size: stream.Size
 			};
 		})
 	);

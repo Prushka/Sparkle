@@ -117,6 +117,9 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   Keep Encoded and Raw defaults in `lib/player/track-selection.ts`: audio prefers Japanese,
   English, then Chinese; subtitle format/language priorities are shared. Persist audio only
   after explicit selection, never while applying defaults or falling back from missing tracks.
+  Automatic subtitle ties prefer the largest known byte size within the same format,
+  language and CueForge/annotation category, after saved matching. Preserve menu order,
+  companion restoration and unknown-size ordering; never scan media to determine sizes.
   Keep subtitle catalog construction, toggles, matching and per-format layer persistence
   shared in `lib/player/subtitle-selection.ts` and `SubtitlesMenuSection.tsx`. Preserve
   Encoded's format/language policy and layout; Raw uses version/stream identities rather

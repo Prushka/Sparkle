@@ -42,6 +42,29 @@ func TestEncoderUsesFastNVENCWithReferenceQualityOnEveryAttempt(t *testing.T) {
 		t.Fatal("incorrect HDR labeling")
 	}
 }
+func TestSubtitleBytes(t *testing.T) {
+	for _, tc := range []struct {
+		tags map[string]string
+		want int64
+	}{
+		{nil, 0},
+		{map[string]string{"NUMBER_OF_BYTES": " 12345 "}, 12345},
+		{map[string]string{"NUMBER_OF_BYTES-eng": "45678"}, 45678},
+		{map[string]string{"NUMBER_OF_BYTES": "12", "NUMBER_OF_BYTES-eng": "34"}, 12},
+		{map[string]string{"NUMBER_OF_BYTES": "-1", "NUMBER_OF_BYTES-eng": "34"}, 34},
+		{map[string]string{"NUMBER_OF_BYTES": "0"}, 0},
+		{map[string]string{"NUMBER_OF_BYTES": "NaN"}, 0},
+		{map[string]string{"NUMBER_OF_BYTES": "1e5"}, 0},
+		{map[string]string{"NUMBER_OF_BYTES": "+100"}, 0},
+		{map[string]string{"NUMBER_OF_BYTES": "9007199254740992"}, 0},
+		{map[string]string{"BPS": "10000", "NUMBER_OF_FRAMES": "99"}, 0},
+	} {
+		if got := (Stream{Tags: tc.tags}).subtitleBytes(); got != tc.want {
+			t.Errorf("subtitleBytes(%v) = %d, want %d", tc.tags, got, tc.want)
+		}
+	}
+}
+
 func TestSubtitleHexDump(t *testing.T) {
 	decoded, err := unhex("\n00000000: 4865 6c6c 6f21                           Hello!\n")
 	if err != nil || string(decoded) != "Hello!" {

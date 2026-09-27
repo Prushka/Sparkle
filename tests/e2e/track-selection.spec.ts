@@ -70,7 +70,16 @@ function serveBytes(route: Route, bytes: Buffer, contentType = 'application/octe
 	});
 }
 
-async function fixture(page: Page, nextDuration = 48) {
+async function fixture(page: Page, nextDuration = 48, sizedSubtitles = false) {
+	const streams = subtitleStreams.map((s) => ({
+		...s,
+		Title:
+			sizedSubtitles && s.Index === 6
+				? 'A signs'
+				: sizedSubtitles && s.Index === 7
+					? 'Z full'
+					: s.Title
+	}));
 	await page.addInitScript(() => {
 		// Track-only cases also run without NVENC fixtures. Output-policy cases
 		// explicitly override this choice below.
@@ -101,7 +110,10 @@ async function fixture(page: Page, nextDuration = 48) {
 			readFileSync(`${root}/h264-8bit-${a.Index}-${a.Language}.mp4`).length
 		])
 	);
-	const bytes = readFileSync(`${root}/multilingual.mkv`);
+	if (sizedSubtitles) Object.assign(files, { '6.ass': 100, '7.ass': 1000 });
+	const bytes = readFileSync(
+		`${root}/${sizedSubtitles ? 'multilingual-sized' : 'multilingual'}.mkv`
+	);
 	for (const id of [rawId, rawNextId, encodedId]) {
 		await page.route(`**/be/media/${id}`, (route) =>
 			route.fulfill({
@@ -117,7 +129,7 @@ async function fixture(page: Page, nextDuration = 48) {
 					Files: files,
 					EncodedCodecs: id !== encodedId ? [] : ['h264-8bit'],
 					MappedAudio: { 'h264-8bit': audio },
-					Streams: subtitleStreams,
+					Streams: streams,
 					Chapters: [],
 					DominantColors: [],
 					JobModTime: 1,
@@ -144,7 +156,7 @@ async function fixture(page: Page, nextDuration = 48) {
 													languageCode: a.Language,
 													displayTitle: a.Title
 												})),
-												...subtitleStreams.map((s) => ({
+												...streams.map((s) => ({
 													id: s.Index,
 													index: s.Index,
 													streamType: 3,
@@ -179,7 +191,11 @@ async function fixture(page: Page, nextDuration = 48) {
 					width: 320,
 					height: 180,
 					audio: true,
-					subtitleTracks: subtitleStreams.map((s, id) => ({ id, title: s.Title })),
+					subtitleTracks: streams.map((s, id) => ({
+						id,
+						title: s.Title,
+						size: sizedSubtitles ? files[s.Location] : undefined
+					})),
 					hasFonts: false,
 					segmentSeconds: 6
 				}
@@ -187,7 +203,7 @@ async function fixture(page: Page, nextDuration = 48) {
 		if (file.startsWith('subtitles-'))
 			return route.fulfill({
 				json: {
-					tracks: subtitleStreams.map((s, id) => ({
+					tracks: streams.map((s, id) => ({
 						id,
 						codec: s.Location.endsWith('.ass')
 							? 0x17016
@@ -198,7 +214,7 @@ async function fixture(page: Page, nextDuration = 48) {
 							? readFileSync(`${root}/captions.ass`).toString('base64')
 							: null
 					})),
-					packets: subtitleStreams.flatMap((s, id) => {
+					packets: streams.flatMap((s, id) => {
 						const text = s.Index === 10 ? '中文文本' : s.Title;
 						const intervals = s.Location.endsWith('.vtt')
 							? ([
@@ -946,6 +962,59 @@ async function rawToggle(page: Page, index: number, checked: boolean) {
 	}, index);
 	await page.getByRole('menuitemcheckbox', { name: label, exact: true }).setChecked(checked);
 	await expect.poll(async () => (await status(page))?.changing).toBe(false);
+}
+
+for (const mode of ['processed', 'compatible', 'av1', 'hevc']) {
+	test(`${mode}: largest subtitle default preserves an explicit smaller choice and Off`, async ({
+		page,
+		request
+	}) => {
+		test.skip(!existsSync(`${root}/multilingual-sized.mkv`), 'Prepare multilingual fixtures');
+		test.skip(
+			['av1', 'hevc'].includes(mode) && !existsSync(`${root}/${mode}/master.m3u8`),
+			'Prepare NVENC fixtures'
+		);
+		await fixture(page, 48, true);
+		if (mode !== 'processed')
+			await page.addInitScript((mode) => localStorage.setItem('sparkle.raw.hdr', mode), mode);
+		const id = mode === 'processed' ? encodedId : rawId;
+		const room = `subtitle-size-${mode}-${Date.now()}`;
+		expect((await request.post('/be/rooms', { data: { roomId: room, mediaId: id } })).ok()).toBe(
+			true
+		);
+		await page.goto(`/${room}/media/${id}`);
+		await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+		if (mode !== 'processed') await expect.poll(() => rawSubtitleIndex(page)).toBe(7);
+		await openSubtitles(page);
+		const small = page.getByRole('menuitemcheckbox', { name: /A signs/ });
+		const large = page.getByRole('menuitemcheckbox', { name: /Z full/ });
+		await expect(large).toBeChecked();
+		await expect(small).not.toBeChecked();
+		expect(await page.evaluate(() => localStorage.getItem('subtitleSelection'))).toBeNull();
+		await small.check();
+		await large.uncheck();
+		await expect(small).toBeChecked();
+		await expect
+			.poll(() =>
+				page.evaluate(() => JSON.parse(localStorage.getItem('subtitleSelection') || '{}').label)
+			)
+			.toContain('A signs');
+		await page.reload();
+		await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+		await openSubtitles(page);
+		await expect(small).toBeChecked();
+		await expect(large).not.toBeChecked();
+		await small.uncheck();
+		await expect
+			.poll(() =>
+				page.evaluate(() => JSON.parse(localStorage.getItem('subtitleSelection') || '{}').disabled)
+			)
+			.toBe(true);
+		await page.reload();
+		await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+		await openSubtitles(page);
+		await expect(page.getByRole('menuitemcheckbox', { checked: true })).toHaveCount(0);
+	});
 }
 
 for (const mode of ['compatible', 'av1', 'hevc']) {

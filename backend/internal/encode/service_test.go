@@ -55,6 +55,9 @@ func TestEncodingRequiresAllowedPlexSectionAndHidesPaths(t *testing.T) {
 	s.sources[fingerprint] = &source{probe: Probe{Streams: []Stream{
 		{Type: "video", Codec: "hevc", Transfer: "smpte2084"},
 		{Type: "attachment", Codec: "ttf", Extra: "00000000: 666f 6e74  font"},
+		{Type: "subtitle", Codec: "ass", Tags: map[string]string{"title": "Small", "NUMBER_OF_BYTES": "100", "PRIVATE": "hidden-test-token"}},
+		{Type: "subtitle", Codec: "ass", Tags: map[string]string{"title": "Large", "NUMBER_OF_BYTES-eng": "1000"}},
+		{Type: "subtitle", Codec: "ass", Tags: map[string]string{"title": "Unknown"}},
 	}}, duration: 7200, key: fingerprint, used: time.Now()}
 	mux := http.NewServeMux()
 	s.Register(mux)
@@ -68,6 +71,24 @@ func TestEncodingRequiresAllowedPlexSectionAndHidesPaths(t *testing.T) {
 	}
 	if !strings.Contains(allowed.Body.String(), `"hasFonts":true`) || strings.Contains(allowed.Body.String(), `"fonts":`) {
 		t.Fatal("manifest must announce fonts without downloading attachments")
+	}
+	var manifest struct {
+		SubtitleTracks []struct {
+			ID   int    `json:"id"`
+			Size *int64 `json:"size"`
+		} `json:"subtitleTracks"`
+	}
+	if err := json.Unmarshal(allowed.Body.Bytes(), &manifest); err != nil {
+		t.Fatal(err)
+	}
+	if len(manifest.SubtitleTracks) != 3 {
+		t.Fatalf("unexpected subtitle tracks: %s", allowed.Body)
+	}
+	for i, want := range []int64{100, 1000, 0} {
+		track := manifest.SubtitleTracks[i]
+		if track.ID != i || (want == 0 && track.Size != nil) || (want > 0 && (track.Size == nil || *track.Size != want)) {
+			t.Fatalf("subtitle identity/size mismatch: %s", allowed.Body)
+		}
 	}
 	encodedFingerprint := s.fingerprint(s.sources[fingerprint])
 	for _, audio := range []bool{false, true} {

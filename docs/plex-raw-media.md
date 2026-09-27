@@ -182,8 +182,13 @@ Raw audio choices remain supported until a new shared choice is made.
 Subtitles share the Encoded selection and persistence policy in every Raw mode:
 ASS/SSA, VTT, SRT, then
 PGS/SUP on desktop, with VTT ahead of ASS on iOS/Android; prefer English within
-the selected format. Saved choices retain their language when the exact track is
-missing. Both sources use `subtitleSelection`, `subtitleLanguage`, and per-format
+the selected format. Within the same format, language, and CueForge/annotation category,
+automatic selection prefers the largest known subtitle byte size. Processed tracks use
+file sizes; Raw Compatible and NVENC modes use existing Matroska `NUMBER_OF_BYTES`
+statistics when present, without scanning packets. Known sizes rank ahead of unknown
+sizes; ties retain the existing order. Saved identity/label matches take precedence over size; companion
+restoration and menu ordering are unchanged. Saved choices retain their language when
+the exact track is missing. Both sources use `subtitleSelection`, `subtitleLanguage`, and per-format
 `subtitleLayers`; Off and explicit selections carry between sources. Automatic
 fallbacks do not overwrite the saved primary preference. Raw identities include
 the media version and original stream index, so duplicate titles restore correctly
