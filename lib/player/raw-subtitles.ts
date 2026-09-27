@@ -1,6 +1,7 @@
 import { RawSubtitleComposition, type SubtitleLayer } from './raw-subtitle-composition';
 import { assPacketDialogue } from './subtitle-rendering';
-import { decodeRawTextSubtitle } from './raw-text-subtitles';
+import { RawTextCueWindow } from './raw-text-subtitles';
+import { getActiveTrackText } from './text-subtitle-cues';
 import SUPtitles from '@/lib/suptitles/suptitles';
 import {
 	BaseSegment,
@@ -21,7 +22,8 @@ export class RawSubtitles {
 	private composition: RawSubtitleComposition;
 	private layer: SubtitleLayer;
 	private ownsComposition: boolean;
-	private textUntil = 0;
+	private textWindow = new RawTextCueWindow();
+	private textSuspended = false;
 	private sup: SUPtitles;
 	private codec = 0;
 	private header = '';
@@ -57,6 +59,12 @@ export class RawSubtitles {
 	setFonts(fonts: Uint8Array[]) {
 		this.composition.setFonts(fonts);
 	}
+	attachVideo(video: HTMLVideoElement | null) {
+		this.composition.attachVideo(video);
+	}
+	setNativeFullscreen(active: boolean) {
+		this.composition.setNativeFullscreen(active);
+	}
 	createLayer() {
 		return new RawSubtitles(this.container, this.composition);
 	}
@@ -68,6 +76,11 @@ export class RawSubtitles {
 		reset: (codec: number, header: Uint8Array) => this.reset(codec, header),
 		packet: (data: Uint8Array, pts: number, duration: number) => {
 			if (this.destroyed || data.byteLength > 16 * 1024 * 1024) return;
+			if (this.layer.format === 'text') {
+				this.textWindow.add(this.codec, data, pts, duration, this.currentTime);
+				this.updateText();
+				return;
+			}
 			// Bounded even for malformed timestamps or dense bitmap subtitle tracks.
 			while (this.packets.length >= 256 || this.bytes + data.byteLength > 24 * 1024 * 1024) {
 				const old = this.packets.shift();
@@ -77,8 +90,25 @@ export class RawSubtitles {
 			this.packets.push({ data, pts, duration });
 			this.bytes += data.byteLength;
 		},
-		time: (ms: number) => this.time(ms),
-		clear: () => this.clear()
+		time: (ms: number) => {
+			if (this.textSuspended) {
+				this.textSuspended = false;
+				this.currentTime = ms;
+				this.updateText();
+			}
+			this.time(ms);
+		},
+		clear: () => {
+			if (this.layer.format !== 'text') return this.clear();
+			// libmedia resets the sink on resume/seek after it has prefetched packets.
+			// Hide immediately, but retain that bounded window until its next sink clock.
+			// A decoder/track reset still clears everything via reset() below.
+			this.textSuspended = true;
+			this.currentTime = 0;
+			this.layer.text = '';
+			this.layer.cues = [];
+			this.composition.update();
+		}
 	};
 	private reset(codec: number, header: Uint8Array) {
 		this.clear();
@@ -100,8 +130,19 @@ export class RawSubtitles {
 		this.objects = [];
 		this.sup.lastPalette = null;
 		this.layer.text = '';
+		this.textWindow.clear();
+		this.textSuspended = false;
+		this.layer.cues = [];
+		// A backwards seek may deliver packets before its first clock callback.
+		this.currentTime = 0;
 		this.updateASS();
 		this.canvas.getContext('2d')?.clearRect(0, 0, this.canvas.width, this.canvas.height);
+	}
+	private updateText() {
+		if (this.textSuspended) return;
+		this.layer.cues = this.textWindow.cues;
+		this.layer.text = getActiveTrackText(this.layer.cues, this.currentTime / 1000);
+		this.composition.update();
 	}
 	private updateASS() {
 		this.layer.content =
@@ -137,16 +178,15 @@ export class RawSubtitles {
 				while (bytes > 8 * 1024 * 1024 && this.assWindow.length)
 					bytes -= this.assWindow.shift()!.data.byteLength;
 				this.updateASS();
-			} else {
-				this.layer.text = decodeRawTextSubtitle(this.codec, packet.data);
-				this.textUntil = packet.pts + (packet.duration || 5000);
-				this.composition.update();
 			}
 		}
-		if (this.textUntil < ms && this.layer.text) {
-			this.layer.text = '';
-			this.composition.update();
-		}
+		if (
+			this.layer.format === 'text' &&
+			!this.textSuspended &&
+			(this.textWindow.prune(ms) ||
+				getActiveTrackText(this.textWindow.cues, ms / 1000) !== this.layer.text)
+		)
+			this.updateText();
 		this.composition.time(ms);
 	}
 
@@ -215,6 +255,7 @@ export class RawSubtitles {
 		this.canvas.remove();
 		this.packets = [];
 		this.assWindow = [];
+		this.textWindow.clear();
 		this.objects = [];
 	}
 }

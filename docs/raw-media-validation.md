@@ -298,7 +298,15 @@ Android fullscreen regression coverage uses Pixel 7 touch/mobile emulation in
 Windows Chrome with the actual element Fullscreen API. Compatible, AV1, HEVC and
 Automatic pass touch entry/exit, browser-driven exit, portrait/landscape controls,
 continued playback, and settings/subtitle containment within the fullscreen player.
+The subtitle checks select distinct English and Chinese VTT layers and assert both
+remain visible with the native caption track hidden to avoid duplicates.
 This is browser automation evidence, not physical Android-device qualification.
+
+iOS fullscreen regression tests simulate both WebKit fullscreen APIs in Chrome
+while using real native TextTrack/VTTCue scheduling and libmedia playback. Compatible,
+AV1 and HEVC exercise merged English/Chinese captions, native-track activation before
+entry, cue changes/gaps, forward/backward seeks, exit to inline overlays, layer removal
+and captions off. These tests do not qualify Safari's system player or physical devices.
 
 Media identities/revisions are attached to playback updates and backend tests
 reject stale generations. Decoder operations serialize, obsolete seeks coalesce,

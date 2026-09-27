@@ -151,6 +151,43 @@ test('Raw text layers share Encoded sizing, line stacking, seek clearing and tea
 	const text = page.locator('[data-raw-subtitle-composition="text"]');
 	await expect(text).toHaveText('Subtitle 1\nSubtitle 2\nSubtitle 3\nSubtitle 4\nSubtitle 5');
 	const small = await text.evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+	await page.evaluate(() => {
+		const { root } = (window as any).subtitleFixture;
+		const video = document.createElement('video');
+		(window as any).subtitleFixture.video = video;
+		root.attachVideo(video);
+		root.setNativeFullscreen(true);
+	});
+	await expect
+		.poll(() =>
+			page.evaluate(() => {
+				const track = (window as any).subtitleFixture.video.textTracks[0];
+				return { mode: track.mode, cues: [...track.cues].map((cue: VTTCue) => cue.text) };
+			})
+		)
+		.toEqual({
+			mode: 'showing',
+			cues: ['Subtitle 1\nSubtitle 2\nSubtitle 3\nSubtitle 4\nSubtitle 5']
+		});
+	await expect(text).toBeHidden();
+	await page.evaluate(() => {
+		const { root, layers } = (window as any).subtitleFixture;
+		root.setNativeFullscreen(false);
+		layers.forEach((layer: any) => layer.sink.clear());
+		// The provider keeps ticking while captions are off; only the sink may resume them.
+		layers.forEach((layer: any) => layer.time(2000));
+	});
+	await expect(text).toBeEmpty();
+	await expect
+		.poll(() =>
+			page.evaluate(() => (window as any).subtitleFixture.video.textTracks[0].cues.length)
+		)
+		.toBe(0);
+	await page.evaluate(() =>
+		(window as any).subtitleFixture.layers.forEach((layer: any) => layer.sink.time(2000))
+	);
+	await expect(text).toHaveText('Subtitle 1\nSubtitle 2\nSubtitle 3\nSubtitle 4\nSubtitle 5');
+	await expect(text).toBeVisible();
 	await page.evaluate(() =>
 		(window as any).subtitleFixture.layers.splice(1).forEach((layer: any) => layer.destroy())
 	);
@@ -162,4 +199,12 @@ test('Raw text layers share Encoded sizing, line stacking, seek clearing and tea
 	await expect(text).toBeEmpty();
 	await page.evaluate(() => (window as any).subtitleFixture.root.destroy());
 	await expect(page.locator('#stage')).toBeEmpty();
+	await expect
+		.poll(() =>
+			page.evaluate(() => {
+				const track = (window as any).subtitleFixture.video.textTracks[0];
+				return { mode: track.mode, cues: track.cues?.length ?? 0 };
+			})
+		)
+		.toEqual({ mode: 'disabled', cues: 0 });
 });

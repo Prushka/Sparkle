@@ -136,11 +136,15 @@ export class RawProvider implements MediaProviderAdapter {
 	}
 	readonly container = document.createElement('div');
 	readonly fullscreen = new RawFullscreen(
-		(active, trigger) => this.notify('fullscreen-change', active, trigger),
+		(active, trigger) => {
+			this.setNativeSubtitleFullscreen(active);
+			this.notify('fullscreen-change', active, trigger);
+		},
 		() => {
 			if (!this.destroyed)
 				this.ctx.$state.canFullscreen.set(canFullscreen() || this.fullscreen.supported);
-		}
+		},
+		(active) => this.setNativeSubtitleFullscreen(active)
 	);
 	readonly pictureInPicture = new RawPictureInPicture(
 		this.container,
@@ -268,9 +272,19 @@ export class RawProvider implements MediaProviderAdapter {
 			values.bitrate = undefined;
 		}
 		this.status = { ...this.status, ...values };
-		this.fullscreen.attach(this.container.querySelector('video'));
+		this.attachVideo();
 		this.ctx.$state.canPictureInPicture.set(this.pictureInPicture.supported);
 		this.ctx.player.el?.dispatchEvent(new CustomEvent(RAW_STATUS_EVENT, { detail: this.status }));
+	}
+	private attachVideo() {
+		const video = this.container.querySelector('video');
+		this.fullscreen.attach(video);
+		this.subtitles?.attachVideo(video);
+		this.encodedCaptions?.attachVideo(video);
+	}
+	private setNativeSubtitleFullscreen(active: boolean) {
+		this.subtitles?.setNativeFullscreen(active);
+		this.encodedCaptions?.setNativeFullscreen(active);
 	}
 	private enqueue(operation: () => Promise<void>) {
 		const generation = this.generation;
@@ -594,7 +608,7 @@ export class RawProvider implements MediaProviderAdapter {
 		this.driftSince = 0;
 		await engine.play({ video: true, audio: !this.audioEngine, subtitle: true });
 		if (engine !== this.engine || this.destroyed) return;
-		this.fullscreen.attach(this.container.querySelector('video'));
+		this.attachVideo();
 		await this.audioEngine?.play({ video: false, audio: true, subtitle: false });
 		if (!this.initialized) {
 			this.initialized = true;

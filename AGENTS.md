@@ -163,6 +163,9 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   Raw fullscreen must target the active libmedia video when only iOS native fullscreen
   is available, refresh support after metadata loads, and detach listeners on media changes.
   Prefer whole-player element fullscreen on Android and desktop to retain controls and overlays.
+  Mirror Raw text subtitle layers into one bounded native cue track for iOS video fullscreen,
+  using the same text merge rules as Encoded. Keep it hidden inline and in element fullscreen,
+  clear old cues on seeks/selection changes, and release it with the active video.
 - Frontend public bases (`SERVER_BE`, `SERVER_STATIC`) and internal bases
   (`SERVER_INTERNAL_BE`, `SERVER_INTERNAL_STATIC`) are separate runtime settings. Preserve
   relative-path proxying and Discord Activity mappings; do not bake private hosts into bundles.

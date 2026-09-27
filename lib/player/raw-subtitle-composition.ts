@@ -1,4 +1,6 @@
 import type JASSUB from 'jassub';
+import { RawNativeSubtitles } from './raw-native-subtitles';
+import { mergeSubtitleCues, type SubtitleMergeCue } from './text-subtitle-cues';
 import {
 	EMPTY_ASS_TRACK,
 	ASS_BITMAP_CACHE_LIMIT_MB,
@@ -15,6 +17,7 @@ export type SubtitleLayer = {
 	format: 'ass' | 'text' | 'bitmap' | null;
 	content: string;
 	text: string;
+	cues: SubtitleMergeCue[];
 	language: string;
 };
 
@@ -24,6 +27,7 @@ export class RawSubtitleComposition {
 	private layers = new Set<SubtitleLayer>();
 	private canvas = document.createElement('canvas');
 	private text = document.createElement('div');
+	private native = new RawNativeSubtitles();
 	private renderer?: JASSUB;
 	private fonts: Uint8Array[] = [];
 	private fontsDirty = false;
@@ -61,7 +65,7 @@ export class RawSubtitleComposition {
 	}
 
 	add() {
-		const layer: SubtitleLayer = { format: null, content: '', text: '', language: '' };
+		const layer: SubtitleLayer = { format: null, content: '', text: '', cues: [], language: '' };
 		this.layers.add(layer);
 		return layer;
 	}
@@ -69,6 +73,15 @@ export class RawSubtitleComposition {
 	remove(layer: SubtitleLayer) {
 		this.layers.delete(layer);
 		this.update();
+	}
+
+	attachVideo(video: HTMLVideoElement | null) {
+		this.native.attach(video);
+	}
+
+	setNativeFullscreen(active: boolean) {
+		this.native.setFullscreen(active);
+		this.text.style.display = active ? 'none' : '';
 	}
 
 	setFonts(fonts: Uint8Array[]) {
@@ -93,6 +106,7 @@ export class RawSubtitleComposition {
 				this.dirty = false;
 				const layers = [...this.layers];
 				const textLayers = layers.filter((layer) => layer.format === 'text');
+				this.native.update(mergeSubtitleCues(textLayers));
 				const scale = getMergedSubtitleFontScale(
 					textLayers.length,
 					getMergedSubtitleMinFontScale('vtt')
@@ -173,6 +187,7 @@ export class RawSubtitleComposition {
 
 	destroy() {
 		this.destroyed = true;
+		this.native.destroy();
 		void this.renderer?.destroy().catch(() => {});
 		this.canvas.remove();
 		this.text.remove();

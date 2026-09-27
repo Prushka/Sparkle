@@ -16,7 +16,7 @@ function bytes(value: string | null) {
 export class EncodedSubtitles {
 	private selected: number[] = [];
 	private renderers: RawSubtitles[] = [];
-	private composition?: RawSubtitleComposition;
+	private composition: RawSubtitleComposition;
 	private chunks = new Map<number, Chunk>();
 	private pending = new Map<number, AbortController>();
 	private fed = new Set<number>();
@@ -31,7 +31,15 @@ export class EncodedSubtitles {
 	constructor(
 		private container: HTMLElement,
 		private part: EncodedPart
-	) {}
+	) {
+		this.composition = new RawSubtitleComposition(container);
+	}
+	attachVideo(video: HTMLVideoElement | null) {
+		this.composition.attachVideo(video);
+	}
+	setNativeFullscreen(active: boolean) {
+		this.composition.setNativeFullscreen(active);
+	}
 	select(ids: number[]) {
 		this.renderers.forEach((renderer) => renderer.destroy());
 		this.selected = [...new Set(ids)].filter((id) =>
@@ -40,7 +48,6 @@ export class EncodedSubtitles {
 		this.renderers = [];
 		// Keep the font cache and ASS worker alive when only the selected tracks
 		// change. Recreating a worker for every toggle needlessly reloads fonts.
-		this.composition ??= new RawSubtitleComposition(this.container);
 		for (const id of this.selected) {
 			const renderer = new RawSubtitles(this.container, this.composition);
 			renderer.setLanguage(this.part.subtitleTracks.find((track) => track.id === id)?.language);
@@ -169,7 +176,6 @@ export class EncodedSubtitles {
 		this.renderers.forEach((renderer) => renderer.destroy());
 		this.renderers = [];
 		this.composition?.destroy();
-		this.composition = undefined;
 		this.chunks.clear();
 	}
 }

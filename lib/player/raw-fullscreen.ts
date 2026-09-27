@@ -17,7 +17,8 @@ export class RawFullscreen implements MediaFullscreenAdapter {
 	private isActive = false;
 	constructor(
 		private changed: (active: boolean, trigger?: Event) => void,
-		private supportChanged: () => void
+		private supportChanged: () => void,
+		private prepare?: (active: boolean) => void
 	) {}
 	get active() {
 		return this.isActive;
@@ -63,9 +64,15 @@ export class RawFullscreen implements MediaFullscreenAdapter {
 		if (!video || !this.supported)
 			throw new Error('This browser cannot show raw playback in fullscreen.');
 		// Keep this call synchronous with the user's tap for Safari's activation requirement.
-		if (video.webkitEnterFullscreen && video.webkitSupportsFullscreen !== false)
-			video.webkitEnterFullscreen();
-		else video.webkitSetPresentationMode!('fullscreen');
+		this.prepare?.(true);
+		try {
+			if (video.webkitEnterFullscreen && video.webkitSupportsFullscreen !== false)
+				video.webkitEnterFullscreen();
+			else video.webkitSetPresentationMode!('fullscreen');
+		} catch (error) {
+			this.prepare?.(false);
+			throw error;
+		}
 	}
 	async exit() {
 		if (!this.active || !this.video) return;

@@ -13,9 +13,16 @@ const { RawFullscreen } = await import(
 );
 const changes = [];
 let supportUpdates = 0;
+let prepared = false;
 const adapter = new RawFullscreen(
-	(active) => changes.push(active),
-	() => supportUpdates++
+	(active) => {
+		changes.push(active);
+		prepared = active;
+	},
+	() => supportUpdates++,
+	(active) => {
+		prepared = active;
+	}
 );
 assert.equal(adapter.supported, false);
 await assert.rejects(adapter.enter(), /cannot show raw playback in fullscreen/);
@@ -25,6 +32,7 @@ native.webkitSupportsFullscreen = false;
 let enters = 0,
 	exits = 0;
 native.webkitEnterFullscreen = () => {
+	assert.equal(prepared, true, 'native captions are enabled before opening the system player');
 	enters++;
 	native.dispatchEvent(new Event('webkitbeginfullscreen'));
 };
@@ -88,6 +96,7 @@ native.webkitEnterFullscreen = () => {
 adapter.attach(native);
 await assert.rejects(adapter.enter(), /User activation required/);
 assert.equal(adapter.active, false, 'failed requests must not report fullscreen');
+assert.equal(prepared, false, 'failed requests restore inline captions');
 adapter.attach(null);
 console.log(
 	'Raw fullscreen: native/presentation APIs, readiness, native exit, rejection and teardown passed'

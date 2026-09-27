@@ -104,7 +104,7 @@ The Library and room media picker share a poster grid, source/library filters,
 search, sort, and breadcrumbs. Shows open into seasons and then landscape episode
 cards. Scrolling loads the next page automatically; the grid virtualizes long lists.
 The compact toolbar uses shared shadcn-style Select/InputGroup components, keeps every
-search/filter control visible, and wraps on small screens. Every title has a **Raw**
+search/filter control visible, and wraps on small screens. Every title has a **Plex**
 or **Encoded** badge. The default view includes both sources. Library hierarchy and
 filters live in the URL, preserving the room and unrelated parameters across browser
 Back/Forward and reload without remounting the room. The in-room picker keeps its own
@@ -133,9 +133,14 @@ page and is not enabled inside Discord Activity iframes.
 Fullscreen uses the whole player when the browser supports element fullscreen,
 including Android Chrome, keeping controls, subtitles and chat overlays inside it.
 On iPhone/iPad browsers limited to native video fullscreen, the control targets
-libmedia's active video and follows native fullscreen entry/exit events. This
-fallback does not carry Sparkle's custom subtitle or chat overlays. Physical
-iOS/iPadOS playback qualification remains pending.
+libmedia's active video and follows native fullscreen entry/exit events. Selected
+text/VTT layers are merged into one native subtitle track on that video, using
+the same cue-merging rules as Encoded media. The track follows the video's local
+clock and retains only bounded active/prefetched packets; inline and Android
+element fullscreen keep the custom overlay without duplicating native captions.
+This works for Compatible and server-encoded AV1/HEVC playback of Plex media.
+ASS/PGS and chat still require the page overlays and are unavailable in iOS
+native-video fullscreen. Physical iOS/iPadOS playback qualification remains pending.
 
 Raw **Google Cast options** explains Chrome tab casting and the option to choose
 a compatible processed version. It is not a direct receiver-casting implementation:

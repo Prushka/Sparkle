@@ -34,7 +34,7 @@ import { useLibraryNavigation, type LibraryTrailItem } from '@/lib/use-library-n
 import { usePlexAuth } from '@/components/plex-auth';
 import { backendFetch } from '@/lib/plex-access';
 
-const sourceOptions = { all: 'Both sources', processed: 'Encoded', plex: 'Plex · Raw' };
+const sourceOptions = { all: 'Both sources', processed: 'Encoded', plex: 'Plex' };
 const sortOptions = {
 	'recent-desc': 'Recently added',
 	'recent-asc': 'Oldest first',
@@ -274,7 +274,7 @@ export function CatalogBrowser({
 							</SelectItem>
 							<SelectItem value="processed">Encoded</SelectItem>
 							<SelectItem value="plex" disabled={!rawAllowed}>
-								Plex · Raw{!rawAllowed ? ' · Sign in' : ''}
+								Plex{!rawAllowed ? ' · Sign in' : ''}
 							</SelectItem>
 						</SelectContent>
 					</Select>
@@ -477,7 +477,7 @@ export function CatalogBrowser({
 												/>
 											)}
 											<Badge className="absolute top-2 left-2 border-white/15 bg-black/75 px-2 py-0.5 text-[10px] font-bold text-white">
-												{item.source === 'plex' ? 'Raw' : 'Encoded'}
+												{item.source === 'plex' ? 'Plex' : 'Encoded'}
 											</Badge>
 
 											<div className="absolute inset-0 flex items-center justify-center bg-black/25 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">

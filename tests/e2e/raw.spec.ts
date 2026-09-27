@@ -6,6 +6,11 @@ test('million-item library fetches bounded pages and virtualizes cards', async (
 	const sizes: number[] = [];
 	const urls: string[] = [];
 	page.on('request', (r) => urls.push(new URL(r.url()).pathname));
+	await page.route('**/auth/plex/session', (route) =>
+		route.fulfill({
+			json: { enabled: true, authenticated: true, canAccessRaw: true, name: 'Library fixture' }
+		})
+	);
 	await page.route('**/library/sources', (route) =>
 		route.fulfill({ json: { sources: [{ id: '1', title: 'Test Movies', source: 'plex' }] } })
 	);
@@ -32,7 +37,7 @@ test('million-item library fetches bounded pages and virtualizes cards', async (
 	await expect(page.getByRole('navigation', { name: 'Library hierarchy' })).toContainText(
 		'1,000,000'
 	);
-	await expect(page.getByText('Raw', { exact: true }).first()).toBeVisible();
+	await expect(page.getByText('Plex', { exact: true }).first()).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Load more', exact: true })).toHaveCount(0);
 	await expect(page.getByRole('heading', { name: 'Your library', exact: true })).toHaveCount(0);
 	const grid = page.getByLabel('Library titles', { exact: true });
@@ -46,7 +51,7 @@ test('million-item library fetches bounded pages and virtualizes cards', async (
 	}
 	expect(sizes.every((n) => n === 48)).toBeTruthy();
 	expect(sizes.length).toBeLessThan(10);
-	expect(await page.getByText('Raw', { exact: true }).count()).toBeLessThan(100);
+	expect(await page.getByText('Plex', { exact: true }).count()).toBeLessThan(100);
 	expect(urls).not.toContain('/be/all');
 	expect(urls).not.toContain('/all');
 	for (const name of ['Source', 'Plex library', 'Sort library'])

@@ -13,6 +13,7 @@ import {
 	getPublicAssetUrl,
 	getAssFallbackFonts
 } from '@/lib/player/subtitle-rendering';
+import { mergeSubtitleCues, type SubtitleMergeCue } from '@/lib/player/text-subtitle-cues';
 import { SubtitlesMenuSection } from './SubtitlesMenuSection';
 import {
 	type SubtitleTrackInfo,
@@ -1874,59 +1875,6 @@ function getMergedSubtitleSignature(tracks: SubtitleTrackInfo[]) {
 	return tracks.map((track) => track.src).join('\n');
 }
 
-function getActiveTrackText(cues: SubtitleMergeCue[], time: number) {
-	return cues
-		.filter((cue) => cue.startTime <= time && cue.endTime > time)
-		.map((cue) => cue.text)
-		.filter(Boolean)
-		.join('\n');
-}
-
-function mergeSubtitleCues(documents: ParsedSubtitleDocument[]) {
-	const timePoints = new Set<number>();
-	for (const document of documents) {
-		for (const cue of document.cues) {
-			timePoints.add(cue.startTime);
-			timePoints.add(cue.endTime);
-		}
-	}
-	const sortedTimes = [...timePoints].sort((a, b) => a - b);
-	const mergedCues: MergedSubtitleCue[] = [];
-
-	for (let index = 0; index < sortedTimes.length - 1; index++) {
-		const startTime = sortedTimes[index];
-		const endTime = sortedTimes[index + 1];
-		if (
-			!Number.isFinite(startTime) ||
-			!Number.isFinite(endTime) ||
-			endTime <= startTime ||
-			endTime - startTime < 0.01
-		) {
-			continue;
-		}
-		const sampleTime = startTime + (endTime - startTime) / 2;
-		const text = documents
-			.map((document) => getActiveTrackText(document.cues, sampleTime))
-			.filter(Boolean)
-			.join('\n');
-		if (!text) {
-			continue;
-		}
-		const previousCue = mergedCues[mergedCues.length - 1];
-		if (
-			previousCue &&
-			previousCue.text === text &&
-			Math.abs(previousCue.endTime - startTime) < 0.02
-		) {
-			previousCue.endTime = endTime;
-		} else {
-			mergedCues.push({ startTime, endTime, text });
-		}
-	}
-
-	return mergedCues;
-}
-
 function formatVttTimestamp(seconds: number) {
 	const clampedSeconds = Math.max(0, seconds);
 	const hours = Math.floor(clampedSeconds / 3600);
@@ -3148,12 +3096,6 @@ type ParsedSubtitleDocument = {
 	content: string;
 	cues: SubtitleMergeCue[];
 	track: SubtitleTrackInfo;
-};
-
-type SubtitleMergeCue = {
-	endTime: number;
-	startTime: number;
-	text: string;
 };
 
 type MergedSubtitleCue = SubtitleMergeCue;

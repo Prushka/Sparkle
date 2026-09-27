@@ -209,9 +209,9 @@ test('Library selects allow background scrolling and keyboard selection', async 
 	// to the still-focused trigger can leave the original value selected in CI.
 	await expect(page.getByRole('option', { name: 'Both sources', exact: true })).toBeFocused();
 	await page.keyboard.press('End');
-	await expect(page.getByRole('option', { name: 'Plex · Raw', exact: true })).toBeFocused();
+	await expect(page.getByRole('option', { name: 'Plex', exact: true })).toBeFocused();
 	await page.keyboard.press('Enter');
-	await expect(source).toContainText('Plex · Raw');
+	await expect(source).toContainText('Plex');
 	await expect(page).toHaveURL(/[?&]source=plex(?:&|$)/);
 });
 

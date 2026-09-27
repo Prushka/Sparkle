@@ -7,6 +7,21 @@ await writeFile(
 	`${root}/captions.srt`,
 	'1\n00:00:00,000 --> 00:00:47,000\nTrack selection fixture\n'
 );
+for (const [language, text] of [
+	['eng', 'English text'],
+	['chi', '中文文本']
+]) {
+	await writeFile(
+		`${root}/captions-${language}.vtt`,
+		'WEBVTT\n\n' +
+			Array.from({ length: 47 }, (_, second) => {
+				if (second === 30 || second === 31) return '';
+				const stamp = (value) => `00:00:${String(value).padStart(2, '0')}.000`;
+				const suffix = second >= 32 ? ' — last' : second >= 15 ? ' — second' : '';
+				return `${stamp(second)} --> ${stamp(second + 1)}\n${text}${suffix}\n\n`;
+			}).join('')
+	);
+}
 const ffmpeg = process.env.FFMPEG || 'ffmpeg';
 const run = (args) =>
 	execFileSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', ...args], { stdio: 'pipe' });
@@ -21,6 +36,10 @@ run([
 	'sine=frequency=440:sample_rate=48000',
 	'-i',
 	`${root}/captions.srt`,
+	'-i',
+	`${root}/captions-eng.vtt`,
+	'-i',
+	`${root}/captions-chi.vtt`,
 	'-map',
 	'0:v',
 	'-map',
@@ -35,7 +54,11 @@ run([
 	'2:s',
 	'-map',
 	'2:s',
-	...Array.from({ length: 4 }, () => ['-map', '2:s']).flat(),
+	...Array.from({ length: 2 }, () => ['-map', '2:s']).flat(),
+	'-map',
+	'3:s',
+	'-map',
+	'4:s',
 	'-t',
 	'48',
 	'-c:v',

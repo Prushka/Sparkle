@@ -16,14 +16,14 @@ library from the same Library view.
   covers without sign-in; playback remains protected. See [authentication setup](docs/plex-auth.md).
 - **Go back to library** beside **Change media** clears the room's selected media and
   returns everyone to Library while keeping the same room ID and library filters.
-- A paged, searchable poster Library with source filters, seasons, episodes, and **Raw**
+- A paged, searchable poster Library with source filters, seasons, episodes, and **Plex**
   and **Encoded** badges. Back/Forward preserves the room, hierarchy, and filters.
   Search applies to the current level; opening a show or season clears it, and going
   back restores the parent search. Menus and dialogs leave page scrolling enabled.
   Large Plex libraries load on demand; confidently matched processed titles reuse Plex
   covers and descriptions.
 - Vidstack controls for playback, audio selection, subtitles, HDR options, and media versions.
-  Raw fullscreen includes an iOS native-video fallback; see the
+  Raw fullscreen includes an iOS native-video fallback with merged text subtitle layers; see the
   [fullscreen limitations](docs/plex-raw-media.md#playback-and-hdr).
 - Shared Encoded/Raw track priorities: Japanese → English → Chinese audio, with only
   explicit choices saved; subtitles share format tabs, track toggles, language fallback,

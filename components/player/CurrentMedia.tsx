@@ -57,7 +57,7 @@ export function CurrentMedia({
 				<div className="space-y-1.5">
 					<div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-muted-foreground">
 						<Badge variant="secondary">
-							{job.Source === 'plex' || job.Raw ? 'Raw' : 'Encoded'}
+							{job.Source === 'plex' || job.Raw ? 'Plex' : 'Encoded'}
 						</Badge>
 						{job.year ? <span>{job.year}</span> : null}
 						{job.Duration > 0 && <span>{duration}</span>}
