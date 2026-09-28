@@ -14,7 +14,7 @@ Windows bitmap scaling.
 ## Install and use
 
 Requirements: Windows with Windows PowerShell 5.1 and .NET Framework 4.x, plus Go 1.25+
-on `PATH` for the initial build. The build uses Windows' existing Framework C# compiler;
+on `PATH` (or supplied with `-GoExe`) for builds and tray rebuilds. The build uses Windows' existing Framework C# compiler;
 neither Visual Studio nor a .NET SDK is required. The account must have access to the
 configured media, profile, session and cache directories.
 
@@ -36,7 +36,7 @@ they do not leave a console wrapper open. Sparkle-Transcoder's **Sparkle** short
 instance are separate. Windows may place the new tray icon in the overflow area.
 
 Double-click the tray icon to open logs. Right-click it for backend status, Start,
-Stop, Restart, Open Logs, Open Log Folder and Quit. Closing the log window hides it
+Stop, Restart, **Rebuild and Restart Backend**, Open Logs, Open Log Folder and Quit. Closing the log window hides it
 while the backend continues running. Stop keeps the tray available; Quit shuts down
 the backend and exits the tray app. A failed backend stays stopped until Start/Restart
 is requested, with details in the log and a tray notification.
@@ -51,7 +51,7 @@ expiry, with fresh membership verification after restart.
 Each backend start uses `start-backend.ps1 -BackendExecutable ...`, which reads the
 root `.env` (or inherited `ENV_FILE`). Relative `OUTPUT`, `PFP_DIR`, `MEDIA_CACHE_DIR`, and `PLEX_AUTH_SESSION_DIR`
 paths resolve against the repository root, just as with a terminal launch. No
-credentials or media mappings are written into shortcuts. Go is not needed at runtime.
+credentials or media mappings are written into shortcuts. Go is not needed to run the compiled backend.
 Restart the backend after configuration changes. If media is on a mapped network
 drive, it must be connected in this user's sign-in session before the backend starts;
 otherwise use an accessible UNC mapping or retry Start after connecting the drive.
@@ -77,7 +77,23 @@ and binaries are ignored by Git and excluded from the frontend Docker context.
 The checked-in icon can be regenerated with `windows/assets/generate-icon.ps1`; it
 uses vector drawing instructions and the built-in Windows drawing runtime.
 
-To update after pulling changes, choose **Quit**, then rerun the installer. Builds
+To apply backend source changes, choose **Rebuild and Restart Backend**. The tray
+builds only the Go API in the background and captures compiler output in the same log.
+The existing backend keeps running until compilation succeeds, then shuts down
+gracefully before its binary is replaced and restarted. A failed build leaves it
+running with its existing binary and opens the logs. If replacement fails, the tray
+restarts the previous binary and reports the error. This action also works while the
+backend is stopped or its executable is missing. Start, Stop, Restart and another
+rebuild are disabled during the operation; logs and Quit remain available. Quit
+cancels the build and its compiler children.
+
+The installer records the resolved Go executable in `bin/windows/Sparkle.Go.txt`,
+so tray rebuilds also work when Go was supplied with `-GoExe <path>` instead of being
+on Explorer's `PATH`. Older installations without that file use Go on `PATH`.
+If Go moves, rerun the installer with its new path. Rebuilds use the current checkout;
+they do not pull source changes or rebuild the tray app or frontend.
+
+To update the tray app itself, choose **Quit**, then rerun the installer. Full builds
 refuse to overwrite a running copy. If Go is not on `PATH`, supply `-GoExe <path>`.
 The checkout must remain at its installed path; remove its shortcuts before moving it,
 then reinstall from the new location. The installer refuses to overwrite shortcuts
@@ -111,6 +127,9 @@ logs and request exit. The hidden PowerShell launcher waits on a startup gate un
 the tray assigns it to a Windows Job Object. The compiled Go API and encoder children
 inherit that job. Closing the last job handle kills the whole owned process tree,
 including when the tray crashes or Windows ends the session.
+Background builds use a separate gated, kill-on-close job for the hidden PowerShell,
+Go and compiler processes. Their staged executable is replaced on the same volume
+only after the old backend process tree has stopped.
 
 Stop/Restart/Quit first signal a private Windows shutdown event. The backend cancels
 its existing context and runs ordinary HTTP, room and encoder shutdown. The tray allows
@@ -130,7 +149,11 @@ The first suite uses a fake backend/encoder to check absence of console windows,
 root-relative configuration, DPI scaling, icon sizes, UTF-8 live logs, bounded log
 display, full disk logs, five-archive retention, recovery, timestamp collisions,
 locked-file safety, final stdout/stderr capture, close/reopen,
-activation, start/stop/restart/quit and process-tree cleanup. The second builds the real
+activation, start/stop/restart/quit and process-tree cleanup. It also invokes the real
+backend-only build script with a fake compiler to check menu availability, responsive
+logs, hidden compiler children, duplicate requests, compilation and replacement
+failures, successful rebuild/restart, missing-binary recovery and Quit cancellation.
+The second builds the real
 API and GUI in a path containing spaces, serves an empty catalog on a temporary loopback
 port, and checks process DPI awareness, single-instance activation, hidden login launch,
 graceful shutdown archives, cleanup and log recovery after killing the tray process.

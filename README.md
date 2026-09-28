@@ -175,7 +175,9 @@ It uses the existing `.env`; the frontend still runs separately.
 
 Double-click the tray icon or open **Sparkle Backend** from Start to see live logs
 in a dedicated window. Closing that window hides it. Right-click the tray for
-Start, Stop, Restart, or Quit. Restarting the backend clears in-memory rooms/chat.
+Start, Stop, Restart, **Rebuild and Restart Backend**, or Quit. Rebuild compiles the
+current backend source before restarting; a failed build leaves the current backend
+running. Restarting the backend clears in-memory rooms/chat.
 The DPI-aware app uses a yellow server/sparkle icon. Full logs are stored in
 `.sparkle-backend/logs/sparkle.log`; exiting the tray archives the session with its
 UTC exit timestamp and keeps the latest five archives plus the active log. Only older

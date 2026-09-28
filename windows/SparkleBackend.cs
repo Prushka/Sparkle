@@ -96,12 +96,17 @@ namespace Sparkle.Backend.Windows
         private readonly Icon icon, trayIcon;
         private readonly NotifyIcon tray;
         private readonly ContextMenuStrip menu;
-        private readonly ToolStripMenuItem statusItem, startItem, stopItem, restartItem;
+        private readonly ToolStripMenuItem statusItem, startItem, stopItem, restartItem, rebuildItem;
         private readonly System.Windows.Forms.Timer timer;
         private readonly Stopwatch stopWatch = new Stopwatch();
         private Process backend;
         private ProcessJob job;
         private EventWaitHandle startGate, shutdownEvent;
+        private Process build;
+        private ProcessJob buildJob;
+        private EventWaitHandle buildGate;
+        private string rebuildDirectory;
+        private bool rebuildReady;
         private bool stopping, restartAfterStop, quitting, disposed;
         internal readonly LogsWindow LogWindow;
 
@@ -123,7 +128,8 @@ namespace Sparkle.Backend.Windows
             startItem = new ToolStripMenuItem("Start Backend", null, delegate { StartBackend(); });
             stopItem = new ToolStripMenuItem("Stop Backend", null, delegate { StopBackend(false, false); });
             restartItem = new ToolStripMenuItem("Restart Backend", null, delegate { StopBackend(true, false); });
-            menu.Items.AddRange(new ToolStripItem[] { startItem, stopItem, restartItem });
+            rebuildItem = new ToolStripMenuItem("Rebuild and Restart Backend", null, delegate { RebuildBackend(); });
+            menu.Items.AddRange(new ToolStripItem[] { startItem, stopItem, restartItem, rebuildItem });
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Open Logs", null, delegate { ShowLogs(); });
             menu.Items.Add("Open Log Folder", null, delegate { LogWindow.OpenFolder(); });
@@ -141,6 +147,8 @@ namespace Sparkle.Backend.Windows
         internal bool IsRunning { get { return backend != null && !backend.HasExited; } }
         internal bool IsQuitting { get { return quitting; } }
         internal int BackendProcessId { get { return backend == null ? 0 : backend.Id; } }
+        internal bool IsRebuilding { get { return rebuildDirectory != null; } }
+        internal ContextMenuStrip TrayMenu { get { return menu; } }
 
         internal static Icon LoadIcon(Size size)
         {
@@ -163,7 +171,7 @@ namespace Sparkle.Backend.Windows
 
         internal void StartBackend()
         {
-            if (backend != null || quitting) return;
+            if (backend != null || quitting || IsRebuilding) return;
             try
             {
                 if (!File.Exists(backendPath)) throw new FileNotFoundException("Run build-windows-app.ps1 to build " + backendPath);
@@ -173,19 +181,7 @@ namespace Sparkle.Backend.Windows
                 startGate = new EventWaitHandle(false, EventResetMode.ManualReset, gateName);
                 shutdownEvent = new EventWaitHandle(false, EventResetMode.ManualReset, stopName);
                 job = new ProcessJob();
-                var info = new ProcessStartInfo
-                {
-                    FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe"),
-                    Arguments = "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File " + Quote(Path.Combine(root, "start-backend.ps1")) + " -BackendExecutable " + Quote(backendPath),
-                    WorkingDirectory = root,
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    WindowStyle = ProcessWindowStyle.Hidden,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    StandardOutputEncoding = Encoding.UTF8,
-                    StandardErrorEncoding = Encoding.UTF8
-                };
+                var info = ScriptStartInfo("start-backend.ps1", " -BackendExecutable " + Quote(backendPath));
                 info.EnvironmentVariables["SPARKLE_START_EVENT"] = gateName;
                 info.EnvironmentVariables["SPARKLE_SHUTDOWN_EVENT"] = stopName;
                 backend = new Process { StartInfo = info };
@@ -214,12 +210,14 @@ namespace Sparkle.Backend.Windows
 
         internal void StopBackend(bool restart, bool quit)
         {
+            if (IsRebuilding && !rebuildReady && !quit) return;
             quitting |= quit;
+            if (quitting) CancelRebuild();
             restartAfterStop = restart && !quitting;
             if (backend == null)
             {
                 if (quitting) ExitThread();
-                else if (restartAfterStop) StartBackend();
+                else if (restartAfterStop) RestartBackend();
                 return;
             }
             if (!stopping)
@@ -232,10 +230,131 @@ namespace Sparkle.Backend.Windows
             UpdateStatus();
         }
 
+        internal void RebuildBackend()
+        {
+            if (IsRebuilding || stopping || quitting) return;
+            try
+            {
+                string script = Path.Combine(root, "build-windows-app.ps1");
+                if (!File.Exists(script)) throw new FileNotFoundException("Cannot find build-windows-app.ps1.");
+                // Stage beside the installed binary so replacement is an atomic,
+                // same-volume operation. Never overwrite the running server.
+                rebuildDirectory = Path.Combine(Path.GetDirectoryName(backendPath), ".rebuild-" + Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(rebuildDirectory);
+                string arguments = " -BackendOnly -OutputDirectory " + Quote(rebuildDirectory);
+                string goPath = Path.Combine(Path.GetDirectoryName(backendPath), "Sparkle.Go.txt");
+                if (File.Exists(goPath)) arguments += " -GoExe " + Quote(File.ReadAllText(goPath).Trim());
+                var info = ScriptStartInfo("build-windows-app.ps1", arguments);
+                string gateName = "Local\\SparkleWatchParty.Build." + Guid.NewGuid().ToString("N");
+                buildGate = new EventWaitHandle(false, EventResetMode.ManualReset, gateName);
+                info.EnvironmentVariables["SPARKLE_BUILD_EVENT"] = gateName;
+                buildJob = new ProcessJob();
+                build = new Process { StartInfo = info };
+                build.OutputDataReceived += delegate(object sender, DataReceivedEventArgs e) { if (e.Data != null) logs.Write("build", e.Data); };
+                build.ErrorDataReceived += delegate(object sender, DataReceivedEventArgs e) { if (e.Data != null) logs.Write("build err", e.Data); };
+                if (!build.Start()) throw new InvalidOperationException("Windows did not start the backend build.");
+                buildJob.Assign(build);
+                build.BeginOutputReadLine();
+                build.BeginErrorReadLine();
+                buildGate.Set();
+                logs.Write("app", "Rebuilding backend; the current backend will continue until the build succeeds.");
+            }
+            catch (Exception error) { RebuildFailed(error.Message); }
+            UpdateStatus();
+        }
+
+        private ProcessStartInfo ScriptStartInfo(string script, string arguments)
+        {
+            return new ProcessStartInfo
+            {
+                FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe"),
+                Arguments = "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File " + Quote(Path.Combine(root, script)) + arguments,
+                WorkingDirectory = root,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8
+            };
+        }
+
+        private void RestartBackend()
+        {
+            restartAfterStop = false;
+            if (rebuildReady)
+            {
+                try
+                {
+                    string replacement = Path.Combine(rebuildDirectory, "Sparkle.Api.exe");
+                    if (File.Exists(backendPath)) File.Replace(replacement, backendPath, null);
+                    else File.Move(replacement, backendPath);
+                    logs.Write("app", "Backend rebuild installed; starting the new backend.");
+                    CancelRebuild();
+                }
+                catch (Exception error) { RebuildFailed("Could not install the build; restarting the previous backend. " + error.Message); }
+            }
+            StartBackend();
+        }
+
+        private void RebuildFailed(string message)
+        {
+            CancelRebuild();
+            logs.Write("app", "Backend rebuild failed: " + message);
+            ShowLogs();
+            tray.ShowBalloonTip(4000, "Sparkle Backend rebuild failed", "Open Logs for details.", ToolTipIcon.Warning);
+        }
+
+        private void ReleaseBuild()
+        {
+            if (buildJob != null) { buildJob.Dispose(); buildJob = null; }
+            if (build != null)
+            {
+                try
+                {
+                    // Also covers a launch/assignment failure before job ownership.
+                    if (!build.HasExited) build.Kill();
+                    if (build.WaitForExit(5000)) build.WaitForExit();
+                }
+                catch (InvalidOperationException) { }
+                build.Dispose();
+                build = null;
+            }
+            if (buildGate != null) { buildGate.Dispose(); buildGate = null; }
+        }
+
+        private void CancelRebuild()
+        {
+            ReleaseBuild();
+            rebuildReady = false;
+            if (rebuildDirectory == null) return;
+            try
+            {
+                File.Delete(Path.Combine(rebuildDirectory, "Sparkle.Api.exe"));
+                Directory.Delete(rebuildDirectory);
+            }
+            catch (IOException error) { logs.Write("app", "Could not remove staged build: " + error.Message); }
+            catch (UnauthorizedAccessException error) { logs.Write("app", "Could not remove staged build: " + error.Message); }
+            rebuildDirectory = null;
+        }
+
         private void Tick()
         {
             if (quitEvent != null && quitEvent.WaitOne(0)) StopBackend(false, true);
             if (showEvent != null && showEvent.WaitOne(0)) ShowLogs();
+            if (build != null && build.HasExited)
+            {
+                int exitCode = build.ExitCode;
+                ReleaseBuild();
+                if (exitCode == 0 && File.Exists(Path.Combine(rebuildDirectory, "Sparkle.Api.exe")))
+                {
+                    rebuildReady = true;
+                    logs.Write("app", "Backend build succeeded; restarting backend...");
+                    StopBackend(true, false);
+                }
+                else RebuildFailed("Build exited with code " + exitCode + ". The existing backend was not replaced.");
+            }
             if (backend != null)
             {
                 if (stopping && job != null && !backend.HasExited && stopWatch.ElapsedMilliseconds >= 12000)
@@ -252,7 +371,7 @@ namespace Sparkle.Backend.Windows
                     logs.Write("app", "Backend " + (expected ? "stopped" : "exited") + " (exit code " + exitCode + ").");
                     stopping = false;
                     if (quitting) { ExitThread(); return; }
-                    if (restartAfterStop) { restartAfterStop = false; StartBackend(); }
+                    if (restartAfterStop) RestartBackend();
                     else if (!expected)
                     {
                         tray.ShowBalloonTip(4000, "Sparkle Backend stopped", "Open Logs for details. Use Start Backend to retry.", ToolTipIcon.Warning);
@@ -265,11 +384,12 @@ namespace Sparkle.Backend.Windows
 
         private void UpdateStatus()
         {
-            string state = stopping ? "Stopping..." : IsRunning ? "Running" : "Stopped";
+            string state = stopping ? "Stopping..." : IsRebuilding ? "Rebuilding..." : IsRunning ? "Running" : "Stopped";
             statusItem.Text = "Status: " + state;
             tray.Text = "Sparkle Backend: " + state;
-            startItem.Enabled = backend == null && !quitting;
-            stopItem.Enabled = restartItem.Enabled = backend != null && !stopping;
+            startItem.Enabled = backend == null && !quitting && !IsRebuilding;
+            stopItem.Enabled = restartItem.Enabled = backend != null && !stopping && !quitting && !IsRebuilding;
+            rebuildItem.Enabled = !stopping && !quitting && !IsRebuilding;
             LogWindow.SetStatus(state);
         }
 
@@ -310,6 +430,7 @@ namespace Sparkle.Backend.Windows
                 SystemEvents.SessionEnding -= OnSessionEnding;
                 timer.Stop();
                 timer.Dispose();
+                CancelRebuild();
                 ReleaseBackend();
                 tray.Visible = false;
                 tray.Dispose();

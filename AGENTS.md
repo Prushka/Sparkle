@@ -224,7 +224,11 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   `.sparkle-backend/`. The tray owns its process tree through a kill-on-close Job Object;
   release the startup gate only after assignment. Stop/Restart/Quit use a private event
   for graceful Go shutdown before bounded forced cleanup. Closing logs only hides the
-  window. Preserve single-instance activation, system DPI awareness, the yellow backend
+  window. Rebuild and Restart stages a backend-only build before stopping the server;
+  failed builds preserve the running backend. Own gated compiler children in a separate
+  job, keep logs and Quit responsive, and cancel builds on tray exit. Replace the binary
+  only after shutdown, and retain the installer's Go path for tray rebuilds.
+  Preserve single-instance activation, system DPI awareness, the yellow backend
   icon, bounded UTF-8 log display, and terminal-free children. Keep full disk logs with
   five UTC exit-timestamped tray-session archives plus the active log; recover interrupted
   sessions and delete only older recognized archives. Shortcut names and instance IDs

@@ -72,6 +72,15 @@ try {
     if ([SparkleLauncherTestWindow]::GetProcessDpiAwareness($trayProcess.Handle, [ref]$awareness) -ne 0 -or $awareness -ne 1) { throw 'Installed tray entry point is not system DPI aware.' }
     $api = @(Get-FixtureApi)
     if ($api.Count -ne 1) { throw 'Expected exactly one compiled backend.' }
+    $trayHash = (Get-FileHash -LiteralPath $AppPath).Hash
+    $rebuildOutput = Join-Path $TestRoot 'rebuild output'
+    $installedGo = [IO.File]::ReadAllText((Join-Path $BinDirectory 'Sparkle.Go.txt'))
+    & (Join-Path $RepoRoot 'build-windows-app.ps1') -BackendOnly -OutputDirectory $rebuildOutput -GoExe $installedGo
+    if (-not (Test-Path -LiteralPath (Join-Path $rebuildOutput 'Sparkle.Api.exe')) -or
+        (Test-Path -LiteralPath (Join-Path $rebuildOutput 'SparkleBackend.exe'))) { throw 'Backend-only build did not produce only the API.' }
+    $remaining = @(Get-FixtureApi)
+    if ($remaining.Count -ne 1 -or $remaining[0].Id -ne $api[0].Id -or
+        (Get-FileHash -LiteralPath $AppPath).Hash -ne $trayHash -or -not (Test-Api)) { throw 'Staged build disrupted the running app.' }
     $trayProcess.Refresh()
     if ($trayProcess.MainWindowHandle -ne 0) { throw 'Login launch unexpectedly opened a window.' }
     $second = Invoke-App '--logs'
@@ -111,7 +120,7 @@ try {
     $quit = Invoke-App '--quit'
     if (-not $quit.WaitForExit(5000) -or -not $trayProcess.WaitForExit(20000)) { throw 'Final fixture shutdown timed out.' }
     Wait-Until { @(Get-FixtureApi).Count -eq 0 } 'final compiled backend cleanup'
-    Write-Host 'PASS: compiled API; system DPI awareness; hidden login; single-instance logs activation; close hides logs; graceful quit archive; forced-exit process cleanup and log recovery.'
+    Write-Host 'PASS: compiled API; staged backend-only build with saved Go path; system DPI awareness; hidden login; single-instance logs activation; close hides logs; graceful quit archive; forced-exit process cleanup and log recovery.'
 } finally {
     if ($trayProcess -and -not $trayProcess.HasExited) {
         $quit = Invoke-App '--quit'

@@ -134,11 +134,100 @@ namespace Sparkle.Backend.Windows
                     quit.Set();
                     Wait(delegate { return app.IsQuitting && app.BackendProcessId == 0; }, "external quit event");
                 }
+                CheckRebuild(args[0], args[1]);
                 Check(Program.InstanceName(args[0]) == Program.InstanceName(args[0].ToUpperInvariant() + "\\"), "instance identity must ignore case/trailing separators");
                 Check(Program.InstanceName(args[0]) != Program.InstanceName(args[0] + "-other"), "different checkouts must have separate instance identities");
-                File.WriteAllText(result, "PASS: DPI awareness and scaled layout; icon frames; five exit-timestamped archives; recovery, retention, collisions and locked-file safety; full disk logs and final stdout/stderr; hidden startup and children; UTF-8; close/reopen; activation; stop/start/restart/quit; graceful shutdown; process-tree cleanup; bounded display logs.");
+                File.WriteAllText(result, "PASS: DPI awareness and scaled layout; icon frames; five exit-timestamped archives; recovery, retention, collisions and locked-file safety; full disk logs and final stdout/stderr; hidden startup and children; UTF-8; close/reopen; activation; stop/start/restart/quit; graceful shutdown; process-tree cleanup; bounded display logs; rebuild menu, success, failure, stopped recovery, replacement failure, duplicate suppression, hidden compiler children and quit cancellation.");
             }
             catch (Exception error) { File.WriteAllText(result, "FAIL: " + error); Environment.ExitCode = 1; }
+        }
+        private static ToolStripMenuItem MenuItem(TrayApplication app, string text)
+        {
+            foreach (ToolStripItem item in app.TrayMenu.Items)
+                if (item.Text == text) return (ToolStripMenuItem)item;
+            throw new Exception("Missing tray menu item: " + text);
+        }
+        private static int StartBuild(TrayApplication app, string root, EventWaitHandle gate, string mode)
+        {
+            gate.Reset();
+            File.Delete(Path.Combine(root, "compiler-pid.txt"));
+            File.Delete(Path.Combine(root, "compiler-child-console.txt"));
+            File.WriteAllText(Path.Combine(root, "build-mode.txt"), mode);
+            var rebuild = MenuItem(app, "Rebuild and Restart Backend");
+            Check(rebuild.Enabled, "rebuild should be available while running or stopped");
+            rebuild.PerformClick();
+            Wait(delegate { return File.Exists(Path.Combine(root, "compiler-pid.txt")) && File.Exists(Path.Combine(root, "compiler-child-console.txt")); }, "compiler startup");
+            Check(app.IsRebuilding && !rebuild.Enabled, "rebuild must disable duplicate requests");
+            Check(!MenuItem(app, "Start Backend").Enabled && !MenuItem(app, "Stop Backend").Enabled && !MenuItem(app, "Restart Backend").Enabled,
+                "lifecycle actions must stay disabled during rebuild");
+            Check(MenuItem(app, "Quit").Enabled && MenuItem(app, "Open Logs").Enabled, "rebuild blocked logs or Quit");
+            Check(File.ReadAllText(Path.Combine(root, "compiler-console.txt")) == "0" && File.ReadAllText(Path.Combine(root, "compiler-child-console.txt")) == "0",
+                "build opened a console window");
+            app.RebuildBackend();
+            Check(Directory.GetDirectories(root, ".rebuild-*").Length == 1, "duplicate rebuild created another stage");
+            return Int32.Parse(File.ReadAllText(Path.Combine(root, "compiler-child-pid.txt")));
+        }
+        private static void CheckRebuild(string root, string executable)
+        {
+            string gateName = "Local\\SparkleTest.Build." + Guid.NewGuid().ToString("N");
+            Environment.SetEnvironmentVariable("SPARKLE_TEST_BUILD_EVENT", gateName);
+            string template = Path.Combine(root, "NextBackend.exe");
+            File.AppendAllText(template, "rebuilt fixture version");
+            using (var gate = new EventWaitHandle(false, EventResetMode.ManualReset, gateName))
+            using (var quit = new EventWaitHandle(false, EventResetMode.AutoReset))
+            using (var app = new TrayApplication(root, executable, null, quit))
+            {
+                Wait(delegate { app.LogWindow.RefreshLogs(); return app.LogWindow.LogText.Contains("stderr: ready"); }, "rebuild backend startup");
+                string original = Convert.ToBase64String(File.ReadAllBytes(executable));
+                int launcher = app.BackendProcessId;
+                int child = StartBuild(app, root, gate, "fail");
+                Check(app.IsRunning && app.BackendProcessId == launcher, "build stopped the backend before compilation finished");
+                app.StartBackend();
+                app.StopBackend(true, false);
+                Check(app.BackendProcessId == launcher, "lifecycle command interrupted rebuild");
+                app.ShowLogs();
+                app.LogWindow.Close();
+                Check(app.IsRebuilding && !app.LogWindow.Visible, "logs were not responsive during rebuild");
+                gate.Set();
+                Wait(delegate { return !app.IsRebuilding; }, "failed build");
+                Wait(delegate { return Gone(child); }, "failed compiler child cleanup");
+                Check(app.IsRunning && app.BackendProcessId == launcher && Convert.ToBase64String(File.ReadAllBytes(executable)) == original,
+                    "failed compilation changed or restarted the backend");
+                Check(app.LogWindow.Visible && app.LogWindow.LogText.Contains("fixture compilation error"), "compiler errors did not open logs");
+
+                // Prevent replacement while still permitting the existing executable to run.
+                using (var locked = new FileStream(executable, FileMode.Open, FileAccess.Read, FileShare.Read))
+                {
+                    StartBuild(app, root, gate, "success");
+                    gate.Set();
+                    Wait(delegate { return !app.IsRebuilding && app.IsRunning && app.BackendProcessId != launcher; }, "replacement failure recovery");
+                    Check(Convert.ToBase64String(File.ReadAllBytes(executable)) == original, "replacement failure damaged installed backend");
+                    app.LogWindow.RefreshLogs();
+                    Check(app.LogWindow.LogText.Contains("Could not install the build; restarting the previous backend"), "replacement failure was not reported");
+                }
+                launcher = app.BackendProcessId;
+                child = StartBuild(app, root, gate, "success");
+                Check(app.BackendProcessId == launcher && app.IsRunning, "successful build stopped backend too early");
+                gate.Set();
+                Wait(delegate { return !app.IsRebuilding && app.IsRunning && app.BackendProcessId != launcher; }, "successful rebuild restart");
+                Wait(delegate { return Gone(child); }, "successful compiler child cleanup");
+                Check(Convert.ToBase64String(File.ReadAllBytes(executable)) == Convert.ToBase64String(File.ReadAllBytes(template)), "rebuild did not install new binary");
+                Check(!File.Exists(Path.Combine(root, "SparkleBackend.exe")), "backend rebuild unexpectedly rebuilt the tray");
+
+                app.StopBackend(false, false);
+                Wait(delegate { return app.BackendProcessId == 0; }, "stop before rebuild");
+                File.Delete(executable);
+                StartBuild(app, root, gate, "success");
+                gate.Set();
+                Wait(delegate { return !app.IsRebuilding && app.IsRunning; }, "rebuild missing backend while stopped");
+                child = StartBuild(app, root, gate, "success");
+                int compiler = Int32.Parse(File.ReadAllText(Path.Combine(root, "compiler-pid.txt")));
+                quit.Set();
+                Wait(delegate { return app.IsQuitting && !app.IsRebuilding && app.BackendProcessId == 0; }, "quit during rebuild");
+                Wait(delegate { return Gone(compiler) && Gone(child); }, "cancelled compiler tree cleanup");
+                Check(Directory.GetDirectories(root, ".rebuild-*").Length == 0, "rebuild left staged binaries behind");
+            }
+            Environment.SetEnvironmentVariable("SPARKLE_TEST_BUILD_EVENT", null);
         }
         private static string ArchivePath(string directory, DateTime timestamp, string suffix)
         {
