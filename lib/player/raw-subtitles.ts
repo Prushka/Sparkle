@@ -23,7 +23,7 @@ export class RawSubtitles {
 	private layer: SubtitleLayer;
 	private ownsComposition: boolean;
 	private textWindow = new RawTextCueWindow();
-	private textSuspended = false;
+	private suspended = false;
 	private sup: SUPtitles;
 	private codec = 0;
 	private header = '';
@@ -91,23 +91,25 @@ export class RawSubtitles {
 			this.bytes += data.byteLength;
 		},
 		time: (ms: number) => {
-			if (this.textSuspended) {
-				this.textSuspended = false;
+			if (this.suspended) {
+				this.suspended = false;
+				this.canvas.style.visibility = '';
 				this.currentTime = ms;
-				this.updateText();
+				if (this.layer.format === 'text') this.updateText();
+				if (this.layer.format === 'ass') this.updateASS();
 			}
 			this.time(ms);
 		},
 		clear: () => {
-			if (this.layer.format !== 'text') return this.clear();
 			// libmedia resets the sink on resume/seek after it has prefetched packets.
 			// Hide immediately, but retain that bounded window until its next sink clock.
-			// A decoder/track reset still clears everything via reset() below.
-			this.textSuspended = true;
+			// Track resets and provider seeks explicitly clear the old timeline.
+			this.suspended = true;
+			this.canvas.style.visibility = 'hidden';
 			this.currentTime = 0;
 			this.layer.text = '';
 			this.layer.cues = [];
-			this.composition.update();
+			this.updateASS();
 		}
 	};
 	private reset(codec: number, header: Uint8Array) {
@@ -131,7 +133,8 @@ export class RawSubtitles {
 		this.sup.lastPalette = null;
 		this.layer.text = '';
 		this.textWindow.clear();
-		this.textSuspended = false;
+		this.suspended = false;
+		this.canvas.style.visibility = '';
 		this.layer.cues = [];
 		// A backwards seek may deliver packets before its first clock callback.
 		this.currentTime = 0;
@@ -139,7 +142,7 @@ export class RawSubtitles {
 		this.canvas.getContext('2d')?.clearRect(0, 0, this.canvas.width, this.canvas.height);
 	}
 	private updateText() {
-		if (this.textSuspended) return;
+		if (this.suspended) return;
 		this.layer.cues = this.textWindow.cues;
 		this.layer.text = getActiveTrackText(this.layer.cues, this.currentTime / 1000);
 		this.composition.update();
@@ -148,7 +151,7 @@ export class RawSubtitles {
 		this.layer.content =
 			this.header +
 			'\n' +
-			this.assWindow
+			(this.suspended ? [] : this.assWindow)
 				.map((packet) =>
 					assPacketDialogue(new TextDecoder().decode(packet.data), packet.pts, packet.duration)
 				)
@@ -157,7 +160,7 @@ export class RawSubtitles {
 	}
 
 	time(ms: number) {
-		if (this.destroyed) return;
+		if (this.destroyed || this.suspended) return;
 		this.currentTime = ms;
 		while (
 			this.packets.length &&
@@ -182,7 +185,6 @@ export class RawSubtitles {
 		}
 		if (
 			this.layer.format === 'text' &&
-			!this.textSuspended &&
 			(this.textWindow.prune(ms) ||
 				getActiveTrackText(this.textWindow.cues, ms / 1000) !== this.layer.text)
 		)

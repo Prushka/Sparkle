@@ -21,6 +21,7 @@ export class EncodedSubtitles {
 	private pending = new Map<number, AbortController>();
 	private fed = new Set<number>();
 	private seen = new Map<string, number>();
+	private fedUntil = new Map<number, number>();
 	private generation = 0;
 	private time = 0;
 	private position = -1;
@@ -55,6 +56,7 @@ export class EncodedSubtitles {
 		}
 		this.fed.clear();
 		this.seen.clear();
+		this.fedUntil.clear();
 		this.update(this.time, true);
 	}
 	update(ms: number, reset = false) {
@@ -63,6 +65,7 @@ export class EncodedSubtitles {
 		if (reset || current < this.position || current > this.position + 1) {
 			this.fed.clear();
 			this.seen.clear();
+			this.fedUntil.clear();
 			this.renderers.forEach((renderer) => renderer.clear());
 		}
 		this.position = current;
@@ -100,12 +103,19 @@ export class EncodedSubtitles {
 		// Keep packet order when the network completes prefetched chunks first.
 		if (n > Math.max(0, this.position - 1) && !this.fed.has(n - 1)) return;
 		const first = this.fed.size === 0;
-		const packets = chunk.packets.filter((packet) => {
-			const key = packet.key ?? `${packet.id}:${packet.pts}:${packet.duration}:${packet.data}`;
-			if (this.seen.has(key)) return false;
-			this.seen.set(key, packet.pts + packet.duration);
-			return true;
-		});
+		const packets = [...chunk.packets]
+			.sort((a, b) => a.pts - b.pts)
+			.filter((packet) => {
+				// A sparse subtitle stream can make ffprobe seek minutes backwards.
+				// Old overlap must never re-enter the renderer after its dedupe keys
+				// expire: it can evict upcoming cues and replay old PGS clear frames.
+				if (packet.pts < (this.fedUntil.get(packet.id) ?? -Infinity)) return false;
+				const key = packet.key ?? `${packet.id}:${packet.pts}:${packet.duration}:${packet.data}`;
+				if (this.seen.has(key)) return false;
+				this.seen.set(key, packet.pts + packet.duration);
+				this.fedUntil.set(packet.id, packet.pts);
+				return true;
+			});
 		for (const [key, until] of this.seen)
 			if (until < this.time - 2 * this.part.segmentSeconds * 1000) this.seen.delete(key);
 		this.selected.forEach((id, index) => {
@@ -113,8 +123,13 @@ export class EncodedSubtitles {
 				track = chunk.tracks.find((t) => t.id === id);
 			if (!track) return;
 			if (first) renderer.sink.reset(track.codec, bytes(track.header));
-			for (const packet of packets)
-				if (packet.id === id) renderer.sink.packet(bytes(packet.data), packet.pts, packet.duration);
+			for (const packet of packets) {
+				if (packet.id !== id) continue;
+				renderer.sink.packet(bytes(packet.data), packet.pts, packet.duration);
+				// Consume preroll as it arrives so the bounded queue does not drop
+				// the palette/object state needed by the current display set.
+				if (packet.pts <= this.time) renderer.time(this.time);
+			}
 		});
 		this.fed.add(n);
 		for (const old of this.fed) if (old < this.position - 1) this.fed.delete(old);

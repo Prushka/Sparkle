@@ -121,10 +121,52 @@ assert.equal(pickPrioritySubtitleStream(subtitles, { language: 'en-US', format: 
 assert.equal(pickPrioritySubtitleStream(subtitles, { language: 'ja-JP' }).Index, 4);
 assert.equal(
 	pickPrioritySubtitleStream([stream('jpn', 1, 'ass'), stream('eng', 2, 'srt')], null).Index,
-	1,
-	'Encoded policy is format first'
+	2,
+	'preferred language precedes format'
 );
 assert.equal(pickPrioritySubtitleStream([], null), null);
+
+// Language-first policy is shared by processed files and every Plex transport.
+for (const mobile of [false, true]) {
+	for (const format of ['ass', 'vtt', 'srt', 'sup']) {
+		const streams = [
+			...['ass', 'vtt', 'srt', 'sup'].map((f, i) => stream('fra', i, f)),
+			stream('eng', 10, format)
+		];
+		for (const selection of [
+			null,
+			{ language: 'en-US' },
+			{ language: 'en-US', format: 'ass', style: 'ass' }
+		]) {
+			assert.equal(pickPrioritySubtitleStream(streams, selection, mobile).Index, 10);
+			storage.clear();
+			if (selection) storage.set('subtitleSelection', JSON.stringify(selection));
+			for (const offset of [0, 100, 200]) {
+				const raw = streams.map((s) => ({
+					id: s.Index + offset,
+					index: s.Index,
+					title: s.Title,
+					language: s.Language,
+					codec: s.Location.split('.')[1]
+				}));
+				assert.equal(
+					getRawSubtitleTracks(raw, `version-${offset}`, mobile).find((t) => t.default).id,
+					10 + offset
+				);
+			}
+		}
+	}
+	// An explicit non-English language also survives a missing format.
+	assert.equal(
+		pickPrioritySubtitleStream(
+			[stream('eng', 1, 'ass'), stream('jpn', 2, 'sup')],
+			{ language: 'ja-JP', format: 'vtt' },
+			mobile
+		).Index,
+		2
+	);
+}
+storage.clear();
 
 // Size is an automatic tie-breaker, never a substitute for a saved identity or priority.
 for (const format of ['ass', 'vtt', 'srt', 'sup']) {

@@ -30,7 +30,10 @@ library from the same Library view.
   [fullscreen limitations](docs/plex-raw-media.md#playback-and-hdr).
 - Shared Encoded/Raw track priorities: Japanese → English → Chinese audio, with only
   explicit choices saved; subtitles share format tabs, track toggles, language fallback,
-  and per-format layer preferences across playback sources. Automatic subtitle ties within
+  and per-format layer preferences across playback sources. Automatic subtitles prefer
+  the saved language, then English, across all formats; format priority breaks ties within
+  that language, so English Image wins over another language's text. Explicit saved track
+  matches are preserved. Automatic subtitle ties within
   a format/language prefer the largest known byte size, after saved preferences and
   subtitle-category priorities.
 - Optional client-side audio normalization beside Captions, with a saved local preference

@@ -576,9 +576,24 @@ export function pickPrioritySubtitleStream(
 		}
 	}
 
+	// Resolve the preferred language across every format before ranking formats.
+	// An unavailable saved format must not hide that language's image/text track.
+	let languageStreams = storedSelection?.language
+		? streams.filter((stream) =>
+				isSameSubtitleLanguage(getSubtitleLanguage(stream), storedSelection.language!)
+			)
+		: [];
+	if (!languageStreams.length) {
+		for (const language of SUBTITLE_LANGUAGE_PRIORITY) {
+			languageStreams = streams.filter(
+				(stream) => getSubtitleLanguageBase(getSubtitleLanguage(stream)) === language
+			);
+			if (languageStreams.length) break;
+		}
+	}
 	const streamsByFormat = new Map<SubtitleTrackFormat, Stream[]>();
 
-	for (const stream of streams) {
+	for (const stream of languageStreams.length ? languageStreams : streams) {
 		const format = getSubtitleFormat(stream.Location);
 		const formatStreams = streamsByFormat.get(format);
 		if (formatStreams) {

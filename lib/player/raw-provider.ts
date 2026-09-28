@@ -849,6 +849,10 @@ export class RawProvider implements MediaProviderAdapter {
 				if (this.paused) await Promise.all([this.engine?.pause(), this.audioEngine?.pause()]);
 			}
 			const ms = BigInt(Math.round((target - this.raw.parts[index].start) * 1000));
+			// A real timeline change invalidates old captions. The sink's later
+			// resume/reset may retain packets prefetched during this seek.
+			this.subtitles?.clear();
+			this.subtitleLayers.forEach((layer) => layer.clear());
 			// Start both indexed seeks together; do not let video finish before the
 			// audio decoder even starts moving to the requested position.
 			await Promise.all([this.engine?.seek(ms), this.audioEngine?.seek(ms)]);

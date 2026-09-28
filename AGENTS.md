@@ -117,7 +117,8 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
 - Raw demuxing/decoding stays client-side. Keep audio, subtitles, HDR choices, and versions
   inside Vidstack settings. Audio/subtitle preferences are local; version changes are shared.
   Keep Encoded and Raw defaults in `lib/player/track-selection.ts`: audio prefers Japanese,
-  English, then Chinese; subtitle format/language priorities are shared. Persist audio only
+  English, then Chinese; subtitles choose the saved/default language before format,
+  with shared format priorities within that language. Persist audio only
   after explicit selection, never while applying defaults or falling back from missing tracks.
   Automatic subtitle ties prefer the largest known byte size within the same format,
   language and CueForge/annotation category, after saved matching. Preserve menu order,
@@ -128,6 +129,10 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   than titles. Keep ASS font fallback and layer composition shared in
   `lib/player/subtitle-rendering.ts`; Raw uses one ASS renderer for collision-aware
   stacking and bounded packet windows, without a separate track-count cap.
+  Encoded subtitle chunks can contain long overlapping seek preroll. Feed each stream
+  monotonically, even after dedupe entries expire, and consume due preroll before it can
+  evict upcoming packets. Preserve prefetched captions on sink resume; clear old caption
+  state explicitly for a real provider seek or track reset.
 - Audio normalization is a local control beside Captions. Preserve the PCM hook before
   user volume and the native element's clock, volume and mute. Downmix to stereo before
   measuring loudness; link left/right gain and guard peaks after mixing. Keep bounded

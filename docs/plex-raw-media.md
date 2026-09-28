@@ -180,9 +180,12 @@ media. Automatic fallbacks never overwrite the saved choice. Existing explicit
 Raw audio choices remain supported until a new shared choice is made.
 
 Subtitles share the Encoded selection and persistence policy in every Raw mode:
-ASS/SSA, VTT, SRT, then
-PGS/SUP on desktop, with VTT ahead of ASS on iOS/Android; prefer English within
-the selected format. Within the same format, language, and CueForge/annotation category,
+restore an explicit saved track when available, otherwise prefer the saved language,
+then English, across all formats. Within that language choose ASS/SSA, VTT, SRT, then
+PGS/SUP on desktop, with VTT ahead of ASS on iOS/Android for unsaved defaults.
+English available only as Image therefore wins over French Text or Styled subtitles.
+When neither the saved language nor English is available, retain the existing format fallback.
+Within the same format, language, and CueForge/annotation category,
 automatic selection prefers the largest known subtitle byte size. Processed tracks use
 file sizes; Raw Compatible and NVENC modes use existing Matroska `NUMBER_OF_BYTES`
 statistics when present, without scanning packets. Known sizes rank ahead of unknown

@@ -20,6 +20,43 @@ of every codec, browser, display, or Dolby profile.
 
 ## Real files, client-side decoding
 
+### Subtitle timing and language selection
+
+September 27, 2026: a browser regression reproduced old PGS images at the current
+playhead when Encoded subtitle requests repeated long seek preroll. Avatar's bounded
+source inspection returned packets from 681 seconds for a request starting at 1260
+seconds; all 235 English bitmap objects in that sample decoded successfully. The
+fault was expired dedupe entries allowing old packets back into the bounded queue.
+Per-stream timestamp progress now rejects that overlap, and due preroll is consumed
+without displacing future packets. Compatible sink resume retains prefetched image,
+styled, and text captions; provider seeks and track resets clear the old timeline.
+
+Chrome renderer checks compare chronological delivery against overlapping Encoded
+chunks at one-second samples in four bounded windows: Avatar English/French PGS at
+30–87 and 1260–1318 seconds, plus English ASS/SRT from ZENSHU episodes 1 and 2 at
+90–148 and 120–177 seconds. All comparisons passed. These replay extracted subtitle
+packets through the real browser renderers; they are not full-movie playback or
+physical-device HDR qualification. Generated pixel assertions also cover overlapping
+chunks, forward/backward seeks, active/prefetched image resume, and track replacement.
+An authored PGS-in-MKV fixture also passes actual libmedia demux/playback through
+pause/resume and forward/backward indexed seeks.
+
+Selection checks cover language before format for ASS, VTT, SRT and PGS, desktop
+and mobile priorities, missing saved formats, and version/transport-specific Plex IDs.
+Explicit saved choices, Off, size ties, local layers, and menu ordering remain covered.
+
+To repeat renderer checks, run `npx playwright test tests/e2e/subtitle-rendering.spec.ts`
+against the running app. The MKV test needs `node scripts/tests/prepare-track-fixture.mjs`
+followed by `node scripts/tests/prepare-pgs-fixture.mjs`; without that fixture it skips.
+Optional `SPARKLE_SUBTITLE_PACKET_FIXTURES` is a JSON array
+of `{path, start, end, tracks}` entries referencing private, bounded packet JSON files
+under ignored `cache/`. Times are seconds and tracks are numeric source stream IDs.
+The JSON contains `tracks` with `{id, codec, header}` (codec name and base64 header)
+and `packets` with `{id, pts, duration, data}` (milliseconds and base64 payload).
+Keep original media, subtitle contents, credentials and source paths out of commits.
+
+### Existing codec qualification
+
 Chrome 153.0.8010.53 on Windows, headless and **not cross-origin isolated**:
 
 | Material           | Evidence                                                                                             |
