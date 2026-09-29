@@ -1,6 +1,6 @@
 # Raw-media validation record
 
-Validated September 22–27, 2026 on Windows using the configured Plex server and
+Validated September 22–29, 2026 on Windows using the configured Plex server and
 read-only mapped files. This records implementation evidence, not certification
 of every codec, browser, display, or Dolby profile.
 
@@ -30,6 +30,9 @@ fault was expired dedupe entries allowing old packets back into the bounded queu
 Per-stream timestamp progress now rejects that overlap, and due preroll is consumed
 without displacing future packets. Compatible sink resume retains prefetched image,
 styled, and text captions; provider seeks and track resets clear the old timeline.
+This includes the indexed seeks used for audio/subtitle changes. Initial Compatible
+selection refills the selected track so a late packet from the decoder's original
+default cannot remain visible after a different default is applied.
 
 Chrome renderer checks compare chronological delivery against overlapping Encoded
 chunks at one-second samples in four bounded windows: Avatar English/French PGS at
@@ -40,6 +43,14 @@ physical-device HDR qualification. Generated pixel assertions also cover overlap
 chunks, forward/backward seeks, active/prefetched image resume, and track replacement.
 An authored PGS-in-MKV fixture also passes actual libmedia demux/playback through
 pause/resume and forward/backward indexed seeks.
+
+Caption Off is independent of temporary sink suspension: libmedia can restart its
+subtitle clock during seeks or resume. The provider disables delivery to the primary
+renderer until a track is selected again. Regression checks cover late packets,
+sink reset/resume, and re-enabling PGS, ASS, and text, including the native cue mirror.
+The PGS MKV also exercises the full provider with image captions as its first subtitle
+track: the initial cue appears, Off survives seeks and pause/resume, and re-enabling
+captions restores the current image.
 
 Selection checks cover language before format for ASS, VTT, SRT and PGS, desktop
 and mobile priorities, missing saved formats, and version/transport-specific Plex IDs.

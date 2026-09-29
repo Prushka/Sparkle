@@ -23,6 +23,7 @@ export class RawSubtitles {
 	private layer: SubtitleLayer;
 	private ownsComposition: boolean;
 	private textWindow = new RawTextCueWindow();
+	private enabled = true;
 	private suspended = false;
 	private sup: SUPtitles;
 	private codec = 0;
@@ -72,10 +73,15 @@ export class RawSubtitles {
 		this.layer.language = language;
 		this.composition.update();
 	}
+	setEnabled(enabled: boolean) {
+		if (this.enabled === enabled) return;
+		this.enabled = enabled;
+		this.clear();
+	}
 	readonly sink = {
 		reset: (codec: number, header: Uint8Array) => this.reset(codec, header),
 		packet: (data: Uint8Array, pts: number, duration: number) => {
-			if (this.destroyed || data.byteLength > 16 * 1024 * 1024) return;
+			if (!this.enabled || this.destroyed || data.byteLength > 16 * 1024 * 1024) return;
 			if (this.layer.format === 'text') {
 				this.textWindow.add(this.codec, data, pts, duration, this.currentTime);
 				this.updateText();
@@ -91,6 +97,9 @@ export class RawSubtitles {
 			this.bytes += data.byteLength;
 		},
 		time: (ms: number) => {
+			// libmedia may restart its subtitle clock on seek/play even after Off.
+			// Only an explicit track selection can enable this layer again.
+			if (!this.enabled) return;
 			if (this.suspended) {
 				this.suspended = false;
 				this.canvas.style.visibility = '';
@@ -160,7 +169,7 @@ export class RawSubtitles {
 	}
 
 	time(ms: number) {
-		if (this.destroyed || this.suspended) return;
+		if (!this.enabled || this.destroyed || this.suspended) return;
 		this.currentTime = ms;
 		while (
 			this.packets.length &&

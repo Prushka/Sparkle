@@ -155,6 +155,54 @@ test('Compatible PGS retains prefetched and active images on resume, but clears 
 	await page.evaluate(() => (window as any).subtitleFixture.root.destroy());
 });
 
+for (const format of ['PGS', 'ASS', 'text']) {
+	test(`Compatible ${format} stays off when the decoder resumes its sink`, async ({ page }) => {
+		const state = await page.evaluate(
+			({ format, bitmap }) => {
+				const api = (window as any).SubtitleFixture;
+				const root = new api.RawSubtitles(document.getElementById('stage'));
+				const codec = format === 'PGS' ? 0x17006 : format === 'ASS' ? 0x17016 : 0x17011;
+				const header = new TextEncoder().encode(format === 'ASS' ? api.EMPTY_ASS_TRACK : '');
+				const packet =
+					format === 'PGS'
+						? Uint8Array.from(atob(bitmap), (c) => c.charCodeAt(0))
+						: new TextEncoder().encode(
+								format === 'ASS' ? '0,0,Default,,0,0,0,,Visible caption' : 'Visible caption'
+							);
+				const visible = () =>
+					format === 'PGS'
+						? root.canvas
+								.getContext('2d')
+								.getImageData(0, 0, 32, 1)
+								.data.some((v: number) => v)
+						: format === 'ASS'
+							? root.layer.content.includes('Dialogue:')
+							: Boolean(root.layer.text || root.layer.cues.length);
+				root.sink.reset(codec, header);
+				root.sink.packet(packet, 0, 5000);
+				root.sink.time(1000);
+				const before = visible();
+				root.setEnabled(false);
+				// Seek, audio changes and play can restart libmedia's stopped sink.
+				root.sink.clear();
+				root.sink.reset(codec, header);
+				root.sink.packet(packet, 0, 5000);
+				root.sink.time(1500);
+				root.time(1500);
+				const off = visible();
+				root.setEnabled(true);
+				root.sink.packet(packet, 0, 5000);
+				root.sink.time(2000);
+				const restored = visible();
+				root.destroy();
+				return { before, off, restored };
+			},
+			{ format, bitmap: pgsPacket(1) }
+		);
+		expect(state).toEqual({ before: true, off: false, restored: true });
+	});
+}
+
 test('Compatible demuxes embedded PGS through pause, resume and indexed seeks', async ({
 	page
 }) => {

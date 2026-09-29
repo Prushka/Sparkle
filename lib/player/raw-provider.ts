@@ -541,6 +541,7 @@ export class RawProvider implements MediaProviderAdapter {
 		const Constructor = await playbackOperation(loadEngine(), this.abort.signal);
 		if (generation !== this.generation || this.destroyed) return;
 		this.subtitles = new RawSubtitles(this.container);
+		this.subtitles.setEnabled(false);
 		this.engineContainer = document.createElement('div');
 		Object.assign(this.engineContainer.style, { position: 'absolute', inset: '0' });
 		this.container.prepend(this.engineContainer);
@@ -716,6 +717,8 @@ export class RawProvider implements MediaProviderAdapter {
 				});
 		const subtitleTracks = this.encoded?.subtitleTracks ?? list('subtitle');
 		this.subtitleSelectionTracks = getRawSubtitleTracks(subtitleTracks, this.mediaId);
+		// Accept the default track's prefetch before either decoder starts playing.
+		this.subtitles.setEnabled(!this.encoded && this.subtitleSelectionTracks.some((t) => t.default));
 		this.publish({
 			output: plan?.output ?? 'SDR',
 			renderer: plan?.renderer ?? (nativeVideo ? 'native' : undefined),
@@ -770,12 +773,22 @@ export class RawProvider implements MediaProviderAdapter {
 				.filter((track) => layerSrcs.includes(track.src))
 				.map((track) => track.id);
 			await this.applySubtitleLayers(ids);
-			if (ids.length && !this.encoded) await engine.seek(engine.currentTime);
+			if (subtitle && !this.encoded) {
+				// Initial selection can replace libmedia's first subtitle stream while
+				// its old pull is still completing. Refill only the selected timeline.
+				const time = engine.currentTime;
+				this.clearSubtitleTimeline();
+				await Promise.all([engine.seek(time), this.audioEngine?.seek(time)]);
+			}
 		}
 		this.setVolume(this.volume);
 		engine.setPlaybackRate(this.rate);
 		this.setAudioRate(this.rate);
 		this.ctx.$state.canPictureInPicture.set(this.pictureInPicture.supported);
+	}
+	private clearSubtitleTimeline() {
+		this.subtitles?.clear();
+		this.subtitleLayers.forEach((layer) => layer.clear());
 	}
 	play() {
 		return this.enqueue(async () => {
@@ -851,8 +864,7 @@ export class RawProvider implements MediaProviderAdapter {
 			const ms = BigInt(Math.round((target - this.raw.parts[index].start) * 1000));
 			// A real timeline change invalidates old captions. The sink's later
 			// resume/reset may retain packets prefetched during this seek.
-			this.subtitles?.clear();
-			this.subtitleLayers.forEach((layer) => layer.clear());
+			this.clearSubtitleTimeline();
 			// Start both indexed seeks together; do not let video finish before the
 			// audio decoder even starts moving to the requested position.
 			await Promise.all([this.engine?.seek(ms), this.audioEngine?.seek(ms)]);
@@ -918,6 +930,7 @@ export class RawProvider implements MediaProviderAdapter {
 				await (this.audioEngine ?? this.engine).selectAudio(id, false, !!this.encoded);
 				if (this.engine !== expectedEngine || this.destroyed) return;
 				const ms = BigInt(Math.round((time - this.raw!.parts[this.part].start) * 1000));
+				this.clearSubtitleTimeline();
 				await this.engine.seek(ms);
 				await this.audioEngine?.seek(ms);
 				if (!wasPaused) await this.start();
@@ -1003,12 +1016,14 @@ export class RawProvider implements MediaProviderAdapter {
 					await this.audioEngine?.pause();
 					if (this.engine !== engine || this.destroyed) return;
 					await this.applySubtitleLayers([]);
+					this.subtitles?.setEnabled(id >= 0);
 					this.subtitles?.setLanguage(primary?.language);
 					engine.setSubtitleEnable(id >= 0);
 					if (id >= 0) await engine.selectSubtitle(id);
 					if (this.engine !== engine || this.destroyed) return;
 					this.publish({ subtitle: id });
 					await this.applySubtitleLayers(layers);
+					this.clearSubtitleTimeline();
 					await engine.seek(time);
 					await this.audioEngine?.seek(time);
 					if (this.engine !== engine || this.destroyed) return;

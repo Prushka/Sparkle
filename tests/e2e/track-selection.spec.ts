@@ -977,6 +977,93 @@ async function rawToggle(page: Page, index: number, checked: boolean) {
 	await expect.poll(async () => (await status(page))?.changing).toBe(false);
 }
 
+test('Compatible keeps the first PGS track on startup and restores it after Off and a seek', async ({
+	page,
+	request
+}) => {
+	test.skip(!existsSync(`${root}/pixels.mkv`), 'Prepare the PGS MKV fixture');
+	await fixture(page);
+	const bytes = readFileSync(`${root}/pixels.mkv`);
+	await page.route(`**/be/media/${rawId}`, (route) =>
+		route.fulfill({
+			json: {
+				Id: rawId,
+				Title: { title: 'PGS fixture', titleId: rawId, id: rawId, modTime: 1 },
+				Source: 'plex',
+				Input: 'PGS fixture.mkv',
+				State: 'complete',
+				EncodedCodecs: [],
+				MappedAudio: {},
+				JobModTime: 1,
+				Duration: 48,
+				width: 320,
+				height: 180,
+				Files: {},
+				Streams: [],
+				Chapters: [],
+				DominantColors: [],
+				Raw: {
+					container: 'mkv',
+					videoCodec: 'h264',
+					versions: [],
+					parts: [
+						{
+							id: '1',
+							url: `/media/${rawId}/parts/1/file`,
+							size: bytes.length,
+							duration: 48,
+							start: 0,
+							streams: [
+								{ id: 0, index: 0, streamType: 1, codec: 'h264' },
+								{ id: 1, index: 1, streamType: 2, codec: 'aac', languageCode: 'eng' },
+								{
+									id: 2,
+									index: 2,
+									streamType: 3,
+									codec: 'pgs',
+									languageCode: 'eng',
+									displayTitle: 'English image'
+								}
+							]
+						}
+					]
+				}
+			}
+		})
+	);
+	await page.route(`**/be/media/${rawId}/parts/1/file`, (route) => serveBytes(route, bytes));
+	const room = `pgs-start-${Date.now()}`;
+	expect((await request.post('/be/rooms', { data: { roomId: room, mediaId: rawId } })).ok()).toBe(
+		true
+	);
+	await page.goto(`/${room}/media/${rawId}`);
+	await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+	await expect.poll(() => rawSubtitleIndex(page)).toBe(2);
+	const ink = () =>
+		page.evaluate(() => {
+			const canvas = (window as any).trackTestProvider?.subtitles?.canvas;
+			if (!canvas || canvas.style.visibility === 'hidden') return -1;
+			const pixels = canvas.getContext('2d').getImageData(0, 0, 32, 1).data;
+			return [...pixels].findIndex((value, index) => index % 4 === 3 && value !== 0) >> 2;
+		});
+	await expect.poll(ink).toBe(0);
+	const player = page.locator('[data-media-player]');
+	await player.hover();
+	await page.getByRole('button', { name: 'Closed captions', exact: true }).click();
+	await expect.poll(() => rawSubtitleIndex(page)).toBe(-1);
+	await seekRaw(page, 12);
+	await expect.poll(ink).toBe(-1);
+	await player.press('k');
+	await expect(player).toHaveAttribute('data-paused', '');
+	await player.press('k');
+	await expect(player).not.toHaveAttribute('data-paused');
+	await expect.poll(ink).toBe(-1);
+	await player.hover();
+	await page.getByRole('button', { name: 'Closed captions', exact: true }).click();
+	await expect.poll(() => rawSubtitleIndex(page)).toBe(2);
+	await expect.poll(ink).toBeGreaterThanOrEqual(12);
+});
+
 for (const mode of ['processed', 'compatible', 'av1', 'hevc']) {
 	test(`${mode}: largest subtitle default preserves an explicit smaller choice and Off`, async ({
 		page,
