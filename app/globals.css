@@ -446,7 +446,7 @@ html::-webkit-scrollbar-thumb:hover,
 }
 
 .chat-pc .chat-input-wrap .chat-rich-input {
-	padding-left: 4.75rem;
+	padding-left: 5.25rem;
 }
 
 .chat-pc .chat-input-emote[data-selected='true'] {
