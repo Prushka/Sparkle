@@ -76,7 +76,7 @@ export function RawAIHDRButton() {
 	const label = enabled
 		? 'Disable AI HDR'
 		: available
-			? 'AI HDR · expand highlights up to 1600 nits'
+			? 'AI HDR · natural HDR enhancement'
 			: 'AI HDR unavailable on this server or browser';
 	return (
 		<DefaultTooltip content={label} placement="top">

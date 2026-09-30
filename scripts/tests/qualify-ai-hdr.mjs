@@ -134,7 +134,7 @@ const server = createServer(async (req, res) => {
 				return json({
 					fingerprint: aiHDR ? 'enhanced' : 'ordinary',
 					aiHDR,
-					aiHDRMode: item[1] === 'bt709' ? 'nvidia-truehdr' : 'hdr-expansion',
+					aiHDRMode: item[1] === 'bt709' ? 'sdr-expansion' : 'hdr-expansion',
 					playlist: 'master.m3u8',
 					codec,
 					output: 'HDR10',

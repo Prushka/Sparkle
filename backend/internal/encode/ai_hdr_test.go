@@ -22,7 +22,7 @@ func TestHDRClassification(t *testing.T) {
 		mode   string
 		peak   float64
 	}{
-		{"SDR", base, nil, "nvidia-truehdr", 1000},
+		{"SDR", base, nil, "sdr-expansion", 1000},
 		{"missing-transfer", Stream{Primaries: "bt709", Space: "bt709"}, nil, "", 0},
 		{"conflicting-frame", base, []Stream{{Transfer: "smpte2084"}}, "", 0},
 		{"bitstream-HDR", Stream{}, []Stream{{Transfer: "smpte2084", SideData: []HDRSideData{{MaxLuminance: "10000000/10000", MaxContent: 400, MaxAverage: 100}}}}, "hdr-expansion", 400},
@@ -86,7 +86,7 @@ func TestHDRUntaggedHDAVC(t *testing.T) {
 				}
 				return
 			}
-			if err != nil || !plan.AssumedSDR || plan.Mode != "nvidia-truehdr" || plan.Transfer != "bt709" || plan.Primaries != "bt709" || plan.Matrix != "bt709" || plan.Range != "tv" {
+			if err != nil || !plan.AssumedSDR || plan.Mode != "sdr-expansion" || plan.Transfer != "bt709" || plan.Primaries != "bt709" || plan.Matrix != "bt709" || plan.Range != "tv" {
 				t.Fatalf("SDR assumption: %+v %v", plan, err)
 			}
 		})
@@ -100,7 +100,7 @@ func TestHDRUntaggedHDAVC(t *testing.T) {
 func TestAIHDRGPU(t *testing.T) {
 	nvencc := os.Getenv("SPARKLE_TEST_NVENCC")
 	if nvencc == "" {
-		t.Skip("set SPARKLE_TEST_NVENCC for NVIDIA TrueHDR/libplacebo qualification")
+		t.Skip("set SPARKLE_TEST_NVENCC for NVEncC/libplacebo qualification")
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
@@ -234,7 +234,7 @@ func TestAIHDRGPU(t *testing.T) {
 	}
 }
 
-func TestAIHDRExpandsPixels(t *testing.T) {
+func TestAIHDRPreservesRestrainedGrade(t *testing.T) {
 	nvencc := os.Getenv("SPARKLE_TEST_NVENCC")
 	if nvencc == "" {
 		t.Skip("requires NVIDIA GPU")
@@ -244,8 +244,8 @@ func TestAIHDRExpandsPixels(t *testing.T) {
 	opts := Options{FFmpeg: "ffmpeg", FFprobe: "ffprobe", NVEncC: nvencc, Profile: Profile{Quality: 24, Preset: "p3", AudioSurroundKbpsPerChannel: 80}}
 	dir := t.TempDir()
 	input := filepath.Join(dir, "low-peak.mkv")
-	// A ~100-nit PQ highlight on black. Static mastering alone must not
-	// prevent expansion of an intentionally restrained HDR grade.
+	// A ~100-nit PQ patch on black must keep its intended brightness. A dark
+	// scene is no longer stretched to the processing ceiling.
 	filter := "format=yuv420p10le,geq=lum='if(lt(X,W/2),64,512)':cb=512:cr=512,setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc:range=limited"
 	if err := run(ctx, opts.FFmpeg, []string{"-v", "error", "-y", "-f", "lavfi", "-i", "color=size=320x180:rate=24", "-t", "6", "-vf", filter, "-c:v", "hevc_nvenc", "-preset", "p3", input}, nil); err != nil {
 		t.Fatal(err)
@@ -280,8 +280,8 @@ func TestAIHDRExpandsPixels(t *testing.T) {
 		}
 		after := peak(filepath.Join(out, "video.mp4"))
 		t.Logf("%s %.2f -> %.2f nits", codec, before, after)
-		if after < before*1.5 || after > 1800 {
-			t.Fatalf("unexpected expanded peak %.2f", after)
+		if math.Abs(after-before) > before*0.05 {
+			t.Fatalf("restrained grade changed: %.2f -> %.2f", before, after)
 		}
 	}
 }
@@ -335,6 +335,11 @@ func TestAIHDRSource(t *testing.T) {
 		}
 		if gpuHDRSource(p.video(), plan) {
 			reference := t.TempDir()
+			cleanup, err := writeNaturalHDRShader(reference)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer cleanup()
 			decode, filter, encode := aiHDRCommands(url, reference, codec, segment, duration, opts.Profile, plan)
 			// This independent pixel oracle decodes from the beginning before
 			// discarding the pre-roll. Input-side seeking in some HEVC MP4

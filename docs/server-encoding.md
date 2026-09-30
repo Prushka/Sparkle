@@ -93,7 +93,7 @@ Missing GPU/filter support leaves the button disabled. Processing failures are
 reported, without silently substituting ordinary video.
 
 On Windows, run `./scripts/install-ai-hdr.ps1` (requires 7-Zip). It installs portable,
-SHA-256-checked NVEncC 9.35 and its NVIDIA NGX dependency into ignored `bin/` and prints
+SHA-256-checked NVEncC 9.35, including libplacebo, into ignored `bin/` and prints
 the backend settings to add to your existing `.env`:
 
 ```dotenv
@@ -104,9 +104,10 @@ NVENCC=C:/path/to/Sparkle/bin/nvencc-9.35/NVEncC64.exe
 
 Restart the backend. `NVENCC` defaults to `NVEncC64` on PATH. Keep the distribution's
 DLLs, licenses and notices together. FFmpeg also needs `zscale`, `libplacebo`, and the
-existing NVENC/Opus support. Startup tests both TrueHDR and libplacebo through each
-encoder before advertising support. This integration is qualified on Windows;
-the supplied Linux Docker image does not include NVIDIA NGX/TrueHDR.
+existing NVENC/Opus support. Startup tests SDR conversion and HDR filtering through
+each encoder before advertising support. NVIDIA NGX/TrueHDR is no longer required.
+This integration is qualified on Windows; the supplied Linux Docker image does not
+include NVEncC. Keep the optional feature disabled there until separately qualified.
 
 The backend reads stream metadata and a bounded sample of decoded frame metadata:
 transfer function, primaries, matrix, range, mastering maximum, MaxCLL/MaxFALL,
@@ -118,26 +119,47 @@ Decoded frames must also be 8-bit 4:2:0; every declared color tag must agree wit
 limited-range Rec.709, and no HDR mastering, light-level or dynamic metadata may be
 present. This is an SDR interpretation, not proof of an untagged source's original
 grade. Other missing-color cases, including untagged 10-bit material, remain rejected.
-A mastering-display maximum is only a
-fallback seed, never proof that the movie contains highlights at that brightness.
+A mastering-display maximum is not proof that the movie contains highlights at
+that brightness. It does not set the enhancement curve's exposure.
 
-- Recognized SDR is normalized to limited-range Rec.709 and processed by
-  [NVIDIA TrueHDR through NVEncC](https://github.com/rigaya/NVEnc/blob/master/NVEncC_Options.en.md#--vpp-ngx-truehdr).
-- PQ and HLG use libplacebo frame peak detection and temporally smoothed spline
-  inverse tone mapping. A two-second lead-in settles analysis before a requested
-  segment; those frames are discarded. Restrained HDR grades can expand even when
-  their mastering tags say 1,000 nits. Brighter sources are compressed to the target.
-- The target is **1,600 nits**, not a requirement that every scene reach that peak.
-  Output is 10-bit BT.2020/PQ HDR10 with new mastering and light-level MP4 boxes.
-  The target ceiling is recorded as MaxCLL; MaxFALL remains unknown (zero).
-  The display and browser still determine physical luminance.
+- Recognized SDR is normalized to ten-bit limited-range Rec.709, then converted to
+  BT.2020/PQ with a fixed 203-nit reference white. Its upper range gets restrained
+  enhancement: gain rises smoothly above 100 nits and never exceeds 1.30. A small
+  white highlight can approach 264 nits; SDR is not stretched to 1,600 nits.
+- PQ uses absolute source luminance; HLG first uses a fixed 1,000-nit reference
+  display conversion. HDR values through 203 nits keep their brightness. Gain
+  increases smoothly from 203 to 600 nits and never exceeds 1.25.
+- A bundled GPU shader measures bounded bright-area coverage, excluding black
+  bars. Broad highlights receive less gain than small highlights. Coverage can
+  change gain by at most 0.10, only above the protected range; it never adjusts
+  exposure or stretches a scene peak to the output peak. No local sharpening,
+  contrast recovery, or detail reconstruction is applied.
+- The shader uses only the current frame, with no temporal detector history.
+  This deliberately replaces smoothing of a moving scene-peak curve: unchanged
+  midtones cannot pump when another object brightens, cuts need no settling, and
+  independent segments use the same grade as continuous filtering. The two-second
+  preroll remains for decoding/timestamps, not grade warm-up. This is conservative
+  frame-adaptive highlight processing, not an implementation of a TV's proprietary
+  regional/temporal tone mapper.
+- A twice-continuously-differentiable shoulder above 1,000 nits approaches the
+  **1,600-nit ceiling**. Scaling RGB together preserves chromaticity and bounds
+  bright color components as well as neutral whites. Output is 10-bit BT.2020/PQ
+  HDR10, with the ceiling recorded in mastering/MaxCLL boxes; MaxFALL is unknown.
+  These are signal limits, not a claim about measured whole-title light levels.
+
+One shared grade serves all devices. Native video/MSE, the OS and the display
+perform final display mapping; the browser cannot reliably report exact panel
+peak brightness. There is no G6-specific grade, calibration UI or bright-room
+boost. The label remains **AI HDR** for continuity, but this implementation uses
+deterministic shaders rather than a neural model. The manifest mode for SDR is
+`sdr-expansion`; PQ/HLG use `hdr-expansion`.
 
 Dolby Vision Profile 5 is reshaped through FFmpeg/libplacebo before expansion.
 Profiles 7/8 use their compatible base signal; Profile 7 enhancement layers and
 preservation of Dolby Vision/HDR10+ artistic dynamic metadata are not claimed.
 Output is an optional new grade, not recovered highlight detail or a faithful
-reconstruction of the studio master. Scene boundaries can still expose differences
-between independent filter invocations; the bounded lead-in reduces this risk.
+reconstruction of the studio master. Native HDR10 compatibility does not establish
+physical image quality on every HDR panel or qualify iOS Safari hardware.
 
 For canonical limited-range 4:2:0 sources (10-bit BT.2020 PQ/HLG or 8-bit Rec.709
 SDR), NVEncC keeps NVDEC decoding, the same enhancement filters and NVENC encoding
@@ -151,23 +173,27 @@ Fractional constant frame rates are supported without rounding to an integer rat
 Other color spaces, full-range sources, Dolby Vision Profile 5, variable frame rates
 and unsupported GPU decoders retain the normalized reference pipeline. That path
 streams raw frames through bounded OS pipes without decoded files on disk. Both
-paths share the exact TrueHDR/libplacebo parameters, scene detection, two-second
-analysis lead-in and Opus audio processing. Mastering metadata is written after
+paths share the exact normalization and shader, frame-local coverage analysis,
+two-second decode lead-in and Opus audio processing. Shader files are embedded in
+the backend, written privately per job and removed before caching. Any shader
+diagnostic fails the job, including libplacebo disabling a hook with a successful
+process exit. Mastering metadata is written after
 filtering so it cannot change libplacebo's target gamut. The optimized NVENC QVBR
 path uses a generous 500 Mbps ceiling to avoid NVEncC's implicit low bitrate cap;
 it retains p3/CQ 24, dimensions and frame rate. Different GPU chroma conversion and
 encoder wrappers can produce small pixel differences from the reference encode.
 
 Both paths share GPU concurrency, cancellation, cache size/TTL and original file
-confinement. Enhanced profile revision v2 separates optimized output from older
+confinement. Enhanced profile revision `ai-hdr-natural-v3` separates this grade from older
 cached derivatives. Performance depends on source decoding, resolution, GPU,
 storage and concurrent streams; a single sample cannot establish sustained throughput.
 
 For repeatable synthetic GPU qualification, set `SPARKLE_TEST_NVENCC` to the absolute
 executable and run `go test ./internal/encode -run 'TestAIHDR' -v` from `backend/`.
 The tests cover SDR/PQ/HLG in AV1/HEVC, MP4 HDR signaling, first/middle/final segment
-timestamps, fractional frame rates, VFR fallback, decoded HDR pixel expansion and
-reference color comparisons around bright/dark scene transitions. They skip when
+timestamps, fractional frame rates, VFR fallback, protected brightness, black level,
+bounded highlights, monotonic gradients, moving highlights/flashes, continuous vs
+independent segment grades, and reference color comparisons. They skip when
 the executable is not supplied.
 For a confined, read-only real-source check, also set `SPARKLE_AI_HDR_SOURCE` to
 the source file and run `go test ./internal/encode -run '^TestAIHDRSource$' -v`.
@@ -182,14 +208,14 @@ local on/off choices, timeline changes/recovery, flag-off behavior and the actua
 Vidstack button in desktop/mobile layouts. Fixtures do not exercise Plex authentication
 or full watch-party WebSocket transport, which retain their separate test suites.
 
-On the qualified RTX 5090 host, a 4K Avatar sample with 1,000-nit mastering metadata
-and zero MaxCLL/MaxFALL took about **3.7 seconds for AV1 and 3.3 seconds for HEVC**
-per 12-second enhanced segment, including audio, through the optimized path. The
-reference pipeline previously took 12.7 and 12.1 seconds respectively. Sampled
-decoded RGB comparisons against the reference passed (mean absolute normalized
-code-value error below 0.002); scene-transition fixtures also passed. A synthetic
-103-nit PQ highlight expanded to approximately 1,587 nits in decoded AV1 and HEVC.
-These are signal/throughput measurements, not physical-display HDR qualification.
+On the RTX 5090 host, the natural-grade regression retains a 103-nit PQ patch at
+approximately 103 nits. Fixed patch fixtures retain approximately 99/146/197 nits
+for 100/150/200-nit inputs, while 400/800-nit highlights become approximately
+432/963 nits and a 4,000-nit patch rolls to about 1,575 nits. SDR reference white
+in the test scene is approximately 256 nits. Small differences include source
+quantization, color conversion and video compression. These are decoded signal
+checks, not physical-display or subjective image-quality qualification. See the
+[qualification record](raw-media-validation.md) for coverage and remaining gaps.
 
 ## Encoder profile and HDR
 

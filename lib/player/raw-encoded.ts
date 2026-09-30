@@ -26,7 +26,7 @@ export function saveHDRPreference(value: HDRPreference) {
 
 export interface EncodedPart {
 	aiHDR?: boolean;
-	aiHDRMode?: 'nvidia-truehdr' | 'hdr-expansion';
+	aiHDRMode?: 'sdr-expansion' | 'hdr-expansion';
 	base: string;
 	fingerprint: string;
 	playlist?: 'master.m3u8';

@@ -24,6 +24,43 @@ func TestFramePipeHelper(t *testing.T) {
 		_, _ = io.Copy(os.Stdout, os.Stdin)
 	case "fail":
 		os.Exit(3)
+	case "shader-fail":
+		_, _ = os.Stderr.WriteString("libplacebo: Failed executing hook, disabling\n")
+		os.Exit(0)
+	case "shader-ok":
+		os.Exit(0)
+	case "decoder-warning":
+		_, _ = os.Stderr.WriteString("[hevc] PPS id out of range: 0\n")
+		os.Exit(0)
+	}
+}
+
+func TestShaderErrorsFailClosed(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, mode := range []string{"shader-fail", "shader-ok", "decoder-warning"} {
+		args := []string{"-test.run=^TestFramePipeHelper$", "--", "--vpp-libplacebo-shader", "--frame-pipe-helper", mode}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		for _, err := range []error{run(ctx, exe, args, nil), runPipeline(ctx, []processStep{{exe, args}})} {
+			if (err != nil) != (mode == "shader-fail") {
+				t.Fatalf("%s: %v", mode, err)
+			}
+		}
+	}
+}
+
+func TestShaderDiagnosticAcrossWrites(t *testing.T) {
+	const message = "libplacebo: Failed executing hook, disabling"
+	for split := 1; split < len(message); split++ {
+		d := &shaderDiagnostic{}
+		_, _ = d.Write([]byte(message[:split]))
+		_, _ = d.Write([]byte(message[split:]))
+		if !d.failed || len(d.tail) > 9 {
+			t.Fatalf("lost or retained diagnostics at split %d", split)
+		}
 	}
 }
 

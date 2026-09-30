@@ -6,8 +6,7 @@ $downloadDir = Join-Path $repo 'cache/ai-hdr-downloads'
 $toolDir = Join-Path $repo 'bin/nvencc-9.35'
 New-Item -ItemType Directory -Force -Path $downloadDir, $toolDir | Out-Null
 $packages = @(
-    @{ Name = 'NVEncC_9.35_x64.7z'; SHA256 = '8d80c91b4d38f2065b760a9b13d7835080d9971569b172fbff6c376fd429febd' },
-    @{ Name = 'NVEncNVSDKNGX_20260925_x64.7z'; SHA256 = '4a08c28e42986410637fd45212c5a285e277c6905c608a84ebeadd72d844565e' }
+    @{ Name = 'NVEncC_9.35_x64.7z'; SHA256 = '8d80c91b4d38f2065b760a9b13d7835080d9971569b172fbff6c376fd429febd' }
 )
 foreach ($package in $packages) {
     $archive = Join-Path $downloadDir $package.Name

@@ -201,14 +201,19 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   `AI_HDR_ENABLED` defaults off and gates every enhanced resource before probing or cache
   access. AI HDR is a local Plex toggle before audio normalization; its encoded variant
   must have separate URLs/cache identity and preserve the saved ordinary output choice.
-  SDR uses NVIDIA TrueHDR; PQ/HLG use frame-adaptive expansion to a 1600-nit HDR10
-  ceiling. Inspect container and decoded color metadata; reject conflicting HDR signals.
+  SDR uses a fixed 203-nit reference conversion and restrained highlight enhancement;
+  PQ/HLG retain ordinary brightness through 203 nits. A frame-local GPU shader
+  bounds highlight gain and smoothly rolls bright RGB components toward 1600 nits.
+  Do not restore scene-peak stretching, temporal detector state or local sharpening.
+  Shader diagnostics must fail closed even when NVEncC exits successfully.
+  Inspect container and decoded color metadata; reject conflicting HDR signals.
   Untagged 8-bit 4:2:0 AVC at HD dimensions may use the conventional limited-range
   Rec.709 SDR assumption after decoded-frame checks and absence of all HDR metadata.
   Keep other ambiguous/high-bit-depth/wide-gamut sources rejected.
   Keep canonical 4:2:0 decode/filter/encode frames on the GPU when timestamp checks
   pass; retain the normalized reference path for other colors/formats and VFR.
-  Both paths must share scene analysis, tone/gamut mapping and the two-second lead-in.
+  Both paths must share frame-local coverage analysis, tone/gamut mapping and the
+  two-second decode lead-in; grading must not depend on segment history.
   Bound and remove compressed job intermediates; never persist decoded frames.
   Never substitute a metadata-only relabel or ordinary encode after enhancement fails.
   NVENC tests need a GPU; CI exercises the scheduling/cache contracts with temporary fixtures.

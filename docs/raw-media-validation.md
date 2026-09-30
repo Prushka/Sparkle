@@ -365,8 +365,38 @@ PCM check in the [server encoding guide](server-encoding.md#validation).
 
 See [server encoding](server-encoding.md) for opt-in configuration and reproduction.
 
-The AI HDR GPU pipeline was qualified on September 26–27, 2026 with Windows,
-RTX 5090, NVEncC 9.35 and p3/CQ 24, using 12-second segments:
+The natural AI HDR grade (`ai-hdr-natural-v3`) was checked on September 30, 2026
+with Windows, RTX 5090 and NVEncC 9.35. Its GPU tests cover SDR/PQ/HLG in AV1/HEVC,
+first/middle/final segments, fractional frame rates, VFR reference fallback and
+GPU/reference color comparisons. `TestAIHDRNaturalGrade` additionally compares
+continuous processing with independently requested 12-second segments, including
+their first frames, a moving highlight, a one-frame flash, black preservation and
+monotonic gradients/fades. The fixed 100-nit PQ patch stays approximately 99 nits while
+another highlight changes; the prior grade moved it from about 446 to 191 nits.
+The SDR fixture's white is approximately 256 nits, with black below 0.001 nit.
+Native Chrome passes all six SDR/PQ/HLG × AV1/HEVC combinations with the new
+segments, two-provider seek/pause/play, silent delayed-audio transitions, timestamp
+startup, native stereo audio and desktop/mobile controls. Sampled PCM/video clock
+differences stayed below 182 ms; no positive boundary stall was detected. These
+are bounded browser clock checks, not measured acoustic lip sync.
+Read-only Avatar source checks pass both codecs and GPU/reference comparisons;
+the sampled 12-second encode took approximately 4.2 seconds (AV1) and 4.0 seconds
+(HEVC), including audio, on this host. This is not sustained throughput qualification.
+The natural grade also passes both codecs for Weathering with You, HDR10+ Fire
+and Ash, Dune's Dolby Vision Profile 7 base layer, and Dolby Profile 5/8.1/8.4
+reference clips. Eligible GPU paths pass sampled reference color comparisons;
+Profile 5 uses its reshaping/reference path. Ordinary decoder preroll warnings
+do not masquerade as shader failures; actual libplacebo errors fail closed even
+when the encoder exits successfully. A clean base NVEncC 9.35 distribution without
+the extra NGX archive passes the SDR/PQ quality matrix and the Profile 8.4 check.
+These tests establish bounded decoded signal behavior, not subjective naturalness
+or physical LG G6/iOS Safari HDR qualification. The new processing is frame-local;
+it does not reproduce a television's proprietary temporal or regional algorithm.
+
+Earlier pipeline and real-source results below used the **v2** grade (TrueHDR for
+SDR and scene-peak stretching for HDR), qualified on September 26–27, 2026 with
+Windows, RTX 5090, NVEncC 9.35 and p3/CQ 24. Its brightness and performance numbers
+must not be attributed to the natural grade:
 
 - SDR TrueHDR, PQ expansion and HLG conversion passed AV1/HEVC native Chrome
   playback, two-provider seek/pause/play, local enhancement choices, delayed

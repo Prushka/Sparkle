@@ -15,10 +15,10 @@ import (
 	"time"
 )
 
-const aiHDRVersion = "ai-hdr-1600-v2"
+const aiHDRVersion = "ai-hdr-natural-v3"
 const aiHDRPeak = 1600
 
-var errAIHDR = errors.New("AI HDR is unavailable; check NVEncC, NVIDIA TrueHDR, libplacebo and the GPU")
+var errAIHDR = errors.New("AI HDR is unavailable; check NVEncC, libplacebo shader support and the GPU")
 var errHDRMetadata = errors.New("AI HDR cannot safely interpret this video's color metadata")
 
 func aiHDRToolRevision(binary string) string {
@@ -186,9 +186,9 @@ func planHDR(video Stream, frames []Stream) (hdrPlan, error) {
 		if p.DolbyProfile != 0 || p.Dynamic || p.MasteringPeak > 203 || p.ContentPeak > 203 {
 			return p, errHDRMetadata
 		}
-		p.Mode = "nvidia-truehdr"
+		p.Mode = "sdr-expansion"
 	default:
-		// An untagged source may be SDR, PQ or log. Never feed it blindly to TrueHDR.
+		// An untagged source may be SDR, PQ or log. Never feed it blindly to HDR conversion.
 		return p, errHDRMetadata
 	}
 	if !knownColor(p.Matrix) || !knownColor(p.Primaries) {
@@ -281,8 +281,8 @@ func aiHDRCommands(input, dir, codec string, segment int, duration float64, prof
 		conversion = "libplacebo=apply_dolbyvision=1:colorspace=bt2020nc:color_primaries=bt2020:color_trc=smpte2084:range=tv:format=yuv420p10le"
 	}
 	// Frame color metadata is explicit here: rawvideo/NUT does not reliably
-	// transport it through NVEncC. Normalize SDR to Rec.709 before TrueHDR.
-	if plan.Mode == "nvidia-truehdr" {
+	// transport it through NVEncC. Normalize SDR to Rec.709 before HDR conversion.
+	if plan.Mode == "sdr-expansion" {
 		trc := plan.Transfer
 		if trc == "gamma22" {
 			trc = "bt470m"
@@ -290,11 +290,13 @@ func aiHDRCommands(input, dir, codec string, segment int, duration float64, prof
 		if trc == "gamma28" {
 			trc = "bt470bg"
 		}
-		conversion = fmt.Sprintf("zscale=pin=%s:tin=%s:min=%s:rin=%s:p=bt709:t=bt709:m=bt709:r=limited,format=yuv420p", plan.Primaries, trc, plan.Matrix, plan.Range)
+		// The shader accepts ten-bit SDR; do not retain TrueHDR's eight-bit
+		// input restriction and quantize smooth gradients before enhancement.
+		conversion = fmt.Sprintf("zscale=pin=%s:tin=%s:min=%s:rin=%s:p=bt709:t=bt709:m=bt709:r=limited,format=yuv420p10le", plan.Primaries, trc, plan.Matrix, plan.Range)
 	}
 	decode = append(decode, "-vf", conversion, "-fps_mode", "vfr", "-c:v", "rawvideo", "-f", "nut", "pipe:1")
 	filter = []string{"--avsw", "--input-format", "nut", "--input-option", "protocol_whitelist:pipe", "-i", "-", "-o", "-", "-c", "raw", "--output-format", "nut", "--output-depth", "10", "--output-csp", "yuv444", "--avsync", "vfr", "--timebase", "1/90000", "--log-level", "error", "--colormatrix", "bt2020nc", "--colorprim", "bt2020", "--transfer", "smpte2084"}
-	filter = append(filter, aiHDRFilters(plan)...)
+	filter = append(filter, aiHDRFilters(plan, dir)...)
 	encode = []string{"-hide_banner", "-v", "error", "-nostdin", "-y", "-protocol_whitelist", "pipe", "-f", "nut", "-i", "pipe:0", "-ss", fmt.Sprintf("%.6f", lead), "-t", fmt.Sprintf("%.6f", length), "-map_metadata", "-1", "-map_chapters", "-1"}
 	encode = append(encode, videoArgs(codec, profile, Stream{})...)
 	// Independent fragments and the Opus track share a zero presentation origin.
@@ -311,22 +313,26 @@ func aiHDRCommands(input, dir, codec string, segment int, duration float64, prof
 	return
 }
 
-// Both pipelines use exactly the same analysis, tone curve and gamut mapping.
-func aiHDRFilters(plan hdrPlan) []string {
+// Both pipelines normalize into absolute BT.2020 PQ before running the same
+// frame-local shader. Disable all implicit peak detection, inverse stretching
+// and local contrast recovery in the normalization step.
+func aiHDRFilters(plan hdrPlan, dir string) []string {
 	matrix, primaries, transfer := "bt2020nc", "bt2020", plan.Transfer
-	if plan.Mode == "nvidia-truehdr" {
+	csp, sourcePeak, sdr := "hdr10", 10000, 0
+	if plan.Mode == "sdr-expansion" {
 		matrix, primaries, transfer = "bt709", "bt709", "bt709"
+		csp, sourcePeak, sdr = "sdr", 203, 1
+	} else if transfer == "arib-std-b67" {
+		// HLG is relative. Use the BT.2100 reference display (1000 nits), not
+		// the viewer's panel or unreliable whole-title peak metadata.
+		csp, sourcePeak = "hlg", 1000
 	}
 	filter := []string{"--vpp-colorspace", fmt.Sprintf("matrix=%s:%s,colorprim=%s:%s,transfer=%s:%s", matrix, matrix, primaries, primaries, transfer, transfer)}
-	if plan.Mode == "nvidia-truehdr" {
-		filter = append(filter, "--vpp-ngx-truehdr", "maxluminance=1600,contrast=125,saturation=75,middlegray=44")
-	} else {
-		csp := "hdr10"
-		if transfer == "arib-std-b67" {
-			csp = "hlg"
-		}
-		filter = append(filter, "--vpp-libplacebo-tonemapping", fmt.Sprintf("src_csp=%s,dst_csp=hdr10,src_max=%.4f,dst_max=1600,dst_min=0.005,tonemapping_function=spline,inverse_tone_mapping=true,dynamic_peak_detection=true,smooth_period=8,knee_adaptation=0,gamut_mapping=perceptual,use_dovi=false", csp, plan.SourcePeak))
-	}
+	// Zero means "infer" to the wrapper; metadata=none also ignores the explicit
+	// black level. Both would give SDR a ~0.2-nit BT.1886 black pedestal. Use
+	// explicit near-zero black and our fixed metadata for the conversion only.
+	filter = append(filter, "--vpp-libplacebo-tonemapping", fmt.Sprintf("src_csp=%s,dst_csp=hdr10,src_max=%d,src_min=0.000001,dst_max=10000,dst_min=0.000001,tonemapping_function=clip,inverse_tone_mapping=false,dynamic_peak_detection=false,contrast_recovery=0,gamut_mapping=relative,metadata=hdr10,use_dovi=false", csp, sourcePeak))
+	filter = append(filter, "--vpp-libplacebo-shader", fmt.Sprintf("shader=\"%s\",colorsystem=bt2020nc,transfer=pq,SDR=%d", filepath.ToSlash(filepath.Join(dir, "hdr-natural.glsl")), sdr))
 	return filter
 }
 
@@ -355,6 +361,11 @@ func runAIHDRVideo(ctx context.Context, opts Options, input, dir, codec string, 
 // Preserve the normalized reference path for source formats/colors that cannot
 // yet use the GPU path, and for decoders whose timestamps cannot be preserved.
 func runAIHDRReferenceVideo(ctx context.Context, opts Options, input, dir, codec string, segment int, duration float64, source Probe, plan hdrPlan) error {
+	cleanup, err := writeNaturalHDRShader(dir)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
 	decode, filter, encode := aiHDRCommands(input, dir, codec, segment, duration, opts.Profile, plan)
 	if plan.DolbyProfile != 5 {
 		for i, arg := range decode {
@@ -415,6 +426,13 @@ func aiHDRCapabilities(ctx context.Context, opts Options, codecs []string) []str
 				break
 			}
 			plan, _ := planHDR(Stream{Transfer: transfer, Primaries: "bt709", Space: "bt709", Range: "tv"}, nil)
+			cleanup, shaderErr := writeNaturalHDRShader(dir)
+			if shaderErr != nil {
+				os.Remove(dir)
+				cancel()
+				ok = false
+				break
+			}
 			decode, filter, encode := aiHDRCommands("probe", dir, codec, 0, 0.125, opts.Profile, plan)
 			decode = []string{"-v", "error", "-nostdin", "-f", "lavfi", "-i", "testsrc2=size=256x144:rate=24", "-frames:v", "3", "-vf", "format=yuv420p10le", "-c:v", "rawvideo", "-f", "nut", "pipe:1"}
 			err = runPipeline(check, []processStep{{opts.FFmpeg, decode}, {opts.NVEncC, filter}, {opts.FFmpeg, encode}})
@@ -422,6 +440,7 @@ func aiHDRCapabilities(ctx context.Context, opts Options, codecs []string) []str
 				err = writeHDRMastering(filepath.Join(dir, "video.mp4"))
 			}
 			os.Remove(filepath.Join(dir, "video.mp4"))
+			cleanup()
 			os.Remove(dir)
 			cancel()
 			if err != nil {

@@ -773,7 +773,7 @@ export class RawProvider implements MediaProviderAdapter {
 			output: plan?.output ?? 'SDR',
 			renderer: plan?.renderer ?? (nativeVideo ? 'native' : undefined),
 			reason: this.encoded
-				? `${this.aiHDR ? 'AI HDR · 1600 nits · ' : this.hdrPreference === 'auto' ? 'Automatic · ' : ''}Shared NVENC ${this.encoded.codec.toUpperCase()}${/Dolby|HDR10\+/.test(originalHDR) ? ` · ${this.encoded.output} conversion` : ''}.`
+				? `${this.aiHDR ? 'AI HDR · natural highlights · ' : this.hdrPreference === 'auto' ? 'Automatic · ' : ''}Shared NVENC ${this.encoded.codec.toUpperCase()}${/Dolby|HDR10\+/.test(originalHDR) ? ` · ${this.encoded.output} conversion` : ''}.`
 				: plan?.reason,
 			audioTracks: list('audio'),
 			subtitleTracks,

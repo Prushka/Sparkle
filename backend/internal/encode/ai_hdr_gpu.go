@@ -18,7 +18,7 @@ func gpuHDRSource(video Stream, plan hdrPlan) bool {
 	if !containsCodec([]string{"hevc", "h264", "av1"}, video.Codec) || plan.DolbyProfile == 5 || plan.Range != "tv" {
 		return false
 	}
-	if plan.Mode == "nvidia-truehdr" {
+	if plan.Mode == "sdr-expansion" {
 		return plan.Primaries == "bt709" && plan.Matrix == "bt709" && plan.Transfer == "bt709" && video.PixelFormat == "yuv420p"
 	}
 	return plan.Primaries == "bt2020" && plan.Matrix == "bt2020nc" && video.PixelFormat == "yuv420p10le"
@@ -65,6 +65,11 @@ func packetTimes(packets []hdrPacket) ([]float64, error) {
 // FFmpeg only copies compressed packets at the boundaries. The transient input
 // window is bounded, video-only, private to this job and removed before caching.
 func runGPUHDR(ctx context.Context, opts Options, input, dir, codec string, segment int, duration float64, source Probe, plan hdrPlan) error {
+	cleanup, err := writeNaturalHDRShader(dir)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
 	clip, encoded := filepath.Join(dir, "hdr-input.nut"), filepath.Join(dir, "hdr-encoded.mp4")
 	defer os.Remove(clip)
 	defer os.Remove(encoded)
@@ -122,7 +127,7 @@ func runGPUHDR(ctx context.Context, opts Options, input, dir, codec string, segm
 	// generous ceiling rather than changing constant-quality encoding to a low
 	// bitrate profile. The shared job byte budget still bounds these files.
 	encode := []string{"--avhw", "--input-format", "nut", "--input-option", "protocol_whitelist:file", "-i", clip, "-o", encoded, "--trim", fmt.Sprintf("%d:%d", first, last-1), "--avsync", "vfr", "--timebase", "1/90000", "--codec", codec, "--preset", opts.Profile.Preset, "--tune", "hq", "--qvbr", strconv.Itoa(opts.Profile.Quality), "--max-bitrate", "500000", "--qp-init", fmt.Sprintf("%d:%d:%d", max(0, opts.Profile.Quality-2), opts.Profile.Quality, min(51, opts.Profile.Quality+2)), "--multipass", "none", "--bframes", "0", "--gop-len", strconv.Itoa(gop), "--strict-gop", "--output-depth", "10", "--output-csp", "yuv420", "--colormatrix", "bt2020nc", "--colorprim", "bt2020", "--transfer", "smpte2084", "--colorrange", "limited", "--log-level", "error"}
-	encode = append(encode, aiHDRFilters(plan)...)
+	encode = append(encode, aiHDRFilters(plan, dir)...)
 	// Set mastering/light metadata in the final MP4, as in the reference path.
 	// NVEncC --master-display also alters libplacebo's target gamut, changing
 	// the grade even when dst_max is explicit. Do not set it on this process.
