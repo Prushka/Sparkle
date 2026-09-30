@@ -14,6 +14,7 @@ const {
 	readAIHDRPreference,
 	saveAIHDRPreference,
 	encodedCapabilities,
+	encodedNativeAudio,
 	encodedURL,
 	loadEncodedPart
 } = await import(
@@ -61,6 +62,35 @@ Object.defineProperty(globalThis, 'navigator', {
 		}
 	}
 });
+globalThis.MediaSource = { isTypeSupported: () => true };
+const audioPart = { playlist: 'master.m3u8', audio: true };
+for (const audioChannels of [1, 2])
+	assert.equal(encodedNativeAudio({ ...audioPart, audioChannels }), true);
+for (const audioChannels of [undefined, 0, 3, 6, 8, NaN])
+	assert.equal(
+		encodedNativeAudio({ ...audioPart, audioChannels }),
+		false,
+		'surround/unknown uses PCM even when native Opus is advertised'
+	);
+globalThis.MediaSource = undefined;
+globalThis.ManagedMediaSource = { isTypeSupported: (mime) => mime.includes('opus') };
+assert.equal(
+	encodedNativeAudio({ ...audioPart, audioChannels: 2 }),
+	true,
+	'iOS ManagedMediaSource'
+);
+assert.equal(
+	encodedNativeAudio({ ...audioPart, audioChannels: 8 }),
+	false,
+	'iOS surround uses WASM'
+);
+globalThis.ManagedMediaSource.isTypeSupported = () => false;
+assert.equal(
+	encodedNativeAudio({ ...audioPart, audioChannels: 2 }),
+	false,
+	'PCM fallback without native Opus'
+);
+delete globalThis.ManagedMediaSource;
 globalThis.MediaSource = { isTypeSupported: () => true };
 globalThis.fetch = async () => ({ ok: true, json: async () => ({ codecs: ['av1', 'hevc'] }) });
 assert.deepEqual(await encodedCapabilities('', 1920, 1080, new AbortController().signal), ['hevc']);

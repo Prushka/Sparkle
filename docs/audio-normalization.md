@@ -34,14 +34,15 @@ pairs into their respective stereo side at −3 dB. Mono is duplicated to stereo
 These use canonical speaker ordering, not arbitrary discrete channel arrangements.
 Unknown channel counts report unavailable and keep the original audio route.
 
-Compatible Plex playback explicitly remixes the decoded speaker layout to the
+Compatible and multichannel Encoded Plex playback explicitly remixes the decoded speaker layout to the
 browser's accepted output width in libmedia. Stereo devices therefore receive a
 complete stereo mix before the normalizer, while surround devices supply canonical
 multichannel PCM. The normalizer measures an existing stereo mix without downmixing
 it again. Disabling restores this device-mapped PCM route; the source may have more
 channels than the device can reproduce.
-The AV1/HEVC server modes already deliver stereo Opus. The feature does not recover
-discarded channels or preserve compressed bitstream/Atmos passthrough.
+AV1/HEVC server modes retain supported source layouts up to 7.1 in Opus and use
+this same PCM path for multichannel titles, including on Safari. Mono/stereo-only
+titles can use native audio. Compressed bitstream/Atmos passthrough is not provided.
 
 Turning off crossfades to the original PCM route over 5 ms, restoring its original
 channel count and sample-exact unity gain. Turning on crossfades to the stereo

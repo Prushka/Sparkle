@@ -272,7 +272,7 @@ drift is corrected with small audio-rate adjustments instead of repeated seeks.
 Audio-only Matroska reads reuse video-indexed cluster positions, including the
 last cue, so a distant seek does not scan from the beginning of a large file.
 
-Compatible original audio is decoded to PCM and remixed by libmedia using each
+Compatible original and multichannel server-encoded audio are decoded to PCM and remixed by libmedia using each
 decoded frame's channel layout. The browser destination is explicitly configured
 to an accepted mono, stereo, quad, 5.1 or 7.1 layout, capped by its reported device
 capacity. Stereo conversion folds center, side and back channels into the main
@@ -291,8 +291,9 @@ Configure the Windows playback endpoint for the connected speakers before starti
 Chrome; after changing devices/layouts, restart playback (or Chrome if its reported
 capacity is stale). Audio normalization intentionally produces stereo while enabled.
 The original speaker route returns when it is disabled. This is decoded PCM, without
-compressed Dolby/DTS/Atmos passthrough. Processed media and server Encoded AV1/HEVC
-continue using their stereo sources. See [surround qualification](raw-media-validation.md#compatible-surround-audio).
+compressed Dolby/DTS/Atmos passthrough. Server Encoded AV1/HEVC preserves supported
+source layouts up to 7.1, with [per-track bitrates and layout limits](server-encoding.md#encoder-profile-and-hdr).
+Processed media continues using its stereo sources. See [surround qualification](raw-media-validation.md#compatible-surround-audio).
 
 ## Validation
 

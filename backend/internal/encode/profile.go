@@ -14,7 +14,7 @@ import (
 )
 
 const SegmentSeconds = 12
-const profileVersion = "nvenc-segments-v6"
+const profileVersion = "nvenc-segments-v7"
 
 // Four 20 ms Opus packets minus libopus's 312-sample encoder lookahead.
 // Encode a short lead-in, then discard it so each cached clip starts with
@@ -23,26 +23,28 @@ const profileVersion = "nvenc-segments-v6"
 const audioLead = 0.0735
 
 type Profile struct {
-	Quality   int
-	Preset    string
-	AudioKbps int
+	Quality                     int
+	Preset                      string
+	AudioSurroundKbpsPerChannel int
 }
 type Stream struct {
-	Index       int               `json:"index"`
-	Codec       string            `json:"codec_name"`
-	Type        string            `json:"codec_type"`
-	Width       int               `json:"width"`
-	Height      int               `json:"height"`
-	Transfer    string            `json:"color_transfer"`
-	Primaries   string            `json:"color_primaries"`
-	Space       string            `json:"color_space"`
-	Range       string            `json:"color_range"`
-	PixelFormat string            `json:"pix_fmt"`
-	FrameRate   string            `json:"avg_frame_rate"`
-	BitDepth    string            `json:"bits_per_raw_sample"`
-	Extra       string            `json:"extradata"`
-	Tags        map[string]string `json:"tags"`
-	SideData    []HDRSideData     `json:"side_data_list"`
+	Index         int               `json:"index"`
+	Codec         string            `json:"codec_name"`
+	Type          string            `json:"codec_type"`
+	Channels      int               `json:"channels"`
+	ChannelLayout string            `json:"channel_layout"`
+	Width         int               `json:"width"`
+	Height        int               `json:"height"`
+	Transfer      string            `json:"color_transfer"`
+	Primaries     string            `json:"color_primaries"`
+	Space         string            `json:"color_space"`
+	Range         string            `json:"color_range"`
+	PixelFormat   string            `json:"pix_fmt"`
+	FrameRate     string            `json:"avg_frame_rate"`
+	BitDepth      string            `json:"bits_per_raw_sample"`
+	Extra         string            `json:"extradata"`
+	Tags          map[string]string `json:"tags"`
+	SideData      []HDRSideData     `json:"side_data_list"`
 }
 type Probe struct {
 	Streams []Stream `json:"streams"`
@@ -193,13 +195,37 @@ func encodeArgs(input, dir, codec string, segment int, duration float64, p Profi
 	if source.count("audio") > 0 {
 		args = append(args, "-t", fmt.Sprintf("%.6f", length+audioLead))
 		args = append(args, "-map_chapters", "-1", "-map_metadata", "-1")
-		args = append(args, "-map", "0:a", "-vn", "-sn", "-dn", "-c:a", "libopus", "-b:a", strconv.Itoa(p.AudioKbps)+"k", "-ac", "2")
+		args = append(args, "-map", "0:a", "-vn", "-sn", "-dn", "-c:a", "libopus")
 		filter := "aresample=48000:async=1:first_pts=0"
 		if segment == 0 {
 			filter += ",adelay=3528S:all=1"
 		}
 		filter += ",apad=pad_dur=0.02"
-		args = append(args, "-ar", "48000", "-frame_duration", "20", "-af", filter,
+		index := 0
+		for _, stream := range source.Streams {
+			if stream.Type != "audio" {
+				continue
+			}
+			layout, _ := opusLayout(stream)
+			streamFilter := filter
+			// Opus 5.x labels its surrounds BL/BR. Preserve side positions on
+			// 7.1 devices by adding silent back channels, without mixing samples.
+			if stream.ChannelLayout == "5.1(side)" {
+				streamFilter += ",pan=7.1|FL=FL|FR=FR|FC=FC|LFE=LFE|SL=SL|SR=SR"
+			} else if stream.ChannelLayout == "5.0(side)" {
+				streamFilter += ",pan=7.1|FL=FL|FR=FR|FC=FC|SL=SL|SR=SR"
+			} else if layout != "" {
+				streamFilter += ",aformat=channel_layouts=" + layout
+			}
+			family := "0"
+			if stream.Channels > 2 {
+				family = "1"
+			}
+			suffix := ":a:" + strconv.Itoa(index)
+			args = append(args, "-b"+suffix, strconv.Itoa(p.audioKbps(stream.Channels))+"k", "-mapping_family"+suffix, family, "-filter"+suffix, streamFilter)
+			index++
+		}
+		args = append(args, "-ar", "48000", "-frame_duration", "20",
 			"-bsf:a", fmt.Sprintf("noise=drop='lt(n,4)+gte(n,%d)'", 4+int(math.Ceil(length*50))))
 		args = append(args, fragmentArgs(start)...)
 		args = append(args, filepath.Join(dir, "audio.mp4"))
@@ -248,5 +274,43 @@ func capabilities(ctx context.Context, binary, dir string) []string {
 }
 
 func validProfile(p Profile) bool {
-	return p.Quality >= 0 && p.Quality <= 51 && p.AudioKbps >= 32 && p.AudioKbps <= 512 && len(p.Preset) == 2 && strings.HasPrefix(p.Preset, "p") && p.Preset[1] >= '1' && p.Preset[1] <= '7'
+	return p.Quality >= 0 && p.Quality <= 51 && p.AudioSurroundKbpsPerChannel >= 32 && p.AudioSurroundKbpsPerChannel <= 128 && len(p.Preset) == 2 && strings.HasPrefix(p.Preset, "p") && p.Preset[1] >= '1' && p.Preset[1] <= '7'
+}
+
+func (p Profile) audioKbps(channels int) int {
+	return channels * p.AudioSurroundKbpsPerChannel
+}
+
+// Family 1 has defined speaker positions, unlike family 255's discrete channels.
+// Refuse unknown/unsupported layouts instead of silently reducing them to stereo.
+func opusLayout(s Stream) (string, bool) {
+	layouts := []string{"", "mono", "stereo", "3.0", "quad", "5.0", "5.1", "6.1", "7.1"}
+	if s.Channels < 1 || s.Channels >= len(layouts) {
+		return "", false
+	}
+	layout := layouts[s.Channels]
+	if (s.ChannelLayout == "5.1(side)" && s.Channels == 6) || (s.ChannelLayout == "5.0(side)" && s.Channels == 5) {
+		return "7.1", true
+	}
+	if s.ChannelLayout == layout || (s.Channels <= 2 && s.ChannelLayout == "") {
+		return layout, true
+	}
+	return "", false
+}
+
+func (p Probe) audioChannels() int {
+	channels := 0
+	for _, s := range p.Streams {
+		if s.Type == "audio" {
+			if s.Channels < 1 {
+				return 0
+			}
+			width := s.Channels
+			if layout, ok := opusLayout(s); ok && layout == "7.1" {
+				width = 8
+			}
+			channels = max(channels, width)
+		}
+	}
+	return channels
 }

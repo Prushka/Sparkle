@@ -8,68 +8,68 @@ import (
 )
 
 type Config struct {
-	PlexAuthOrigins        string
-	PlexAuthCookieSecure   bool
-	PlexAuthCookieSameSite string
-	PlexAuthSessionDir     string
-	EncodeEnabled          bool
-	AIHDREnabled           bool
-	NVEncC                 string
-	FFmpeg                 string
-	FFprobe                string
-	EncodeCacheBytes       int64
-	EncodeCacheTTL         time.Duration
-	EncodeConcurrency      int64
-	EncodeQuality          int64
-	EncodePreset           string
-	EncodeAudioKbps        int64
-	PlexURL                string
-	PlexToken              string
-	PlexMappings           string
-	PlexLibraryIDs         string
-	MediaCacheDir          string
-	PFPDir                 string
-	Addr                   string
-	OutputDir              string
-	JobsCacheTTL           time.Duration
-	MaxPFPBytes            int64
-	ReadHeaderTimeout      time.Duration
-	ReadTimeout            time.Duration
-	WriteTimeout           time.Duration
-	IdleTimeout            time.Duration
-	ShutdownTimeout        time.Duration
+	PlexAuthOrigins                   string
+	PlexAuthCookieSecure              bool
+	PlexAuthCookieSameSite            string
+	PlexAuthSessionDir                string
+	EncodeEnabled                     bool
+	AIHDREnabled                      bool
+	NVEncC                            string
+	FFmpeg                            string
+	FFprobe                           string
+	EncodeCacheBytes                  int64
+	EncodeCacheTTL                    time.Duration
+	EncodeConcurrency                 int64
+	EncodeQuality                     int64
+	EncodePreset                      string
+	EncodeAudioSurroundKbpsPerChannel int64
+	PlexURL                           string
+	PlexToken                         string
+	PlexMappings                      string
+	PlexLibraryIDs                    string
+	MediaCacheDir                     string
+	PFPDir                            string
+	Addr                              string
+	OutputDir                         string
+	JobsCacheTTL                      time.Duration
+	MaxPFPBytes                       int64
+	ReadHeaderTimeout                 time.Duration
+	ReadTimeout                       time.Duration
+	WriteTimeout                      time.Duration
+	IdleTimeout                       time.Duration
+	ShutdownTimeout                   time.Duration
 }
 
 func Load() (Config, error) {
 	cfg := Config{
-		PlexAuthOrigins:        getenv("PLEX_AUTH_ORIGINS", "http://localhost:3001,http://127.0.0.1:3001"),
-		PlexAuthCookieSecure:   true,
-		PlexAuthCookieSameSite: getenv("PLEX_AUTH_COOKIE_SAMESITE", "lax"),
-		PlexAuthSessionDir:     getenv("PLEX_AUTH_SESSION_DIR", "./data/plex-auth"),
-		FFmpeg:                 getenv("FFMPEG", "ffmpeg"),
-		FFprobe:                getenv("FFPROBE", "ffprobe"),
-		NVEncC:                 getenv("NVENCC", "NVEncC64"),
-		EncodeCacheBytes:       40 << 30,
-		EncodeCacheTTL:         12 * time.Hour,
-		EncodeConcurrency:      2,
-		EncodeQuality:          24,
-		EncodePreset:           getenv("ENCODE_PRESET", "p3"),
-		EncodeAudioKbps:        144,
-		PlexURL:                os.Getenv("PLEX_URL"),
-		PlexToken:              os.Getenv("PLEX_TOKEN"),
-		PlexMappings:           os.Getenv("PLEX_PATH_MAPPINGS"),
-		PlexLibraryIDs:         os.Getenv("PLEX_LIBRARY_IDS"),
-		MediaCacheDir:          getenv("MEDIA_CACHE_DIR", "./cache/media"),
-		PFPDir:                 getenv("PFP_DIR", "./data/pfp"),
-		Addr:                   getenv("ADDR", ":1323"),
-		OutputDir:              getenv("OUTPUT", "./output"),
-		JobsCacheTTL:           30 * time.Minute,
-		MaxPFPBytes:            12_000_000,
-		ReadHeaderTimeout:      5 * time.Second,
-		ReadTimeout:            30 * time.Second,
-		WriteTimeout:           30 * time.Second,
-		IdleTimeout:            60 * time.Second,
-		ShutdownTimeout:        10 * time.Second,
+		PlexAuthOrigins:                   getenv("PLEX_AUTH_ORIGINS", "http://localhost:3001,http://127.0.0.1:3001"),
+		PlexAuthCookieSecure:              true,
+		PlexAuthCookieSameSite:            getenv("PLEX_AUTH_COOKIE_SAMESITE", "lax"),
+		PlexAuthSessionDir:                getenv("PLEX_AUTH_SESSION_DIR", "./data/plex-auth"),
+		FFmpeg:                            getenv("FFMPEG", "ffmpeg"),
+		FFprobe:                           getenv("FFPROBE", "ffprobe"),
+		NVEncC:                            getenv("NVENCC", "NVEncC64"),
+		EncodeCacheBytes:                  40 << 30,
+		EncodeCacheTTL:                    12 * time.Hour,
+		EncodeConcurrency:                 2,
+		EncodeQuality:                     24,
+		EncodePreset:                      getenv("ENCODE_PRESET", "p3"),
+		EncodeAudioSurroundKbpsPerChannel: 80,
+		PlexURL:                           os.Getenv("PLEX_URL"),
+		PlexToken:                         os.Getenv("PLEX_TOKEN"),
+		PlexMappings:                      os.Getenv("PLEX_PATH_MAPPINGS"),
+		PlexLibraryIDs:                    os.Getenv("PLEX_LIBRARY_IDS"),
+		MediaCacheDir:                     getenv("MEDIA_CACHE_DIR", "./cache/media"),
+		PFPDir:                            getenv("PFP_DIR", "./data/pfp"),
+		Addr:                              getenv("ADDR", ":1323"),
+		OutputDir:                         getenv("OUTPUT", "./output"),
+		JobsCacheTTL:                      30 * time.Minute,
+		MaxPFPBytes:                       12_000_000,
+		ReadHeaderTimeout:                 5 * time.Second,
+		ReadTimeout:                       30 * time.Second,
+		WriteTimeout:                      30 * time.Second,
+		IdleTimeout:                       60 * time.Second,
+		ShutdownTimeout:                   10 * time.Second,
 	}
 
 	if os.Getenv("ADDR") == "" {
@@ -97,7 +97,7 @@ func Load() (Config, error) {
 			return Config{}, fmt.Errorf("AI_HDR_ENABLED must be true or false")
 		}
 	}
-	for name, target := range map[string]*int64{"ENCODE_CACHE_BYTES": &cfg.EncodeCacheBytes, "ENCODE_CONCURRENCY": &cfg.EncodeConcurrency, "ENCODE_QUALITY": &cfg.EncodeQuality, "ENCODE_AUDIO_KBPS": &cfg.EncodeAudioKbps} {
+	for name, target := range map[string]*int64{"ENCODE_CACHE_BYTES": &cfg.EncodeCacheBytes, "ENCODE_CONCURRENCY": &cfg.EncodeConcurrency, "ENCODE_QUALITY": &cfg.EncodeQuality, "ENCODE_AUDIO_SURROUND_KBPS_PER_CHANNEL": &cfg.EncodeAudioSurroundKbpsPerChannel} {
 		*target, err = int64Env(name, *target)
 		if err != nil {
 			return Config{}, err
@@ -106,7 +106,10 @@ func Load() (Config, error) {
 	if cfg.EncodeCacheTTL, err = durationEnv("ENCODE_CACHE_TTL", cfg.EncodeCacheTTL); err != nil {
 		return Config{}, err
 	}
-	if cfg.EncodeCacheBytes < 512<<20 || cfg.EncodeConcurrency < 1 || cfg.EncodeConcurrency > 32 || cfg.EncodeQuality < 0 || cfg.EncodeQuality > 51 || cfg.EncodeAudioKbps < 32 || cfg.EncodeAudioKbps > 512 || len(cfg.EncodePreset) != 2 || cfg.EncodePreset[0] != 'p' || cfg.EncodePreset[1] < '1' || cfg.EncodePreset[1] > '7' {
+	if cfg.EncodeAudioSurroundKbpsPerChannel < 32 || cfg.EncodeAudioSurroundKbpsPerChannel > 128 {
+		return Config{}, fmt.Errorf("invalid encoder audio settings")
+	}
+	if cfg.EncodeCacheBytes < 512<<20 || cfg.EncodeConcurrency < 1 || cfg.EncodeConcurrency > 32 || cfg.EncodeQuality < 0 || cfg.EncodeQuality > 51 || len(cfg.EncodePreset) != 2 || cfg.EncodePreset[0] != 'p' || cfg.EncodePreset[1] < '1' || cfg.EncodePreset[1] > '7' {
 		return Config{}, fmt.Errorf("invalid encoder settings")
 	}
 	if cfg.JobsCacheTTL, err = durationEnv("JOBS_CACHE_TTL", cfg.JobsCacheTTL); err != nil {

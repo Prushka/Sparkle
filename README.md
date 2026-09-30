@@ -85,19 +85,24 @@ Supported 4:2:0 sources keep decoding, enhancement and encoding on the GPU; othe
 formats retain the same enhancement through the reference pipeline.
 Conventional untagged 8-bit HD H.264 sources use a checked Rec.709 SDR assumption;
 conflicting or ambiguous HDR metadata is rejected.
-Encoded audio and video share a native playback clock on compatible browsers.
+Mono/stereo-only encoded audio and video share a native clock when supported.
+Multichannel encoded audio uses the Compatible client PCM path, including on Safari.
 HDR output settings show live bitrate for the active playback mode.
 Software tone mapping is temporarily disabled; Compatible and AV1/HEVC playback use
 native video on SDR and HDR displays. Saved Tone mapping selections switch to Compatible.
 
-Compatible Plex playback sends decoded PCM to the browser's reported speaker layout,
+Compatible and multichannel Encoded Plex playback send decoded PCM to the browser's reported speaker layout,
 up to 7.1. Stereo outputs receive a client-side downmix with center and surround
 content preserved; surround outputs retain their speaker positions. Configure the
 Windows playback device for the connected speakers before starting Chrome.
 Mono, stereo, quad, 5.1 and 7.1 are supported; intermediate reported channel counts
 use the next smaller supported layout.
 This is PCM output; compressed Dolby/DTS/Atmos passthrough is not implemented.
-Processed media and Encoded AV1/HEVC retain their intended stereo output.
+Server Encoded AV1/HEVC retains supported source layouts up to 7.1, with configurable
+Opus targets from `ENCODE_AUDIO_SURROUND_KBPS_PER_CHANNEL` (default 80): 80 kbps mono,
+160 kbps stereo, 480 kbps 5.1, and 640 kbps 7.1. See
+[encoder audio settings and layout limits](docs/server-encoding.md#encoder-profile-and-hdr).
+Processed media retains its existing stereo output.
 
 The waveform button beside Captions enables [audio normalization](docs/audio-normalization.md).
 It downmixes multichannel audio to stereo before adjusting loudness in an AudioWorklet,

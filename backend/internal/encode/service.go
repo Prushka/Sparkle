@@ -92,7 +92,7 @@ func (s *Service) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /media/{id}/parts/{partId}/encoded/{codec}/{resource}", s.serve)
 }
 func (s *Service) capabilities(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, map[string]any{"codecs": s.codecs, "aiHDREnabled": s.options.AIHDREnabled, "aiHDRCodecs": s.aiHDRCodecs, "segmentSeconds": SegmentSeconds, "quality": s.options.Profile.Quality, "preset": s.options.Profile.Preset, "audioKbps": s.options.Profile.AudioKbps})
+	writeJSON(w, map[string]any{"codecs": s.codecs, "aiHDREnabled": s.options.AIHDREnabled, "aiHDRCodecs": s.aiHDRCodecs, "segmentSeconds": SegmentSeconds, "quality": s.options.Profile.Quality, "preset": s.options.Profile.Preset, "audioSurroundKbpsPerChannel": s.options.Profile.AudioSurroundKbpsPerChannel})
 }
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -164,6 +164,13 @@ func (s *Service) resolve(ctx context.Context, id, part string) (*source, *os.Fi
 	}
 	if p.count("video") == 0 || p.count("audio") > 24 || p.count("subtitle") > 64 {
 		return nil, nil, errEncode
+	}
+	for _, stream := range p.Streams {
+		if stream.Type == "audio" {
+			if _, ok := opusLayout(stream); !ok {
+				return nil, nil, errors.New("This audio speaker layout cannot be preserved by the encoder; select Compatible")
+			}
+		}
 	}
 	duration, _ := strconv.ParseFloat(p.Format.Duration, 64)
 	if !isFinitePositive(duration) || duration > 7*24*3600 {
@@ -307,7 +314,7 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		if aiHDR {
 			output = "HDR10"
 		}
-		writeJSON(w, map[string]any{"fingerprint": fingerprint, "playlist": "master.m3u8", "codec": codec, "aiHDR": aiHDR, "aiHDRMode": enhancement.Mode, "output": output, "duration": source.duration, "width": video.Width, "height": video.Height, "audio": source.probe.count("audio") > 0, "subtitleTracks": tracks, "hasFonts": hasFonts, "segmentSeconds": SegmentSeconds})
+		writeJSON(w, map[string]any{"fingerprint": fingerprint, "playlist": "master.m3u8", "codec": codec, "aiHDR": aiHDR, "aiHDRMode": enhancement.Mode, "output": output, "duration": source.duration, "width": video.Width, "height": video.Height, "audio": source.probe.count("audio") > 0, "audioChannels": source.probe.audioChannels(), "subtitleTracks": tracks, "hasFonts": hasFonts, "segmentSeconds": SegmentSeconds})
 		return
 	}
 	if strings.HasSuffix(resource, ".m3u8") {

@@ -59,7 +59,7 @@ test('every HDR output mode reports measured bitrate and keeps mobile menus sepa
 });
 
 for (const codec of ['av1', 'hevc']) {
-	test(`encoded ${codec} keeps one audio clock, live bitrate and stable open submenus`, async ({
+	test(`encoded ${codec} keeps synchronized audio, live bitrate and stable open submenus`, async ({
 		page,
 		request
 	}) => {
@@ -93,19 +93,22 @@ for (const codec of ['av1', 'hevc']) {
 			const p = (window as any).testProvider;
 			return {
 				separateAudio: !!p.audioEngine,
+				channels: p.encoded.audioChannels,
+				nativeOpus: MediaSource.isTypeSupported('audio/mp4; codecs="opus"'),
 				native: p.engine.isMSE(),
-				audio: p.engine.getSelectedAudioStreamId()
+				audio: (p.audioEngine ?? p.engine).getSelectedAudioStreamId()
 			};
 		});
-		expect(clocks.separateAudio).toBe(false);
+		expect(clocks.separateAudio).toBe(
+			!(clocks.channels >= 1 && clocks.channels <= 2 && clocks.nativeOpus)
+		);
 		expect(clocks.native).toBe(true);
 		expect(clocks.audio).toBeGreaterThanOrEqual(0);
 		await video.evaluate((v) => {
 			(v as any).testWaits = 0;
 			v.addEventListener('waiting', () => (v as any).testWaits++);
 		});
-		// Cross at least two twelve-second segment boundaries with no audio-only
-		// rate adjustments or recovery seeks competing with the native clock.
+		// Cross at least two twelve-second boundaries with native video retained.
 		await expect
 			.poll(() => video.evaluate((v) => (v as HTMLVideoElement).currentTime), { timeout: 55_000 })
 			.toBeGreaterThan(33);
@@ -123,7 +126,10 @@ for (const codec of ['av1', 'hevc']) {
 			await page.getByRole('menuitemradio', { name: audio[1].title, exact: true }).click();
 			await expect
 				.poll(() =>
-					page.evaluate(() => (window as any).testProvider.engine.getSelectedAudioStreamId())
+					page.evaluate(() => {
+						const p = (window as any).testProvider;
+						return (p.audioEngine ?? p.engine).getSelectedAudioStreamId();
+					})
 				)
 				.toBe(audio[1].id);
 			await expect(player).not.toHaveAttribute('data-paused', '');

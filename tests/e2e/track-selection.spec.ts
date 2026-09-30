@@ -3,6 +3,9 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import type { RawPlaybackStatus } from '../../lib/player/raw-types';
 
 const root = 'cache/track-selection';
+// Older manifests have no channel count and must use the safe PCM path.
+// Reuse the timeline fixtures to run room/fullscreen checks through that path.
+const encodedPCM = process.env.SPARKLE_TEST_ENCODED_PCM === '1';
 const rawId = 'track-raw-fixture',
 	rawNextId = 'track-raw-next-fixture',
 	encodedId = 'track-encoded-fixture';
@@ -192,7 +195,10 @@ async function fixture(page: Page, nextDuration = 48, sizedSubtitles = false) {
 		const segments = new URL(route.request().url()).pathname.split('/');
 		const duration = segments.includes(rawNextId) ? nextDuration : 48;
 		const codec = segments.at(-2)!,
-			file = segments.at(-1)!;
+			resource = segments.at(-1)!,
+			// These older timeline fixtures multiplex audio/video in one playlist.
+			// The real surround qualifier separately uses production split playlists.
+			file = encodedPCM && /^(video|audio)\.m3u8$/.test(resource) ? 'master.m3u8' : resource;
 		if (file === 'manifest')
 			return route.fulfill({
 				json: {
@@ -204,6 +210,7 @@ async function fixture(page: Page, nextDuration = 48, sizedSubtitles = false) {
 					width: 320,
 					height: 180,
 					audio: true,
+					audioChannels: encodedPCM ? undefined : 2,
 					subtitleTracks: streams.map((s, id) => ({
 						id,
 						title: s.Title,
@@ -400,7 +407,21 @@ for (const mode of ['compatible', 'av1', 'hevc']) {
 				(await request.post('/be/rooms', { data: { roomId: room, mediaId: rawId } })).ok()
 			).toBe(true);
 			await page.goto(`/${room}/media/${rawId}`);
+			if (mode === 'compatible' || encodedPCM) {
+				await expect(page.locator('[data-media-player]')).toHaveAttribute('data-raw-ready', 'true');
+				await page.evaluate(async () => {
+					const context = (window as any).trackTestProvider.pcmContext as AudioContext;
+					await context.suspend();
+					const resume = context.resume.bind(context);
+					context.resume = () => {
+						if (window.event?.isTrusted) (window as any).pcmResumedInGesture = true;
+						return resume();
+					};
+				});
+			}
 			await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+			if (mode === 'compatible' || encodedPCM)
+				expect(await page.evaluate(() => (window as any).pcmResumedInGesture)).toBe(true);
 			const player = page.locator('[data-media-player]');
 			const video = page.locator('.sparkle-raw-surface video');
 			await expect
@@ -609,6 +630,10 @@ for (const mode of ['compatible', 'av1', 'hevc', 'auto']) {
 				await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
 				await expect(page.getByRole('textbox', { name: 'Chat', exact: true }).last()).toBeEnabled();
 				await expect.poll(() => audioTitle(page), { timeout: 20_000 }).toBe('Japanese');
+				if (encodedPCM && mode !== 'compatible')
+					expect(await page.evaluate(() => !!(window as any).trackTestProvider.audioEngine)).toBe(
+						true
+					);
 				await expect
 					.poll(async () => {
 						const s = await status(page);

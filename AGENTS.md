@@ -152,14 +152,18 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   AudioWorklet processing and an exact original-channel bypass when disabled; never
   seek, reload or broadcast playback events for a normalization toggle. See
   [audio normalization](docs/audio-normalization.md) for assets, lifecycle and checks.
-- Compatible Plex audio explicitly configures the browser speaker destination and
-  remixes decoded channel layouts to that output in libmedia before Web Audio. Preserve
+- Compatible and multichannel Encoded Plex audio explicitly configures the browser
+  speaker destination and remixes decoded channel layouts to that output in libmedia before Web Audio. Preserve
   center/side/back content when downmixing to stereo and speaker positions on surround
   outputs. Quad requires an explicit FL/FR/BL/BR layout; FFmpeg's default four-channel
   layout has center/back-center positions. Restore the shared context when the last
-  original-media player stops.
-  Processed media and Encoded AV1/HEVC keep their existing stereo behavior; this option
-  is original-media-only. Output is decoded PCM, not Dolby/DTS/Atmos bitstream passthrough.
+  PCM player stops.
+  Server encodes preserve supported speaker layouts up to 7.1 with per-track Opus
+  bitrates calculated from `ENCODE_AUDIO_SURROUND_KBPS_PER_CHANNEL` (default 80)
+  times the source channel count, including mono and stereo.
+  Multichannel titles use WASM PCM even when native Opus is advertised;
+  mono/stereo-only titles can share the native video clock. Processed media keeps
+  its existing stereo behavior. Output is decoded PCM, not Dolby/DTS/Atmos bitstream passthrough.
 - Server encodes use 12-second segments, including AI HDR; bump the profile revision when
   duration changes. Share cache keys by source fingerprint, codec, profile and time segment,
   never by participant. Preserve cancellation, GPU limits, byte/count cache bounds, original
@@ -170,8 +174,9 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   Automatic always prefers browser-supported Encoded AV1, then HEVC, independent of
   network conditions. Unavailable or failed encoding must not fall back to original
   playback; Compatible requires an explicit saved user choice. Do not probe network speed.
-  Prefer one native clock for encoded video/Opus audio. Keep subtitle menu roots
-  mounted during provider changes; Vidstack hides sibling menus when opening a submenu.
+  Prefer one native clock for mono/stereo-only encoded video/Opus audio;
+  multichannel titles use the Compatible PCM speaker path, including on iOS. Keep
+  subtitle menu roots mounted during provider changes; Vidstack hides sibling menus when opening a submenu.
   Bitrate means bounded compressed packet bytes over media time, not network throughput.
   Keep encoded output labeled HDR10/HLG/SDR; do not claim preserved dynamic HDR.
   `AI_HDR_ENABLED` defaults off and gates every enhanced resource before probing or cache

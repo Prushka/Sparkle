@@ -207,6 +207,7 @@ const server = createServer(async (req, res) => {
 			width: 320,
 			height: 180,
 			audio: true,
+			audioChannels: 2,
 			subtitleTracks: [],
 			hasFonts: false,
 			segmentSeconds: 12

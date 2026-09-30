@@ -50,6 +50,8 @@ export interface EncodedPart {
 	width: number;
 	height: number;
 	audio: boolean;
+	/** Largest encoded track width; absent on older servers. */
+	audioChannels?: number;
 	subtitleTracks: (RawPlaybackTrack & { default?: boolean })[];
 	hasFonts: boolean;
 	segmentSeconds: number;
@@ -62,6 +64,20 @@ export function supportsNativeVideo(contentType: string) {
 		globalThis.MediaSource ??
 		(globalThis as unknown as { ManagedMediaSource?: typeof MediaSource }).ManagedMediaSource;
 	return mse?.isTypeSupported(contentType) ?? false;
+}
+export function encodedNativeAudio(part: EncodedPart | undefined) {
+	// A generic Opus MIME probe says nothing about multichannel decoding or
+	// speaker mapping (in particular on Safari). Use the Compatible PCM path
+	// for every track in a surround title, including after local track changes.
+	const channels = part?.audioChannels ?? 0;
+	return (
+		part?.playlist === 'master.m3u8' &&
+		(!part.audio ||
+			(Number.isInteger(channels) &&
+				channels >= 1 &&
+				channels <= 2 &&
+				supportsNativeVideo('audio/mp4; codecs="opus"')))
+	);
 }
 export async function encodedCapabilities(
 	base: string,

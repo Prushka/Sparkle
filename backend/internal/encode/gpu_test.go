@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -16,6 +17,15 @@ import (
 // PCM continuity test. Nothing is written to Plex/media roots; callers opt into
 // an explicit disposable fixture directory and a physical NVENC GPU.
 func TestNVENCAudioContinuityFixture(t *testing.T) {
+	nvencAudioFixture(t, false)
+}
+
+func TestNVENCSurroundAudioFixture(t *testing.T) {
+	nvencAudioFixture(t, true)
+}
+
+func nvencAudioFixture(t *testing.T, surround bool) {
+	t.Helper()
 	root := os.Getenv("SPARKLE_ENCODE_AUDIO_FIXTURE_DIR")
 	if root == "" {
 		t.Skip("SPARKLE_ENCODE_AUDIO_FIXTURE_DIR is required")
@@ -27,13 +37,44 @@ func TestNVENCAudioContinuityFixture(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	input := filepath.Join(t.TempDir(), "tones.mkv")
-	args := []string{"-v", "error", "-nostdin", "-y", "-f", "lavfi", "-i", "color=size=320x180:rate=24", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-f", "lavfi", "-i", "sine=frequency=880:sample_rate=48000", "-t", "30", "-map", "0:v", "-map", "1:a", "-map", "2:a", "-c:v", "ffv1", "-c:a", "pcm_s16le", input}
+	args := []string{"-v", "error", "-nostdin", "-y", "-f", "lavfi", "-i", "color=size=320x180:rate=24", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000", "-f", "lavfi", "-i", "sine=frequency=880:sample_rate=48000"}
+	tones := []int{440, 550, 660, 60, 770, 880, 990, 1100}
+	layouts := []string{}
+	wantChannels := []int{1, 1}
+	if surround {
+		layouts = []string{"5.1", "7.1", "5.1(side)"}
+		wantChannels = append(wantChannels, 6, 8, 8)
+	}
+	for _, layout := range layouts {
+		count := 6
+		if layout == "7.1" {
+			count = 8
+		}
+		expressions := []string{}
+		for _, hz := range tones[:count] {
+			expressions = append(expressions, fmt.Sprintf("0.025*sin(2*PI*%d*t)", hz))
+		}
+		args = append(args, "-f", "lavfi", "-i", "aevalsrc="+strings.Join(expressions, "|")+":s=48000:c="+layout)
+	}
+	args = append(args, "-t", "30", "-map", "0:v")
+	for i := range wantChannels {
+		args = append(args, "-map", fmt.Sprintf("%d:a", i+1))
+	}
+	args = append(args, "-c:v", "ffv1", "-c:a", "pcm_s16le")
+	if surround {
+		// Matroska PCM does not retain the side/back distinction. AC-3 does.
+		args = append(args, "-c:a:4", "ac3", "-b:a:4", "640k")
+	}
+	args = append(args, input)
 	if err := run(ctx, ffmpeg, args, nil); err != nil {
 		t.Fatal(err)
 	}
 	p, err := probe(ctx, ffprobe, input)
 	if err != nil {
 		t.Fatal(err)
+	}
+	if surround && p.Streams[len(p.Streams)-1].ChannelLayout != "5.1(side)" {
+		t.Fatal("fixture lost its side speaker positions")
 	}
 	for _, codec := range []string{"av1", "hevc"} {
 		dir := filepath.Join(root, codec)
@@ -42,7 +83,7 @@ func TestNVENCAudioContinuityFixture(t *testing.T) {
 		}
 		for segment := 0; segment*SegmentSeconds < 30; segment++ {
 			chunk := t.TempDir()
-			if err := run(ctx, ffmpeg, encodeArgs(input, chunk, codec, segment, 30, Profile{22, "p3", 144}, p), nil); err != nil {
+			if err := run(ctx, ffmpeg, encodeArgs(input, chunk, codec, segment, 30, Profile{Quality: 22, Preset: "p3", AudioSurroundKbpsPerChannel: 80}, p), nil); err != nil {
 				t.Fatal(err)
 			}
 			for _, kind := range []string{"video", "audio"} {
@@ -82,8 +123,22 @@ func TestNVENCAudioContinuityFixture(t *testing.T) {
 						counts[packet.Track]++
 					}
 					packetsPerTrack := int(math.Min(SegmentSeconds, 30-float64(segment*SegmentSeconds)) * 50)
-					if counts[0] != packetsPerTrack || counts[1] != packetsPerTrack {
-						t.Fatalf("unexpected audio packet count: %v", counts)
+					for track := range wantChannels {
+						if counts[track] != packetsPerTrack {
+							t.Fatalf("unexpected audio packet count: %v", counts)
+						}
+					}
+					encoded, err := probe(ctx, ffprobe, name)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if len(encoded.Streams) != len(wantChannels) {
+						t.Fatalf("lost encoded audio tracks: %+v", encoded.Streams)
+					}
+					for i, channels := range wantChannels {
+						if encoded.Streams[i].Channels != channels {
+							t.Fatalf("track %d: expected %d channels, got %d", i, channels, encoded.Streams[i].Channels)
+						}
 					}
 				}
 				data, err := os.ReadFile(name)
@@ -148,7 +203,7 @@ func TestNVENCReferenceMedia(t *testing.T) {
 	for _, codec := range []string{"av1", "hevc"} {
 		t.Run(codec, func(t *testing.T) {
 			dir := t.TempDir()
-			args := encodeArgs(input, dir, codec, 0, 3, Profile{22, "p3", 144}, p)
+			args := encodeArgs(input, dir, codec, 0, 3, Profile{Quality: 22, Preset: "p3", AudioSurroundKbpsPerChannel: 80}, p)
 			if err := run(ctx, ffmpeg, args, nil); err != nil {
 				t.Fatal(err)
 			}

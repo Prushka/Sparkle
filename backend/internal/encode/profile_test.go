@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,10 +15,10 @@ import (
 )
 
 func TestEncoderUsesFastNVENCWithReferenceQualityOnEveryAttempt(t *testing.T) {
-	p := Probe{Streams: []Stream{{Type: "video", Codec: "av1", Transfer: "smpte2084"}, {Type: "audio", Codec: "truehd"}, {Type: "subtitle", Codec: "hdmv_pgs_subtitle"}, {Type: "subtitle", Codec: "mov_text"}}}
+	p := Probe{Streams: []Stream{{Type: "video", Codec: "av1", Transfer: "smpte2084"}, {Type: "audio", Codec: "truehd", Channels: 2, ChannelLayout: "stereo"}, {Type: "subtitle", Codec: "hdmv_pgs_subtitle"}, {Type: "subtitle", Codec: "mov_text"}}}
 	for _, codec := range []string{"av1", "hevc"} {
 		t.Run(codec, func(t *testing.T) {
-			args := encodeArgs("http://127.0.0.1:1234/input", t.TempDir(), codec, 4, 100, Profile{22, "p3", 144}, p)
+			args := encodeArgs("http://127.0.0.1:1234/input", t.TempDir(), codec, 4, 100, Profile{Quality: 22, Preset: "p3", AudioSurroundKbpsPerChannel: 80}, p)
 			retry := softwareDecodeInput(args)
 			if !slices.Equal(args[slices.Index(args, "-i"):], retry[slices.Index(retry, "-i"):]) {
 				t.Fatal("decoder fallback changed output encoding")
@@ -30,7 +31,7 @@ func TestEncoderUsesFastNVENCWithReferenceQualityOnEveryAttempt(t *testing.T) {
 				if strings.Contains(command, "-s12m_tc 0") != (codec == "av1") {
 					t.Fatal("AV1 timecode workaround missing or applied to another codec")
 				}
-				for _, want := range []string{"-ss 47.926500", "-ss 0.073500", "-t 12.000000", "-t 12.073500", "noise=drop='lt(n,4)+gte(n,604)'", "-c:v " + codec + "_nvenc", "-preset p3", "-rc vbr -cq 22 -b:v 0", "-init_qpP 22 -init_qpI 20 -init_qpB 24", "-pix_fmt p010le", "-c:a libopus -b:a 144k -ac 2", "type=DOVI_METADATA", "type=DYNAMIC_HDR_PLUS"} {
+				for _, want := range []string{"-ss 47.926500", "-ss 0.073500", "-t 12.000000", "-t 12.073500", "noise=drop='lt(n,4)+gte(n,604)'", "-c:v " + codec + "_nvenc", "-preset p3", "-rc vbr -cq 22 -b:v 0", "-init_qpP 22 -init_qpI 20 -init_qpB 24", "-pix_fmt p010le", "-c:a libopus -b:a:0 160k -mapping_family:a:0 0", "type=DOVI_METADATA", "type=DYNAMIC_HDR_PLUS"} {
 					if !strings.Contains(command, want) {
 						t.Errorf("missing %s", want)
 					}
@@ -42,6 +43,87 @@ func TestEncoderUsesFastNVENCWithReferenceQualityOnEveryAttempt(t *testing.T) {
 		t.Fatal("incorrect HDR labeling")
 	}
 }
+func TestAudioProfilesPreserveEachTrack(t *testing.T) {
+	p := Profile{Quality: 24, Preset: "p3", AudioSurroundKbpsPerChannel: 80}
+	streams := []Stream{{Type: "video"}}
+	for _, layout := range []struct {
+		channels int
+		layout   string
+	}{{1, "mono"}, {2, "stereo"}, {3, "3.0"}, {4, "quad"}, {5, "5.0"}, {6, "5.1(side)"}, {7, "6.1"}, {8, "7.1"}} {
+		s := Stream{Type: "audio", Channels: layout.channels, ChannelLayout: layout.layout}
+		if _, ok := opusLayout(s); !ok {
+			t.Fatalf("rejected %s", layout.layout)
+		}
+		streams = append(streams, s)
+	}
+	for _, codec := range []string{"av1", "hevc"} {
+		args := encodeArgs("fixture", t.TempDir(), codec, 1, 30, p, Probe{Streams: streams})
+		if slices.Contains(args, "-ac") || slices.Contains(args, "-b:a") || slices.Contains(args, "-af") {
+			t.Fatal("global audio options override individual tracks")
+		}
+		for i, rate := range []string{"80k", "160k", "240k", "320k", "400k", "480k", "560k", "640k"} {
+			key := fmt.Sprintf("-b:a:%d", i)
+			at := slices.Index(args, key)
+			if at < 0 || args[at+1] != rate {
+				t.Fatalf("%s: %s missing %s", codec, key, rate)
+			}
+			family := "1"
+			if i < 2 {
+				family = "0"
+			}
+			at = slices.Index(args, fmt.Sprintf("-mapping_family:a:%d", i))
+			if at < 0 || args[at+1] != family {
+				t.Fatal("incorrect Opus mapping family")
+			}
+		}
+		if !strings.Contains(strings.Join(args, " "), "pan=7.1|FL=FL|FR=FR|FC=FC|LFE=LFE|SL=SL|SR=SR") {
+			t.Fatal("side surrounds were not preserved")
+		}
+	}
+	if (Probe{Streams: []Stream{{Type: "audio", Channels: 6, ChannelLayout: "5.1(side)"}}}).audioChannels() != 8 {
+		t.Fatal("manifest must report padded encoded width")
+	}
+	for _, stream := range []Stream{{Channels: 0}, {Channels: 9}, {Channels: 6}, {Channels: 8, ChannelLayout: "7.1(wide)"}} {
+		if _, ok := opusLayout(stream); ok {
+			t.Fatalf("accepted ambiguous layout: %+v", stream)
+		}
+	}
+	if !validProfile(p) {
+		t.Fatal("valid profile rejected")
+	}
+	s := &Service{options: Options{Profile: p}}
+	before := s.fingerprint(&source{key: "fixture"})
+	s.options.Profile.AudioSurroundKbpsPerChannel++
+	if s.fingerprint(&source{key: "fixture"}) == before {
+		t.Fatal("per-channel bitrate did not invalidate cache")
+	}
+	s.options.Profile.AudioSurroundKbpsPerChannel = 129
+	if validProfile(s.options.Profile) {
+		t.Fatal("unbounded per-channel bitrate accepted")
+	}
+}
+
+func TestAudioBitrateOverrideAppliesToMonoStereoAndSurround(t *testing.T) {
+	p := Profile{Quality: 24, Preset: "p3", AudioSurroundKbpsPerChannel: 96}
+	probe := Probe{Streams: []Stream{
+		{Type: "video"},
+		{Type: "audio", Channels: 1, ChannelLayout: "mono"},
+		{Type: "audio", Channels: 2, ChannelLayout: "stereo"},
+		{Type: "audio", Channels: 6, ChannelLayout: "5.1(side)"},
+		{Type: "audio", Channels: 8, ChannelLayout: "7.1"},
+	}}
+	for _, codec := range []string{"av1", "hevc"} {
+		args := encodeArgs("fixture", t.TempDir(), codec, 0, 30, p, probe)
+		for i, rate := range []string{"96k", "192k", "576k", "768k"} {
+			key := fmt.Sprintf("-b:a:%d", i)
+			at := slices.Index(args, key)
+			if at < 0 || args[at+1] != rate {
+				t.Fatalf("%s: %s missing override %s", codec, key, rate)
+			}
+		}
+	}
+}
+
 func TestSubtitleBytes(t *testing.T) {
 	for _, tc := range []struct {
 		tags map[string]string
@@ -202,11 +284,11 @@ func TestWarmedOpusHasNoRepeatedPreSkip(t *testing.T) {
 
 func TestAudioLeadInAndFinalPartialSegment(t *testing.T) {
 	source := Probe{Streams: []Stream{{Type: "video"}, {Type: "audio"}}}
-	first := strings.Join(encodeArgs("fixture", t.TempDir(), "av1", 0, 12.45, Profile{22, "p3", 144}, source), " ")
+	first := strings.Join(encodeArgs("fixture", t.TempDir(), "av1", 0, 12.45, Profile{Quality: 22, Preset: "p3", AudioSurroundKbpsPerChannel: 80}, source), " ")
 	if !strings.Contains(first, "-ss 0.000000 -i") || !strings.Contains(first, "adelay=3528S:all=1") {
 		t.Fatal("missing first-segment lead-in")
 	}
-	last := strings.Join(encodeArgs("fixture", t.TempDir(), "hevc", 1, 12.45, Profile{22, "p3", 144}, source), " ")
+	last := strings.Join(encodeArgs("fixture", t.TempDir(), "hevc", 1, 12.45, Profile{Quality: 22, Preset: "p3", AudioSurroundKbpsPerChannel: 80}, source), " ")
 	if !strings.Contains(last, "-t 0.523500") || !strings.Contains(last, "gte(n,27)") || strings.Contains(last, "adelay") {
 		t.Fatal("incorrect final-segment Opus packet window")
 	}

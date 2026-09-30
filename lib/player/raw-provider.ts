@@ -12,13 +12,13 @@ import type { Job } from './t';
 import type { EncodedCodec, HDRPreference, RawMedia, RawPlaybackStatus } from './raw-types';
 import {
 	encodedCapabilities,
+	encodedNativeAudio,
 	encodedURL,
 	loadEncodedPart,
 	readHDRPreference,
 	readAIHDRPreference,
 	saveAIHDRPreference,
 	saveHDRPreference,
-	supportsNativeVideo,
 	type EncodedPart
 } from './raw-encoded';
 import { EncodedSubtitles } from './encoded-subtitles';
@@ -99,7 +99,10 @@ interface Engine {
 	resize(width: number, height: number): void;
 	on(event: string, callback: (...args: unknown[]) => void): void;
 }
-type EngineConstructor = new (options: Record<string, unknown>) => Engine;
+type EngineConstructor = {
+	new (options: Record<string, unknown>): Engine;
+	audioContext?: AudioContext;
+};
 let engineImport: Promise<EngineConstructor> | undefined;
 function loadEngine() {
 	const url = '/vendor/libmedia/1.3.1/avplayer.js';
@@ -167,6 +170,15 @@ export class RawProvider implements MediaProviderAdapter {
 	private engine?: Engine;
 	private mediaId = '';
 	private audioEngine?: Engine;
+	private pcmContext?: AudioContext;
+	private resumeAudio = () => {
+		const context = this.pcmContext;
+		// Safari can suspend/interrupt PCM independently of the native video.
+		// Resume in the gesture itself, before serialized async player commands.
+		if (context && context.state !== 'running' && context.state !== 'closed')
+			void context.resume().catch(() => {});
+		this.normalizers.forEach((normalizer) => normalizer.resume());
+	};
 	private normalizers = new Set<AudioNormalization>();
 	private audioFilter = async (source: GainNode, destination: GainNode) => {
 		const normalizer = this.createNormalizer();
@@ -263,6 +275,8 @@ export class RawProvider implements MediaProviderAdapter {
 		return (this.raw?.parts[this.part]?.start ?? 0) + Number(this.engine?.currentTime ?? 0n) / 1000;
 	}
 	setup() {
+		for (const event of ['click', 'touchend', 'keydown'])
+			document.addEventListener(event, this.resumeAudio, { capture: true, passive: true });
 		this.media.style.display = 'none';
 		this.container.className = 'sparkle-raw-surface';
 		Object.assign(this.container.style, { position: 'absolute', inset: '0', overflow: 'hidden' });
@@ -555,7 +569,7 @@ export class RawProvider implements MediaProviderAdapter {
 		this.audioContainer.append(this.engineAudioContainer);
 		this.engine = recoverableEngine(
 			new Constructor({
-				speakerOutput: !this.encoded,
+				speakerOutput: true,
 				audioFilter: this.audioFilter,
 				nativeAudioFilter: this.nativeAudioFilter,
 				container: this.engineContainer,
@@ -609,10 +623,7 @@ export class RawProvider implements MediaProviderAdapter {
 		};
 		await engine.load(
 			this.encoded
-				? encodedURL(
-						this.encoded,
-						this.encoded.playlist === 'master.m3u8' ? 'master.m3u8' : 'video.m3u8'
-					)
+				? encodedURL(this.encoded, encodedNativeAudio(this.encoded) ? 'master.m3u8' : 'video.m3u8')
 				: `${this.baseURL}${part.url}`,
 			options
 		);
@@ -672,15 +683,20 @@ export class RawProvider implements MediaProviderAdapter {
 		const nativeVideo =
 			!SOFTWARE_TONE_MAPPING_ENABLED || !!this.encoded || plan?.renderer === 'native';
 		this.subtitles.setFonts(engine.getEmbeddedFonts());
-		// Encoded Opus and video share one native media clock when supported.
-		// Original unsupported audio still uses the independent WASM decoder.
-		const combinedAudio =
-			this.encoded?.playlist === 'master.m3u8' &&
-			(plan?.renderer === 'software' || supportsNativeVideo('audio/mp4; codecs="opus"'));
-		if (nativeVideo && !combinedAudio && part.streams.some((s) => s.streamType === 2)) {
+		// Surround stays in the shared layout-aware PCM path on every browser.
+		// Native mono/stereo can retain a single audio/video clock.
+		const combinedAudio = encodedNativeAudio(this.encoded);
+		const hasAudio = this.encoded?.audio ?? part.streams.some((s) => s.streamType === 2);
+		if (nativeVideo && !combinedAudio && hasAudio) {
+			// Prepare libmedia's shared context before the Join/Play gesture. Its
+			// pipeline will install the worklet; this does not start audio or video.
+			this.pcmContext = Constructor.audioContext ??= new AudioContext();
 			this.audioEngine = recoverableEngine(
 				new Constructor({
-					speakerOutput: !this.encoded,
+					speakerOutput: true,
+					// WASM preserves the Opus speaker mapping even where Safari's
+					// native/WebCodecs decoder only accepts mono or stereo.
+					enableWebCodecs: !this.encoded,
 					audioFilter: this.audioFilter,
 					nativeAudioFilter: this.nativeAudioFilter,
 					container: this.engineAudioContainer,
@@ -797,6 +813,7 @@ export class RawProvider implements MediaProviderAdapter {
 		this.subtitleLayers.forEach((layer) => layer.clear());
 	}
 	play() {
+		this.resumeAudio();
 		return this.enqueue(async () => {
 			// Safari can pause the native element while libmedia still reports PLAYED.
 			// Move both clocks through pause so play actually restarts the pipeline.
@@ -1284,6 +1301,7 @@ export class RawProvider implements MediaProviderAdapter {
 		this.subtitleLayers = [];
 		this.engine = undefined;
 		this.audioEngine = undefined;
+		this.pcmContext = undefined;
 		this.audioRate = NaN;
 		this.subtitles = undefined;
 		this.initialized = false;
@@ -1304,6 +1322,8 @@ export class RawProvider implements MediaProviderAdapter {
 		).catch(() => {});
 	}
 	destroy() {
+		for (const event of ['click', 'touchend', 'keydown'])
+			document.removeEventListener(event, this.resumeAudio, true);
 		this.pictureInPicture.destroy();
 		this.destroyed = true;
 		++this.generation;

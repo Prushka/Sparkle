@@ -172,6 +172,52 @@ copies are needed. `SPARKLE_AUDIO_CASE` filters by fixture name,
 fallback; the full matrix requires an eight-channel device. Filtered runs write
 `partial-report.json` without replacing the full `report.json`.
 
+## Encoded multichannel audio
+
+Validated September 29, 2026 with Chrome **154.0.8037.92** on Windows and real
+NVENC AV1/HEVC output. The fixture encoder preserves mono, 5.1, 7.1 and
+side-labelled 5.1 as independent Opus tracks, with exact 20 ms packets through
+three segments. Side-labelled 5.1 retains its six active channels in 7.1 Opus
+with silent back channels, preserving side placement on 7.1 devices. The encoder profile is v7; older stereo cache entries are separate.
+
+Six real encoded codec/layout combinations passed stereo output routing and seek
+checks. The 7.1 cases also crossed the 12- and 24-second boundaries with continuous
+PCM and advancing native video. Twenty-four additional combinations passed on
+virtual mono, quad, 5.1 and 7.1 PCM buses, including speaker isolation and LFE
+routing. The 7.1 AV1/HEVC cases also restored all speaker channels after toggling
+normalization on and off. Those inspect samples before the physical destination: the host reported
+only two output channels, so they do **not** qualify physical surround speakers.
+
+Thirteen focused room/fullscreen cases passed on both the native mono/stereo and
+PCM paths: pause/play, seek, local tracks, delayed readiness, reconnect, and rapid
+source changes. Suspended PCM contexts resumed directly in trusted user gestures.
+The iOS fullscreen checks emulate the native and presentation APIs in Chrome;
+they are not physical iOS qualification. Windows Playwright WebKit 26.6 exposes
+no AudioContext here and cannot run the audio checks. Physical iPhone/iPad Safari,
+headphones/Bluetooth/AirPlay changes, physical surround and HDR output remain
+unqualified. Safari uses WASM Opus and explicit PCM speaker remixing, without
+depending on native multichannel Opus/WebCodecs.
+
+To reproduce from the repository root (requires NVENC and FFmpeg/FFprobe):
+
+```powershell
+$env:SPARKLE_ENCODE_AUDIO_FIXTURE_DIR="$PWD/cache/encoded-surround-fixture"
+$env:FFMPEG=(Get-Command ffmpeg).Source
+$env:FFPROBE=(Get-Command ffprobe).Source
+go -C backend test ./internal/encode -run '^TestNVENCSurroundAudioFixture$' -count=1
+$env:SPARKLE_AUDIO_OUTPUTS='2'
+npm run test:surround
+$env:SPARKLE_AUDIO_VIRTUAL_OUTPUT='1'
+$env:SPARKLE_AUDIO_OUTPUTS='1,4,6,8'
+npm run test:surround
+```
+
+Virtual runs write `virtual-report.json` separately. Clear these fixture variables
+before returning to original-media qualification. Set `SPARKLE_TEST_ENCODED_PCM=1`
+when running `track-selection.spec.ts` to exercise the safe PCM path with older
+manifests that omit channel counts; the real surround fixtures above separately
+establish channel content and ordering.
+
 ## Client audio normalization
 
 Stereo downmix validated September 24–25, 2026 in Chrome 154.0.8037.57 on Windows,

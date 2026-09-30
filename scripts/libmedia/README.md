@@ -78,7 +78,7 @@ linked gain worklet are described in [audio normalization](../../docs/audio-norm
 The non-isolated audio worker reports statistics every 50 ms rather than 500 ms,
 preserving one-second peak-stat resets. This prevents a stale audio playhead from
 driving unnecessary speed corrections against native video.
-Original Plex playback opts into `speakerOutput`. The hash-pinned `audio-output.ts`
+Original and multichannel server-encoded Plex playback opt into `speakerOutput`. The hash-pinned `audio-output.ts`
 helper configures the shared AudioContext destination to an accepted canonical
 speaker layout (up to eight channels), with reference-counted restoration on stop.
 Its PCM renderer always remixes to that width using the decoded AVChannelLayout,
@@ -87,7 +87,8 @@ positions change. This avoids Web Audio's implicit eight-channel-to-stereo trunc
 and its default two-channel destination. Quad output supplies an explicit FL/FR/BL/BR
 mask: FFmpeg's default four-channel layout uses center/back-center instead and would
 send dialogue to a rear speaker. The layout allocation lives with the render task
-and is released on teardown. Processed and server-encoded playback do
+and is released on teardown. Encoded surround uses the WASM Opus decoder on all
+browsers, bypassing native multichannel audio support. Processed playback does
 not opt in. `npm run test:surround` checks lifecycle negotiation and real codec
 speaker routing; see [surround qualification](../../docs/raw-media-validation.md#compatible-surround-audio).
 Native media errors propagate through the player error event, without browser

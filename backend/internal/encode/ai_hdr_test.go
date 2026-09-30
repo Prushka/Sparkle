@@ -104,7 +104,7 @@ func TestAIHDRGPU(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
-	opts := Options{FFmpeg: "ffmpeg", FFprobe: "ffprobe", NVEncC: nvencc, Dir: t.TempDir(), Profile: Profile{24, "p3", 144}}
+	opts := Options{FFmpeg: "ffmpeg", FFprobe: "ffprobe", NVEncC: nvencc, Dir: t.TempDir(), Profile: Profile{Quality: 24, Preset: "p3", AudioSurroundKbpsPerChannel: 80}}
 	const fixtureDuration = 2*SegmentSeconds + 1
 	if got := aiHDRCapabilities(ctx, opts, []string{"av1", "hevc"}); len(got) != 2 {
 		t.Fatalf("AI HDR capability probe: %v", got)
@@ -241,7 +241,7 @@ func TestAIHDRExpandsPixels(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	opts := Options{FFmpeg: "ffmpeg", FFprobe: "ffprobe", NVEncC: nvencc, Profile: Profile{24, "p3", 144}}
+	opts := Options{FFmpeg: "ffmpeg", FFprobe: "ffprobe", NVEncC: nvencc, Profile: Profile{Quality: 24, Preset: "p3", AudioSurroundKbpsPerChannel: 80}}
 	dir := t.TempDir()
 	input := filepath.Join(dir, "low-peak.mkv")
 	// A ~100-nit PQ highlight on black. Static mastering alone must not
@@ -294,7 +294,7 @@ func TestAIHDRSource(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	opts := Options{FFmpeg: "ffmpeg", FFprobe: "ffprobe", NVEncC: nvencc, Profile: Profile{24, "p3", 144}}
+	opts := Options{FFmpeg: "ffmpeg", FFprobe: "ffprobe", NVEncC: nvencc, Profile: Profile{Quality: 24, Preset: "p3", AudioSurroundKbpsPerChannel: 80}}
 	f, err := os.Open(input)
 	if err != nil {
 		t.Fatal("source unavailable")

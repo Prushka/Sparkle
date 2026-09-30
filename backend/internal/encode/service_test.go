@@ -43,7 +43,7 @@ func TestEncodingRequiresAllowedPlexSectionAndHidesPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := testCache(t)
-	s := &Service{plex: p, cache: c, codecs: []string{"av1"}, sources: map[string]*source{}, probes: make(chan struct{}, 2), options: Options{Profile: Profile{22, "p3", 144}}}
+	s := &Service{plex: p, cache: c, codecs: []string{"av1"}, sources: map[string]*source{}, probes: make(chan struct{}, 2), options: Options{Profile: Profile{Quality: 22, Preset: "p3", AudioSurroundKbpsPerChannel: 80}}}
 	id, err := p.ID(context.Background(), "1", 10)
 	if err != nil {
 		t.Fatal(err)
@@ -95,7 +95,7 @@ func TestEncodingRequiresAllowedPlexSectionAndHidesPaths(t *testing.T) {
 		}
 	}
 	encodedFingerprint := s.fingerprint(s.sources[fingerprint])
-	oldFingerprint := fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("nvenc-segments-v5:%s:%s:%+v", s.revision, fingerprint, s.options.Profile))))
+	oldFingerprint := fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("nvenc-segments-v6:%s:%s:%+v", s.revision, fingerprint, s.options.Profile))))
 	old := httptest.NewRecorder()
 	mux.ServeHTTP(old, httptest.NewRequest("GET", "/media/"+id+"/parts/20/encoded/av1/video.m3u8?v="+oldFingerprint, nil))
 	if old.Code != http.StatusConflict {
@@ -150,7 +150,13 @@ func TestEncodingRequiresAllowedPlexSectionAndHidesPaths(t *testing.T) {
 	s.options.AIHDREnabled = false
 	for _, audio := range []bool{false, true} {
 		if audio {
-			s.sources[fingerprint].probe.Streams = append(s.sources[fingerprint].probe.Streams, Stream{Type: "audio", Codec: "opus"})
+			s.sources[fingerprint].probe.Streams = append(s.sources[fingerprint].probe.Streams, Stream{Type: "audio", Codec: "opus", Channels: 8, ChannelLayout: "7.1"})
+			audioManifest := httptest.NewRecorder()
+			mux.ServeHTTP(audioManifest, httptest.NewRequest("GET", "/media/"+id+"/parts/20/encoded/av1/manifest", nil))
+			if audioManifest.Code != 200 || !strings.Contains(audioManifest.Body.String(), `"audioChannels":8`) {
+				t.Fatalf("missing probed surround channels: %s", audioManifest.Body)
+			}
+
 		}
 		master := httptest.NewRecorder()
 		mux.ServeHTTP(master, httptest.NewRequest("GET", "/media/"+id+"/parts/20/encoded/av1/master.m3u8?v="+encodedFingerprint, nil))

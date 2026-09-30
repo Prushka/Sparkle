@@ -18,7 +18,7 @@ func TestAIHDRGPUResident(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
-	opts := Options{FFmpeg: "ffmpeg", FFprobe: "ffprobe", NVEncC: nvencc, Profile: Profile{24, "p3", 144}}
+	opts := Options{FFmpeg: "ffmpeg", FFprobe: "ffprobe", NVEncC: nvencc, Profile: Profile{Quality: 24, Preset: "p3", AudioSurroundKbpsPerChannel: 80}}
 	for _, transfer := range []string{"smpte2084", "arib-std-b67", "bt709"} {
 		t.Run(transfer, func(t *testing.T) {
 			input := filepath.Join(t.TempDir(), "source.mkv")
@@ -125,7 +125,7 @@ func TestAIHDRGPUInputTiming(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	opts := Options{FFmpeg: "ffmpeg", FFprobe: "ffprobe", NVEncC: nvencc, Profile: Profile{24, "p3", 144}}
+	opts := Options{FFmpeg: "ffmpeg", FFprobe: "ffprobe", NVEncC: nvencc, Profile: Profile{Quality: 24, Preset: "p3", AudioSurroundKbpsPerChannel: 80}}
 	for _, tt := range []struct {
 		name, codec, fps, selectFrames string
 		fast                           bool
