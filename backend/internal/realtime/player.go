@@ -29,8 +29,9 @@ type Player struct {
 	joinMessagePending   bool
 	suppressLeaveMessage bool
 
-	sendMu sync.Mutex
-	closed bool
+	sendMu          sync.Mutex
+	closed          bool
+	lastVoiceConfig time.Time // Only accessed by the socket's read pump.
 }
 
 func newPlayer(conn *websocket.Conn, id string) *Player {

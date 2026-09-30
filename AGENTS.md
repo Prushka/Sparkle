@@ -232,6 +232,12 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
 - Keep room participation independent of decoding. Preserve chat, profiles, notifications,
   games/tabs, presence, and existing voice behavior on unsupported clients. Do not introduce
   global COOP/COEP isolation headers that break Discord Activities.
+  Voice uses room-authorized WebSocket signaling and WebRTC audio. Keep negotiation
+  serialized per peer, deterministic offer roles, session checks, bounded ICE retries,
+  and established connections across mute toggles. Cancel pending microphone requests
+  on leave/disposal; audio-device errors must not crash the room. Never log SDP, ICE,
+  or TURN credentials. Optional `VOICE_TURN_URLS`/`VOICE_TURN_SECRET` use temporary
+  browser credentials; the shared secret stays in Go. See [voice chat](docs/voice-chat.md).
   Raw fullscreen must target the active libmedia video when only iOS native fullscreen
   is available, refresh support after metadata loads, and detach listeners on media changes.
   Prefer whole-player element fullscreen on Android and desktop to retain controls and overlays.

@@ -8,6 +8,8 @@ import (
 )
 
 type Config struct {
+	VoiceTURNURLs                     string
+	VoiceTURNSecret                   string
 	PlexAuthOrigins                   string
 	PlexAuthCookieSecure              bool
 	PlexAuthCookieSameSite            string
@@ -42,6 +44,8 @@ type Config struct {
 
 func Load() (Config, error) {
 	cfg := Config{
+		VoiceTURNURLs:                     os.Getenv("VOICE_TURN_URLS"),
+		VoiceTURNSecret:                   os.Getenv("VOICE_TURN_SECRET"),
 		PlexAuthOrigins:                   getenv("PLEX_AUTH_ORIGINS", "http://localhost:3001,http://127.0.0.1:3001"),
 		PlexAuthCookieSecure:              true,
 		PlexAuthCookieSameSite:            getenv("PLEX_AUTH_COOKIE_SAMESITE", "lax"),

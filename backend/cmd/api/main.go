@@ -67,7 +67,12 @@ func main() {
 	}
 	defer auth.Close()
 	mediaCatalog := catalog.New(jobStore, plexClient, cfg.MediaCacheDir, auth.CanAccessLibrary)
+	voiceICE, err := realtime.NewVoiceICE(cfg.VoiceTURNURLs, cfg.VoiceTURNSecret)
+	if err != nil {
+		log.Fatalf("voice configuration error: %v", err)
+	}
 	hub := realtime.NewHub(realtime.Options{
+		VoiceICE:       voiceICE,
 		OutputDir:      cfg.OutputDir,
 		PFPDir:         cfg.PFPDir,
 		MaxUploadBytes: cfg.MaxPFPBytes,

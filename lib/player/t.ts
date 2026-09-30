@@ -394,6 +394,7 @@ export enum BroadcastTypes {
 }
 
 export interface SendPayload {
+	iceServers?: RTCIceServer[];
 	mediaId?: string;
 	mediaUpdated?: number;
 	type: string;
@@ -436,6 +437,7 @@ export type VoiceSignalKind = 'hello' | 'offer' | 'answer' | 'ice' | 'leave' | '
 export interface VoiceSignalPayload {
 	kind: VoiceSignalKind;
 	sessionId: string;
+	targetSessionId?: string;
 	description?: RTCSessionDescriptionInit;
 	candidate?: RTCIceCandidateInit;
 	muted?: boolean;

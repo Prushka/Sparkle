@@ -197,6 +197,7 @@ import { MediaSelection, type MediaSelectionHandle } from '@/components/player/M
 import { MoveToast } from '@/components/player/MoveToast';
 import { Chats } from '@/components/player/Chats';
 import { useVoiceChat } from '@/components/player/useVoiceChat';
+import { RemoteVoiceAudio } from '@/components/player/RemoteVoiceAudio';
 import { CottageGamePlaceholder } from '@/components/player/CottageGamePlaceholder';
 import { RoomNavigationInput } from '@/components/room-navigation-input';
 import { joinBackendPath, updateRoomRecord } from '@/lib/player/data';
@@ -2675,109 +2676,6 @@ function getBackendWebSocketUrl(base: string, path: string) {
 
 type VoiceChatController = ReturnType<typeof useVoiceChat>;
 
-function RemoteVoiceAudio({
-	stream,
-	deafened,
-	volume
-}: {
-	stream: MediaStream;
-	deafened: boolean;
-	volume: number;
-}) {
-	const audioRef = useRef<HTMLAudioElement | null>(null);
-	const audioContextRef = useRef<AudioContext | null>(null);
-	const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
-	const gainRef = useRef<GainNode | null>(null);
-	const normalizedVolume = normalizeRemoteMicVolume(volume);
-	const canUseGain = typeof AudioContext !== 'undefined';
-	const shouldUseGain = canUseGain && normalizedVolume > 1 && !deafened;
-
-	useEffect(() => {
-		if (!audioRef.current || audioRef.current.srcObject === stream) {
-			return;
-		}
-		const audio = audioRef.current;
-		audio.srcObject = stream;
-		return () => {
-			if (audio.srcObject === stream) {
-				audio.pause();
-				audio.srcObject = null;
-				audio.removeAttribute('src');
-				audio.load();
-			}
-		};
-	}, [stream]);
-
-	useEffect(() => {
-		if (!audioRef.current) {
-			return;
-		}
-		audioRef.current.muted = deafened || shouldUseGain;
-	}, [deafened, shouldUseGain]);
-
-	useEffect(() => {
-		if (!shouldUseGain) {
-			sourceRef.current?.disconnect();
-			gainRef.current?.disconnect();
-			sourceRef.current = null;
-			gainRef.current = null;
-			if (audioContextRef.current) {
-				void audioContextRef.current.close().catch(() => {});
-				audioContextRef.current = null;
-			}
-			return;
-		}
-
-		const context = audioContextRef.current ?? new AudioContext();
-		audioContextRef.current = context;
-		void context.resume().catch(() => {});
-		const source = context.createMediaStreamSource(stream);
-		const gain = context.createGain();
-		gain.gain.value = DEFAULT_REMOTE_MIC_VOLUME;
-		source.connect(gain);
-		gain.connect(context.destination);
-		sourceRef.current = source;
-		gainRef.current = gain;
-
-		return () => {
-			source.disconnect();
-			gain.disconnect();
-			if (sourceRef.current === source) {
-				sourceRef.current = null;
-			}
-			if (gainRef.current === gain) {
-				gainRef.current = null;
-			}
-		};
-	}, [shouldUseGain, stream]);
-
-	useEffect(() => {
-		if (gainRef.current) {
-			gainRef.current.gain.value = normalizedVolume;
-		}
-		if (audioRef.current) {
-			audioRef.current.volume = Math.min(1, normalizedVolume);
-		}
-	}, [normalizedVolume]);
-
-	useEffect(() => {
-		const audio = audioRef.current;
-		return () => {
-			if (audio) {
-				audio.pause();
-				audio.srcObject = null;
-				audio.removeAttribute('src');
-				audio.load();
-			}
-			sourceRef.current?.disconnect();
-			gainRef.current?.disconnect();
-			void audioContextRef.current?.close().catch(() => {});
-		};
-	}, []);
-
-	return <audio ref={audioRef} autoPlay playsInline className="hidden" />;
-}
-
 function StoryboardCanvasPreview({ thumbnailSrc }: { thumbnailSrc: string }) {
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
 	const drawRequestRef = useRef(0);
@@ -4625,11 +4523,15 @@ export function Player({
 		}
 		const socket = socketRef.current;
 		if (
-			playerElementRef.current &&
+			(playerElementRef.current ||
+				data.broadcast?.type === BroadcastTypes.VoiceSignal ||
+				data.type === 'voiceConfig') &&
 			interactedRef.current &&
 			socket?.readyState === WebSocket.OPEN
 		) {
-			console.log('sending: ' + JSON.stringify(data));
+			// Voice SDP/ICE includes network addresses; never log signaling payloads.
+			if (data.broadcast?.type !== BroadcastTypes.VoiceSignal)
+				console.log('sending: ' + JSON.stringify(data));
 			socket.send(JSON.stringify(data));
 		}
 	}, []);
@@ -5410,13 +5312,15 @@ export function Player({
 	const voice = useVoiceChat({
 		playerId,
 		roomPlayers,
-		socketCommunicating,
+		socketCommunicating: socketConnected,
 		disabled: !voiceSupported,
 		send,
 		addSystemMessage
 	});
 	const { handleVoiceBroadcast, join: joinVoice } = voice;
 	const handleVoiceBroadcastRef = useLatestRef(handleVoiceBroadcast);
+	const configureVoiceRef = useLatestRef(voice.configure);
+	const leaveVoiceRef = useLatestRef(voice.leave);
 	const speakingPlayerIds = useMemo(() => new Set(voice.speakingIds), [voice.speakingIds]);
 	const setRemoteMicVolume = useCallback((remotePlayerId: string, volume: number) => {
 		const normalized = normalizeRemoteMicVolume(volume);
@@ -6188,7 +6092,12 @@ export function Player({
 						setControlsToDisplay((prev) => appendControlMessages(prev, payload));
 					}
 				};
-				console.debug('received: ' + JSON.stringify(state));
+				if (state.type === 'voiceConfig') {
+					configureVoiceRef.current(state.iceServers);
+					return;
+				}
+				if (broadcast?.type !== BroadcastTypes.VoiceSignal)
+					console.debug('received: ' + JSON.stringify(state));
 				const initiateMoveTo = (jobs: LibraryJob[]) => {
 					pendingRemotePlaybackSyncRef.current = null;
 					const target = jobs.find((candidate) => candidate.Id === broadcast!.moveTo);
@@ -6335,6 +6244,7 @@ export function Player({
 						}
 						break;
 					case SyncTypes.ExitSync:
+						leaveVoiceRef.current();
 						clearReconnectTimer();
 						setExited(true);
 						exitedRef.current = true;
@@ -6375,11 +6285,13 @@ export function Player({
 				socketRef.current = null;
 				socketUrlRef.current = null;
 				if (event.code === 4003) {
+					leaveVoiceRef.current();
 					clearReconnectTimer();
 					window.dispatchEvent(new Event(plexAccessRequiredEvent));
 					return;
 				}
 				if (intentionallyDisconnected) {
+					leaveVoiceRef.current();
 					clearReconnectTimer();
 					exitedRef.current = true;
 					interactedRef.current = false;
@@ -6419,6 +6331,8 @@ export function Player({
 			updatePfp,
 			applyRemotePlaybackSyncRef,
 			handleVoiceBroadcastRef,
+			configureVoiceRef,
+			leaveVoiceRef,
 			onRoomMediaChangedRef,
 			playSoundEffectRef,
 			pulseSoundEffectBadgeRef,

@@ -50,6 +50,7 @@ const (
 )
 
 type Options struct {
+	VoiceICE       *VoiceICE
 	AuthorizeMedia func(http.ResponseWriter, *http.Request, string) bool
 	CanAccessMedia func(context.Context, string) bool
 	CheckOrigin    func(*http.Request) bool

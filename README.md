@@ -52,7 +52,9 @@ library from the same Library view.
   three-track cap; layer and audio preferences stay local to each participant.
 - Raw caption toggle and supported-browser picture-in-picture. Chrome Document PiP keeps
   subtitle layers; raw Google Cast options explain tab casting and direct-cast limitations.
-- Shared YouTube, Chess, and Wordle tabs, plus browser voice chat outside Discord Activities.
+- Shared YouTube, Chess, and Wordle tabs, plus [browser voice chat](docs/voice-chat.md)
+  outside Discord Activities. Public deployments can configure a TURN relay for
+  networks that cannot establish a direct WebRTC connection.
 - Discord identity, avatars, Rich Presence, and share previews with media artwork.
 - [Browser asset caching](docs/frontend-caching.md) reuses scripts, fonts, emotes,
   sounds and decoders, with content revisions that invalidate changed files on updates.

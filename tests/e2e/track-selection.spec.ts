@@ -1567,7 +1567,9 @@ test('AI HDR and normalization reset per title and ignore legacy saved preferenc
 	await expect(normalize).toHaveAttribute('aria-pressed', 'true');
 	await expect(player).toHaveAttribute('data-normalization-state', 'active');
 	await request.put(`/be/rooms/${room}`, { data: { mediaId: rawNextId } });
-	await expect(page).toHaveURL(new RegExp(`/media/${rawNextId}$`));
+	// A presence snapshot can still be pending, selecting the five-second room
+	// countdown instead of the solo-room shortcut. Allow the countdown to finish.
+	await expect(page).toHaveURL(new RegExp(`/media/${rawNextId}$`), { timeout: 20000 });
 	await assertOff();
 	await enable();
 	await page.reload();
@@ -1575,14 +1577,14 @@ test('AI HDR and normalization reset per title and ignore legacy saved preferenc
 	await assertOff();
 	await enable();
 	await request.put(`/be/rooms/${room}`, { data: { mediaId: encodedId } });
-	await expect(page).toHaveURL(new RegExp(`/media/${encodedId}$`));
+	await expect(page).toHaveURL(new RegExp(`/media/${encodedId}$`), { timeout: 20000 });
 	await expect(normalize).toHaveAttribute('aria-pressed', 'false');
 	await expect(hdr).toHaveCount(0);
 	await player.hover();
 	await normalize.click();
 	await expect(normalize).toHaveAttribute('aria-pressed', 'true');
 	await request.put(`/be/rooms/${room}`, { data: { mediaId: rawId } });
-	await expect(page).toHaveURL(new RegExp(`/media/${rawId}$`));
+	await expect(page).toHaveURL(new RegExp(`/media/${rawId}$`), { timeout: 20000 });
 	await assertOff();
 });
 

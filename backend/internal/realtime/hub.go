@@ -54,6 +54,7 @@ const (
 )
 
 type Hub struct {
+	voiceICE       *VoiceICE
 	authorizeMedia func(http.ResponseWriter, *http.Request, string) bool
 	canAccessMedia func(context.Context, string) bool
 	accountProfile func(context.Context) (id, name string, ok bool)
@@ -107,6 +108,7 @@ func NewHub(options Options) *Hub {
 		checkOrigin = func(*http.Request) bool { return true }
 	}
 	return &Hub{
+		voiceICE:       options.VoiceICE,
 		authorizeMedia: options.AuthorizeMedia,
 		canAccessMedia: options.CanAccessMedia,
 		accountProfile: options.AccountProfile,
@@ -204,6 +206,7 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("[%s] connected to room %s", playerID, roomID)
 	go player.writePump()
+	h.sendVoiceConfig(player, roomID)
 	h.readPump(room, player)
 }
 
@@ -605,7 +608,11 @@ func (h *Hub) readPump(room *Room, player *Player) {
 			player.denyAccess()
 			return
 		}
-		room.handlePayload(player, payload)
+		if payload.Type == "voiceConfig" {
+			h.sendVoiceConfig(player, room.id)
+		} else {
+			room.handlePayload(player, payload)
+		}
 		room.accessMu.Unlock()
 	}
 }
@@ -1008,6 +1015,8 @@ func sanitizeBroadcast(broadcast map[string]any) map[string]any {
 		return nil
 	}
 	switch broadcast["type"] {
+	case "voiceSignal":
+		return sanitizeVoiceBroadcast(broadcast)
 	case MoveToBroadcast:
 		mediaID, ok := broadcastMoveToMediaID(broadcast)
 		if !ok {
