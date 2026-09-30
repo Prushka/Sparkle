@@ -76,8 +76,10 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
 ## Contracts to preserve
 
 - Plex sign-in uses server-held account tokens and opaque HttpOnly cookies. Raw browsing,
-  files, NVENC derivatives and rooms require membership of the configured server;
-  any member may access every configured library. Anonymous users get existing Encoded
+  files, NVENC derivatives and rooms require access to the media's Plex library.
+  Intersect configured library IDs with sections returned by the configured server
+  using the user's server resource token; never reuse owner metadata caches for grants.
+  Anonymous users get existing Encoded
   media only. Keep exact-origin CORS/CSRF checks and credentialed backend/player fetches.
   See [authentication](docs/plex-auth.md); never bypass it using the owner token in a browser.
   Signed-in room profiles use the server-verified Plex name and proxied avatar. Reserve
@@ -86,8 +88,11 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   `/share/rooms/{room}` exposes only the current media identity. Keep files, derivatives,
   hierarchy, room mutations and WebSockets protected; never forward sessions into previews.
   Persist sessions in private `PLEX_AUTH_SESSION_DIR` storage before acknowledging login
-  or logout. Restarts preserve the original expiry and must reverify membership before
-  access; temporary upstream failures deny access but allow later revalidation.
+  or logout. Restarts preserve the original expiry and must reverify membership and
+  library access before use; temporary upstream failures deny access but allow later
+  revalidation. Recheck grants after five minutes, cancel private requests when grants
+  shrink, and refresh the catalog when session library IDs change. Library authorization
+  does not replicate Plex rating, label or individual-item restrictions.
   Require HTTPS for LAN/public sign-in and explain HTTP network addresses before
   opening a popup or allocating a PIN; preserve loopback development support.
 - Plex access is read-only and endpoint-allowlisted. Do not add watched-state updates,

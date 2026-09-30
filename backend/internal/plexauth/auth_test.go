@@ -102,6 +102,13 @@ func setup(t *testing.T, sessionDir ...string) *fixture {
 	}))
 	t.Cleanup(upstream.Close)
 	opts := Options{Identity: func(context.Context) (string, error) { return "configured-server", nil }, Origins: "https://sparkle.test", Secure: true}
+	opts.Libraries = func(_ context.Context, token string) ([]string, error) {
+		if token != "resource-secret" {
+			t.Error("library check did not use this user's server resource token")
+		}
+		return []string{"1"}, nil
+	}
+	opts.MediaLibrary = func(context.Context, string) (string, error) { return "1", nil }
 	if len(sessionDir) > 0 {
 		opts.SessionDir = sessionDir[0]
 	}

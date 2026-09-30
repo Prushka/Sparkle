@@ -74,10 +74,12 @@ export function HomeClient() {
 	}, []);
 
 	useEffect(() => {
+		if (!auth.ready) return;
 		let disposed = false;
 
 		async function boot() {
 			setError('');
+			setNeedsPlex(false);
 			try {
 				const runtimeConfig = await loadRuntimeConfig();
 				if (disposed) {
@@ -116,10 +118,11 @@ export function HomeClient() {
 		router,
 		searchValues.mediaId,
 		searchValues.requestedRoomId,
-		auth.canAccessRaw
+		auth.ready,
+		auth.revision
 	]);
 
-	if (needsPlex && !auth.canAccessRaw) {
+	if (needsPlex) {
 		return (
 			<PlexRoomGate
 				onLeave={() => {

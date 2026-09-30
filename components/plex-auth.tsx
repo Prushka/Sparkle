@@ -21,6 +21,7 @@ type PlexSession = {
 	enabled: boolean;
 	authenticated: boolean;
 	canAccessRaw: boolean;
+	libraryIds?: string[];
 	name?: string;
 	profileId?: string;
 };
@@ -139,7 +140,7 @@ export function PlexAuthProvider({ children }: { children: ReactNode }) {
 					apply(result.data);
 					if (!result.data.canAccessRaw)
 						setError(
-							'This Plex account does not have access to this server. Ask its owner for an invitation.'
+							'This Plex account does not have access to any configured library. Ask the server owner to share a library with you.'
 						);
 					popup.close();
 					return;
@@ -214,9 +215,9 @@ export function PlexAccountButton({ children }: { children?: ReactElement } = {}
 					<Dialog.Description>
 						{auth.authenticated
 							? auth.canAccessRaw
-								? 'Raw media is available.'
-								: 'This account needs access to this Plex server.'
-							: 'Sign in with a server member’s Plex account to browse and play Raw media. Encoded media is available without signing in.'}
+								? 'Raw media is available from the Plex libraries shared with your account.'
+								: 'This account needs access to a configured Plex library.'
+							: 'Sign in with Plex to browse and play Raw media from libraries shared with your account. Encoded media is available without signing in.'}
 					</Dialog.Description>
 				</Dialog.DialogHeader>
 				<PlexAuthActions />
@@ -307,8 +308,8 @@ export function PlexRoomGate({ onLeave }: { onLeave: () => void }) {
 						<Dialog.Title>Plex access required</Dialog.Title>
 						<Dialog.Description>
 							{auth.authenticated
-								? 'This room is playing Raw media. Your Plex account needs access to this server to join.'
-								: 'This room is playing Raw media. Sign in with a Plex account that has access to this server, or leave the room.'}
+								? 'This room is playing Raw media. Ask the server owner to share this media’s Plex library with your account to join.'
+								: 'This room is playing Raw media. Sign in with a Plex account that has access to its library, or leave the room.'}
 						</Dialog.Description>
 					</Dialog.DialogHeader>
 					<PlexAuthActions />

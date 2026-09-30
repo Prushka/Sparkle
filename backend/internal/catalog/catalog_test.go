@@ -30,7 +30,7 @@ func TestFirstBrowseIncludesProcessedTitles(t *testing.T) {
 	for _, source := range []string{"processed", "all"} {
 		t.Run(source, func(t *testing.T) {
 			// No warmup or retry: the very first response must include existing titles.
-			s := New(jobs.NewStore(output, time.Hour), nil, t.TempDir())
+			s := New(jobs.NewStore(output, time.Hour), nil, t.TempDir(), nil)
 			mux := http.NewServeMux()
 			s.Register(mux)
 			w := httptest.NewRecorder()
@@ -47,7 +47,7 @@ func TestFirstBrowseIncludesProcessedTitles(t *testing.T) {
 }
 
 func TestFirstBrowseReportsProcessedScanFailure(t *testing.T) {
-	s := New(jobs.NewStore(t.TempDir()+"\x00", time.Hour), nil, t.TempDir())
+	s := New(jobs.NewStore(t.TempDir()+"\x00", time.Hour), nil, t.TempDir(), nil)
 	mux := http.NewServeMux()
 	s.Register(mux)
 	w := httptest.NewRecorder()
@@ -106,7 +106,7 @@ func fixture(t *testing.T) (*Service, *http.ServeMux, *atomic.Int32, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := New(nil, p, t.TempDir())
+	s := New(nil, p, t.TempDir(), func(context.Context, string) bool { return true })
 	mux := http.NewServeMux()
 	s.Register(mux)
 	id, _ := p.ID(context.Background(), "7", 1)

@@ -9,18 +9,26 @@ const plexProfileId = 'plex-0123456789abcdef0123456789abcdef';
 async function fixture(
 	page: Page,
 	member = true,
-	options: { cookiesBlocked?: boolean; manualAuthorization?: boolean; name?: string } = {}
+	options: {
+		cookiesBlocked?: boolean;
+		manualAuthorization?: boolean;
+		name?: string;
+		roomLibraryDenied?: boolean;
+		extraLibrary?: boolean;
+	} = {}
 ) {
 	let signedIn = false;
 	let authorized = false;
 	let authorizationsOpened = 0;
 	let mediaId = rawId;
 	let roomWrites = 0;
+	let libraryIds = options.extraLibrary ? ['1', '2'] : ['1'];
 	const catalogSources: string[] = [];
 	const status = () => ({
 		enabled: true,
 		authenticated: signedIn,
 		canAccessRaw: signedIn && member,
+		libraryIds: signedIn && member ? libraryIds : [],
 		...(signedIn ? { name: options.name || 'Test member', profileId: plexProfileId } : {})
 	});
 	await page.route('**/api/runtime-env', (route) =>
@@ -78,9 +86,16 @@ async function fixture(
 	});
 	await page.route('**/be/rooms**', (route) => {
 		const path = new URL(route.request().url()).pathname;
-		const rawRoom = path === '/be/rooms/private-room';
+		const rawRoom =
+			path === '/be/rooms/private-room' ||
+			(path === '/be/rooms' && route.request().postDataJSON()?.mediaId === rawId);
 		if (rawRoom && mediaId && !status().canAccessRaw)
 			return route.fulfill({ status: 401, json: denied });
+		if (rawRoom && mediaId && options.roomLibraryDenied)
+			return route.fulfill({
+				status: 403,
+				json: { code: 'plex_library_access_denied', error: 'Library access required' }
+			});
 		if (route.request().method() === 'PUT') {
 			roomWrites++;
 			mediaId = route.request().postDataJSON().mediaId;
@@ -94,7 +109,13 @@ async function fixture(
 			json: {
 				sources: [
 					{ id: 'processed', source: 'processed', title: 'Encoded' },
-					...(status().canAccessRaw ? [{ id: '1', source: 'plex', title: 'Movies' }] : [])
+					...(status().canAccessRaw
+						? libraryIds.map((id) => ({
+								id,
+								source: 'plex',
+								title: id === '1' ? 'Movies' : 'Other Movies'
+							}))
+						: [])
 				]
 			}
 		})
@@ -113,9 +134,20 @@ async function fixture(
 					},
 					...(status().canAccessRaw
 						? [{ id: rawId, source: 'plex', kind: 'movie', title: 'Private movie', duration: 120 }]
+						: []),
+					...(status().canAccessRaw && libraryIds.includes('2')
+						? [
+								{
+									id: 'plex-fixture-2-1',
+									source: 'plex',
+									kind: 'movie',
+									title: 'Other library movie',
+									duration: 120
+								}
+							]
 						: [])
 				],
-				total: status().canAccessRaw ? 2 : 1
+				total: status().canAccessRaw ? 1 + libraryIds.length : 1
 			}
 		});
 	});
@@ -156,6 +188,9 @@ async function fixture(
 		authorizationsOpened: () => authorizationsOpened,
 		authorize: () => {
 			authorized = true;
+		},
+		revokeExtraLibrary: () => {
+			libraryIds = ['1'];
 		}
 	};
 }
@@ -287,6 +322,48 @@ test('an authenticated Plex account without server membership cannot enter a Raw
 	await expect(page.getByRole('button', { name: 'Sign out of Plex' })).toBeVisible();
 	await expectAccountIdentity(page);
 	await expect(page.getByRole('region', { name: 'Current media' })).toHaveCount(0);
+});
+
+test('a member with another shared library cannot enter an unshared Raw room', async ({ page }) => {
+	const f = await fixture(page, true, { roomLibraryDenied: true });
+	await page.goto('/private-room');
+	await signIn(page);
+	await expect(page.getByRole('heading', { name: 'Plex access required' })).toBeVisible();
+	await expect(page.getByRole('dialog')).toContainText('share this media’s Plex library');
+	await expect(page.getByRole('region', { name: 'Current media' })).toHaveCount(0);
+	await page.getByRole('button', { name: 'Leave room' }).click();
+	await expect(page.getByRole('link', { name: /Private movie/ })).toBeVisible();
+	expect(f.roomWrites()).toBe(0);
+});
+
+test('legacy media links keep the library permission gate after member sign-in', async ({
+	page
+}) => {
+	await fixture(page, true, { roomLibraryDenied: true });
+	await page.goto(`/?mediaId=${rawId}`);
+	await expect(page.getByRole('heading', { name: 'Plex access required' })).toBeVisible();
+	await signIn(page);
+	await expect(page.getByRole('heading', { name: 'Plex access required' })).toBeVisible();
+	await expect(page.getByRole('dialog')).toContainText('share this media’s Plex library');
+	await expect(page.getByText('Loading room...', { exact: true })).toHaveCount(0);
+	await page.getByRole('button', { name: 'Leave room' }).click();
+	await expect(page.getByRole('link', { name: /Public movie/ })).toBeVisible();
+});
+
+test('library revocation refreshes the catalog while the member retains another library', async ({
+	page
+}) => {
+	const f = await fixture(page, true, { extraLibrary: true });
+	await page.goto('/public-room');
+	await page.getByRole('button', { name: 'Sign in with Plex', exact: true }).click();
+	await signIn(page);
+	await page.keyboard.press('Escape');
+	await expect(page.getByRole('link', { name: /Other library movie/ })).toBeVisible();
+	f.revokeExtraLibrary();
+	await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+	await expect(page.getByRole('link', { name: /Other library movie/ })).toHaveCount(0);
+	await expect(page.getByRole('link', { name: /Private movie/ })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Plex account', exact: true })).toBeVisible();
 });
 
 test('account popup keeps a long name and avatar fallback readable on mobile', async ({ page }) => {

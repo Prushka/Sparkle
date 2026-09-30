@@ -230,6 +230,64 @@ func (c *Client) Sections(ctx context.Context) ([]Section, error) {
 	return result, nil
 }
 
+// UserLibraries checks the configured server with the member's resource token.
+// Authorization must never reuse the owner's metadata cache or follow a URL
+// supplied by the account's resources response.
+func (c *Client) UserLibraries(ctx context.Context, token string) ([]string, error) {
+	if token == "" {
+		return nil, ErrUnavailable
+	}
+	select {
+	case c.requests <- struct{}{}:
+		defer func() { <-c.requests }()
+	case <-ctx.Done():
+		return nil, ErrUnavailable
+	}
+	u := *c.base
+	u.Path = strings.TrimRight(u.Path, "/") + "/library/sections"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, ErrUnavailable
+	}
+	req.Header.Set("X-Plex-Token", token)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("X-Plex-Product", "Sparkle")
+	req.Header.Set("X-Plex-Client-Identifier", "sparkle-readonly")
+	res, err := c.http.Do(req)
+	if err != nil {
+		return nil, ErrUnavailable
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil, ErrUnavailable
+	}
+	data, err := io.ReadAll(io.LimitReader(res.Body, 2*1024*1024+1))
+	var response struct {
+		Container *struct {
+			Sections []Section `json:"Directory"`
+		} `json:"MediaContainer"`
+	}
+	if err != nil || len(data) > 2*1024*1024 || json.Unmarshal(data, &response) != nil || response.Container == nil {
+		return nil, ErrUnavailable
+	}
+	ids := []string{}
+	for _, section := range response.Container.Sections {
+		if !digits.MatchString(section.Key) {
+			return nil, ErrUnavailable
+		}
+		if (section.Type == "movie" || section.Type == "show") && (len(c.allowed) == 0 || c.allowed[section.Key]) {
+			ids = append(ids, section.Key)
+		}
+	}
+	return ids, nil
+}
+
+// MediaLibrary resolves an opaque, version-specific ID before authorizing it.
+func (c *Client) MediaLibrary(ctx context.Context, id string) (string, error) {
+	m, _, err := c.Item(ctx, id)
+	return m.SectionID, err
+}
+
 func (c *Client) permits(ctx context.Context, section string) bool {
 	sections, err := c.Sections(ctx)
 	if err != nil {

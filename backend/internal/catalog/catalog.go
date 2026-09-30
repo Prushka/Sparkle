@@ -47,20 +47,25 @@ type Page struct {
 	Warnings   []string `json:"warnings,omitempty"`
 }
 type Service struct {
-	jobs    *jobs.Store
-	plex    *plex.Client
-	secret  []byte
-	artwork *artCache
-	matchMu sync.Mutex
-	matches map[matchIdentity]matchEntry
+	jobs             *jobs.Store
+	plex             *plex.Client
+	secret           []byte
+	artwork          *artCache
+	matchMu          sync.Mutex
+	matches          map[matchIdentity]matchEntry
+	canAccessLibrary func(context.Context, string) bool
 }
 
-func New(j *jobs.Store, p *plex.Client, cacheDir string) *Service {
+func New(j *jobs.Store, p *plex.Client, cacheDir string, canAccessLibrary func(context.Context, string) bool) *Service {
 	secret := make([]byte, 32)
 	if _, err := rand.Read(secret); err != nil {
 		panic(err)
 	}
-	return &Service{jobs: j, plex: p, secret: secret, artwork: newArtCache(cacheDir), matches: map[matchIdentity]matchEntry{}}
+	return &Service{jobs: j, plex: p, secret: secret, artwork: newArtCache(cacheDir), matches: map[matchIdentity]matchEntry{}, canAccessLibrary: canAccessLibrary}
+}
+
+func (s *Service) permitsLibrary(ctx context.Context, id string) bool {
+	return s.canAccessLibrary != nil && s.canAccessLibrary(ctx, id)
 }
 
 type query struct {
@@ -129,6 +134,9 @@ func (s *Service) sources(w http.ResponseWriter, r *http.Request) {
 			warnings = append(warnings, err.Error())
 		} else {
 			for _, section := range sections {
+				if !s.permitsLibrary(r.Context(), section.Key) {
+					continue
+				}
 				sources = append(sources, map[string]string{"id": section.Key, "title": section.Title, "source": "plex", "kind": section.Type})
 			}
 		}
@@ -178,6 +186,10 @@ func (s *Service) browse(w http.ResponseWriter, r *http.Request) {
 		fail(w, 400, err.Error())
 		return
 	}
+	if q.Library != "" && !s.permitsLibrary(r.Context(), q.Library) {
+		fail(w, http.StatusForbidden, "This Plex library is not available to your account")
+		return
+	}
 	c, err := s.decodeCursor(r.URL.Query().Get("cursor"), q)
 	if err != nil {
 		fail(w, 400, err.Error())
@@ -209,6 +221,9 @@ func (s *Service) browse(w http.ResponseWriter, r *http.Request) {
 			var mu sync.Mutex
 			semaphore := make(chan struct{}, 4)
 			for _, section := range sections {
+				if !s.permitsLibrary(r.Context(), section.Key) {
+					continue
+				}
 				if q.Library != "" && q.Library != section.Key {
 					continue
 				}

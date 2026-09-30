@@ -15,16 +15,28 @@ Discord Activity voice behavior remains unchanged; a signed-in Plex profile take
 precedence over its display name/avatar.
 
 Anonymous visitors can browse, play and share existing **Encoded** titles from
-`OUTPUT`. Any member of the configured Plex server can access **every configured
-Raw library**, including libraries not individually shared with that member in
-Plex. This is intentionally server membership authorization, not replication of
-Plex's per-library, rating, label or item restrictions. Do not enable this policy
-for a server whose members should have different access within Sparkle.
+`OUTPUT`. Signed-in accounts can browse and play only the intersection of
+**configured Raw libraries** (`PLEX_LIBRARY_IDS`) and **libraries shared with
+their Plex account**. An empty `PLEX_LIBRARY_IDS` permits all supported video
+libraries on the server, still limited by the user's own access. Server owners
+retain access to their configured libraries. Accounts with no matching libraries
+remain signed in but cannot use Raw media.
+
+Sparkle reads `/library/sections` on the configured `PLEX_URL` using the account's
+server-specific resource token from Plex. This authorization request is separate
+from the owner's cached metadata requests, never follows redirects, and never
+uses server URLs advertised by account resources. Failed checks deny access;
+there is no owner-token fallback. The scope is library-level: Plex rating, label
+and individual-item restrictions within a shared library are not replicated.
 
 Original files, Raw library browsing/hierarchy, embedded track bytes and on-demand
-NVENC derivatives require membership. Selecting Encoded AV1/HEVC for a Plex video
+NVENC derivatives require access to that media's library. Selecting Encoded AV1/HEVC for a Plex video
 does not make playback public. Raw room participation, HTTP mutations and WebSocket
-connections enforce membership too, including later media changes.
+connections enforce library access too, including later media changes. Guessed
+IDs, alternate versions, byte ranges, saved page cursors and shared encode caches
+do not bypass the check. A member with access to other libraries receives a 403
+`plex_library_access_denied` response for an unshared library; the UI explains
+that the library must be shared with their account.
 
 Shared links intentionally expose complete sanitized single-title metadata and
 poster/backdrop images without a session. `GET/HEAD /media/{id}` and
@@ -105,10 +117,10 @@ does not extend it. The stable client-identifier cookie is not an access credent
 `PLEX_AUTH_SESSION_DIR` defaults to `./data/plex-auth`. Startup scripts resolve it
 against the repository root; direct API execution uses the working directory.
 Its `sessions.db` stores account tokens, client identifiers, verified profiles and
-expiry under hashes of the random cookie IDs. Raw cookie IDs and cached membership
+expiry under hashes of the random cookie IDs. Raw cookie IDs and cached membership/library
 decisions are not persisted. Each restored session rechecks the account and the
 currently configured server before private media access, even if the previous
-process had just checked membership. Pending PIN flows remain temporary.
+process had just checked access. Pending PIN flows remain temporary.
 
 This directory contains credentials: keep it on persistent local storage outside
 `OUTPUT`, `PFP_DIR`, and mapped Plex media roots. Unix permissions are 0700 for the
@@ -133,8 +145,11 @@ endpoint and its HTTPS `assets.plex.tv/avatars/` redirects, reject other redirec
 and non-image/oversized responses, and use a memory
 cache capped at 64 images of 512 KiB each. No avatar is written to mapped media.
 
-Membership is rechecked after five minutes on subsequent requests and active
-Raw-room socket checks. Plex verification failures fail closed and cancel private
+Membership and shared library IDs are rechecked after five minutes on subsequent
+requests and active Raw-room socket checks. Library grants are held only in memory
+and revalidated after restart. Losing even one library cancels the session's
+existing private requests; requests for retained libraries can restart under the
+new grant. Plex verification failures fail closed and cancel private
 requests, while keeping the saved login available for a later successful check.
 Sign-out durably revokes the session, cancels its in-flight private requests and
 removes its cookie. Failed sign-out storage writes still stop current access and
@@ -142,17 +157,35 @@ report an error; retry sign-out to commit the removal.
 Room sockets check access before reading/writing messages and on their heartbeat.
 Already received or buffered bytes cannot be recalled. The frontend also refreshes
 session state on focus and once per minute while visible, covering other tabs.
+The session response includes only that account's permitted library IDs, allowing
+the catalog to refresh when sharing changes even if Raw access remains available.
+Sharing changes can take up to the five-minute authorization cache interval to be
+observed by an active client.
 
 Sign-in mutations require an allowed Origin and a custom request header. PINs,
 sessions, rate-limit entries, upstream response sizes and request timeouts are
 bounded. Upstream redirects are refused. Account authentication only creates
-Plex sign-in PINs and reads identity/resources; catalog access stays read-only.
+Plex sign-in PINs and reads identity/resources and shared library sections;
+catalog access stays read-only.
 
 ## Verification
 
+The access boundaries are:
+
+| Surface                                                                            | Enforcement                                                                                                                       |
+| ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Library sources, search, paging and totals                                         | Include only configured sections in the user's verified grant; apply it again on every page, including reused cursors.            |
+| Show/season children, originals and alternate versions                             | Resolve the media ID's actual Plex section server-side before serving the request; client library parameters cannot grant access. |
+| Encoded manifests, playlists, segments, audio, captions, fonts and AI HDR          | Check the same library permission before entering the encoder or reading its shared cache.                                        |
+| Room creation, reads, replacement and WebSocket messages                           | Check current and requested media; disconnect participants who cannot access the selected library.                                |
+| Single-title metadata, covers, share previews and existing processed Encoded media | Retain the public exceptions described above; they grant no original-file or derivative access.                                   |
+
 `go test ./...` includes mocked Plex flows, non-members, forged and expired
-cookies, CSRF/origin rejection, access revocation, private route guards and
-two-client WebSocket room changes. Persistence tests cover restarts, abrupt process
+cookies, CSRF/origin rejection, library intersection, isolated permission caches,
+copied pagination cursors, alternate versions/parts, GET/HEAD/range requests,
+encoded resources (including AI HDR), access revocation and two-client WebSocket
+room changes. The authorization route tests use synthetic encoded bytes; they
+do not qualify GPU encoding or device playback. Persistence tests cover restarts, abrupt process
 exit, expiry, concurrent login/logout, replacement, membership/token revocation,
 storage failures and private filesystem permissions. `go test -race ./...` checks concurrency.
 
@@ -164,9 +197,10 @@ npx playwright test tests/e2e/plex-auth.spec.ts tests/e2e/library.spec.ts tests/
 ```
 
 The browser auth suite mocks Plex authorization; it checks guest browsing,
-sign-in/out, cookie visibility, mobile layouts, membership denial and resuming
-the original Raw room. A real Plex account must still complete its hosted sign-in
-to verify that account's membership. Never insert the owner's configured Plex
+sign-in/out, cookie visibility, mobile layouts, membership/library denial, catalog
+refresh after partial revocation and resuming the original Raw room. A real Plex
+account must still complete its hosted sign-in to verify its actual library shares.
+Never insert the owner's configured Plex
 token into a browser test to bypass the member flow.
 
 Run `tests/e2e/metadata.spec.ts` with `SPARKLE_RAW_TEST_ID` set to a configured Raw

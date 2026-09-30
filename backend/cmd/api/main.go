@@ -52,17 +52,21 @@ func main() {
 			log.Fatalf("configuration error: %v", err)
 		}
 	}
-	mediaCatalog := catalog.New(jobStore, plexClient, cfg.MediaCacheDir)
 	var identity func(context.Context) (string, error)
+	var libraries func(context.Context, string) ([]string, error)
+	var mediaLibrary func(context.Context, string) (string, error)
 	if plexClient != nil {
 		identity = plexClient.MachineIdentifier
+		libraries = plexClient.UserLibraries
+		mediaLibrary = plexClient.MediaLibrary
 	}
-	auth, err := plexauth.New(plexauth.Options{Identity: identity, Origins: cfg.PlexAuthOrigins, Secure: cfg.PlexAuthCookieSecure, SameSite: cfg.PlexAuthCookieSameSite,
+	auth, err := plexauth.New(plexauth.Options{Identity: identity, Libraries: libraries, MediaLibrary: mediaLibrary, Origins: cfg.PlexAuthOrigins, Secure: cfg.PlexAuthCookieSecure, SameSite: cfg.PlexAuthCookieSameSite,
 		SessionDir: cfg.PlexAuthSessionDir, PublicDirs: []string{cfg.OutputDir, cfg.PFPDir}})
 	if err != nil {
 		log.Fatalf("authentication configuration error: %v", err)
 	}
 	defer auth.Close()
+	mediaCatalog := catalog.New(jobStore, plexClient, cfg.MediaCacheDir, auth.CanAccessLibrary)
 	hub := realtime.NewHub(realtime.Options{
 		OutputDir:      cfg.OutputDir,
 		PFPDir:         cfg.PFPDir,

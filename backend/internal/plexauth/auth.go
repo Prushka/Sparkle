@@ -15,6 +15,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,9 +33,13 @@ const (
 type Options struct {
 	// Identity returns the exact configured PMS machine identifier, never a URL.
 	Identity func(context.Context) (string, error)
-	Origins  string
-	Secure   bool
-	SameSite string
+	// Libraries returns configured libraries visible with this user's PMS token.
+	Libraries func(context.Context, string) ([]string, error)
+	// MediaLibrary resolves the real library of a media ID, never a client claim.
+	MediaLibrary func(context.Context, string) (string, error)
+	Origins      string
+	Secure       bool
+	SameSite     string
 	// Empty SessionDir is for ephemeral managers (tests/embedded callers).
 	SessionDir string
 	PublicDirs []string
@@ -46,6 +51,7 @@ type session struct {
 	profileID, avatar   string
 	expires, checked    time.Time
 	access              bool
+	libraries           map[string]bool
 	ctx                 context.Context
 	cancel              context.CancelFunc
 	privateCtx          context.Context
@@ -62,31 +68,34 @@ type rate struct {
 	until time.Time
 }
 type Manager struct {
-	identity func(context.Context) (string, error)
-	origins  map[string]bool
-	secure   bool
-	sameSite http.SameSite
-	http     *http.Client
-	api      string
-	mu       sync.Mutex
-	sessions map[[32]byte]*session
-	pins     map[[32]byte]*pending
-	rates    map[string]rate
-	avatars  map[string]*avatarEntry
-	store    *sessionStore
-	closed   bool
+	identity     func(context.Context) (string, error)
+	libraries    func(context.Context, string) ([]string, error)
+	mediaLibrary func(context.Context, string) (string, error)
+	origins      map[string]bool
+	secure       bool
+	sameSite     http.SameSite
+	http         *http.Client
+	api          string
+	mu           sync.Mutex
+	sessions     map[[32]byte]*session
+	pins         map[[32]byte]*pending
+	rates        map[string]rate
+	avatars      map[string]*avatarEntry
+	store        *sessionStore
+	closed       bool
 }
 type status struct {
-	Enabled       bool   `json:"enabled"`
-	Authenticated bool   `json:"authenticated"`
-	CanAccessRaw  bool   `json:"canAccessRaw"`
-	Name          string `json:"name,omitempty"`
-	ProfileID     string `json:"profileId,omitempty"`
+	Enabled       bool     `json:"enabled"`
+	Authenticated bool     `json:"authenticated"`
+	CanAccessRaw  bool     `json:"canAccessRaw"`
+	Name          string   `json:"name,omitempty"`
+	ProfileID     string   `json:"profileId,omitempty"`
+	LibraryIDs    []string `json:"libraryIds,omitempty"`
 }
 type contextKey struct{}
 
 func New(opts Options) (*Manager, error) {
-	m := &Manager{identity: opts.Identity, origins: map[string]bool{}, secure: opts.Secure, sameSite: http.SameSiteLaxMode,
+	m := &Manager{identity: opts.Identity, libraries: opts.Libraries, mediaLibrary: opts.MediaLibrary, origins: map[string]bool{}, secure: opts.Secure, sameSite: http.SameSiteLaxMode,
 		http: &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 		api:  "https://plex.tv/api/v2", sessions: map[[32]byte]*session{}, pins: map[[32]byte]*pending{}, rates: map[string]rate{}, avatars: map[string]*avatarEntry{}}
 	if opts.SameSite == "none" {
@@ -188,16 +197,38 @@ func (m *Manager) state(ctx context.Context) status {
 		}
 		v.Authenticated, v.Name, v.CanAccessRaw = true, s.name, s.access && s.ctx.Err() == nil && time.Since(s.checked) < accessTTL
 		v.ProfileID = s.profileID
+		if v.CanAccessRaw {
+			for id := range s.libraries {
+				v.LibraryIDs = append(v.LibraryIDs, id)
+			}
+			sort.Strings(v.LibraryIDs)
+		}
 	}
 	return v
 }
 func (m *Manager) CanAccess(ctx context.Context, mediaID string) bool {
-	if strings.HasPrefix(mediaID, "plex-") {
-		if s, ok := ctx.Value(contextKey{}).(*session); ok {
-			m.refresh(ctx, s)
-		}
+	if !strings.HasPrefix(mediaID, "plex-") {
+		return true
 	}
-	return !strings.HasPrefix(mediaID, "plex-") || m.state(ctx).CanAccessRaw
+	if s, ok := ctx.Value(contextKey{}).(*session); ok {
+		m.refresh(ctx, s)
+	}
+	if !m.state(ctx).CanAccessRaw || m.mediaLibrary == nil {
+		return false
+	}
+	library, err := m.mediaLibrary(ctx, mediaID)
+	return err == nil && m.CanAccessLibrary(ctx, library)
+}
+
+func (m *Manager) CanAccessLibrary(ctx context.Context, library string) bool {
+	s, ok := ctx.Value(contextKey{}).(*session)
+	if !ok || library == "" || ctx.Err() != nil {
+		return false
+	}
+	m.refresh(ctx, s)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.access && s.libraries[library] && s.ctx.Err() == nil && time.Now().Before(s.expires) && time.Since(s.checked) < accessTTL
 }
 
 func (m *Manager) refresh(ctx context.Context, s *session) {
@@ -206,16 +237,24 @@ func (m *Manager) refresh(ctx context.Context, s *session) {
 	if s.ctx.Err() != nil || !time.Now().Before(s.expires) || time.Since(s.checked) < accessTTL {
 		return
 	}
-	profile, access, err := m.verify(ctx, s.token, s.client)
+	profile, libraries, err := m.verify(ctx, s.token, s.client)
 	if ctx.Err() != nil || s.ctx.Err() != nil {
 		return
 	}
 	s.checked = time.Now()
-	s.access = err == nil && access
+	// Revoke existing private requests even when only one library disappeared.
+	reduced := err != nil
+	for library := range s.libraries {
+		if !libraries[library] {
+			reduced = true
+		}
+	}
+	s.access = err == nil && len(libraries) > 0
+	s.libraries = libraries
 	if err == nil {
 		s.name, s.profileID, s.avatar = profile.name, profile.id, profile.avatar
 	}
-	if !s.access && s.privateCancel != nil {
+	if (!s.access || reduced) && s.privateCancel != nil {
 		// Cancel existing streams without destroying the login. A later valid
 		// membership check can issue a new private context under this session.
 		s.privateCancel()
@@ -246,8 +285,16 @@ func (m *Manager) RequireMedia(w http.ResponseWriter, r *http.Request, mediaID s
 	if m.CanAccess(r.Context(), mediaID) {
 		return true
 	}
-	Required(w)
+	m.denied(w, r.Context())
 	return false
+}
+
+func (m *Manager) denied(w http.ResponseWriter, ctx context.Context) {
+	if m.state(ctx).CanAccessRaw {
+		reply(w, http.StatusForbidden, map[string]string{"code": "plex_library_access_denied", "error": "This Plex account does not have access to this library. Ask the server owner to share it with you."})
+		return
+	}
+	Required(w)
 }
 
 func (m *Manager) request(ctx context.Context, method, endpoint, client, token string, form url.Values, out any) error {
@@ -282,7 +329,7 @@ func (m *Manager) request(ctx context.Context, method, endpoint, client, token s
 	}
 	return nil
 }
-func (m *Manager) verify(ctx context.Context, token, client string) (accountProfile, bool, error) {
+func (m *Manager) verify(ctx context.Context, token, client string) (accountProfile, map[string]bool, error) {
 	var user struct {
 		ID       int64  `json:"id"`
 		Username string `json:"username"`
@@ -290,7 +337,7 @@ func (m *Manager) verify(ctx context.Context, token, client string) (accountProf
 		Thumb    string `json:"thumb"`
 	}
 	if err := m.request(ctx, "GET", "/user", client, token, nil, &user); err != nil || user.ID == 0 {
-		return accountProfile{}, false, errors.New("Unable to verify the Plex account")
+		return accountProfile{}, nil, errors.New("Unable to verify the Plex account")
 	}
 	var resources []struct {
 		ClientIdentifier string `json:"clientIdentifier"`
@@ -298,11 +345,11 @@ func (m *Manager) verify(ctx context.Context, token, client string) (accountProf
 		AccessToken      string `json:"accessToken"`
 	}
 	if err := m.request(ctx, "GET", "/resources?includeHttps=1", client, token, nil, &resources); err != nil {
-		return accountProfile{}, false, err
+		return accountProfile{}, nil, err
 	}
 	server, err := m.identity(ctx)
 	if err != nil {
-		return accountProfile{}, false, errors.New("Unable to verify access to the configured Plex server")
+		return accountProfile{}, nil, errors.New("Unable to verify access to the configured Plex server")
 	}
 	name := user.Title
 	if name == "" {
@@ -316,12 +363,25 @@ func (m *Manager) verify(ctx context.Context, token, client string) (accountProf
 		if resource.ClientIdentifier == server && resource.AccessToken != "" {
 			for _, provided := range strings.Split(resource.Provides, ",") {
 				if provided == "server" {
-					return profile, true, nil
+					if m.libraries == nil {
+						return profile, nil, errors.New("Unable to verify Plex library access")
+					}
+					ids, err := m.libraries(ctx, resource.AccessToken)
+					if err != nil {
+						return profile, nil, errors.New("Unable to verify Plex library access")
+					}
+					libraries := make(map[string]bool, len(ids))
+					for _, id := range ids {
+						if id != "" {
+							libraries[id] = true
+						}
+					}
+					return profile, libraries, nil
 				}
 			}
 		}
 	}
-	return profile, false, nil
+	return profile, nil, nil
 }
 
 // Pruning and hard caps keep unauthenticated PIN creation and sessions bounded.
@@ -459,7 +519,7 @@ func (m *Manager) poll(w http.ResponseWriter, r *http.Request) {
 		reply(w, 502, map[string]string{"error": "Invalid Plex sign-in response"})
 		return
 	}
-	profile, access, err := m.verify(r.Context(), pin.AuthToken, p.client)
+	profile, libraries, err := m.verify(r.Context(), pin.AuthToken, p.client)
 	if err != nil {
 		reply(w, 502, map[string]string{"error": err.Error()})
 		return
@@ -467,7 +527,8 @@ func (m *Manager) poll(w http.ResponseWriter, r *http.Request) {
 	id := randomID()
 	expires := time.Now().Add(sessionTTL)
 	sessionContext, cancel := context.WithDeadline(context.Background(), expires)
-	s := &session{token: pin.AuthToken, client: p.client, name: profile.name, profileID: profile.id, avatar: profile.avatar, access: access, checked: time.Now(), expires: expires, ctx: sessionContext, cancel: cancel}
+	access := len(libraries) > 0
+	s := &session{token: pin.AuthToken, client: p.client, name: profile.name, profileID: profile.id, avatar: profile.avatar, access: access, libraries: libraries, checked: time.Now(), expires: expires, ctx: sessionContext, cancel: cancel}
 	m.mu.Lock()
 	if m.closed || m.pins[key] != p || len(m.sessions) >= maxSessions {
 		m.mu.Unlock()
@@ -492,7 +553,7 @@ func (m *Manager) poll(w http.ResponseWriter, r *http.Request) {
 	m.mu.Unlock()
 	m.cookie(w, pendingCookie, "", -time.Hour)
 	m.cookie(w, sessionCookie, id, sessionTTL)
-	reply(w, 200, status{Enabled: true, Authenticated: true, CanAccessRaw: access, Name: profile.name, ProfileID: profile.id})
+	reply(w, 200, m.state(context.WithValue(r.Context(), contextKey{}, s)))
 }
 func (m *Manager) logout(w http.ResponseWriter, r *http.Request) {
 	if !m.mutation(w, r) {
@@ -571,8 +632,29 @@ func (m *Manager) Middleware(next http.Handler) http.Handler {
 		allowed := m.state(r.Context()).CanAccessRaw
 		path := r.URL.Path
 		protected := (strings.HasPrefix(path, "/media/plex-") && !publicMediaRead(r)) || strings.HasPrefix(path, "/library/items/plex-")
-		if protected && !allowed {
-			Required(w)
+		if s != nil && allowed && (protected || path == "/library/items" || path == "/library/sources") {
+			// Bind before the per-media decision: a concurrent library revocation
+			// must not let this request attach to a newly issued private context.
+			private := s.privateContext()
+			ctx, cancel := context.WithCancel(r.Context())
+			stop := context.AfterFunc(private, cancel)
+			defer cancel()
+			defer stop()
+			r = r.WithContext(ctx)
+			w = &privateWriter{ResponseWriter: w, ctx: ctx, access: private}
+		}
+		if protected {
+			parts := strings.Split(path, "/")
+			id := parts[2]
+			if parts[1] == "library" {
+				id = parts[3]
+			}
+			if !m.RequireMedia(w, r, id) {
+				return
+			}
+		}
+		if path == "/library/items" && r.URL.Query().Get("libraryId") != "" && !m.CanAccessLibrary(r.Context(), r.URL.Query().Get("libraryId")) {
+			m.denied(w, r.Context())
 			return
 		}
 		if !allowed && path == "/library/sources" {
@@ -582,7 +664,7 @@ func (m *Manager) Middleware(next http.Handler) http.Handler {
 		if !allowed && path == "/library/items" {
 			q := r.URL.Query()
 			if q.Get("source") == "plex" || q.Get("libraryId") != "" {
-				Required(w)
+				m.denied(w, r.Context())
 				return
 			}
 			if q.Get("source") == "" || q.Get("source") == "all" {
@@ -593,14 +675,6 @@ func (m *Manager) Middleware(next http.Handler) http.Handler {
 				r.URL = &clone
 			}
 		}
-		if protected && s != nil {
-			ctx, cancel := context.WithCancel(r.Context())
-			stop := context.AfterFunc(s.privateContext(), cancel)
-			defer cancel()
-			defer stop()
-			r = r.WithContext(ctx)
-			w = &privateWriter{ResponseWriter: w, ctx: ctx}
-		}
 		next.ServeHTTP(w, r)
 	})
 }
@@ -609,11 +683,15 @@ func (m *Manager) Middleware(next http.Handler) http.Handler {
 // not make http.ServeContent stop copying bytes from an already-open file.
 type privateWriter struct {
 	http.ResponseWriter
-	ctx context.Context
+	ctx    context.Context
+	access context.Context
 }
 
 func (w *privateWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 func (w *privateWriter) Write(data []byte) (int, error) {
+	if w.access != nil && w.access.Err() != nil {
+		return 0, w.access.Err()
+	}
 	if err := w.ctx.Err(); err != nil {
 		return 0, err
 	}

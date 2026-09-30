@@ -13,8 +13,8 @@ library from the same Library view.
   Returning from another app refreshes room playback; stalled Plex playback can rebuild
   its selected output automatically or through **Retry playback**.
   Suspended background clocks cannot overwrite room progress or its pause state.
-- Plex sign-in in Library and the player. Server members can access every configured
-  Raw library; anonymous visitors can use existing Encoded media. Raw rooms prompt
+- Plex sign-in in Library and the player. Members can browse and play only configured
+  Raw libraries shared with their Plex account; anonymous visitors can use existing Encoded media. Raw rooms prompt
   visitors to sign in or leave. Shared Raw links render full titles, descriptions and
   covers without sign-in; playback remains protected. See [authentication setup](docs/plex-auth.md).
 - **Go back to library** beside **Change media** clears the room's selected media and
@@ -260,7 +260,7 @@ entries refresh in the background. `JOBS_CACHE_TTL` controls that expiration.
 
 Plex account tokens remain server-side in a private session database behind an
 HttpOnly cookie; they are never stored in browser localStorage. Sessions last up to
-14 days and survive backend restarts, with a fresh Plex membership check before
+14 days and survive backend restarts, with fresh Plex membership and library checks before
 restored access. Preserve `PLEX_AUTH_SESSION_DIR` across deployments. Signed-in room profiles use the Plex name and
 avatar; clicking your badge opens the Plex account dialog. Sign-out restores your
 saved guest profile. Use HTTPS and configure the actual frontend

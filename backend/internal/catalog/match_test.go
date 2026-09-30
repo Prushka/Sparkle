@@ -64,7 +64,7 @@ func matchingFixture(t *testing.T, candidates []plex.Metadata, total int) (*Serv
 	if err != nil {
 		t.Fatal(err)
 	}
-	return New(nil, p, t.TempDir()), calls
+	return New(nil, p, t.TempDir(), nil), calls
 }
 
 func TestMatchingRejectsRemakesAmbiguityAndTruncation(t *testing.T) {

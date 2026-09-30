@@ -18,9 +18,9 @@ import (
 
 func (f *fixture) restart(t *testing.T, dir string) {
 	t.Helper()
-	api, identity := f.m.api, f.m.identity
+	api, identity, libraries, mediaLibrary := f.m.api, f.m.identity, f.m.libraries, f.m.mediaLibrary
 	f.m.Close()
-	m, err := New(Options{SessionDir: dir, Identity: identity, Origins: "https://sparkle.test", Secure: true})
+	m, err := New(Options{SessionDir: dir, Identity: identity, Libraries: libraries, MediaLibrary: mediaLibrary, Origins: "https://sparkle.test", Secure: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestPersistentSessionRestartAndLogout(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.restart(t, dir)
-	if !f.m.sessions[key].expires.Equal(expires) || !f.m.sessions[key].checked.IsZero() || f.m.sessions[key].access {
+	if !f.m.sessions[key].expires.Equal(expires) || !f.m.sessions[key].checked.IsZero() || f.m.sessions[key].access || len(f.m.sessions[key].libraries) != 0 {
 		t.Fatal("restart extended expiry or restored a cached authorization decision")
 	}
 	state := sessionStatus(t, f, cookie)
