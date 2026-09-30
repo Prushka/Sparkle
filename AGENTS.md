@@ -226,6 +226,12 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   Background clock updates must not change the shared timeline. Prime unstarted
   decoders before restoring paused positions, and let the latest room seek replace
   an unfinished seek even when the native clock still matches the latest target.
+  Prime replacement decoders silently and discard/refill queued PCM on paused seeks.
+  Encoded replacements/recovery load at the saved timestamp before probing. Reuse
+  the target segment's initialization headers and cache job, preserve the full VOD
+  timeline and backward seeks, and retain compatibility with older backends.
+  Audio-only PCM engines follow sample consumption; keep A/V correction in the
+  provider rather than allowing a second wall-clock gate to insert silence.
   Hold both PCM playback clocks until both decoders finish seeking, then restore
   the requested play state without publishing a stale seek or an internal pause.
   Automatic connections after media replacement preserve room pause state; only

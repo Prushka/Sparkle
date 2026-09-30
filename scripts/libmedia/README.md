@@ -78,6 +78,14 @@ linked gain worklet are described in [audio normalization](../../docs/audio-norm
 The non-isolated audio worker reports statistics every 50 ms rather than 500 ms,
 preserving one-second peak-stat resets. This prevents a stale audio playhead from
 driving unnecessary speed corrections against native video.
+Paused AudioWorklet seeks drain outstanding pulls and refill both PCM buffers while
+held, including the shared-memory processor. This removes pre-seek audio and resume
+lag. Immediate volume changes explicitly update the gain automation timeline, so
+silent decoder priming can restore the user's gain without a leftover ramp.
+Encoded VOD loads can pass `ioLoaderOptions.startTimestamp` in milliseconds. The
+HLS readers select that fragment before the first probe/prefetch, and native/PCM
+renderers start at the requested timestamp. Positive initial packet timestamps do
+not shift the full playlist's origin; subsequent backward seeks remain absolute.
 Original and multichannel server-encoded Plex playback opt into `speakerOutput`. The hash-pinned `audio-output.ts`
 helper configures the shared AudioContext destination to an accepted canonical
 speaker layout (up to eight channels), with reference-counted restoration on stop.

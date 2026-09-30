@@ -3,7 +3,7 @@
   "commit": "152f629d3021fd8013efa464fcb7b55f9fbe7753",
   "ffmpeg": "3a14ab29692763e561610412cdeb1985da4e3cd8",
   "emscripten": "4.0.10",
-  "patchHash": "82179134138e50943e5e9ad1111a4ee7e347a00077ae3db5f3dcee8755c02c98",
+  "patchHash": "23460250997bb5b6423a80ece3c94e6dac6ca07f51edc6ffcbde4fb8415548ae",
   "sources": {
     "hdr-sdr.ts": "7145cc1cb27cf75cdae17ef1c6f4cc3121289dad6fbe7edecb9f3ef8db350c6b",
     "dovi-sdr.ts": "d4a572d72c175bba9fff94adcf0ec72a2b306c341e87877876b4d5cbb68cdb74",
@@ -22,7 +22,7 @@
     "avplayer/437.avplayer.js": "6ec03a7a5a9e3ccb032af9cf6a9c26dc9e7d024e239514784520fd30967ea533",
     "avplayer/485.avplayer.js": "b58df5e540c74229411ae6d41fc66497837ab9907906b9d7e6d0bb6dbad2f133",
     "avplayer/525.avplayer.js": "755c8f6e4700d38848031e4f384e62c985faca50f9aeffd8f3d599c19cdb8abc",
-    "avplayer/600.avplayer.js": "0c34359cc72f09ce48f2dbdf7369cd3503644e6bb800205981902ee58e765a36",
+    "avplayer/600.avplayer.js": "f013c1239f2561d40f052cd468118646ece28b58ffadb1fc9cc735cabc6dbd17",
     "avplayer/606.avplayer.js": "4c90eeedb7397723acd0d03c31315e49d48c0be597dc0cf54917203d0e4e9367",
     "avplayer/625.avplayer.js": "89ceb59c7f1bf8a2002b64e1a30d1a01aad8cfd6c93a9583bb9ecbcf315cae58",
     "avplayer/652.avplayer.js": "07b72e26e3c4d1509a4180e7dd83d4e5bf275a796fd3cc6986217418edafe562",
@@ -44,7 +44,7 @@
     "avplayer/888.avplayer.js": "636f045b692045666610992c2b8782d87fff87fc1f2a0a125e0da47e574ea176",
     "avplayer/933.avplayer.js": "76920cb417b6359bf5481339e6f8ddb1e3b395ddd4909740c98cb89b34d70ab1",
     "avplayer/977.avplayer.js": "89a9e0df3097ccdeca218b4419f327015368940f31e36f5c7061a00cdb564754",
-    "avplayer/avplayer.js": "ab25d8bb83dcdbf71c0d9e9c155df70f7fec919d703dcfe880ca6b1efba0ee7b"
+    "avplayer/avplayer.js": "aab9c4d5da732ebacb5938a36ce8d2307f31371383153faffaaf631e7279fbcf"
   },
   "codecs": {
     "decode/aac-atomic.wasm": "45e90ba204af8295db460adb50e929dd38c3ed8d27422973149737613cc4f584",

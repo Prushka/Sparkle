@@ -124,6 +124,19 @@ const rawBundle = (
 		write: false,
 		format: 'esm',
 		platform: 'browser',
+		plugins: [
+			{
+				name: 'shared-normalization-controller',
+				setup(build) {
+					// The temporary preference lives in module memory. Use the same
+					// instance for test controls and the provider, as the app does.
+					build.onResolve({ filter: /^\.\/audio-normalization$/ }, () => ({
+						path: '/controller.js',
+						external: true
+					}));
+				}
+			}
+		],
 		define: { 'process.env.NODE_ENV': '"production"' }
 	})
 ).outputFiles[0].text;

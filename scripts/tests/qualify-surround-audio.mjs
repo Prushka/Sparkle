@@ -115,6 +115,17 @@ const bundle = async (entry) =>
 			write: false,
 			format: 'esm',
 			platform: 'browser',
+			plugins: [
+				{
+					name: 'shared-normalization-controller',
+					setup(build) {
+						build.onResolve({ filter: /^\.\/audio-normalization$/ }, () => ({
+							path: '/controller.js',
+							external: true
+						}));
+					}
+				}
+			],
 			define: { 'process.env.NODE_ENV': '"production"' }
 		})
 	).outputFiles[0].text;
@@ -184,6 +195,7 @@ const server = createServer(async (req, res) => {
 				audioTracks: layoutMetadata?.audioTracks,
 				subtitleTracks: [],
 				hasFonts: false,
+				timestampStart: true,
 				segmentSeconds: 12
 			})
 		);
@@ -281,7 +293,18 @@ try {
 					await provider.loadSource({ src: location.origin + '/media/test', type: RAW_MEDIA_TYPE });
 					if (!provider.status.ready) throw new Error(provider.status.reason);
 					await provider.play();
-					if (encoded) await provider.selectTrack('audio', provider.status.audioTracks[track].id);
+					if (encoded) {
+						await provider.selectTrack('audio', provider.status.audioTracks[track].id);
+						await provider.applyRoomState({ time: 14, paused: true });
+						await provider.recoverPlayback();
+						if (
+							!provider.paused ||
+							Math.abs(provider.timeline - 14) > 0.3 ||
+							provider.status.audio !== provider.status.audioTracks[track].id
+						)
+							throw new Error('timestamp recovery lost the paused position or local audio track');
+						await provider.play();
+					}
 					const normalizer = [...provider.normalizers][0];
 					const context = normalizer.source.context;
 					const output = context.destination.channelCount;
@@ -327,6 +350,21 @@ try {
 					const boundaries = [];
 					// Exercise actual PCM across both independently encoded boundaries.
 					if (encoded && (track === 3 || extendedChecks) && channels === 2 && !virtual) {
+						const module = URL.createObjectURL(
+							new Blob(
+								[
+									`class Continuity extends AudioWorkletProcessor {
+ constructor(){super();this.active=false;this.zeros=0;this.count=0;this.port.onmessage=({data})=>{if(data==='arm'){this.active=true;this.zeros=this.count=0;}else{this.active=false;this.port.postMessage({zeros:this.zeros,count:this.count});}};}
+ process(inputs){if(this.active&&inputs[0]?.length){this.count++;let energy=0;for(const channel of inputs[0])for(const x of channel)energy+=x*x;if(energy<1e-12)this.zeros++;}return true;}
+}registerProcessor('continuity',Continuity);`
+								],
+								{ type: 'text/javascript' }
+							)
+						);
+						await context.audioWorklet.addModule(module);
+						URL.revokeObjectURL(module);
+						const capture = new AudioWorkletNode(context, 'continuity');
+						normalizer.destination.connect(capture).connect(context.destination);
 						const samples = new Float32Array(2048);
 						const meter = context.createAnalyser();
 						meter.fftSize = 2048;
@@ -334,26 +372,48 @@ try {
 						for (const boundary of [12, 24]) {
 							provider.setCurrentTime(boundary - 2);
 							await provider.commands;
-							const values = [];
+							const values = [],
+								dropouts = [];
+							let armed = false;
 							const deadline = performance.now() + 12000;
 							while (provider.timeline < boundary + 1 && performance.now() < deadline) {
 								if (provider.timeline > boundary - 0.5) {
+									if (!armed) {
+										capture.port.postMessage('arm');
+										armed = true;
+									}
 									meter.getFloatTimeDomainData(samples);
 									values.push(
 										Math.sqrt(
 											samples.reduce((sum, value) => sum + value * value, 0) / samples.length
 										)
 									);
+									if (values.at(-1) < 0.002)
+										dropouts.push({
+											time: provider.timeline,
+											audio: Number(provider.audioEngine.currentTime) / 1000,
+											rate: provider.audioRate,
+											stutters: provider.audioEngine.getStats().audioStutter,
+											rms: values.at(-1)
+										});
 								}
 								await sleep(10);
 							}
+							const rendered = await new Promise((resolve) => {
+								capture.port.onmessage = ({ data }) => resolve(data);
+								capture.port.postMessage('report');
+							});
 							boundaries.push({
+								rendered,
 								boundary,
 								end: provider.timeline,
 								count: values.length,
-								min: Math.min(...values)
+								min: Math.min(...values),
+								dropouts
 							});
 						}
+						normalizer.destination.disconnect(capture);
+						capture.disconnect();
 						normalizer.destination.disconnect(meter);
 					}
 					const clock = provider.timeline;
@@ -414,7 +474,9 @@ try {
 					assert.equal(result.audioDescription, '7.1 mix');
 				for (const b of result.boundaries) {
 					assert.ok(b.end >= b.boundary + 1 && b.count > 40, 'boundary playback stalled');
-					assert.ok(b.min > 0.002, `PCM dropout at ${b.boundary}s: ${b.min}`);
+					assert.ok(b.rendered.count > 400, 'audio-thread capture did not span the boundary');
+					assert.equal(b.rendered.zeros, 0, `rendered PCM dropout: ${JSON.stringify(b)}`);
+					assert.ok(b.min > 0.002, `PCM dropout: ${JSON.stringify(b)}`);
 				}
 			}
 			assert.equal(

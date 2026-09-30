@@ -77,6 +77,18 @@ Track/output changes and recovery of the current title retain an explicit choice
 It does not change anyone else's room playback setting.
 Turning it on uses an enhanced AV1/HEVC encode, including from Compatible mode.
 Turning it off restores the saved ordinary output choice, position and pause state.
+Both directions prime replacement decoders silently, hold video and PCM audio
+through their indexed seeks, and discard queued pre-seek samples before resuming.
+Encoded replacements and recovery pass the saved part-relative timestamp to both
+HLS readers before probing/prefetching. They start with the containing segment,
+including at exact twelve-second boundaries, and decode its preroll to the target.
+The manifest advertises `timestampStart`; older backends retain silent startup
+followed by seeking. Playlist requests accept a bounded integer `startSegment`
+hint, propagated through the master playlist to initialization URLs. An init
+request with that hint serves headers from the selected segment's existing encode
+job. Full playlists, absolute media timestamps and fragment URLs remain unchanged,
+so backward seeking works and participants still share the same cache entries.
+The hint does not change encoded bytes or the profile revision.
 Missing GPU/filter support leaves the button disabled. Processing failures are
 reported, without silently substituting ordinary video.
 
@@ -251,6 +263,11 @@ context, and user-initiated playback. The shared PCM context is prepared before
 Join/Play and resumed synchronously from click, touch-end, or keyboard gestures;
 this does not seek or broadcast a room command. Physical iOS Safari qualification is separate
 from desktop browser tests.
+Separate HLS audio/video renditions share the segment timeline. Multiplexing them
+into one file would not eliminate the separate PCM presentation clock needed for
+surround decoding/remixing. Mono/stereo-only outputs already use one native clock
+when supported. Decoder readiness, seek coordination and clock correction maintain
+sync for the PCM path; container separation alone does not cause drift.
 
 AV1 disables S12M timecode insertion (`-s12m_tc 0`) to avoid the
 [FFmpeg/NVENC malformed timecode metadata bug](https://forums.developer.nvidia.com/t/ffmpeg-av1-nvenc-encoder-sometimes-generates-undecodeable-bitstreams/364011),

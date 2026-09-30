@@ -47,6 +47,8 @@ export interface EncodedPart {
 	subtitleTracks: (RawPlaybackTrack & { default?: boolean })[];
 	hasFonts: boolean;
 	segmentSeconds: number;
+	/** Server can serve initialization headers from the requested segment. */
+	timestampStart?: boolean;
 }
 export function encodedAudioDescription(part: EncodedPart | undefined, index: number) {
 	const track = part?.audioTracks?.[index];
@@ -54,8 +56,12 @@ export function encodedAudioDescription(part: EncodedPart | undefined, index: nu
 	if (track?.conversion === 'downmix') return `${track.layout} mix`;
 	return undefined;
 }
-export function encodedURL(part: EncodedPart, resource: string) {
-	return `${part.base}/${resource}?v=${encodeURIComponent(part.fingerprint)}${part.aiHDR ? '&aiHDR=1' : ''}`;
+export function encodedURL(part: EncodedPart, resource: string, startSeconds = 0) {
+	const segment =
+		part.timestampStart && Number.isFinite(startSeconds) && part.segmentSeconds > 0
+			? Math.floor(Math.max(0, Math.min(startSeconds, part.duration - 0.001)) / part.segmentSeconds)
+			: 0;
+	return `${part.base}/${resource}?v=${encodeURIComponent(part.fingerprint)}${part.aiHDR ? '&aiHDR=1' : ''}${segment > 0 ? `&startSegment=${segment}` : ''}`;
 }
 export function supportsNativeVideo(contentType: string) {
 	const mse =

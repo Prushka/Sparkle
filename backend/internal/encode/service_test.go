@@ -66,6 +66,9 @@ func TestEncodingRequiresAllowedPlexSectionAndHidesPaths(t *testing.T) {
 	if allowed.Code != 200 {
 		t.Fatalf("manifest %d %s", allowed.Code, allowed.Body)
 	}
+	if !strings.Contains(allowed.Body.String(), `"timestampStart":true`) {
+		t.Fatal("manifest did not advertise timestamp initialization")
+	}
 	if strings.Contains(allowed.Body.String(), mediaRoot) || strings.Contains(allowed.Body.String(), "hidden-test-token") || strings.Contains(allowed.Body.String(), server.URL) {
 		t.Fatal("private configuration leaked")
 	}
@@ -170,6 +173,60 @@ func TestEncodingRequiresAllowedPlexSectionAndHidesPaths(t *testing.T) {
 		}
 	}
 	fontURL := "/media/" + id + "/parts/20/encoded/av1/fonts.json?v=" + encodedFingerprint
+	// A late startup must reuse the selected segment job, including its headers,
+	// without touching segment zero or changing media-fragment URLs/cache identity.
+	for _, enhanced := range []bool{false, true} {
+		s.options.AIHDREnabled = enhanced
+		cacheCodec, variant := "av1", ""
+		if enhanced {
+			cacheCodec += s.aiHDRRevision
+			variant = "&aiHDR=1"
+		}
+		segmentKey := fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("%s:%s:%s:%s:%+v:%d", profileVersion, s.revision, fingerprint, cacheCodec, s.options.Profile, 1))))
+		_, release, err := c.acquire(context.Background(), segmentKey, func(_ context.Context, dir string) error {
+			for _, kind := range []string{"video", "audio"} {
+				if err := os.WriteFile(filepath.Join(dir, kind+".mp4"), []byte("initfragment"), 0644); err != nil {
+					return err
+				}
+			}
+			return os.WriteFile(filepath.Join(dir, "index.json"), []byte(`{"video":4,"audio":4}`), 0644)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		release()
+		for _, kind := range []string{"video", "audio"} {
+			base := "/media/" + id + "/parts/20/encoded/av1/" + kind
+			playlist := httptest.NewRecorder()
+			mux.ServeHTTP(playlist, httptest.NewRequest("GET", base+".m3u8?startSegment=1"+variant, nil))
+			if playlist.Code != 200 || strings.Count(playlist.Body.String(), "&startSegment=1") != 1 || !strings.Contains(playlist.Body.String(), kind+"-0.m4s?v=") {
+				t.Fatalf("late playlist lost full timeline: %d %s", playlist.Code, playlist.Body)
+			}
+			initial := httptest.NewRecorder()
+			mux.ServeHTTP(initial, httptest.NewRequest("GET", base+"-init.mp4?startSegment=1"+variant, nil))
+			if initial.Code != 200 || initial.Body.String() != "init" {
+				t.Fatalf("late init: %d %s", initial.Code, initial.Body)
+			}
+			fragment := httptest.NewRecorder()
+			mux.ServeHTTP(fragment, httptest.NewRequest("GET", base+"-1.m4s?unused=1"+variant, nil))
+			if fragment.Code != 200 || fragment.Body.String() != "fragment" {
+				t.Fatalf("shared segment: %d %s", fragment.Code, fragment.Body)
+			}
+		}
+		master := httptest.NewRecorder()
+		mux.ServeHTTP(master, httptest.NewRequest("GET", "/media/"+id+"/parts/20/encoded/av1/master.m3u8?startSegment=1"+variant, nil))
+		if master.Code != 200 || strings.Count(master.Body.String(), "&startSegment=1") != 2 {
+			t.Fatal(master.Body)
+		}
+	}
+	s.options.AIHDREnabled = false
+	for _, value := range []string{"-1", "600", "999999999999999999999", "NaN", "1.5", "", "1&startSegment=2"} {
+		invalid := httptest.NewRecorder()
+		mux.ServeHTTP(invalid, httptest.NewRequest("GET", "/media/"+id+"/parts/20/encoded/av1/video-init.mp4?startSegment="+value, nil))
+		if invalid.Code != 400 {
+			t.Fatalf("accepted startSegment=%q: %d", value, invalid.Code)
+		}
+	}
 	fonts := httptest.NewRecorder()
 	mux.ServeHTTP(fonts, httptest.NewRequest("GET", fontURL, nil))
 	if fonts.Code != 200 || strings.TrimSpace(fonts.Body.String()) != `["Zm9udA=="]` {

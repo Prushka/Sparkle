@@ -89,6 +89,11 @@ Conventional untagged 8-bit HD H.264 sources use a checked Rec.709 SDR assumptio
 conflicting or ambiguous HDR metadata is rejected.
 Mono/stereo-only encoded audio and video share a native clock when supported.
 Multichannel encoded audio uses the Compatible client PCM path, including on Safari.
+Output changes prime decoders silently and hold both clocks until the current
+position is restored; queued audio from before a seek is discarded.
+Encoded output changes and recovery initialize from the current segment, including
+AI HDR, without first fetching or encoding the opening segment. This requires an
+updated backend; older backends retain silent startup followed by seeking.
 HDR output settings show live bitrate for the active playback mode.
 Software tone mapping is temporarily disabled; Compatible and AV1/HEVC playback use
 native video on SDR and HDR displays. Saved Tone mapping selections switch to Compatible.
@@ -112,7 +117,8 @@ Processed media retains its existing stereo output.
 The waveform button beside Captions enables [audio normalization](docs/audio-normalization.md).
 It downmixes multichannel audio to stereo before adjusting loudness in an AudioWorklet,
 preserves stereo balance and the playback clock, and restores the original samples and
-channel routing when off. It starts off for each title and is never saved.
+channel routing when off. It can make loud passages quieter, and its stereo mix
+omits LFE; it is not an audio boost. It starts off for each title and is never saved.
 
 Raw playback supports client WASM fallbacks, including TrueHD audio and embedded
 subtitles. TrueHD output is decoded PCM, not Atmos bitstream passthrough. Raw

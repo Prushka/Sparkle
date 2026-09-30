@@ -32,6 +32,50 @@ function patch(file, before, after, all = false) {
 	writeFileSync(path, all ? original.replaceAll(before, after) : original.replace(before, after));
 }
 const player = 'packages/avplayer/src/AVPlayer.ts';
+// Opt-in encoded VOD startup: select the target fragment before probing or
+// prefetching any packets. Preserve the full timeline (the first decoded PTS
+// is no longer the playlist's origin) and prime renderers at the exact target.
+patch(
+	'packages/avnetwork/src/ioLoader/IOLoader.ts',
+	'export type IOLoaderOptions = {',
+	'export type IOLoaderOptions = {\n  startTimestamp?: number'
+);
+const hlsLoader = 'packages/avnetwork/src/ioLoader/HlsIOLoader.ts';
+patch(
+	hlsLoader,
+	'    this.status = IOLoaderStatus.BUFFERING\n\n    return 0',
+	`    if (!this.options.isLive && Number.isFinite(this.options.startTimestamp) && this.options.startTimestamp > 0) {
+      for (const loader of this.loaders.values()) {
+        await loader.seek(BigInt(Math.round(this.options.startTimestamp)))
+      }
+    }
+    this.status = IOLoaderStatus.BUFFERING
+
+    return 0`
+);
+// Independent encoded startup must not fetch the preceding fragment at an exact
+// boundary. Retain existing preroll for other seeks/containers (whose first
+// independently decodable frame can follow the playlist boundary).
+patch(
+	hlsLoader,
+	'if (duration * 1000 >= seekTime)',
+	'if (duration * 1000 > seekTime || (duration * 1000 === seekTime && seekTime !== this.options.startTimestamp))'
+);
+patch(
+	player,
+	'      else if (start > 0 && this.isHls()) {',
+	'      else if (start > 0 && this.isHls() && !options.ioLoaderOptions?.startTimestamp) {'
+);
+patch(
+	player,
+	'    this.changingStreamPending.length = 0\n\n    this.status = AVPlayerStatus.LOADED',
+	`    if (this.isHls() && !this.isLive_ && Number.isFinite(options.ioLoaderOptions?.startTimestamp) && options.ioLoaderOptions.startTimestamp > 0) {
+      this.seekedTimestamp = BigInt(Math.round(options.ioLoaderOptions.startTimestamp))
+    }
+    this.changingStreamPending.length = 0
+
+    this.status = AVPlayerStatus.LOADED`
+);
 writeFileSync(
 	resolve(root, 'packages/avplayer/src/audio-output.ts'),
 	readFileSync('scripts/libmedia/audio-output.ts')
@@ -167,6 +211,56 @@ patch(
 const audioWorker = 'packages/avplayer/src/worker/AudioPipeline.ts';
 patch(audioWorker, '    }, 0, 500)', '    }, 0, 50)');
 patch(audioWorker, 'secondCounter === 2', 'secondCounter === 20', true);
+// Immediate mute/restoration must update the automation timeline, not only the
+// intrinsic AudioParam value underneath earlier scheduled volume ramps.
+patch(
+	player,
+	'          this.gainNode.gain.value = this.volume',
+	'          this.gainNode.gain.setValueAtTime(this.volume, AVPlayer.audioContext.currentTime)'
+);
+// Paused seeks must replace both queued PCM buffers. Otherwise resuming plays
+// pre-seek samples and leaves the audio clock behind native video. Drain any
+// outstanding pull before resetting the decoder, then refill while still held.
+patch(
+	player,
+	'        await this.doSeek(timestamp, streamIndex)\n        this.status = this.lastStatus',
+	`        const refillPCM = this.lastStatus === AVPlayerStatus.PAUSED
+          && this.audioSourceNode instanceof AudioSourceWorkletNode
+        if (refillPCM) await this.audioSourceNode.request('prepareSeek')
+        await this.doSeek(timestamp, streamIndex)
+        if (refillPCM) await this.audioSourceNode.request('refillSeek')
+        this.status = this.lastStatus`
+);
+for (const name of ['AudioSourceWorkletProcessor', 'AudioSourceWorkletProcessor2']) {
+	const file = `packages/avrender/src/pcm/${name}.ts`;
+	const original = execFileSync('git', ['-C', root, 'show', `HEAD:${file}`], {
+		encoding: 'utf8'
+	}).replaceAll('\r\n', '\n');
+	const restart = original.match(/ {8}case 'restart': \{[\s\S]*?(?= {8}case ')/)?.[0];
+	if (!restart) throw new Error('Pinned PCM restart does not match');
+	const refill = restart
+		.replace("case 'restart'", "case 'refillSeek'")
+		.replace(/          if \(!this\.ended\) \{[\s\S]*?          \}\n/, '')
+		.replace('          this.pause = false', '          this.pause = true')
+		.replace('this.backBufferOffset === BUFFER_LENGTH', 'this.backBufferOffset = BUFFER_LENGTH');
+	if (!refill.includes("case 'refillSeek'") || !refill.includes('this.pause = true'))
+		throw new Error('Pinned PCM restart does not match');
+	patch(
+		file,
+		"        case 'restart': {",
+		`        case 'prepareSeek': {
+          this.pause = true
+          if (!this.ended && !this.frontBuffered) {
+            await new Promise<void>((resolve) => { this.afterPullResolve = resolve })
+            this.afterPullResolve = null
+          }
+          this.ipcPort.reply(request)
+          break
+        }
+
+${refill}        case 'restart': {`
+	);
+}
 // Optional graph hooks run before samples start. PCM is pre-volume; native MSE
 // retains its HTMLMediaElement clock. Teardown owns every installed graph.
 patch(

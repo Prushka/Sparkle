@@ -258,6 +258,20 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Media changed; reload playback", 409)
 		return
 	}
+	// Initialization may reuse any existing segment job. Keep the complete VOD
+	// timeline and media URLs unchanged; the hint must not create new cache keys.
+	startSegment := 0
+	if requested, present := r.URL.Query()["startSegment"]; present {
+		if len(requested) != 1 {
+			http.Error(w, "Invalid start segment", http.StatusBadRequest)
+			return
+		}
+		startSegment, err = strconv.Atoi(requested[0])
+		if err != nil || startSegment < 0 || startSegment > 999999 || float64(startSegment)*SegmentSeconds >= source.duration {
+			http.Error(w, "Invalid start segment", http.StatusBadRequest)
+			return
+		}
+	}
 	if resource == "fonts.json" {
 		fonts := [][]byte{}
 		total := 0
@@ -314,12 +328,16 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		if aiHDR {
 			output = "HDR10"
 		}
-		writeJSON(w, map[string]any{"fingerprint": fingerprint, "playlist": "master.m3u8", "codec": codec, "aiHDR": aiHDR, "aiHDRMode": enhancement.Mode, "output": output, "duration": source.duration, "width": video.Width, "height": video.Height, "audio": source.probe.count("audio") > 0, "audioChannels": source.probe.audioChannels(), "audioTracks": source.probe.audioPlans(), "subtitleTracks": tracks, "hasFonts": hasFonts, "segmentSeconds": SegmentSeconds})
+		writeJSON(w, map[string]any{"fingerprint": fingerprint, "playlist": "master.m3u8", "codec": codec, "aiHDR": aiHDR, "aiHDRMode": enhancement.Mode, "output": output, "duration": source.duration, "width": video.Width, "height": video.Height, "audio": source.probe.count("audio") > 0, "audioChannels": source.probe.audioChannels(), "audioTracks": source.probe.audioPlans(), "subtitleTracks": tracks, "hasFonts": hasFonts, "segmentSeconds": SegmentSeconds, "timestampStart": true})
 		return
 	}
 	if strings.HasSuffix(resource, ".m3u8") {
 		if aiHDR {
 			fingerprint += "&aiHDR=1"
+		}
+		initialFingerprint := fingerprint
+		if startSegment > 0 {
+			initialFingerprint += fmt.Sprintf("&startSegment=%d", startSegment)
 		}
 		if resource == "master.m3u8" {
 			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
@@ -327,12 +345,12 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 			_, _ = io.WriteString(w, "#EXTM3U\n#EXT-X-VERSION:7\n")
 			audio := ""
 			if source.probe.count("audio") > 0 {
-				_, _ = fmt.Fprintf(w, "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"audio\",NAME=\"Audio\",DEFAULT=YES,AUTOSELECT=YES,URI=\"audio.m3u8?v=%s\"\n", fingerprint)
+				_, _ = fmt.Fprintf(w, "#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"audio\",NAME=\"Audio\",DEFAULT=YES,AUTOSELECT=YES,URI=\"audio.m3u8?v=%s\"\n", initialFingerprint)
 				audio = ",AUDIO=\"audio\""
 			}
 			// One variant, with the existing bounded audio/video segment caches.
 			// CQ is variable bitrate; this is a playlist selection hint, not telemetry.
-			_, _ = fmt.Fprintf(w, "#EXT-X-STREAM-INF:BANDWIDTH=80000000%s\nvideo.m3u8?v=%s\n", audio, fingerprint)
+			_, _ = fmt.Fprintf(w, "#EXT-X-STREAM-INF:BANDWIDTH=80000000%s\nvideo.m3u8?v=%s\n", audio, initialFingerprint)
 			return
 		}
 		kind := strings.TrimSuffix(resource, ".m3u8")
@@ -342,7 +360,7 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
 		w.Header().Set("Cache-Control", "private, no-cache")
-		_, _ = fmt.Fprintf(w, "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:%d\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-MAP:URI=\"%s-init.mp4?v=%s\"\n", SegmentSeconds, kind, fingerprint)
+		_, _ = fmt.Fprintf(w, "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:%d\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-INDEPENDENT-SEGMENTS\n#EXT-X-MAP:URI=\"%s-init.mp4?v=%s\"\n", SegmentSeconds, kind, initialFingerprint)
 		for n := 0; n < int(math.Ceil(source.duration/SegmentSeconds)); n++ {
 			_, _ = fmt.Fprintf(w, "#EXTINF:%.6f,\n%s-%d.m4s?v=%s\n", math.Min(SegmentSeconds, source.duration-float64(n*SegmentSeconds)), kind, n, fingerprint)
 		}
@@ -350,6 +368,9 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	kind, number, initial := parseResource(resource)
+	if initial {
+		number = startSegment
+	}
 	if number < 0 || float64(number*SegmentSeconds) >= source.duration {
 		http.NotFound(w, r)
 		return

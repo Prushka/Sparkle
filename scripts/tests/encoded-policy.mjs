@@ -32,6 +32,32 @@ assert.equal(
 	encodedURL({ base: '/test', fingerprint: 'a b', aiHDR: true }, 'video-init.mp4'),
 	'/test/video-init.mp4?v=a%20b&aiHDR=1'
 );
+const timestampPart = {
+	base: '/test',
+	fingerprint: 'version',
+	timestampStart: true,
+	segmentSeconds: 12,
+	duration: 25
+};
+for (const [time, segment] of [
+	[0, 0],
+	[11.999, 0],
+	[12, 1],
+	[13, 1],
+	[24, 2],
+	[100, 2],
+	[-1, 0],
+	[NaN, 0]
+]) {
+	assert.equal(
+		encodedURL(timestampPart, 'video.m3u8', time),
+		`/test/video.m3u8?v=version${segment ? `&startSegment=${segment}` : ''}`
+	);
+}
+assert.equal(
+	encodedURL({ ...timestampPart, timestampStart: undefined }, 'audio.m3u8', 13),
+	'/test/audio.m3u8?v=version'
+);
 preferences.set('sparkle.raw.hdr', 'sdr');
 assert.equal(readHDRPreference(), 'compatible');
 assert.equal(preferences.get('sparkle.raw.hdr'), 'compatible', 'migrate persisted software mode');

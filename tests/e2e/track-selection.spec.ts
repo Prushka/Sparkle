@@ -214,6 +214,7 @@ async function fixture(page: Page, nextDuration = 48, sizedSubtitles = false, au
 						? { aiHDR: true, aiHDRMode: 'hdr-expansion', output: 'HDR10' }
 						: {}),
 					duration,
+					timestampStart: true,
 					width: 320,
 					height: 180,
 					audio: true,
@@ -1563,6 +1564,7 @@ test('AI HDR and normalization reset per title and ignore legacy saved preferenc
 		await provider.selectTrack('audio', provider.status.audioTracks[0].id);
 		await provider.recoverPlayback();
 	});
+	await player.hover();
 	await expect(hdr).toHaveAttribute('aria-pressed', 'true');
 	await expect(normalize).toHaveAttribute('aria-pressed', 'true');
 	await expect(player).toHaveAttribute('data-normalization-state', 'active');
@@ -1610,6 +1612,12 @@ test('unavailable AI HDR reports failure and disabling it restores playback cont
 	await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
 	await expect.poll(() => audioTitle(page), { timeout: 30000 }).toBe('Japanese');
 	const player = page.locator('[data-media-player]');
+	// Default track publication occurs during silent decoder priming. Wait for
+	// actual playback before using the play/pause keyboard toggle.
+	await expect(player).not.toHaveAttribute('data-paused');
+	await expect
+		.poll(() => page.evaluate(() => (window as any).trackTestProvider.canPublishPlayback))
+		.toBe(true);
 	await player.press('k');
 	await expect(player).toHaveAttribute('data-paused');
 	await seekRaw(page, 12);
@@ -1729,6 +1737,10 @@ test('encoded playback recovers a stuck seek and restores working controls', asy
 	await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
 	await expect.poll(() => audioTitle(page), { timeout: 30000 }).toBe('Japanese');
 	const player = page.locator('[data-media-player]');
+	await expect(player).not.toHaveAttribute('data-paused');
+	await expect
+		.poll(() => page.evaluate(() => (window as any).trackTestProvider.canPublishPlayback))
+		.toBe(true);
 	await player.press('k');
 	await expect(player).toHaveAttribute('data-paused');
 	await page.evaluate(() => {
@@ -1924,6 +1936,11 @@ test('delayed Plex viewer restores the paused room position before first play', 
 		await first.goto(`${baseURL}/${room}/media/${rawId}`);
 		await first.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
 		await expect.poll(() => audioTitle(first), { timeout: 30000 }).toBe('Japanese');
+		// The default track is published during silent priming, before autoplay.
+		await expect(first.locator('[data-media-player]')).not.toHaveAttribute('data-paused');
+		await expect
+			.poll(() => first.evaluate(() => (window as any).trackTestProvider.canPublishPlayback))
+			.toBe(true);
 		await first.locator('[data-media-player]').press('k');
 		await expect(first.locator('[data-media-player]')).toHaveAttribute('data-paused');
 		await seekRaw(first, 18);

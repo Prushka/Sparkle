@@ -93,7 +93,7 @@ interface Engine {
 	getPlaybackBitrate(): Promise<{ video?: number; audio?: number }>;
 	selectSubtitle(id: number): Promise<void>;
 	setSubtitleEnable(value: boolean): void;
-	setVolume(value: number): void;
+	setVolume(value: number, force?: boolean): void;
 	setPlaybackRate(value: number): void;
 	resize(width: number, height: number): void;
 	on(event: string, callback: (...args: unknown[]) => void): void;
@@ -225,6 +225,7 @@ export class RawProvider implements MediaProviderAdapter {
 	private starting = false;
 	private volume = 1;
 	private muted = false;
+	private restoringPosition = false;
 	private rate = 1;
 	private desiredTime = 0;
 	private audioWaiting = false;
@@ -264,6 +265,7 @@ export class RawProvider implements MediaProviderAdapter {
 			this.initialized &&
 			!this.buffering &&
 			!this.starting &&
+			!this.restoringPosition &&
 			!this.status.changing &&
 			!this.destroyed &&
 			this.pendingSeek === 0 &&
@@ -361,7 +363,7 @@ export class RawProvider implements MediaProviderAdapter {
 		const time = this.status.changing || !this.status.ready ? this.desiredTime : this.timeline;
 		const paused = this.paused;
 		this.remoteOperations++;
-		const loading = this.loadSource(this.currentSrc);
+		const loading = this.loadSourceAt(this.currentSrc, time);
 		this.desiredTime = time;
 		this.paused = paused;
 		const generation = this.generation;
@@ -371,18 +373,15 @@ export class RawProvider implements MediaProviderAdapter {
 					if (generation !== this.generation || !this.status.ready) return;
 					this.starting = true;
 					try {
-						await this.start();
 						const index = Math.max(
 							0,
 							this.raw!.parts.findLastIndex((part) => part.start <= time)
 						);
 						if (index !== this.part) {
-							await this.loadPart(index, generation);
-							await this.start();
+							await this.loadPart(index, generation, time - this.raw!.parts[index].start);
 						}
 						const ms = BigInt(Math.round(Math.max(0, time - this.raw!.parts[index].start) * 1000));
-						await Promise.all([this.engine?.seek(ms), this.audioEngine?.seek(ms)]);
-						if (paused) await Promise.all([this.engine?.pause(), this.audioEngine?.pause()]);
+						await this.restorePosition(ms, !paused);
 						this.paused = paused;
 						this.desiredTime = time;
 						this.lastTime = -1;
@@ -404,7 +403,10 @@ export class RawProvider implements MediaProviderAdapter {
 		this.recovering = recovery;
 		return recovery;
 	}
-	async loadSource(src: Src) {
+	loadSource(src: Src) {
+		return this.loadSourceAt(src, 0);
+	}
+	private async loadSourceAt(src: Src, startSeconds: number) {
 		// Keep an explicit choice through recovery of this source only.
 		const aiHDR = this.currentSrc?.src === src.src && this.aiHDR;
 		const generation = ++this.generation;
@@ -477,7 +479,12 @@ export class RawProvider implements MediaProviderAdapter {
 						'Cannot check AI HDR availability. Retry playback to reconnect to the server.'
 					);
 				this.publish({ encodedAvailable: this.availableEncoders });
-				await this.loadPart(0, generation);
+				const time = Math.max(0, Math.min(startSeconds, this.duration - 0.001));
+				const index = Math.max(
+					0,
+					this.raw.parts.findLastIndex((part) => part.start <= time)
+				);
+				await this.loadPart(index, generation, time - this.raw.parts[index].start);
 			} catch (e) {
 				if (generation === this.generation && !this.abort.signal.aborted) this.fail(e);
 			}
@@ -485,7 +492,7 @@ export class RawProvider implements MediaProviderAdapter {
 		this.commands = loading.catch(() => {});
 		return loading;
 	}
-	private async loadPart(index: number, generation: number): Promise<void> {
+	private async loadPart(index: number, generation: number, startSeconds = 0): Promise<void> {
 		await this.releaseEngines();
 		if (generation !== this.generation || this.destroyed) return;
 		this.part = index;
@@ -620,11 +627,27 @@ export class RawProvider implements MediaProviderAdapter {
 					this.raw!.container ||
 					'mkv',
 			maxProbeDuration: 3,
-			ioLoaderOptions: { retryCount: 2, preload: 4 * 1024 * 1024 }
+			ioLoaderOptions: {
+				retryCount: 2,
+				preload: 4 * 1024 * 1024,
+				// Start both HLS readers before their first probe/prefetch. Timestamps
+				// remain relative to the full part, including subsequent backward seeks.
+				...(this.encoded?.timestampStart && startSeconds > 0
+					? {
+							startTimestamp: Math.round(
+								Math.min(startSeconds, this.encoded.duration - 0.001) * 1000
+							)
+						}
+					: {})
+			}
 		};
 		await engine.load(
 			this.encoded
-				? encodedURL(this.encoded, encodedNativeAudio(this.encoded) ? 'master.m3u8' : 'video.m3u8')
+				? encodedURL(
+						this.encoded,
+						encodedNativeAudio(this.encoded) ? 'master.m3u8' : 'video.m3u8',
+						startSeconds
+					)
 				: `${this.baseURL}${part.url}`,
 			options
 		);
@@ -712,7 +735,9 @@ export class RawProvider implements MediaProviderAdapter {
 				this.abort.signal
 			);
 			await this.audioEngine!.load(
-				this.encoded ? encodedURL(this.encoded, 'audio.m3u8') : `${this.baseURL}${part.url}`,
+				this.encoded
+					? encodedURL(this.encoded, 'audio.m3u8', startSeconds)
+					: `${this.baseURL}${part.url}`,
 				options
 			);
 		}
@@ -763,18 +788,25 @@ export class RawProvider implements MediaProviderAdapter {
 			buffered: new TimeRange()
 		});
 	}
-	private async start() {
+	private async start(): Promise<void> {
 		if (!this.engine || !this.status.ready)
 			throw new Error(this.status.reason || 'Media is not ready.');
+		if (!this.initialized && !this.restoringPosition) return this.restorePosition(0n, true);
 		const engine = this.engine;
 		this.lastProgress = performance.now();
 		this.buffering = false;
 		this.audioWaiting = false;
 		this.driftSince = 0;
-		await engine.play({ video: true, audio: !this.audioEngine, subtitle: true });
+		// Apply mute/volume before either fresh decoder can produce samples.
+		this.applyVolume(true);
+		await Promise.all([
+			engine.play({ video: true, audio: !this.audioEngine, subtitle: true }),
+			// Native video is coordinated by this provider. The audio-only engine
+			// must follow consumed PCM, not insert silence against a second timer.
+			this.audioEngine?.play({ video: false, audio: true, subtitle: false, audioMasterForce: true })
+		]);
 		if (engine !== this.engine || this.destroyed) return;
 		this.attachVideo();
-		await this.audioEngine?.play({ video: false, audio: true, subtitle: false });
 		if (!this.initialized) {
 			this.initialized = true;
 			const audio = pickRawAudioTrack(this.status.audioTracks, this.mediaId);
@@ -806,10 +838,31 @@ export class RawProvider implements MediaProviderAdapter {
 				await Promise.all([engine.seek(time), this.audioEngine?.seek(time)]);
 			}
 		}
-		this.setVolume(this.volume);
+		this.applyVolume();
 		engine.setPlaybackRate(this.rate);
 		this.setAudioRate(this.rate);
 		this.ctx.$state.canPictureInPicture.set(this.pictureInPicture.supported);
+	}
+	private async restorePosition(ms: bigint, playing: boolean, current = () => true) {
+		// Loaded libmedia decoders must be primed before seeking. Keep that
+		// initial audio inaudible, then hold both clocks through the entire seek.
+		this.restoringPosition = true;
+		this.applyVolume();
+		try {
+			if (!this.initialized) await this.start();
+			await Promise.all([this.engine?.pause(), this.audioEngine?.pause()]);
+			this.clearSubtitleTimeline();
+			await Promise.all([this.engine?.seek(ms), this.audioEngine?.seek(ms)]);
+			this.encodedCaptions?.update(Number(ms), true);
+			if (playing && current()) await this.start();
+		} catch (error) {
+			// A failed or cancelled seek must not expose the priming audio.
+			await Promise.allSettled([this.engine?.pause(), this.audioEngine?.pause()]);
+			throw error;
+		} finally {
+			this.restoringPosition = false;
+			this.applyVolume(true);
+		}
 	}
 	private clearSubtitleTimeline() {
 		this.subtitles?.clear();
@@ -878,30 +931,10 @@ export class RawProvider implements MediaProviderAdapter {
 			this.notify('seeking', target);
 			this.normalizers.forEach((normalizer) => normalizer.reset());
 			if (index !== this.part) {
-				await this.loadPart(index, this.generation);
-			}
-			// libmedia cannot seek a merely loaded engine. Prime both clocks first,
-			// including when joining a paused room or seeking into an unplayed part.
-			// Keep the whole operation private until the requested frame is ready.
-			if (!this.initialized) {
-				await this.start();
-				if (this.paused) await Promise.all([this.engine?.pause(), this.audioEngine?.pause()]);
+				await this.loadPart(index, this.generation, target - this.raw.parts[index].start);
 			}
 			const ms = BigInt(Math.round((target - this.raw.parts[index].start) * 1000));
-			// A large audio fragment can seek more slowly than native video.
-			// Hold both clocks until both seeks finish, then resume together.
-			// `paused` remains the requested playback state throughout the hold.
-			const resumeTogether = !!this.audioEngine && !this.paused;
-			if (resumeTogether) await Promise.all([this.engine?.pause(), this.audioEngine?.pause()]);
-			// A real timeline change invalidates old captions. The sink's later
-			// resume/reset may retain packets prefetched during this seek.
-			this.clearSubtitleTimeline();
-			// Start both indexed seeks together; do not let video finish before the
-			// audio decoder even starts moving to the requested position.
-			await Promise.all([this.engine?.seek(ms), this.audioEngine?.seek(ms)]);
-			this.encodedCaptions?.update(Number(ms), true);
-			if (sequence !== this.seekSequence) return;
-			if (resumeTogether) await this.start();
+			await this.restorePosition(ms, !this.paused, () => sequence === this.seekSequence);
 			if (sequence !== this.seekSequence) return;
 			this.lastTime = -1;
 			this.lastProgress = performance.now();
@@ -921,8 +954,14 @@ export class RawProvider implements MediaProviderAdapter {
 	}
 	setVolume(volume: number) {
 		this.volume = volume;
-		(this.audioEngine ?? this.engine)?.setVolume(this.muted ? 0 : volume);
+		this.applyVolume();
 		this.notify('volume-change', { volume, muted: this.muted });
+	}
+	private applyVolume(force = false) {
+		(this.audioEngine ?? this.engine)?.setVolume(
+			this.muted || this.restoringPosition ? 0 : this.volume,
+			force || this.restoringPosition
+		);
 	}
 	setPlaybackRate(rate: number) {
 		this.rate = rate;
@@ -1148,19 +1187,13 @@ export class RawProvider implements MediaProviderAdapter {
 				this.hdrPreference = preference;
 				this.aiHDR = aiHDR;
 				saveHDRPreference(preference);
-				await this.loadPart(this.part, generation);
+				await this.loadPart(this.part, generation, time - this.raw!.parts[this.part].start);
 				if (generation !== this.generation || this.destroyed) return;
-				// Warm the replacement renderer before seeking, then restore the local
-				// pause state. None of these internal operations emit room commands.
+				// Restore silently before exposing the replacement output. None of
+				// these internal operations emit room commands.
 				this.starting = true;
-				await this.start();
 				const ms = BigInt(Math.round((time - this.raw!.parts[this.part].start) * 1000));
-				await this.engine?.seek(ms);
-				await this.audioEngine?.seek(ms);
-				if (wasPaused) {
-					await this.engine?.pause();
-					await this.audioEngine?.pause();
-				}
+				await this.restorePosition(ms, !wasPaused);
 				this.desiredTime = time;
 			} finally {
 				this.starting = false;
@@ -1180,6 +1213,7 @@ export class RawProvider implements MediaProviderAdapter {
 			!this.engine ||
 			!this.initialized ||
 			this.starting ||
+			this.restoringPosition ||
 			this.status.changing ||
 			!this.status.ready
 		)

@@ -22,6 +22,10 @@ measures the stereo mix and reserves 2 dB headroom, including when individually 
 source channels sum above full scale. It is not a certified true-peak limiter
 or an offline, two-pass loudness scan; highly dynamic material may not stay at
 the exact target.
+Normalization is not a boost: loud passages can be attenuated, and switching from
+surround to stereo changes which speakers play and omits the LFE channel. Enabled
+playback can therefore sound quieter than the original surround route. Disabling
+restores the original mapped channels and unity gain; it does not invert the setting.
 The adapter disables unused integrated/LRA histograms and oversampled true-peak
 analysis; only momentary loudness and Sparkle's sample-peak guard are used. This
 reserves audio-thread time for decoding rather than unused meter displays.
@@ -73,10 +77,17 @@ worklet loads. Paused Raw sessions install their audio graph when playback start
 
 Non-isolated libmedia audio reports its clock every 50 ms. The separate-audio
 sync controller uses 120/40 ms hysteresis to avoid repeatedly entering/flushing
-time stretching. WASM output uses two bounded 20-quantum PCM buffers (about
+time stretching. The audio-only decoder uses PCM consumption as its master;
+its independent wall-clock gate must not insert silent buffers while Sparkle
+coordinates it with native video. WASM output uses two bounded 20-quantum PCM buffers (about
 53 ms each at 48 kHz), included in libmedia's presentation-time calculation,
 to tolerate decoder scheduling jitter. These are decoder buffers, not a
 normalization lookahead queue.
+Output replacement/recovery primes decoders with the user gain held at zero,
+pauses both clocks, seeks them together, then restores volume/mute and the requested
+play state. Paused seeks drain and refill both worklet PCM buffers before resuming,
+so old samples cannot leak after the target is restored. Immediate gain restoration
+uses an explicit AudioParam timeline event rather than leaving an earlier ramp active.
 
 AudioWorklet requires a secure context (HTTPS or localhost). Module loading or
 context failures retain the direct audio route and the button explains that

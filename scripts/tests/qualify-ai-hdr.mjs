@@ -55,7 +55,8 @@ const bundle = (
 ).outputFiles[0].text;
 let allowed = true,
 	delay = 0,
-	capabilitiesUnavailable = false;
+	capabilitiesUnavailable = false,
+	nativeAudio = false;
 const requests = [];
 const server = createServer(async (req, res) => {
 	try {
@@ -141,23 +142,27 @@ const server = createServer(async (req, res) => {
 					width: 320,
 					height: 180,
 					audio: true,
+					audioChannels: nativeAudio ? 1 : undefined,
+					timestampStart: true,
 					subtitleTracks: [],
 					hasFonts: false,
 					segmentSeconds
 				});
 			const query = `?v=${aiHDR ? 'enhanced' : 'ordinary'}${aiHDR ? '&aiHDR=1' : ''}`;
+			const startSegment = Number(url.searchParams.get('startSegment') || 0);
+			const initialQuery = query + (startSegment ? `&startSegment=${startSegment}` : '');
 			if (resource === 'master.m3u8')
 				return res
 					.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' })
 					.end(
-						`#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Audio",DEFAULT=YES,AUTOSELECT=YES,URI="audio.m3u8${query}"\n#EXT-X-STREAM-INF:BANDWIDTH=8000000,AUDIO="audio"\nvideo.m3u8${query}\n`
+						`#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",NAME="Audio",DEFAULT=YES,AUTOSELECT=YES,URI="audio.m3u8${initialQuery}"\n#EXT-X-STREAM-INF:BANDWIDTH=8000000,AUDIO="audio"\nvideo.m3u8${initialQuery}\n`
 					);
 			if (resource === 'audio.m3u8' || resource === 'video.m3u8') {
 				const kind = resource.split('.')[0];
 				return res
 					.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' })
 					.end(
-						`#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:${segmentSeconds}\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-MAP:URI="${kind}-init.mp4${query}"\n${durations.map((duration, i) => `#EXTINF:${duration},\n${kind}-${i}.m4s${query}\n`).join('')}#EXT-X-ENDLIST\n`
+						`#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:${segmentSeconds}\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-MAP:URI="${kind}-init.mp4${initialQuery}"\n${durations.map((duration, i) => `#EXTINF:${duration},\n${kind}-${i}.m4s${query}\n`).join('')}#EXT-X-ENDLIST\n`
 					);
 			}
 			file = join(root, item[1], codec, resource);
@@ -197,6 +202,12 @@ const browser = await chromium.launch({
 const report = [];
 async function client(transfer, mode = 'compatible', saved = false) {
 	const page = await browser.newPage();
+	const messages = [];
+	page.on('console', (message) => {
+		messages.push(message.text());
+		if (messages.length > 100) messages.shift();
+	});
+	page.diagnostics = messages;
 	await page.goto(`http://127.0.0.1:${server.address().port}`);
 	await page.evaluate(
 		async ({ transfer, mode, saved, noRecovery }) => {
@@ -230,8 +241,82 @@ async function client(transfer, mode = 'compatible', saved = false) {
 	);
 	return page;
 }
+async function timestampStartup(page, time, paused, recover = false) {
+	await page.evaluate(({ time, paused }) => provider.applyRoomState({ time, paused }), {
+		time,
+		paused
+	});
+	const fetched = [];
+	const record = (request) => {
+		const url = new URL(request.url());
+		if (url.pathname.includes('/encoded/'))
+			fetched.push(url.pathname.split('/').at(-1) + url.search);
+	};
+	page.on('request', record);
+	const state = await page.evaluate(async (recover) => {
+		published.length = 0;
+		if (recover) await provider.recoverPlayback();
+		else await provider.chooseAIHDR(!provider.aiHDR);
+		return {
+			time: provider.timeline,
+			paused: provider.paused,
+			ready: provider.status.ready,
+			published
+		};
+	}, recover);
+	page.off('request', record);
+	assert.ok(
+		state.ready && Math.abs(state.time - time) < 0.5,
+		JSON.stringify({ state, time, fetched })
+	);
+	assert.equal(state.paused, paused);
+	assert.deepEqual(state.published, []);
+	const segment = Math.floor(time / segmentSeconds);
+	for (const kind of ['video', 'audio']) {
+		assert.ok(
+			fetched.some(
+				(url) => url.startsWith(`${kind}-init.mp4?`) && url.includes(`startSegment=${segment}`)
+			),
+			JSON.stringify(fetched)
+		);
+		assert.ok(
+			fetched.some((url) => url.startsWith(`${kind}-${segment}.m4s?`)),
+			JSON.stringify(fetched)
+		);
+	}
+	assert.ok(
+		!fetched.some(
+			(url) =>
+				/^(video|audio)-(\d+)\.m4s/.test(url) && Number(url.match(/-(\d+)\.m4s/)[1]) < segment
+		),
+		JSON.stringify(fetched)
+	);
+	// The target fragment's PTS must not become a new timeline origin.
+	await page.evaluate(() => provider.applyRoomState({ time: 3, paused: true }));
+	const backward = await page.evaluate(() => {
+		const video = provider.container.querySelector('video');
+		return {
+			time: provider.timeline,
+			video: Number(provider.engine.currentTime),
+			audio: Number(provider.audioEngine?.currentTime),
+			status: provider.status,
+			paused: provider.paused,
+			buffered:
+				video &&
+				Array.from({ length: video.buffered.length }, (_, n) => [
+					video.buffered.start(n),
+					video.buffered.end(n)
+				])
+		};
+	});
+	assert.ok(
+		Math.abs(backward.time - 3) < 0.3,
+		JSON.stringify({ time, backward, messages: page.diagnostics })
+	);
+}
 try {
-	for (const transfer of process.argv.includes('--ui-only')
+	for (const transfer of process.argv.includes('--ui-only') ||
+	process.argv.includes('--startup-only')
 		? []
 		: ['bt709', 'smpte2084', 'arib-std-b67']) {
 		const first = await client(transfer),
@@ -259,6 +344,81 @@ try {
 				false,
 				'local toggle must not affect peer'
 			);
+			const transition = await first.evaluate(async () => {
+				await provider.applyRoomState({ time: 8, paused: false });
+				const load = provider.loadPart.bind(provider);
+				const observations = [];
+				provider.loadPart = async (...args) => {
+					await load(...args);
+					const audio = provider.audioEngine ?? provider.engine;
+					const volume = audio.setVolume.bind(audio);
+					let gain = 1;
+					audio.setVolume = (value, force) => {
+						gain = value;
+						volume(value, force);
+					};
+					const play = audio.play.bind(audio);
+					audio.play = async (...args) => {
+						observations.push({ phase: 'play', gain, time: Number(audio.currentTime) });
+						return play(...args);
+					};
+					const seek = audio.seek.bind(audio);
+					audio.seek = async (...args) => {
+						await new Promise((r) => setTimeout(r, 150));
+						const before = Number(provider.engine.currentTime);
+						await new Promise((r) => setTimeout(r, 500));
+						observations.push({
+							phase: 'seek',
+							gain,
+							advance: Number(provider.engine.currentTime) - before
+						});
+						return seek(...args);
+					};
+				};
+				published.length = 0;
+				provider.setVolume(0.37);
+				try {
+					await provider.chooseAIHDR(false);
+					await provider.chooseAIHDR(true);
+					await provider.recoverPlayback();
+					return { observations, volume: provider.volume, muted: provider.muted, published };
+				} finally {
+					provider.loadPart = load;
+				}
+			});
+			assert.ok(transition.observations.some((o) => o.phase === 'play' && o.time < 1000));
+			assert.ok(
+				transition.observations.every((o) => o.gain === 0),
+				JSON.stringify(transition)
+			);
+			assert.ok(
+				transition.observations
+					.filter((o) => o.phase === 'seek')
+					.every((o) => Math.abs(o.advance) < 100),
+				JSON.stringify(transition)
+			);
+			assert.equal(transition.volume, 0.37);
+			assert.equal(transition.muted, false);
+			assert.deepEqual(transition.published, []);
+			const continuity = await first.evaluate(async () => {
+				const samples = [];
+				await provider.applyRoomState({ time: 9, paused: false });
+				for (let n = 0; n < 35; n++) {
+					await new Promise((r) => setTimeout(r, 200));
+					samples.push({
+						at: performance.now(),
+						video: Number(provider.engine.currentTime),
+						audio: Number(provider.audioEngine.currentTime),
+						rate: provider.audioRate
+					});
+				}
+				return samples;
+			});
+			const maxDrift = Math.max(...continuity.map((s) => Math.abs(s.audio - s.video)));
+			const elapsed = continuity.at(-1).at - continuity[0].at;
+			const advanced = continuity.at(-1).video - continuity[0].video;
+			assert.ok(maxDrift < 250, JSON.stringify({ maxDrift, continuity }));
+			assert.ok(Math.abs(elapsed - advanced) < 300, JSON.stringify({ elapsed, advanced }));
 			await Promise.all(
 				[first, second].map((p) =>
 					p.evaluate((time) => provider.applyRoomState({ time, paused: false }), segmentSeconds + 1)
@@ -282,6 +442,9 @@ try {
 						}))
 					)
 				);
+			await timestampStartup(first, 12, true);
+			await timestampStartup(first, 13, false);
+			await timestampStartup(first, 24, true, true);
 			await first.evaluate(async () => {
 				published.length = 0;
 				await provider.chooseAIHDR(false);
@@ -294,7 +457,11 @@ try {
 				native: true,
 				togglePosition: true,
 				local: true,
-				twoClientSeekPausePlay: true
+				twoClientSeekPausePlay: true,
+				silentPrimingAndSlowSeek: true,
+				timestampStartupWithoutOpeningSegments: true,
+				maxDriftMs: maxDrift,
+				boundaryStallMs: Math.round(elapsed - advanced)
 			});
 		}
 		delay = 150;
@@ -308,6 +475,25 @@ try {
 		assert.ok(await first.evaluate(() => provider.status.aiHDR && provider.status.ready));
 		await Promise.all([first.close(), second.close()]);
 	}
+	if (!process.argv.includes('--ui-only')) {
+		for (const useNative of process.argv.includes('--startup-only') ? [false, true] : [true]) {
+			nativeAudio = useNative;
+			for (const codec of ['av1', 'hevc']) {
+				const page = await client('smpte2084', codec);
+				assert.equal(await page.evaluate(() => !!provider.audioEngine), !useNative);
+				await timestampStartup(page, 12, true);
+				await timestampStartup(page, 13, false);
+				await timestampStartup(page, 24, true, true);
+				await page.close();
+				report.push({
+					codec,
+					nativeAudio: useNative,
+					timestampStartupWithoutOpeningSegments: true
+				});
+			}
+		}
+		nativeAudio = false;
+	}
 	allowed = false;
 	const start = requests.length;
 	const disabled = await client('bt709', 'compatible', true);
@@ -320,52 +506,66 @@ try {
 	assert.equal(await legacy.evaluate(() => provider.status.aiHDR), false);
 	await legacy.close();
 	capabilitiesUnavailable = false;
-	const controls = await browser.newPage();
-	await controls.goto(`http://127.0.0.1:${server.address().port}/ui`);
-	await controls.waitForFunction(
-		() => document.querySelector('[data-media-player]')?.getAttribute('data-raw-ready') === 'true'
-	);
-	assert.equal(await controls.getByRole('button', { name: 'AI HDR', exact: true }).count(), 0);
-	allowed = true;
-	await controls.reload();
-	const toggle = controls.getByRole('button', { name: 'AI HDR', exact: true });
-	await toggle.waitFor();
-	for (const width of [1100, 390]) {
-		await controls.setViewportSize({ width, height: 800 });
-		await controls.evaluate(async () => {
-			await window.testPlayer.play();
-			await window.testPlayer.pause();
-		});
-		await controls.locator('[data-media-player]').hover();
-		await controls.evaluate(() => window.testPlayer.controls.show());
-		await toggle.click();
+	if (!process.argv.includes('--startup-only')) {
+		const controls = await browser.newPage();
+		await controls.goto(`http://127.0.0.1:${server.address().port}/ui`);
 		await controls.waitForFunction(
-			() =>
-				document.querySelector('[data-media-player]')?.getAttribute('data-raw-ai-hdr') === 'true' &&
-				document.querySelector('[data-media-player]')?.getAttribute('data-raw-ready') === 'true'
+			() => document.querySelector('[data-media-player]')?.getAttribute('data-raw-ready') === 'true'
 		);
-		const hdr = await toggle.boundingBox(),
-			audio = await controls
-				.getByRole('button', { name: 'Normalize audio', exact: true })
-				.boundingBox();
-		assert.ok(hdr && audio && hdr.x < audio.x && hdr.x >= 0 && audio.x + audio.width <= width);
-		await controls.screenshot({ path: join(root, `controls-${width}.png`) });
-		await toggle.click();
-		await controls.waitForFunction(
-			() =>
-				document.querySelector('[data-media-player]')?.getAttribute('data-raw-ai-hdr') ===
-					'false' &&
-				document.querySelector('[data-media-player]')?.getAttribute('data-raw-ready') === 'true'
-		);
+		assert.equal(await controls.getByRole('button', { name: 'AI HDR', exact: true }).count(), 0);
+		allowed = true;
+		await controls.reload();
+		const toggle = controls.getByRole('button', { name: 'AI HDR', exact: true });
+		await toggle.waitFor();
+		for (const width of [1100, 390]) {
+			await controls.setViewportSize({ width, height: 800 });
+			await controls.evaluate(async () => {
+				await window.testPlayer.play();
+				await window.testPlayer.pause();
+			});
+			await controls.locator('[data-media-player]').hover();
+			await controls.evaluate(() => window.testPlayer.controls.show());
+			await toggle.click();
+			await controls.waitForFunction(
+				() =>
+					document.querySelector('[data-media-player]')?.getAttribute('data-raw-ai-hdr') ===
+						'true' &&
+					document.querySelector('[data-media-player]')?.getAttribute('data-raw-ready') === 'true'
+			);
+			await controls.locator('[data-media-player]').hover();
+			await controls.evaluate(() => window.testPlayer.controls.show());
+			const hdr = await toggle.boundingBox(),
+				audio = await controls
+					.getByRole('button', { name: 'Normalize audio', exact: true })
+					.boundingBox();
+			assert.ok(hdr && audio && hdr.x < audio.x && hdr.x >= 0 && audio.x + audio.width <= width);
+			await controls.screenshot({ path: join(root, `controls-${width}.png`) });
+			await toggle.click();
+			await controls.waitForFunction(
+				() =>
+					document.querySelector('[data-media-player]')?.getAttribute('data-raw-ai-hdr') ===
+						'false' &&
+					document.querySelector('[data-media-player]')?.getAttribute('data-raw-ready') === 'true'
+			);
+		}
+		await controls.close();
 	}
-	await controls.close();
 	const result = {
 		playback: report,
-		controls: { widths: [1100, 390], flagOff: true },
+		controls: process.argv.includes('--startup-only')
+			? undefined
+			: { widths: [1100, 390], flagOff: true },
 		unavailableCapabilities: true
 	};
 	await writeFile(
-		join(root, process.argv.includes('--ui-only') ? 'ui-report.json' : 'browser-report.json'),
+		join(
+			root,
+			process.argv.includes('--startup-only')
+				? 'startup-report.json'
+				: process.argv.includes('--ui-only')
+					? 'ui-report.json'
+					: 'browser-report.json'
+		),
 		JSON.stringify(result, null, 2)
 	);
 	console.log(JSON.stringify(result, null, 2));

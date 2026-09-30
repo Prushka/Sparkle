@@ -1,6 +1,6 @@
 # Raw-media validation record
 
-Validated September 22–29, 2026 on Windows using the configured Plex server and
+Validated September 22–30, 2026 on Windows using the configured Plex server and
 read-only mapped files. This records implementation evidence, not certification
 of every codec, browser, display, or Dolby profile.
 
@@ -380,6 +380,47 @@ RTX 5090, NVEncC 9.35 and p3/CQ 24, using 12-second segments:
   12-second segment, including audio, in 3.7 seconds (AV1) and 3.3 seconds (HEVC).
   Sampled color comparisons against the reference passed. This is a bounded
   single-job measurement, not sustained or concurrent throughput qualification.
+
+September 30 client transition checks additionally cover silent decoder priming,
+parallel paused seeks, PCM-buffer replacement and restoration of user volume.
+`qualify-ai-hdr.mjs` passes all six SDR/PQ/HLG × AV1/HEVC combinations with an
+artificially delayed audio seek, playing/paused output changes and recovery.
+Crossing a twelve-second boundary produced no video stall; sampled audio/video
+clock differences stayed below the 250 ms test limit, including startup.
+These are browser clock samples, not measured acoustic lip sync.
+Timestamp-start checks cover replacement loads at 12 seconds (an exact boundary),
+13 seconds (within a segment), and paused recovery at 24 seconds (the final short
+segment). Network assertions require both target init headers and target fragments,
+with no earlier audio/video fragments requested during the replacement. Backward
+seeks retain the original timeline. Five repeated AV1/HEVC × PCM/native-audio
+startup runs pass; `qualify-ai-hdr.mjs --startup-only` runs this focused matrix.
+Go service tests check target-init cache reuse, unchanged full playlists and fragment
+URLs, AI HDR identity, and rejection of invalid/out-of-range startup hints.
+The focused room cases pass local tracks, pause/play, seeks, delayed readiness,
+reconnect, rapid media changes, rejected AI HDR, stuck-seek recovery and temporary
+toggle retention/reset. Six mocked iOS fullscreen API cases also pass; physical
+iOS Safari and HDR display qualification remain outstanding.
+
+The live Avatar Chrome tab reported an eight-channel speaker destination.
+Normalization reported active stereo processing when enabled and an eight-channel,
+zero-gain-adjustment bypass when disabled. Real FLAC 7.1 decoder checks pass mute,
+volume, seek and normalization, alongside sample-exact eight-channel graph bypass.
+Segment continuity checks combine native clocks and spectral sampling with an
+audio-thread capture; a main-thread analyser reading alone cannot prove an audible
+dropout. AV1/HEVC 7.1 and 7.1.4-to-7.1 mixes cross both 12/24-second boundaries
+with no silent render quanta in the final capture. Eight stereo-output layout
+cases and sixteen virtual stereo/7.1 routing cases pass. The audio-only decoder
+follows PCM consumption rather than applying an additional wall-clock silence
+gate alongside the provider's A/V sync.
+Late-start recovery also preserves the selected multichannel track and speaker
+routing on real two- and eight-channel destinations. One HEVC height-layout
+stereo-downmix run recorded 17 silent render quanta (about 45 ms) at a boundary;
+focused repeats passed with both timestamp startup enabled and disabled. Its cause
+remains unconfirmed; passing bounded captures do not establish dropout-free playback.
+Bounded AI HDR playback around the opening and a later scene did not reproduce the
+reported intermittent picture freeze; one dropped frame was observed among roughly
+5,000 frames in the longer sampled run. This does not establish stutter-free playback
+throughout the movie or under arbitrary CPU/GPU load.
 
 Real-source qualification additionally covers both AV1 and HEVC for the following
 inputs. Every output was decoded and checked for 10-bit BT.2020/PQ, 1,600-nit
