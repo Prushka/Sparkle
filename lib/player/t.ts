@@ -446,6 +446,7 @@ export interface VoiceSignalPayload {
 }
 
 export interface Job {
+	plexArtwork?: import('@/lib/plex-artwork').PlexArtworkPaths;
 	Source?: 'processed' | 'plex';
 	Poster?: string;
 	Summary?: string;
@@ -471,6 +472,7 @@ export interface Job {
 export type LibraryJob = Pick<
 	Job,
 	| 'Poster'
+	| 'plexArtwork'
 	| 'Id'
 	| 'Input'
 	| 'EncodedCodecs'

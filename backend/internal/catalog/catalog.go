@@ -24,21 +24,22 @@ import (
 )
 
 type Item struct {
-	ID        string  `json:"id"`
-	Source    string  `json:"source"`
-	LibraryID string  `json:"libraryId,omitempty"`
-	Kind      string  `json:"kind"`
-	Title     string  `json:"title"`
-	SortTitle string  `json:"sortTitle"`
-	Summary   string  `json:"summary,omitempty"`
-	Poster    string  `json:"poster,omitempty"`
-	Year      int     `json:"year,omitempty"`
-	AddedAt   int64   `json:"addedAt"`
-	Duration  float64 `json:"duration"`
-	Index     int     `json:"index,omitempty"`
-	ParentID  string  `json:"parentId,omitempty"`
-	Children  int     `json:"children,omitempty"`
-	match     matchIdentity
+	ID          string       `json:"id"`
+	Source      string       `json:"source"`
+	LibraryID   string       `json:"libraryId,omitempty"`
+	Kind        string       `json:"kind"`
+	Title       string       `json:"title"`
+	SortTitle   string       `json:"sortTitle"`
+	Summary     string       `json:"summary,omitempty"`
+	Poster      string       `json:"poster,omitempty"`
+	PlexArtwork *PlexArtwork `json:"plexArtwork,omitempty"`
+	Year        int          `json:"year,omitempty"`
+	AddedAt     int64        `json:"addedAt"`
+	Duration    float64      `json:"duration"`
+	Index       int          `json:"index,omitempty"`
+	ParentID    string       `json:"parentId,omitempty"`
+	Children    int          `json:"children,omitempty"`
+	match       matchIdentity
 }
 type Page struct {
 	Items      []Item   `json:"items"`
@@ -360,7 +361,7 @@ func (s *Service) plexItem(ctx context.Context, m plex.Metadata) (Item, error) {
 	if titleSort == "" {
 		titleSort = m.Title
 	}
-	return Item{ID: id, Source: "plex", LibraryID: m.SectionID, Kind: m.Type, Title: m.Title, SortTitle: titleSort, Summary: m.Summary, Poster: "/media/" + id + "/artwork/poster", Year: m.Year, AddedAt: m.AddedAt, Duration: m.Duration / 1000, Index: m.Index, Children: m.ChildCount}, nil
+	return Item{ID: id, Source: "plex", LibraryID: m.SectionID, Kind: m.Type, Title: m.Title, SortTitle: titleSort, Summary: m.Summary, Poster: "/media/" + id + "/artwork/poster", PlexArtwork: s.authorizedArtwork(ctx, metadataArtwork(m)), Year: m.Year, AddedAt: m.AddedAt, Duration: m.Duration / 1000, Index: m.Index, Children: m.ChildCount}, nil
 }
 
 var episodeRE = regexp.MustCompile(`(?i)^(.*?) - S([0-9]+)E([0-9]+)(?:[^ ]*) - (.*)$`)

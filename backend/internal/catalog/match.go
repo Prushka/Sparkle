@@ -21,6 +21,7 @@ type matchIdentity struct {
 type enrichment struct {
 	Poster, Backdrop, Summary string
 	Year                      int
+	Artwork                   *PlexArtwork
 }
 type matchEntry struct {
 	value enrichment
@@ -168,12 +169,15 @@ func (s *Service) findMatch(ctx context.Context, id matchIdentity) (enrichment, 
 		if !ok {
 			return enrichment{}, nil
 		}
+		if m.SectionID == "" {
+			m.SectionID = show.SectionID
+		}
 	}
 	canonical, err := s.plex.ID(ctx, m.Key, 0)
 	if err != nil {
 		return enrichment{}, err
 	}
-	value := enrichment{Summary: m.Summary, Year: m.Year}
+	value := enrichment{Summary: m.Summary, Year: m.Year, Artwork: metadataArtwork(m)}
 	if m.Thumb != "" || m.ParentThumb != "" {
 		value.Poster = "/media/" + canonical + "/artwork/poster"
 	}
@@ -255,6 +259,7 @@ func (s *Service) enrichPage(ctx context.Context, items []Item) {
 			defer wg.Done()
 			for i := range work {
 				value := s.matchingArtwork(ctx, items[i].match)
+				items[i].PlexArtwork = s.authorizedArtwork(ctx, value.Artwork)
 				if value.Poster != "" {
 					items[i].Poster = s.publicArtworkURL(value.Poster)
 				}

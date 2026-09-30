@@ -483,19 +483,30 @@ func (c *Client) ArtworkPath(ctx context.Context, id, kind string) (string, erro
 	if err != nil {
 		return "", err
 	}
+	p := MetadataArtworkPath(m, kind)
+	if p == "" {
+		return "", ErrNotFound
+	}
+	return p, nil
+}
+
+var artworkPathRE = regexp.MustCompile(`^/library/metadata/[0-9]+/(thumb|art)(/[0-9]+)?$`)
+
+// MetadataArtworkPath reuses catalog metadata without issuing another Plex request.
+func MetadataArtworkPath(m Metadata, kind string) string {
 	p := m.Thumb
 	if kind == "backdrop" {
 		p = m.Art
 	} else if kind != "poster" {
-		return "", ErrNotFound
+		return ""
 	}
 	if p == "" {
 		p = m.ParentThumb
 	}
-	if !regexp.MustCompile(`^/library/metadata/[0-9]+/(thumb|art)(/[0-9]+)?$`).MatchString(p) {
-		return "", ErrNotFound
+	if !artworkPathRE.MatchString(p) {
+		return ""
 	}
-	return p, nil
+	return p
 }
 
 func (c *Client) Artwork(ctx context.Context, id, kind string) ([]byte, string, error) {

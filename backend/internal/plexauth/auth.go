@@ -42,9 +42,9 @@ type Options struct {
 	Secure       bool
 	SameSite     string
 	// Empty SessionDir is for ephemeral managers (tests/embedded callers).
-	SessionDir    string
-	PublicDirs    []string
-	DirectArtwork bool
+	SessionDir string
+	PublicDirs []string
+	ArtworkURL string
 }
 
 type session struct {
@@ -71,38 +71,45 @@ type rate struct {
 	until time.Time
 }
 type Manager struct {
-	identity      func(context.Context) (string, error)
-	libraries     func(context.Context, string) ([]string, error)
-	mediaLibrary  func(context.Context, string) (string, error)
-	origins       map[string]bool
-	secure        bool
-	sameSite      http.SameSite
-	http          *http.Client
-	api           string
-	mu            sync.Mutex
-	sessions      map[[32]byte]*session
-	pins          map[[32]byte]*pending
-	rates         map[string]rate
-	avatars       map[string]*avatarEntry
-	store         *sessionStore
-	closed        bool
-	directArtwork bool
+	identity     func(context.Context) (string, error)
+	libraries    func(context.Context, string) ([]string, error)
+	mediaLibrary func(context.Context, string) (string, error)
+	origins      map[string]bool
+	secure       bool
+	sameSite     http.SameSite
+	http         *http.Client
+	api          string
+	mu           sync.Mutex
+	sessions     map[[32]byte]*session
+	pins         map[[32]byte]*pending
+	rates        map[string]rate
+	avatars      map[string]*avatarEntry
+	store        *sessionStore
+	closed       bool
+	artworkURL   string
 }
 type status struct {
-	Enabled       bool     `json:"enabled"`
-	Authenticated bool     `json:"authenticated"`
-	CanAccessRaw  bool     `json:"canAccessRaw"`
-	DirectArtwork bool     `json:"directArtwork,omitempty"`
-	Name          string   `json:"name,omitempty"`
-	ProfileID     string   `json:"profileId,omitempty"`
-	LibraryIDs    []string `json:"libraryIds,omitempty"`
+	Enabled       bool                `json:"enabled"`
+	Authenticated bool                `json:"authenticated"`
+	CanAccessRaw  bool                `json:"canAccessRaw"`
+	DirectArtwork bool                `json:"directArtwork,omitempty"`
+	Artwork       *artworkCredentials `json:"artwork,omitempty"`
+	Name          string              `json:"name,omitempty"`
+	ProfileID     string              `json:"profileId,omitempty"`
+	LibraryIDs    []string            `json:"libraryIds,omitempty"`
 }
 type contextKey struct{}
 
 func New(opts Options) (*Manager, error) {
-	m := &Manager{identity: opts.Identity, libraries: opts.Libraries, mediaLibrary: opts.MediaLibrary, directArtwork: opts.DirectArtwork, origins: map[string]bool{}, secure: opts.Secure, sameSite: http.SameSiteLaxMode,
+	m := &Manager{identity: opts.Identity, libraries: opts.Libraries, mediaLibrary: opts.MediaLibrary, artworkURL: opts.ArtworkURL, origins: map[string]bool{}, secure: opts.Secure, sameSite: http.SameSiteLaxMode,
 		http: &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 		api:  "https://plex.tv/api/v2", sessions: map[[32]byte]*session{}, pins: map[[32]byte]*pending{}, rates: map[string]rate{}, avatars: map[string]*avatarEntry{}}
+	if opts.ArtworkURL != "" {
+		u, err := url.Parse(opts.ArtworkURL)
+		if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" {
+			return nil, errors.New("artwork URL must be an HTTPS base without credentials, query or fragment")
+		}
+	}
 	if opts.SameSite == "none" {
 		if !opts.Secure {
 			return nil, errors.New("PLEX_AUTH_COOKIE_SAMESITE=none requires secure cookies")
@@ -188,11 +195,16 @@ func (m *Manager) mutation(w http.ResponseWriter, r *http.Request) bool {
 }
 func (m *Manager) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /auth/plex/session", func(w http.ResponseWriter, r *http.Request) { reply(w, 200, m.state(r.Context())) })
+	mux.HandleFunc("POST /auth/plex/session", m.privateSession)
 	mux.HandleFunc("POST /auth/plex/start", m.start)
 	mux.HandleFunc("POST /auth/plex/poll", m.poll)
 	mux.HandleFunc("POST /auth/plex/logout", m.logout)
 }
 func (m *Manager) state(ctx context.Context) status {
+	return m.sessionState(ctx, false)
+}
+
+func (m *Manager) sessionState(ctx context.Context, includeArtwork bool) status {
 	v := status{Enabled: m.identity != nil}
 	if s, ok := ctx.Value(contextKey{}).(*session); ok {
 		s.mu.Lock()
@@ -203,7 +215,14 @@ func (m *Manager) state(ctx context.Context) status {
 		v.Authenticated, v.Name, v.CanAccessRaw = true, s.name, s.access && s.ctx.Err() == nil && time.Since(s.checked) < accessTTL
 		v.ProfileID = s.profileID
 		if v.CanAccessRaw {
-			v.DirectArtwork = m.directArtwork && s.serverToken != ""
+			v.DirectArtwork = m.artworkURL != "" && s.serverToken != ""
+			if includeArtwork && v.DirectArtwork && ctx.Err() == nil {
+				expires := s.checked.Add(accessTTL)
+				if s.expires.Before(expires) {
+					expires = s.expires
+				}
+				v.Artwork = &artworkCredentials{BaseURL: m.artworkURL, Token: s.serverToken, ExpiresAt: expires.UnixMilli()}
+			}
 			for id := range s.libraries {
 				v.LibraryIDs = append(v.LibraryIDs, id)
 			}
@@ -639,7 +658,7 @@ func (m *Manager) Middleware(next http.Handler) http.Handler {
 		allowed := m.state(r.Context()).CanAccessRaw
 		path := r.URL.Path
 		protected := (strings.HasPrefix(path, "/media/plex-") && !publicMediaRead(r)) || strings.HasPrefix(path, "/library/items/plex-")
-		directArtwork := r.Method == http.MethodPost && strings.HasPrefix(path, "/library/artwork/") && strings.HasSuffix(path, "/direct")
+		directArtwork := r.Method == http.MethodPost && path == "/auth/plex/session"
 		if s != nil && allowed && (protected || directArtwork || path == "/library/items" || path == "/library/sources") {
 			// Bind before the per-media decision: a concurrent library revocation
 			// must not let this request attach to a newly issued private context.

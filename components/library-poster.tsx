@@ -1,10 +1,12 @@
 'use client';
 
 import { PlexArtworkImage } from '@/components/plex-artwork';
+import type { PlexArtworkPaths } from '@/lib/plex-artwork';
 
-export function LibraryPoster({ src }: { src: string }) {
+export function LibraryPoster({ src, artwork }: { src: string; artwork?: PlexArtworkPaths }) {
 	return (
 		<PlexArtworkImage
+			artwork={artwork}
 			alt=""
 			src={src}
 			// The grid already mounts only visible/overscan rows. Native lazy loading

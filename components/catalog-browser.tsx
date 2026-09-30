@@ -474,6 +474,7 @@ export function CatalogBrowser({
 												<LibraryPoster
 													key={item.poster}
 													src={libraryArtwork(backendBaseUrl, staticBaseUrl, item.poster)!}
+													artwork={item.plexArtwork}
 												/>
 											)}
 											<Badge className="absolute top-2 left-2 border-white/15 bg-black/75 px-2 py-0.5 text-[10px] font-bold text-white">

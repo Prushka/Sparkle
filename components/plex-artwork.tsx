@@ -2,192 +2,192 @@
 
 import {
 	createContext,
+	useCallback,
 	useContext,
 	useEffect,
 	useMemo,
+	useRef,
 	useState,
 	type ComponentPropsWithRef,
 	type ReactNode
 } from 'react';
-import { joinBackendPath, loadRuntimeConfig } from '@/lib/player/data';
+import type { PlexArtworkCredentials, PlexArtworkPaths } from '@/lib/plex-artwork';
 
-const lifetime = 4 * 60_000;
-const timeout = 8_000;
-const artworkPath =
-	/\/(?:media\/plex-[a-f0-9]{12}-\d+-\d+\/artwork\/(?:poster|backdrop)|library\/artwork\/[A-Za-z0-9_.-]+)$/;
-
-function artworkSession() {
-	const entries = new Map<
-		string,
-		{ promise: Promise<string>; controller: AbortController; expires: number }
-	>();
-	return {
-		resolve(src: string) {
-			const cached = entries.get(src);
-			if (cached && cached.expires > Date.now()) return cached.promise;
-			cached?.controller.abort();
-			entries.delete(src);
-			while (entries.size >= 128) {
-				const oldest = entries.keys().next().value!;
-				entries.get(oldest)?.controller.abort();
-				entries.delete(oldest);
-			}
-			const controller = new AbortController();
-			const timer = setTimeout(() => controller.abort(), timeout);
-			const promise = (async () => {
-				try {
-					const config = await loadRuntimeConfig();
-					const source = new URL(src, location.href);
-					const backend = new URL(joinBackendPath(config.backendBaseUrl, '/'), location.href);
-					if (
-						source.origin !== backend.origin ||
-						!source.pathname.startsWith(backend.pathname) ||
-						source.search ||
-						source.hash
-					)
-						return src;
-					const response = await fetch(`${source.href}/direct`, {
-						method: 'POST',
-						credentials: 'include',
-						cache: 'no-store',
-						redirect: 'error',
-						headers: { 'X-Sparkle-Auth': '1' },
-						signal: controller.signal
-					});
-					if (!response.ok) return src;
-					const data = await response.json();
-					const direct = new URL(data.url);
-					return !controller.signal.aborted &&
-						direct.protocol === 'https:' &&
-						!direct.username &&
-						!direct.password
-						? direct.href
-						: src;
-				} catch {
-					// Never log a failed request: it may contain the viewer's token.
-					return src;
-				} finally {
-					clearTimeout(timer);
-				}
-			})();
-			entries.set(src, { promise, controller, expires: Date.now() + lifetime });
-			return promise;
-		},
-		fallback(src: string) {
-			const entry = entries.get(src);
-			if (entry) entry.promise = Promise.resolve(src);
-		},
-		clear() {
-			for (const entry of entries.values()) entry.controller.abort();
-			entries.clear();
-		}
-	};
-}
-
-type Session = ReturnType<typeof artworkSession>;
+const artworkPath = /^\/library\/metadata\/[0-9]+\/(thumb|art)(\/[0-9]+)?$/;
+type Session = {
+	credentials: PlexArtworkCredentials;
+	libraryIds: readonly string[];
+	failures: Map<string, ReturnType<typeof setTimeout>>;
+};
 const Artwork = createContext<{ ready: boolean; session: Session | null }>({
 	ready: true,
 	session: null
 });
+const noLibraries: readonly string[] = [];
 
 export function PlexArtworkProvider({
 	children,
 	ready,
-	enabled,
+	credentials,
+	libraryIds = noLibraries,
 	sessionKey
 }: {
 	children: ReactNode;
 	ready: boolean;
-	enabled: boolean;
+	credentials: PlexArtworkCredentials | null;
+	libraryIds?: readonly string[];
 	sessionKey: number;
 }) {
-	// The key changes for account, authorization or sign-out changes. These URLs
-	// belong only to this provider instance, never catalog data or browser storage.
 	const value = useMemo(
-		() => ({ ready, session: enabled ? artworkSession() : null, sessionKey }),
-		[ready, enabled, sessionKey]
+		() => ({
+			ready,
+			sessionKey,
+			session: credentials
+				? { credentials, libraryIds, failures: new Map<string, ReturnType<typeof setTimeout>>() }
+				: null
+		}),
+		[ready, credentials, libraryIds, sessionKey]
 	);
-	useEffect(() => () => value.session?.clear(), [value]);
+	useEffect(
+		() => () => {
+			for (const timer of value.session?.failures.values() || []) clearTimeout(timer);
+			value.session?.failures.clear();
+		},
+		[value]
+	);
 	return <Artwork.Provider value={value}>{children}</Artwork.Provider>;
 }
 
-function useArtwork(src: string) {
-	const { ready, session } = useContext(Artwork);
-	const eligible = artworkPath.test(src);
-	const [resolved, setResolved] = useState<{
-		source: string;
-		session: Session;
-		url: string;
-		loaded: boolean;
-	} | null>(null);
-	// Clear before rendering a different account's image, including late results.
-	if (resolved && (resolved.source !== src || resolved.session !== session || !ready))
-		setResolved(null);
-	useEffect(() => {
-		if (!ready || !session || !eligible) return;
-		let active = true;
-		void session.resolve(src).then((url) => {
-			if (active) setResolved({ source: src, session, url, loaded: false });
-		});
-		return () => {
-			active = false;
-		};
-	}, [src, ready, session, eligible]);
-	const current =
-		resolved?.source === src && resolved.session === session && ready ? resolved : null;
-	const url = !eligible ? src : !ready ? undefined : session ? current?.url : src;
-	const direct = !!url && url !== src;
-	useEffect(() => {
-		if (!direct || !session || current?.loaded) return;
-		const timer = setTimeout(() => {
-			session.fallback(src);
-			setResolved({ source: src, session, url: src, loaded: false });
-		}, timeout);
-		return () => clearTimeout(timer);
-	}, [direct, session, src, current?.loaded]);
-	return {
-		src: url,
-		onLoad() {
-			if (current) setResolved({ ...current, loaded: true });
-		},
-		onError() {
-			if (direct && session) {
-				session.fallback(src);
-				setResolved({ source: src, session, url: src, loaded: false });
-			}
-		}
-	};
+function rememberFailure(session: Session | null, key: string) {
+	if (!session || session.failures.has(key)) return;
+	while (session.failures.size >= 128) {
+		const oldest = session.failures.keys().next().value!;
+		clearTimeout(session.failures.get(oldest));
+		session.failures.delete(oldest);
+	}
+	session.failures.set(
+		key,
+		setTimeout(() => session.failures.delete(key), 4 * 60_000)
+	);
+}
+
+function directURL(
+	session: Session | null,
+	artwork: PlexArtworkPaths | undefined,
+	kind: 'poster' | 'backdrop'
+) {
+	const path = artwork?.[kind];
+	if (
+		!session ||
+		!artwork ||
+		!path ||
+		!artworkPath.test(path) ||
+		!session.libraryIds.includes(artwork.libraryId)
+	)
+		return '';
+	const { baseUrl, token, expiresAt } = session.credentials;
+	if (!token || !Number.isFinite(expiresAt)) return '';
+	try {
+		const url = new URL(baseUrl);
+		if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash)
+			return '';
+		url.pathname = url.pathname.replace(/\/+$/, '') + path;
+		url.searchParams.set('X-Plex-Token', token);
+		return url.href;
+	} catch {
+		return '';
+	}
 }
 
 export function PlexArtworkImage({
 	src = '',
+	artwork,
+	kind = 'poster',
 	alt = '',
 	onError,
 	onLoad,
+	ref,
 	...props
-}: Omit<ComponentPropsWithRef<'img'>, 'src'> & { src?: string }) {
-	const artwork = useArtwork(src);
-	const [failed, setFailed] = useState('');
-	if (failed === src && src) return null;
+}: Omit<ComponentPropsWithRef<'img'>, 'src'> & {
+	src?: string;
+	artwork?: PlexArtworkPaths;
+	kind?: 'poster' | 'backdrop';
+}) {
+	const element = useRef<HTMLImageElement | null>(null);
+	const imageRef = useCallback(
+		(node: HTMLImageElement | null) => {
+			element.current = node;
+			const cleanup = typeof ref === 'function' ? ref(node) : undefined;
+			if (ref && typeof ref !== 'function') ref.current = node;
+			return () => {
+				element.current = null;
+				if (typeof cleanup === 'function') cleanup();
+				else if (typeof ref === 'function') ref(null);
+				else if (ref) ref.current = null;
+			};
+		},
+		[ref]
+	);
+	const { ready, session } = useContext(Artwork);
+	const target = directURL(session, artwork, kind);
+	const key = `${src}:${artwork?.[kind] || ''}`;
+	const [state, setState] = useState<{
+		key: string;
+		session: Session | null;
+		phase: 'loaded' | 'fallback' | 'hidden';
+	} | null>(null);
+	if (state && (state.key !== key || state.session !== session)) setState(null);
+	const current = state?.key === key && state.session === session ? state : null;
+	const cachedFailure = session?.failures.has(key);
+	const direct =
+		ready &&
+		!!target &&
+		!cachedFailure &&
+		current?.phase !== 'fallback' &&
+		current?.phase !== 'hidden';
+	const display = !ready && artwork ? undefined : direct ? target : src;
+	function fallback() {
+		rememberFailure(session, key);
+		setState({ key, session, phase: 'fallback' });
+	}
+	useEffect(() => {
+		if (!direct || current?.phase === 'loaded') return;
+		// A grant refresh can retain the same URL and already-loaded DOM image.
+		if (
+			element.current?.complete &&
+			element.current.naturalWidth > 0 &&
+			element.current.getAttribute('src') === target
+		)
+			return;
+		const timer = setTimeout(() => {
+			rememberFailure(session, key);
+			setState({ key, session, phase: 'fallback' });
+		}, 8_000);
+		return () => clearTimeout(timer);
+	}, [direct, current?.phase, key, session, target]);
+	if (current?.phase === 'hidden') return null;
 	return (
-		// Direct Plex images cannot go through the Next image optimizer or require CORS.
+		// Plex handles image bytes directly; the optimizer and CORS are unnecessary.
 		// eslint-disable-next-line @next/next/no-img-element
 		<img
 			{...props}
-			src={artwork.src}
+			ref={imageRef}
+			src={display}
 			alt={alt}
 			crossOrigin={undefined}
 			referrerPolicy="no-referrer"
 			onLoad={(event) => {
-				artwork.onLoad();
+				if (event.currentTarget.getAttribute('src') !== display) return;
+				if (direct) setState({ key, session, phase: 'loaded' });
 				onLoad?.(event);
 			}}
 			onError={(event) => {
-				if (event.currentTarget.getAttribute('src') !== artwork.src) return;
-				if (artwork.src === src) {
-					setFailed(src);
+				if (event.currentTarget.getAttribute('src') !== display) return;
+				if (direct) fallback();
+				else {
+					setState({ key, session, phase: 'hidden' });
 					onError?.(event);
-				} else artwork.onError();
+				}
 			}}
 		/>
 	);

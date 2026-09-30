@@ -17,6 +17,7 @@ import { Pfp } from '@/components/player/Pfp';
 import { joinBackendPath, loadRuntimeConfig } from '@/lib/player/data';
 import { plexAccessRequiredEvent } from '@/lib/plex-access';
 import { PlexArtworkProvider } from '@/components/plex-artwork';
+import type { PlexArtworkCredentials } from '@/lib/plex-artwork';
 
 type PlexSession = {
 	enabled: boolean;
@@ -41,6 +42,7 @@ const Auth = createContext<PlexAuth | null>(null);
 
 export function PlexAuthProvider({ children }: { children: ReactNode }) {
 	const [session, setSession] = useState(anonymous);
+	const [artwork, setArtwork] = useState<PlexArtworkCredentials | null>(null);
 	const [ready, setReady] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState('');
@@ -49,7 +51,24 @@ export function PlexAuthProvider({ children }: { children: ReactNode }) {
 	const generation = useRef(0);
 	const polling = useRef<AbortController | null>(null);
 	const active = useRef(false);
-	const apply = useCallback((value: PlexSession) => {
+	const apply = useCallback((response: PlexSession & { artwork?: PlexArtworkCredentials }) => {
+		const { artwork: credentials, ...value } = response;
+		const nextArtwork =
+			value.authenticated &&
+			value.canAccessRaw &&
+			value.directArtwork &&
+			credentials &&
+			Number.isFinite(credentials.expiresAt) &&
+			credentials.expiresAt > Date.now()
+				? credentials
+				: null;
+		setArtwork((previous) =>
+			previous?.baseUrl === nextArtwork?.baseUrl &&
+			previous?.token === nextArtwork?.token &&
+			previous?.expiresAt === nextArtwork?.expiresAt
+				? previous
+				: nextArtwork
+		);
 		const next = JSON.stringify(value);
 		if (next !== signature.current) {
 			signature.current = next;
@@ -73,9 +92,9 @@ export function PlexAuthProvider({ children }: { children: ReactNode }) {
 		return { data, pending: response.status === 202 };
 	}, []);
 	const refresh = useCallback(async () => {
-		const current = generation.current;
+		const current = ++generation.current;
 		try {
-			const { data } = await request('session');
+			const { data } = await request('session', 'POST', AbortSignal.timeout(8_000));
 			if (current === generation.current) apply(data);
 		} catch {
 			// Fail closed while preserving the ability to retry the sign-in service.
@@ -83,14 +102,26 @@ export function PlexAuthProvider({ children }: { children: ReactNode }) {
 		}
 	}, [apply, request]);
 	useEffect(() => {
-		void refresh();
+		if (!artwork) return;
+		const timer = setTimeout(
+			() => {
+				setArtwork(null);
+				void refresh();
+			},
+			Math.max(0, artwork.expiresAt - Date.now())
+		);
+		return () => clearTimeout(timer);
+	}, [artwork, refresh]);
+	useEffect(() => {
 		const update = () => {
 			if (document.visibilityState === 'visible') void refresh();
 		};
+		const initial = window.setTimeout(() => void refresh(), 0);
 		window.addEventListener('focus', update);
 		window.addEventListener(plexAccessRequiredEvent, update);
 		const timer = window.setInterval(update, 60_000);
 		return () => {
+			clearTimeout(initial);
 			window.removeEventListener('focus', update);
 			window.removeEventListener(plexAccessRequiredEvent, update);
 			clearInterval(timer);
@@ -145,6 +176,7 @@ export function PlexAuthProvider({ children }: { children: ReactNode }) {
 							'This Plex account does not have access to any configured library. Ask the server owner to share a library with you.'
 						);
 					popup.close();
+					void refresh();
 					return;
 				}
 				// Plex can sever the window handle through its opener policy. Only
@@ -162,7 +194,7 @@ export function PlexAuthProvider({ children }: { children: ReactNode }) {
 			active.current = false;
 			setBusy(false);
 		}
-	}, [apply, request]);
+	}, [apply, request, refresh]);
 	const signOut = useCallback(async () => {
 		polling.current?.abort();
 		generation.current++;
@@ -170,6 +202,7 @@ export function PlexAuthProvider({ children }: { children: ReactNode }) {
 		setError('');
 		try {
 			const { data } = await request('logout', 'POST');
+			generation.current++;
 			apply(data);
 		} catch (caught) {
 			setError(caught instanceof Error ? caught.message : 'Unable to sign out.');
@@ -181,7 +214,8 @@ export function PlexAuthProvider({ children }: { children: ReactNode }) {
 		<Auth.Provider value={{ ...session, ready, busy, error, revision, signIn, signOut, refresh }}>
 			<PlexArtworkProvider
 				ready={ready}
-				enabled={session.directArtwork === true}
+				credentials={artwork}
+				libraryIds={session.libraryIds}
 				sessionKey={revision}
 			>
 				{children}

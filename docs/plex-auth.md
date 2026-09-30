@@ -124,25 +124,36 @@ query parameters or a fragment. The browser must trust its certificate and reach
 Sparkle does not discover a public address automatically. Leave it empty to use the
 existing proxy for every cover. Restart the backend after changing it.
 
-Signed-in viewers resolve images through `POST /media/{id}/artwork/{poster|backdrop}/direct`
-or `POST /library/artwork/{signed-token}/direct` for a conservatively matched Encoded
-title. These requests require the current session, exact allowed Origin,
-`X-Sparkle-Auth: 1`, and access to the resolved media's library. Responses contain an
-HTTPS artwork URL with the viewer's server resource token in `X-Plex-Token` and use
-`Cache-Control: no-store`. The configured `PLEX_TOKEN` and sign-in account token are
-never selected for these responses. Plex may issue a server token with broad account
-privileges, especially for the server owner; it is **not an artwork-only token**.
+The existing session refresh uses `POST /auth/plex/session` with the exact allowed
+Origin and `X-Sparkle-Auth: 1`. When direct artwork is enabled and the viewer has a
+valid library grant, its private, `Cache-Control: no-store` response includes
+`artwork: { baseUrl, token, expiresAt }`. The token is the viewer's server resource
+token. Its frontend expiry is bounded by the five-minute grant check and the
+session's original expiry; it does not set the Plex token's lifetime. Public
+`GET /auth/plex/session` and PIN poll responses remain token-free. The configured
+`PLEX_TOKEN` and sign-in account token are never selected for these responses.
+Plex may issue a server token with broad account privileges, especially for the
+server owner; it is **not an artwork-only token**.
+
+Catalog and title responses include token-free `plexArtwork` paths only when the
+viewer has access to that library, including conservatively matched Encoded titles.
+Paths come from the metadata already requested. The browser combines them with the
+private base URL and resource token in `X-Plex-Token`; there are no per-cover URL
+requests or extra Plex metadata requests to resolve direct artwork. The former
+`/artwork/.../direct` endpoints are removed.
 
 Only image elements use these private URLs. Catalog data, shared room messages,
 Vidstack/media-session metadata, casting and public previews retain proxy URLs.
-Direct lookup resolves metadata without fetching or caching the artwork bytes on
-Sparkle. An unauthorized/failed lookup, broken direct image or eight-second timeout
-falls back to the existing proxy. Anonymous covers and public GET/HEAD routes stay
-proxied. Direct images use `no-referrer` and do not require Plex CORS headers.
+Sparkle does not fetch or cache direct artwork bytes. Missing credentials or paths,
+an unshared library, a broken direct image or an eight-second image timeout falls
+back to the existing proxy. Anonymous covers and public GET/HEAD routes stay proxied.
+Direct images use `no-referrer` and do not require Plex CORS headers.
 
-The frontend coalesces lookups in session-scoped memory, bounded to 128 entries with
-a four-minute lookup TTL. Auth/profile/library changes clear that memory and remove
-private image URLs; outstanding lookups are aborted and late responses ignored.
+Credentials live only in frontend session memory and use the existing minute/focus
+refresh, with an eight-second request timeout. Expiry clears them and triggers
+revalidation. Failed images are remembered in session memory for four minutes,
+bounded to 128 entries. Auth/profile/library or credential changes clear that memory;
+sign-out and expiry remove private image URLs, and stale session responses are ignored.
 Neither localStorage nor sessionStorage stores these URLs, and Sparkle's service
 worker bypasses token-bearing requests. This is not a promise of no browser disk
 persistence: the browser's ordinary HTTP image cache follows Plex's headers and may

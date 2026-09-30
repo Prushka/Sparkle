@@ -3,103 +3,68 @@ package catalog
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"strings"
 	"testing"
+
+	"Sparkle/internal/plex"
 )
 
-func TestDirectArtworkUsesViewerAndPreservesPublicRoutes(t *testing.T) {
+func TestArtworkPathsReuseCatalogMetadataAndKeepPublicProxy(t *testing.T) {
 	s, mux, calls, id := fixture(t)
-	var authorized []string
-	s.RegisterDirectArtwork(mux, "https://public.example/plex/", func(w http.ResponseWriter, r *http.Request, media string) string {
-		authorized = append(authorized, media)
-		return "viewer+secret&value"
-	})
-	for _, kind := range []string{"poster", "backdrop"} {
-		path := "/media/" + id + "/artwork/" + kind
-		for _, route := range []string{path, s.publicArtworkURL(path)} {
-			w := httptest.NewRecorder()
-			mux.ServeHTTP(w, httptest.NewRequest("POST", route+"/direct", nil))
-			var body map[string]string
-			if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &body) != nil {
-				t.Fatalf("direct: %d %s", w.Code, w.Body.String())
-			}
-			u, err := url.Parse(body["url"])
-			part := "thumb"
-			if kind == "backdrop" {
-				part = "art"
-			}
-			if err != nil || u.Scheme != "https" || u.Host != "public.example" || u.Path != "/plex/library/metadata/7/"+part+"/1" || u.Query().Get("X-Plex-Token") != "viewer+secret&value" || strings.Contains(body["url"], "test-secret") {
-				t.Fatal("incorrect direct URL")
-			}
-			if w.Header().Get("Cache-Control") != "no-store" || w.Header().Get("Referrer-Policy") != "no-referrer" {
-				t.Fatal("credential response may be cached")
-			}
-		}
+	// This synthetic row is already in a Plex page; resolving artwork must not
+	// fetch its individual metadata or any artwork bytes.
+	item, err := s.plexItem(context.Background(), plex.Metadata{Key: "123", SectionID: "1", Type: "movie", Thumb: "/library/metadata/123/thumb/456", Art: "/library/metadata/123/art/456", Media: []plex.Media{{ID: 1}}})
+	if err != nil || item.PlexArtwork == nil || item.PlexArtwork.Poster != "/library/metadata/123/thumb/456" {
+		t.Fatal("missing page artwork")
 	}
-	if calls.Load() != 0 || len(authorized) != 4 {
-		t.Fatal("direct lookup enumerated library or skipped authorization")
+	if calls.Load() != 0 {
+		t.Fatal("artwork enumerated catalog")
 	}
-	for _, media := range authorized {
-		if media != id {
-			t.Fatal("signed artwork authorized wrong media")
-		}
+	job, err := s.Details(context.Background(), id)
+	if err != nil || job["plexArtwork"] == nil {
+		t.Fatal("title metadata missing artwork paths")
 	}
-	entries, err := os.ReadDir(s.artwork.dir)
-	if err != nil && !os.IsNotExist(err) {
-		t.Fatal(err)
-	}
-	if len(entries) != 0 {
-		t.Fatal("direct lookup populated artwork disk cache")
-	}
-	job, err := s.RawJob(context.Background(), id)
 	encoded, _ := json.Marshal(job)
-	if err != nil || strings.Contains(string(encoded), "X-Plex-Token") || strings.Contains(string(encoded), "public.example") {
-		t.Fatal("public metadata exposed private artwork")
+	if strings.Contains(string(encoded), "X-Plex-Token") || strings.Contains(string(encoded), "test-secret") || !strings.HasPrefix(str(job, "Poster"), "/media/") {
+		t.Fatal("metadata exposed credentials or lost proxy")
+	}
+	entries, _ := os.ReadDir(s.artwork.dir)
+	if len(entries) != 0 {
+		t.Fatal("metadata fetched image bytes")
+	}
+	s.canAccessLibrary = func(context.Context, string) bool { return false }
+	job, err = s.Details(context.Background(), id)
+	if err != nil || job["plexArtwork"] != nil {
+		t.Fatal("public or unshared metadata exposed direct paths")
 	}
 	w := httptest.NewRecorder()
 	mux.ServeHTTP(w, httptest.NewRequest("GET", "/media/"+id+"/artwork/poster", nil))
 	if w.Code != 200 || w.Header().Get("Cache-Control") != "private, max-age=300" || w.Header().Get("ETag") == "" {
-		t.Fatal("proxy contract changed")
+		t.Fatal("public proxy contract changed")
+	}
+	w = httptest.NewRecorder()
+	mux.ServeHTTP(w, httptest.NewRequest("POST", "/media/"+id+"/artwork/poster/direct", nil))
+	if w.Code == 200 {
+		t.Fatal("obsolete per-cover route remains")
 	}
 }
 
-func TestDirectArtworkRejectsInvalidTargets(t *testing.T) {
-	s, mux, _, id := fixture(t)
-	count := 0
-	s.RegisterDirectArtwork(mux, "https://public.example", func(w http.ResponseWriter, r *http.Request, id string) string {
-		count++
-		http.Error(w, "denied", 403)
-		return ""
-	})
-	for _, route := range []string{"/media/" + id + "/artwork/file/direct", s.publicArtworkURL("/media/"+id+"/artwork/poster") + "tampered/direct"} {
-		w := httptest.NewRecorder()
-		mux.ServeHTTP(w, httptest.NewRequest("POST", route, nil))
-		if w.Code != 404 {
-			t.Fatalf("invalid route accepted: %d", w.Code)
+func TestMatchedArtworkPathsRespectEachViewersGrant(t *testing.T) {
+	s, calls := matchingFixture(t, []plex.Metadata{{Key: "10", SectionID: "1", Type: "movie", Title: "Film", Year: 2020, Thumb: "/library/metadata/10/thumb/1"}}, 1)
+	identity := identityFromTitle("Film (2020).mkv")
+	allowed := true
+	s.canAccessLibrary = func(_ context.Context, library string) bool { return allowed && library == "1" }
+	for _, grant := range []bool{true, false, true} {
+		allowed = grant
+		items := []Item{{Source: "processed", match: identity}}
+		s.enrichPage(context.Background(), items)
+		if (items[0].PlexArtwork != nil) != grant || !strings.HasPrefix(items[0].Poster, "/library/artwork/") {
+			t.Fatal("cached match bypassed viewer grant or lost public proxy")
 		}
 	}
-	if count != 0 {
-		t.Fatal("invalid path reached credential provider")
-	}
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, httptest.NewRequest("POST", "/media/"+id+"/artwork/poster/direct", nil))
-	if w.Code != 403 || strings.Contains(w.Body.String(), "X-Plex-Token") {
-		t.Fatal("denied viewer received artwork")
-	}
-	for _, base := range []string{"", "http://public.example", "https://secret@public.example", "https://public.example?secret"} {
-		m := http.NewServeMux()
-		s.RegisterDirectArtwork(m, base, func(http.ResponseWriter, *http.Request, string) string {
-			t.Fatal("disabled feature requested credentials")
-			return ""
-		})
-		w := httptest.NewRecorder()
-		m.ServeHTTP(w, httptest.NewRequest("POST", "/media/"+id+"/artwork/poster/direct", nil))
-		if w.Code != 404 {
-			t.Fatal("invalid base enabled artwork")
-		}
+	if calls.Load() != 1 {
+		t.Fatal("artwork paths repeated metadata lookup")
 	}
 }

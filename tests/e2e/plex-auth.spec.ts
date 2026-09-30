@@ -44,10 +44,8 @@ async function fixture(
 	});
 	await page.route('**/be/auth/plex/*', async (route) => {
 		const action = new URL(route.request().url()).pathname.split('/').pop();
-		if (action !== 'session') {
-			expect(route.request().method()).toBe('POST');
-			expect(route.request().headers()['x-sparkle-auth']).toBe('1');
-		}
+		expect(route.request().method()).toBe('POST');
+		expect(route.request().headers()['x-sparkle-auth']).toBe('1');
 		if (action === 'start')
 			return route.fulfill({
 				json: {
@@ -467,7 +465,10 @@ test('HTTP network addresses explain HTTPS before opening a popup or starting a 
 	const f = await fixture(page);
 	const mutations: string[] = [];
 	page.on('request', (request) => {
-		if (request.method() === 'POST' && request.url().includes('/auth/plex/'))
+		if (
+			request.method() === 'POST' &&
+			/\/auth\/plex\/(start|poll|logout)$/.test(new URL(request.url()).pathname)
+		)
 			mutations.push(request.url());
 	});
 	let popups = 0;
@@ -512,10 +513,14 @@ test('delayed authorization survives a closed popup handle and a stale focus ref
 	const heldRefresh = new Promise<void>((resolve) => {
 		releaseRefresh = resolve;
 	});
-	await page.route('**/be/auth/plex/session', async (route) => {
-		await heldRefresh;
-		await route.fulfill({ json: { enabled: true, authenticated: false, canAccessRaw: false } });
-	});
+	await page.route(
+		'**/be/auth/plex/session',
+		async (route) => {
+			await heldRefresh;
+			await route.fulfill({ json: { enabled: true, authenticated: false, canAccessRaw: false } });
+		},
+		{ times: 1 }
+	);
 	const staleRequest = page.waitForRequest('**/be/auth/plex/session');
 	await page.evaluate(() => window.dispatchEvent(new Event('focus')));
 	await staleRequest;

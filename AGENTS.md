@@ -111,9 +111,11 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   session storage must also stay outside `OUTPUT` and `PFP_DIR`. Legacy avatars remain readable.
 - Keep Plex account/configured owner tokens and local filesystem paths out of browser
   payloads and logs. Optional `PLEX_PUBLIC_URL` is the sole exception for viewer server
-  resource tokens: authenticated, origin-checked artwork POSTs return private no-store
-  URLs. Keep these out of shared metadata, room messages, application persistent storage,
-  and logs. Clear session-scoped frontend memory on auth changes and retain proxy fallback
+  resource tokens: authenticated, origin-checked session POSTs return private no-store
+  artwork credentials. Authorized metadata carries token-free artwork paths; the browser
+  builds image URLs locally. Keep credentials and private URLs out of shared metadata,
+  room messages, application persistent storage, and logs. Clear session-scoped frontend
+  memory on auth changes and credential expiry, and retain proxy fallback
   and public previews. Never expose backend secrets through public environment variables.
 - Use `/library/items` paging and direct `/media/{id}` lookup. Never enumerate Plex to build
   a complete index or refresh the picker through `/all`; `/all` is processed-only legacy

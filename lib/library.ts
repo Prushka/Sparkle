@@ -1,5 +1,6 @@
 import { backendFetch } from '@/lib/plex-access';
 import { joinBackendPath } from '@/lib/player/data';
+import type { PlexArtworkPaths } from '@/lib/plex-artwork';
 export interface LibraryItem {
 	id: string;
 	source: 'processed' | 'plex';
@@ -7,6 +8,7 @@ export interface LibraryItem {
 	kind: 'movie' | 'show' | 'season' | 'episode';
 	title: string;
 	poster?: string;
+	plexArtwork?: PlexArtworkPaths;
 	summary?: string;
 	year?: number;
 	duration: number;

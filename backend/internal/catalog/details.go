@@ -43,6 +43,9 @@ func (s *Service) Details(ctx context.Context, id string) (map[string]any, error
 		lookup, cancel := context.WithTimeout(ctx, 4*time.Second)
 		match := s.matchingArtwork(lookup, identityFromTitle(str(job, "Input")))
 		cancel()
+		if artwork := s.authorizedArtwork(ctx, match.Artwork); artwork != nil {
+			job["plexArtwork"] = artwork
+		}
 		if match.Poster != "" {
 			job["Poster"] = s.publicArtworkURL(match.Poster)
 		}

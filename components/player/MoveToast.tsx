@@ -80,7 +80,14 @@ export function MoveToast({
 			</CardHeader>
 			<CardContent>
 				<div className="flex w-full items-center gap-1 text-sm font-normal">
-					{job?.Title ? <TitlePoster title={job.Title} staticBaseUrl={staticBaseUrl} poster={job.Poster ? joinBackendPath(backendBaseUrl, job.Poster) : undefined} /> : null}
+					{job?.Title ? (
+						<TitlePoster
+							title={job.Title}
+							staticBaseUrl={staticBaseUrl}
+							poster={job.Poster ? joinBackendPath(backendBaseUrl, job.Poster) : undefined}
+							artwork={job.plexArtwork}
+						/>
+					) : null}
 					To: {job?.Input}
 				</div>
 			</CardContent>

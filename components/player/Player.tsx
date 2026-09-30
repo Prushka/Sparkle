@@ -7378,7 +7378,7 @@ export function Player({
 									type={videoSrc?.type}
 									data-codec={videoSrc?.codec}
 								/>
-								<PlexPoster src={posterSrc} />
+								<PlexPoster src={posterSrc} artwork={job.plexArtwork} />
 								<canvas ref={canvasRef} id="sub-canvas" className="pointer-events-none absolute" />
 							</MediaProvider>
 							{job.Raw && <RawPlaybackObserver onTracks={reportRawTracks} />}

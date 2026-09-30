@@ -43,6 +43,7 @@ export function CurrentMedia({
 				</div>
 				{poster && (
 					<PlexArtworkImage
+						artwork={job.plexArtwork}
 						src={poster}
 						alt={`${job.Title.title} cover`}
 						className="absolute inset-0 size-full object-cover"
