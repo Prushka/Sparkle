@@ -13,7 +13,7 @@ Windows bitmap scaling.
 
 ## Install and use
 
-Requirements: Windows with Windows PowerShell 5.1 and .NET Framework 4.x, plus Go 1.25+
+Requirements: Windows with Windows PowerShell 5.1 and .NET Framework 4.x, plus Go 1.27.1+
 on `PATH` (or supplied with `-GoExe`) for builds and tray rebuilds. The build uses Windows' existing Framework C# compiler;
 neither Visual Studio nor a .NET SDK is required. The account must have access to the
 configured media, profile, session and cache directories.

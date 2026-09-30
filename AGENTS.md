@@ -38,7 +38,7 @@ files. Optional on-demand NVENC encoding serves cached derivatives of Plex media
 
 ## Setup and verification
 
-Use npm with `package-lock.json`; the Go module lives in `backend/` and requires Go 1.25+.
+Use npm with `package-lock.json`; the Go module lives in `backend/` and requires Go 1.27.1+.
 Follow the [local setup](README.md#local-development) for `.env` and separate frontend/backend
 terminals. Do not overwrite an existing `.env`. Startup scripts load the root `.env` and
 resolve output/cache/profile paths relative to the repository; direct `go run` does neither.
@@ -184,7 +184,9 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   mono/stereo-only encoded outputs can share the native video clock. Processed media keeps
   its existing stereo behavior. Output is decoded PCM, not Dolby/DTS/Atmos bitstream passthrough.
 - Server encodes use 12-second segments, including AI HDR; bump the profile revision when
-  duration changes. Share cache keys by source fingerprint, codec, profile and time segment,
+  duration changes. Windows FFmpeg is available through the checksum-pinned
+  `scripts/install-ffmpeg.ps1`; keep its portable distribution and notices together.
+  Share cache keys by source fingerprint, codec, profile and time segment,
   never by participant. Preserve cancellation, GPU limits, byte/count cache bounds, original
   read-only handles and timestamp continuity. Use NVENC exclusively for AV1/HEVC video
   encoding. `ENCODE_CONCURRENCY` accepts 1–32 shared pipelines and defaults to 2. Use

@@ -139,10 +139,18 @@ Windows Chrome/Edge combinations and pending Safari, mobile, Firefox, and Activi
 
 ## Local development
 
-Prerequisites: Node.js LTS with npm, Go 1.25 or newer, and either existing
+Prerequisites: Node.js LTS with npm, Go 1.27.1 or newer, and either existing
 processed output or a reachable Plex server with readable local media mappings.
 Plex is optional. Raw playback does not require server FFmpeg. Optional encoded playback
 requires FFmpeg/ffprobe and an NVIDIA GPU with the selected 10-bit NVENC encoder.
+Windows users can install the pinned FFmpeg build with
+[`scripts/install-ffmpeg.ps1`](scripts/install-ffmpeg.ps1); see
+[server encoding](docs/server-encoding.md#setup) for configuration.
+
+Keep TypeScript on 6.0.x and ESLint on 9.x while the Next.js lint plugins require
+those versions. The patched libmedia runtime and its build toolchain are pinned
+together in the [player build guide](scripts/libmedia/README.md); updating the npm
+package alone does not update that runtime.
 
 1. Install dependencies from the repository root:
 

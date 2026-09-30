@@ -412,8 +412,11 @@ startup runs pass; `qualify-ai-hdr.mjs --startup-only` runs this focused matrix.
 Go service tests check target-init cache reuse, unchanged full playlists and fragment
 URLs, AI HDR identity, and rejection of invalid/out-of-range startup hints.
 The focused room cases pass local tracks, pause/play, seeks, delayed readiness,
-reconnect, rapid media changes, rejected AI HDR, stuck-seek recovery and temporary
-toggle retention/reset. Six mocked iOS fullscreen API cases also pass; physical
+reconnect, rapid media changes, stuck-seek recovery and temporary
+toggle retention/reset. The rejected-AI-HDR recovery case currently times out waiting
+for the provider to allow playback commands after AI HDR is disabled. It reproduces
+with Next.js 16.3.2 / React 19.2.8 and 16.3.8 / 19.3.0; that recovery path remains
+unqualified. Six mocked iOS fullscreen API cases also pass; physical
 iOS Safari and HDR display qualification remain outstanding.
 
 The live Avatar Chrome tab reported an eight-channel speaker destination.

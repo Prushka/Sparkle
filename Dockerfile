@@ -45,9 +45,11 @@ RUN groupadd --system --gid 1001 nodejs \
 
 COPY --from=build --chown=nextjs:nodejs /app/public ./public
 COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
+# Next emits a CommonJS launcher; the application package is an ES module.
+COPY --from=build --chown=nextjs:nodejs /app/.next/standalone/server.js ./server.cjs
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=build --chown=nextjs:nodejs /app/package.json ./package.json
 
 USER nextjs
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["node", "server.cjs"]

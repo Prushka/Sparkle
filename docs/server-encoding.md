@@ -31,8 +31,13 @@ Room recovery refreshes the authoritative timeline without changing its pause st
 
 ## Setup
 
-Compatible playback remains available without FFmpeg or a GPU. To enable encoding on
-Windows, add these backend settings to the existing `.env`, adapting tool paths:
+Compatible playback remains available without FFmpeg or a GPU. On Windows,
+`./scripts/install-ffmpeg.ps1` (requires 7-Zip) installs the SHA-256-checked
+[FFmpeg 9.0.2 full build](https://github.com/GyanD/codexffmpeg/releases/tag/9.0.2)
+under ignored `bin/` and prints its `FFMPEG`/`FFPROBE` settings. It preserves
+the existing `.env`, system tools, and older runtime directories. Keep the full
+distribution, including licenses and notices, together.
+To enable encoding, add these backend settings to the existing `.env`, adapting tool paths:
 
 ```dotenv
 ENCODE_ENABLED=true
@@ -404,6 +409,12 @@ files and `fonts.json`. They cannot name arbitrary paths, commands or encoder ar
 allowed-section and mapping checks apply before serving cached derivatives too.
 
 ## Validation
+
+The Windows encoder baseline is FFmpeg 9.0.2 full with NVEncC 9.36. GPU checks
+cover AV1/HEVC SDR, PQ and HLG, ten-bit output metadata, frame-local grading,
+segment timestamps, multichannel Opus layouts, and Dolby Vision Profile 5
+conversion. Browser checks use decoded media; they do not qualify a physical
+HDR display or iOS Safari device.
 
 `go test ./...` covers cache coalescing/cancellation, eviction, read-only input
 ranges, response validators, subtitle data and fragment timestamp rewriting.

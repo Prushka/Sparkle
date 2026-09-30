@@ -889,6 +889,11 @@ for (const codec of ['av1', 'hevc']) {
 		await expect.poll(() => audioTitle(page)).toBe('Japanese');
 		expect((await status(page)).encodedCodec).toBe(codec);
 		expect(originalRequests).toBe(0);
+		// Track metadata is published before the replacement decoder finishes
+		// priming. Wait until a user pause can be sent to the room before switching.
+		await expect
+			.poll(() => page.evaluate(() => (window as any).trackTestProvider.canPublishPlayback))
+			.toBe(true);
 		await page.locator('[data-media-player]').press('k');
 		await expect(page.locator('[data-media-player]')).toHaveAttribute('data-paused', '');
 		await openVideoSettings(page);
