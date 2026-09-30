@@ -6,6 +6,9 @@ export default defineConfig({
 	outputDir: './cache/playwright-results',
 	reporter: 'list',
 	use: {
+		// App tests mock backend routes; worker requests bypass Playwright page routes.
+		// Worker-specific tests opt in explicitly.
+		serviceWorkers: 'block',
 		baseURL: process.env.SPARKLE_TEST_URL || 'http://127.0.0.1:3002',
 		browserName: process.env.SPARKLE_TEST_CHANNEL === 'firefox' ? 'firefox' : 'chromium',
 		channel:

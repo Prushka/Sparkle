@@ -52,6 +52,8 @@ library from the same Library view.
   subtitle layers; raw Google Cast options explain tab casting and direct-cast limitations.
 - Shared YouTube, Chess, and Wordle tabs, plus browser voice chat outside Discord Activities.
 - Discord identity, avatars, Rich Presence, and share previews with media artwork.
+- [Browser asset caching](docs/frontend-caching.md) reuses scripts, fonts, emotes,
+  sounds and decoders, with content revisions that invalidate changed files on updates.
 
 [Demo](https://sparkle.muddy.ca) · [Plex setup and playback limits](docs/plex-raw-media.md) ·
 [Validation and browser coverage](docs/raw-media-validation.md)

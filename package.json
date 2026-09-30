@@ -2,7 +2,7 @@
 	"name": "sparkle-fe",
 	"version": "0.0.1",
 	"scripts": {
-		"predev": "node scripts/prepare-player-assets.mjs",
+		"predev": "node scripts/prepare-player-assets.mjs && node scripts/generate-sw.mjs --dev",
 		"prebuild": "node scripts/prepare-player-assets.mjs",
 		"prepare:player": "node scripts/prepare-player-assets.mjs",
 		"test:e2e": "playwright test",

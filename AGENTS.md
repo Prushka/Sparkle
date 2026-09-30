@@ -244,7 +244,11 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   must stay distinct from Sparkle-Transcoder.
   Run both Windows test scripts for launcher changes; they use disposable cache fixtures
   and must never inherit real Plex credentials or stop the developer's backend.
-- Edit `scripts/generate-sw.mjs`, not generated `public/sw.js`. Regenerate Wordle dictionaries
+- Edit `scripts/service-worker.js` and `scripts/generate-sw.mjs`, not generated `public/sw.js`
+  or `public/_sparkle/`. Cache only build-manifest assets by verified content revision;
+  keep room HTML, APIs, credentials and streamed media out of worker caches. Production
+  and development workers have separate policies; see [frontend caching](docs/frontend-caching.md).
+  Regenerate Wordle dictionaries
   with `npm run generate:wordle-dictionary`, not manual edits to generated word lists.
 - Preserve the managed Next.js block below. `CLAUDE.md` already imports `@AGENTS.md`; keep
   shared instructions here rather than maintaining a duplicate guide.

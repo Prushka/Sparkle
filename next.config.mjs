@@ -1,3 +1,5 @@
+import { PHASE_DEVELOPMENT_SERVER } from 'next/constants.js';
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
 	distDir: process.env.SPARKLE_BUILD_DIR || '.next',
@@ -7,13 +9,23 @@ const nextConfig = {
 		if (dev) {
 			config.watchOptions = {
 				...config.watchOptions,
-				ignored: ['**/.playwright-mcp/**', '**/.agents/**', '**/.claude/**', '**/cache/**', '**/.next-raw-validation/**']
+				ignored: [
+					'**/.playwright-mcp/**',
+					'**/.agents/**',
+					'**/.claude/**',
+					'**/cache/**',
+					'**/.next-raw-validation/**'
+				]
 			};
 		}
 		return config;
 	},
 	async headers() {
 		return [
+			{
+				source: '/_sparkle/:path*',
+				headers: [{ key: 'Cache-Control', value: 'no-cache, must-revalidate' }]
+			},
 			{
 				source: '/sw.js',
 				headers: [
@@ -33,4 +45,16 @@ const nextConfig = {
 	allowedDevOrigins: ['127.0.0.1', '192.168.1.*', 'a.lyu.sh', '1251822920242823270.discordsays.com']
 };
 
-export default nextConfig;
+const configureNext = (phase) => ({
+	...nextConfig,
+	async rewrites() {
+		return {
+			beforeFiles:
+				phase === PHASE_DEVELOPMENT_SERVER
+					? []
+					: [{ source: '/sw.js', destination: '/_sparkle/sw.js' }]
+		};
+	}
+});
+
+export default configureNext;

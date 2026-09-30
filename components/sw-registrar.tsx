@@ -15,32 +15,15 @@ export function ServiceWorkerRegistrar() {
 		const register = async () => {
 			try {
 				const registration = await navigator.serviceWorker.register(serviceWorkerUrl, {
-					scope: '/'
+					scope: '/',
+					updateViaCache: 'none'
 				});
 
 				if (cancelled) {
 					return;
 				}
 
-				void registration.update();
-
-				if (registration.waiting) {
-					registration.waiting.postMessage({ type: 'SKIP_WAITING' });
-				}
-
-				registration.addEventListener('updatefound', () => {
-					const worker = registration.installing;
-
-					if (!worker) {
-						return;
-					}
-
-					worker.addEventListener('statechange', () => {
-						if (worker.state === 'installed' && navigator.serviceWorker.controller) {
-							worker.postMessage({ type: 'SKIP_WAITING' });
-						}
-					});
-				});
+				void registration.update().catch(() => {});
 			} catch (error) {
 				console.error('Service worker registration failed:', error);
 			}
