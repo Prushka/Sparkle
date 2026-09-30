@@ -15,10 +15,10 @@ import (
 	"time"
 )
 
-const aiHDRVersion = "ai-hdr-natural-v3"
+const aiHDRVersion = "ai-hdr-adaptive-v4"
 const aiHDRPeak = 1600
 
-var errAIHDR = errors.New("AI HDR is unavailable; check NVEncC, libplacebo shader support and the GPU")
+var errAIHDR = errors.New("AI HDR is unavailable; check NVEncC, NVIDIA NGX/TrueHDR, libplacebo and the GPU")
 var errHDRMetadata = errors.New("AI HDR cannot safely interpret this video's color metadata")
 
 func aiHDRToolRevision(binary string) string {
@@ -290,8 +290,8 @@ func aiHDRCommands(input, dir, codec string, segment int, duration float64, prof
 		if trc == "gamma28" {
 			trc = "bt470bg"
 		}
-		// The shader accepts ten-bit SDR; do not retain TrueHDR's eight-bit
-		// input restriction and quantize smooth gradients before enhancement.
+		// Keep normalization at ten bits until NVEncC converts to NGX's RGB8
+		// input. TrueHDR returns floating-point HDR for the ten-bit encoder.
 		conversion = fmt.Sprintf("zscale=pin=%s:tin=%s:min=%s:rin=%s:p=bt709:t=bt709:m=bt709:r=limited,format=yuv420p10le", plan.Primaries, trc, plan.Matrix, plan.Range)
 	}
 	decode = append(decode, "-vf", conversion, "-fps_mode", "vfr", "-c:v", "rawvideo", "-f", "nut", "pipe:1")
@@ -313,26 +313,29 @@ func aiHDRCommands(input, dir, codec string, segment int, duration float64, prof
 	return
 }
 
-// Both pipelines normalize into absolute BT.2020 PQ before running the same
-// frame-local shader. Disable all implicit peak detection, inverse stretching
-// and local contrast recovery in the normalization step.
+// Both pipelines use the same TrueHDR parameters for SDR, or normalize HDR into
+// absolute BT.2020 PQ for the content-adaptive shader. NVEncC runs TrueHDR after
+// libplacebo shaders regardless of argument order, so never feed it PQ pixels.
 func aiHDRFilters(plan hdrPlan, dir string) []string {
-	matrix, primaries, transfer := "bt2020nc", "bt2020", plan.Transfer
-	csp, sourcePeak, sdr := "hdr10", 10000, 0
 	if plan.Mode == "sdr-expansion" {
-		matrix, primaries, transfer = "bt709", "bt709", "bt709"
-		csp, sourcePeak, sdr = "sdr", 203, 1
-	} else if transfer == "arib-std-b67" {
+		return []string{
+			"--vpp-colorspace", "matrix=bt709:bt709,colorprim=bt709:bt709,transfer=bt709:bt709",
+			"--vpp-ngx-truehdr", "maxluminance=800,contrast=100,saturation=85,middlegray=50",
+		}
+	}
+	matrix, primaries, transfer := "bt2020nc", "bt2020", plan.Transfer
+	csp, sourcePeak := "hdr10", 10000
+	if transfer == "arib-std-b67" {
 		// HLG is relative. Use the BT.2100 reference display (1000 nits), not
 		// the viewer's panel or unreliable whole-title peak metadata.
 		csp, sourcePeak = "hlg", 1000
 	}
 	filter := []string{"--vpp-colorspace", fmt.Sprintf("matrix=%s:%s,colorprim=%s:%s,transfer=%s:%s", matrix, matrix, primaries, primaries, transfer, transfer)}
 	// Zero means "infer" to the wrapper; metadata=none also ignores the explicit
-	// black level. Both would give SDR a ~0.2-nit BT.1886 black pedestal. Use
-	// explicit near-zero black and our fixed metadata for the conversion only.
+	// black level. Fix it near zero for normalization, without letting whole-title
+	// mastering/light metadata set the frame's exposure.
 	filter = append(filter, "--vpp-libplacebo-tonemapping", fmt.Sprintf("src_csp=%s,dst_csp=hdr10,src_max=%d,src_min=0.000001,dst_max=10000,dst_min=0.000001,tonemapping_function=clip,inverse_tone_mapping=false,dynamic_peak_detection=false,contrast_recovery=0,gamut_mapping=relative,metadata=hdr10,use_dovi=false", csp, sourcePeak))
-	filter = append(filter, "--vpp-libplacebo-shader", fmt.Sprintf("shader=\"%s\",colorsystem=bt2020nc,transfer=pq,SDR=%d", filepath.ToSlash(filepath.Join(dir, "hdr-natural.glsl")), sdr))
+	filter = append(filter, "--vpp-libplacebo-shader", fmt.Sprintf("shader=\"%s\",colorsystem=bt2020nc,transfer=pq", filepath.ToSlash(filepath.Join(dir, "hdr-natural.glsl"))))
 	return filter
 }
 

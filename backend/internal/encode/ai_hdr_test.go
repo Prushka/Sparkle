@@ -234,7 +234,7 @@ func TestAIHDRGPU(t *testing.T) {
 	}
 }
 
-func TestAIHDRPreservesRestrainedGrade(t *testing.T) {
+func TestAIHDRBoundsLowPeakLift(t *testing.T) {
 	nvencc := os.Getenv("SPARKLE_TEST_NVENCC")
 	if nvencc == "" {
 		t.Skip("requires NVIDIA GPU")
@@ -244,8 +244,8 @@ func TestAIHDRPreservesRestrainedGrade(t *testing.T) {
 	opts := Options{FFmpeg: "ffmpeg", FFprobe: "ffprobe", NVEncC: nvencc, Profile: Profile{Quality: 24, Preset: "p3", AudioSurroundKbpsPerChannel: 80}}
 	dir := t.TempDir()
 	input := filepath.Join(dir, "low-peak.mkv")
-	// A ~100-nit PQ patch on black must keep its intended brightness. A dark
-	// scene is no longer stretched to the processing ceiling.
+	// A ~100-nit PQ patch gets a visible midtone lift, but a low-peak source
+	// must not be stretched to the processing ceiling.
 	filter := "format=yuv420p10le,geq=lum='if(lt(X,W/2),64,512)':cb=512:cr=512,setparams=color_primaries=bt2020:color_trc=smpte2084:colorspace=bt2020nc:range=limited"
 	if err := run(ctx, opts.FFmpeg, []string{"-v", "error", "-y", "-f", "lavfi", "-i", "color=size=320x180:rate=24", "-t", "6", "-vf", filter, "-c:v", "hevc_nvenc", "-preset", "p3", input}, nil); err != nil {
 		t.Fatal(err)
@@ -280,8 +280,8 @@ func TestAIHDRPreservesRestrainedGrade(t *testing.T) {
 		}
 		after := peak(filepath.Join(out, "video.mp4"))
 		t.Logf("%s %.2f -> %.2f nits", codec, before, after)
-		if math.Abs(after-before) > before*0.05 {
-			t.Fatalf("restrained grade changed: %.2f -> %.2f", before, after)
+		if after < before*1.55 || after > before*2.25 {
+			t.Fatalf("missing or unbounded low-peak lift: %.2f -> %.2f", before, after)
 		}
 	}
 }

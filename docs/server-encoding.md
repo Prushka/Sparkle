@@ -93,19 +93,22 @@ Missing GPU/filter support leaves the button disabled. Processing failures are
 reported, without silently substituting ordinary video.
 
 On Windows, run `./scripts/install-ai-hdr.ps1` (requires 7-Zip). It installs portable,
-SHA-256-checked NVEncC 9.35, including libplacebo, into ignored `bin/` and prints
+SHA-256-checked NVEncC 9.36, including NGX/TrueHDR and libplacebo, into ignored `bin/` and prints
 the backend settings to add to your existing `.env`:
 
 ```dotenv
 ENCODE_ENABLED=true
 AI_HDR_ENABLED=true
-NVENCC=C:/path/to/Sparkle/bin/nvencc-9.35/NVEncC64.exe
+NVENCC=C:/path/to/Sparkle/bin/nvencc-9.36/NVEncC64.exe
 ```
 
 Restart the backend. `NVENCC` defaults to `NVEncC64` on PATH. Keep the distribution's
 DLLs, licenses and notices together. FFmpeg also needs `zscale`, `libplacebo`, and the
 existing NVENC/Opus support. Startup tests SDR conversion and HDR filtering through
-each encoder before advertising support. NVIDIA NGX/TrueHDR is no longer required.
+each encoder before advertising support. SDR conversion requires the bundled NVIDIA
+NGX/TrueHDR DLLs. An older 9.35 installation must include its separate NGX archive;
+the 9.36 package includes these dependencies. The installer preserves the existing
+`.env` and older runtime directories.
 This integration is qualified on Windows; the supplied Linux Docker image does not
 include NVEncC. Keep the optional feature disabled there until separately qualified.
 
@@ -122,36 +125,44 @@ grade. Other missing-color cases, including untagged 10-bit material, remain rej
 A mastering-display maximum is not proof that the movie contains highlights at
 that brightness. It does not set the enhancement curve's exposure.
 
-- Recognized SDR is normalized to ten-bit limited-range Rec.709, then converted to
-  BT.2020/PQ with a fixed 203-nit reference white. Its upper range gets restrained
-  enhancement: gain rises smoothly above 100 nits and never exceeds 1.30. A small
-  white highlight can approach 264 nits; SDR is not stretched to 1,600 nits.
+- Recognized SDR uses **NVIDIA AI TrueHDR** with `maxluminance=800`, `contrast=100`,
+  `saturation=85`, `middlegray=50`. Compared with the old 1600/125/75/44 settings,
+  these reduce highlight dominance and contrast while lifting ordinary brightness.
+  The peak parameter is an inference target, not a hard output clamp: the synthetic
+  white patch measures about 994 nits. The normalized source remains ten-bit Rec.709
+  until NVEncC converts to NGX's RGB8 input; TrueHDR returns FP16 HDR for ten-bit
+  AV1/HEVC encoding. The output is not eight-bit. No additional HDR expansion shader
+  is applied to SDR; NVEncC's fixed filter order would run it before TrueHDR.
 - PQ uses absolute source luminance; HLG first uses a fixed 1,000-nit reference
-  display conversion. HDR values through 203 nits keep their brightness. Gain
-  increases smoothly from 203 to 600 nits and never exceeds 1.25.
-- A bundled GPU shader measures bounded bright-area coverage, excluding black
-  bars. Broad highlights receive less gain than small highlights. Coverage can
-  change gain by at most 0.10, only above the protected range; it never adjusts
-  exposure or stretches a scene peak to the output peak. No local sharpening,
-  contrast recovery, or detail reconstruction is applied.
-- The shader uses only the current frame, with no temporal detector history.
-  This deliberately replaces smoothing of a moving scene-peak curve: unchanged
-  midtones cannot pump when another object brightens, cuts need no settling, and
-  independent segments use the same grade as continuous filtering. The two-second
-  preroll remains for decoding/timestamps, not grade warm-up. This is conservative
-  frame-adaptive highlight processing, not an implementation of a TV's proprietary
-  regional/temporal tone mapper.
-- A twice-continuously-differentiable shoulder above 1,000 nits approaches the
-  **1,600-nit ceiling**. Scaling RGB together preserves chromaticity and bounds
-  bright color components as well as neutral whites. Output is 10-bit BT.2020/PQ
-  HDR10, with the ceiling recorded in mastering/MaxCLL boxes; MaxFALL is unknown.
-  These are signal limits, not a claim about measured whole-title light levels.
+  display conversion. A GPU shader samples a bounded spatial grid and computes
+  the log-average brightness with sample luminance capped at 203 nits. Black bars
+  are excluded. A small specular flash therefore has little influence on overall
+  exposure, while broad changes in the picture adjust the grade.
+- Midtones receive **1.6–2.2× exposure**, with the greater lift for dim scenes.
+  A smooth near-black toe and fade guard reduce this toward 1× for darkness.
+  Highlights receive an additional smooth 1–1.70× gain above 100 nits, reaching
+  full strength at 600 nits. Broad bright areas reduce the additional gain to
+  1.45×. The transitions operate in logarithmic brightness to avoid a sharp knee.
+  No sharpening, local contrast recovery or scene-peak stretching is applied.
+- The HDR shader uses only the current frame. Cuts need no settling and independent
+  segments use the same grade as continuous filtering. It deliberately limits
+  adaptation instead of accumulating a moving peak detector's exposure history.
+  The two-second decode lead-in is retained for both HDR and TrueHDR. This is
+  content-adaptive global grading, not a reproduction of a TV's proprietary
+  temporal or regional algorithm; it cannot identify faces or lighting intent.
+- A twice-continuously-differentiable HDR shoulder above 800 nits approaches
+  **1,600 nits**. Scaling RGB together preserves chromaticity and bounds bright
+  components as well as neutral whites. Both modes output 10-bit BT.2020/PQ HDR10,
+  with a 1,600-nit processing envelope recorded in mastering/MaxCLL boxes and
+  unknown MaxFALL. TrueHDR is qualified against that envelope, but its internal
+  neural mapping is not a mathematical hard clamp. These metadata values are not
+  measured whole-title light levels or the viewer's panel brightness.
 
 One shared grade serves all devices. Native video/MSE, the OS and the display
 perform final display mapping; the browser cannot reliably report exact panel
-peak brightness. There is no G6-specific grade, calibration UI or bright-room
-boost. The label remains **AI HDR** for continuity, but this implementation uses
-deterministic shaders rather than a neural model. The manifest mode for SDR is
+peak brightness. There is no G6-specific grade, calibration UI or separate bright-room
+mode. SDR conversion uses NVIDIA's neural model; existing HDR uses the bounded
+shader. The manifest mode for SDR remains
 `sdr-expansion`; PQ/HLG use `hdr-expansion`.
 
 Dolby Vision Profile 5 is reshaped through FFmpeg/libplacebo before expansion.
@@ -173,7 +184,7 @@ Fractional constant frame rates are supported without rounding to an integer rat
 Other color spaces, full-range sources, Dolby Vision Profile 5, variable frame rates
 and unsupported GPU decoders retain the normalized reference pipeline. That path
 streams raw frames through bounded OS pipes without decoded files on disk. Both
-paths share the exact normalization and shader, frame-local coverage analysis,
+paths share the exact normalization and TrueHDR settings or adaptive HDR shader,
 two-second decode lead-in and Opus audio processing. Shader files are embedded in
 the backend, written privately per job and removed before caching. Any shader
 diagnostic fails the job, including libplacebo disabling a hook with a successful
@@ -184,16 +195,17 @@ it retains p3/CQ 24, dimensions and frame rate. Different GPU chroma conversion 
 encoder wrappers can produce small pixel differences from the reference encode.
 
 Both paths share GPU concurrency, cancellation, cache size/TTL and original file
-confinement. Enhanced profile revision `ai-hdr-natural-v3` separates this grade from older
+confinement. Enhanced profile revision `ai-hdr-adaptive-v4` separates this grade from older
 cached derivatives. Performance depends on source decoding, resolution, GPU,
 storage and concurrent streams; a single sample cannot establish sustained throughput.
 
 For repeatable synthetic GPU qualification, set `SPARKLE_TEST_NVENCC` to the absolute
 executable and run `go test ./internal/encode -run 'TestAIHDR' -v` from `backend/`.
 The tests cover SDR/PQ/HLG in AV1/HEVC, MP4 HDR signaling, first/middle/final segment
-timestamps, fractional frame rates, VFR fallback, protected brightness, black level,
+timestamps, fractional frame rates, VFR fallback, bounded midtone lift, black level,
 bounded highlights, monotonic gradients, moving highlights/flashes, continuous vs
-independent segment grades, and reference color comparisons. They skip when
+independent segment grades, full-scene adaptation, letterbox/cut invariance, and
+reference color comparisons. They skip when
 the executable is not supplied.
 For a confined, read-only real-source check, also set `SPARKLE_AI_HDR_SOURCE` to
 the source file and run `go test ./internal/encode -run '^TestAIHDRSource$' -v`.
@@ -208,14 +220,47 @@ local on/off choices, timeline changes/recovery, flag-off behavior and the actua
 Vidstack button in desktop/mobile layouts. Fixtures do not exercise Plex authentication
 or full watch-party WebSocket transport, which retain their separate test suites.
 
-On the RTX 5090 host, the natural-grade regression retains a 103-nit PQ patch at
-approximately 103 nits. Fixed patch fixtures retain approximately 99/146/197 nits
+On the RTX 5090 host, the adaptive-grade regression lifts a 103-nit PQ patch to
+approximately 167 nits. Fixed patch fixtures produce approximately 175/285/423 nits
 for 100/150/200-nit inputs, while 400/800-nit highlights become approximately
-432/963 nits and a 4,000-nit patch rolls to about 1,575 nits. SDR reference white
-in the test scene is approximately 256 nits. Small differences include source
+1,058/1,495 nits and a 4,000-nit patch rolls to about 1,575 nits. The same 100-nit
+patch measures about 204 nits in a dark scene and 156 in a bright scene. TrueHDR
+white in the SDR test scene is approximately 994 nits, with 70% code gray at 151
+nits. Small differences include source
 quantization, color conversion and video compression. These are decoded signal
 checks, not physical-display or subjective image-quality qualification. See the
 [qualification record](raw-media-validation.md) for coverage and remaining gaps.
+
+### Processing choices and research
+
+The current stack keeps NVEncC/NVENC and libplacebo on shared GPU surfaces.
+[NVEncC 9.36](https://github.com/rigaya/NVEnc/releases/tag/9.36) bundles the NVIDIA
+VFX 1.3 NGX runtime. Its
+[TrueHDR wrapper](https://github.com/rigaya/NVEnc/blob/9.36/NVEncCore/NVEncFilterNGX.cpp)
+exposes the four settings above and uses RGB8 input/FP16 output. NVIDIA's newer
+[VFX TrueHDR API](https://docs.nvidia.com/maxine/vfx/latest/Filters/TrueHDR.html)
+has a different packed-output interface; its defaults are not assumed to be
+calibration values for this wrapper.
+
+[libplacebo](https://libplacebo.org/options/) offers histogram-based peak detection,
+scene detection, spline mapping, exposure adaptation and gamut mapping. FFmpeg's
+[libplacebo filter](https://ffmpeg.org/ffmpeg-filters.html#libplacebo) and
+[AviSynth's libplacebo_Render](https://github.com/Asd-g/libplacebo_Render) wrap that
+same engine. Changing wrappers alone does not solve excessive inverse expansion.
+In a neutral-patch comparison, a spline with a 20-frame smoothing period and
+0.4 knee adaptation moved an unchanged 100-nit patch from 491 to 232 nits when a
+different patch rose from 200 to 400 nits. ST2094-40 preserved approximately 99 nits
+but did not expand that source. The bounded adaptive shader held approximately
+197 nits throughout this comparison. This test motivates the chosen bounds; it
+does not establish superiority for all content or every libplacebo configuration.
+
+[madVR Envy](https://madvr.com/EnvyModelComparison.pdf) documents frame analysis,
+scene detection and shadow/highlight recovery in a dedicated playback processor.
+It is a useful design reference, not the server encoder used here. Research systems
+such as [ITMLUT](https://github.com/AndreGuo/ITMLUT) address learned SDR-to-HDR
+conversion; replacing TrueHDR with a separately trained conversion model would
+require its own integration and video qualification. Sparkle instead uses NVIDIA's
+requested AI conversion and bounded source-pixel statistics for existing HDR.
 
 ## Encoder profile and HDR
 

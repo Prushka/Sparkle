@@ -365,51 +365,36 @@ PCM check in the [server encoding guide](server-encoding.md#validation).
 
 See [server encoding](server-encoding.md) for opt-in configuration and reproduction.
 
-The natural AI HDR grade (`ai-hdr-natural-v3`) was checked on September 30, 2026
-with Windows, RTX 5090 and NVEncC 9.35. Its GPU tests cover SDR/PQ/HLG in AV1/HEVC,
+The adaptive AI HDR grade (`ai-hdr-adaptive-v4`) was checked on September 30, 2026
+with Windows, RTX 5090 and NVEncC 9.36, with the same GPU matrix also passing on
+9.35 plus NGX. Its GPU tests cover SDR/PQ/HLG in AV1/HEVC,
 first/middle/final segments, fractional frame rates, VFR reference fallback and
 GPU/reference color comparisons. `TestAIHDRNaturalGrade` additionally compares
 continuous processing with independently requested 12-second segments, including
 their first frames, a moving highlight, a one-frame flash, black preservation and
-monotonic gradients/fades. The fixed 100-nit PQ patch stays approximately 99 nits while
-another highlight changes; the prior grade moved it from about 446 to 191 nits.
-The SDR fixture's white is approximately 256 nits, with black below 0.001 nit.
+monotonic gradients/fades. Its fixed 100-nit PQ patch stays approximately 175 nits
+while another highlight changes. The separate spline comparison and its settings
+are recorded in the [processing research](server-encoding.md#processing-choices-and-research).
+`TestAIHDRSceneAdaptation` measures the same 100-nit patch at approximately 204 nits
+in a dark scene and 156 in a bright scene, checks letterbox invariance and immediate
+cut consistency, and verifies a full fade to black. The SDR fixture uses NVIDIA
+TrueHDR at 800/100/85/50; white is approximately 994 nits and 70% code gray is
+151 nits, with black below 0.001 nit. Single-code gradient checks use CQ/QP 12 to
+separate the grade from codec quantization; playback fixtures retain p3/CQ 24.
 Native Chrome passes all six SDR/PQ/HLG × AV1/HEVC combinations with the new
 segments, two-provider seek/pause/play, silent delayed-audio transitions, timestamp
 startup, native stereo audio and desktop/mobile controls. Sampled PCM/video clock
-differences stayed below 182 ms; no positive boundary stall was detected. These
-are bounded browser clock checks, not measured acoustic lip sync.
-Read-only Avatar source checks pass both codecs and GPU/reference comparisons;
-the sampled 12-second encode took approximately 4.2 seconds (AV1) and 4.0 seconds
-(HEVC), including audio, on this host. This is not sustained throughput qualification.
-The natural grade also passes both codecs for Weathering with You, HDR10+ Fire
-and Ash, Dune's Dolby Vision Profile 7 base layer, and Dolby Profile 5/8.1/8.4
-reference clips. Eligible GPU paths pass sampled reference color comparisons;
-Profile 5 uses its reshaping/reference path. Ordinary decoder preroll warnings
-do not masquerade as shader failures; actual libplacebo errors fail closed even
-when the encoder exits successfully. A clean base NVEncC 9.35 distribution without
-the extra NGX archive passes the SDR/PQ quality matrix and the Profile 8.4 check.
+differences stayed at or below 178 ms; no positive boundary stall was detected. These
+are bounded browser clock checks, not measured acoustic lip sync. The fixture harness
+does not exercise Plex authentication or full watch-party WebSocket transport.
+Ordinary decoder preroll warnings do not masquerade as shader failures; actual
+libplacebo errors fail closed even when the encoder exits successfully. The
+hash-pinned 9.36 installer includes NGX and libplacebo and passes extraction and
+runtime checks. The existing 9.35 runtime passes with its extra NGX archive;
+a base-only 9.35 installation no longer provides the required SDR conversion.
 These tests establish bounded decoded signal behavior, not subjective naturalness
-or physical LG G6/iOS Safari HDR qualification. The new processing is frame-local;
+or physical LG G6/iOS Safari HDR qualification. The HDR shader is frame-local;
 it does not reproduce a television's proprietary temporal or regional algorithm.
-
-Earlier pipeline and real-source results below used the **v2** grade (TrueHDR for
-SDR and scene-peak stretching for HDR), qualified on September 26–27, 2026 with
-Windows, RTX 5090, NVEncC 9.35 and p3/CQ 24. Its brightness and performance numbers
-must not be attributed to the natural grade:
-
-- SDR TrueHDR, PQ expansion and HLG conversion passed AV1/HEVC native Chrome
-  playback, two-provider seek/pause/play, local enhancement choices, delayed
-  readiness/recovery and desktop/mobile controls. These fixtures do not exercise
-  Plex authentication or full room WebSocket transport.
-- Direct GPU tests passed first/middle/final segments, fractional frame rates,
-  H.264/HEVC/AV1 source decoding and VFR reference fallback. Colored scene-change
-  fixtures passed decoded pixel comparisons against the normalized reference
-  pipeline. A synthetic 103-nit highlight expanded to about 1,587 nits.
-- A 4K Avatar sample with 1,000-nit mastering and zero MaxCLL/MaxFALL rendered a
-  12-second segment, including audio, in 3.7 seconds (AV1) and 3.3 seconds (HEVC).
-  Sampled color comparisons against the reference passed. This is a bounded
-  single-job measurement, not sustained or concurrent throughput qualification.
 
 September 30 client transition checks additionally cover silent decoder priming,
 parallel paused seeks, PCM-buffer replacement and restoration of user volume.
@@ -452,8 +437,8 @@ reported intermittent picture freeze; one dropped frame was observed among rough
 5,000 frames in the longer sampled run. This does not establish stutter-free playback
 throughout the movie or under arbitrary CPU/GPU load.
 
-Real-source qualification additionally covers both AV1 and HEVC for the following
-inputs. Every output was decoded and checked for 10-bit BT.2020/PQ, 1,600-nit
+The v4 real-source matrix was rerun on September 30 with NVEncC 9.36 for both AV1
+and HEVC. Every output was decoded and checked for 10-bit BT.2020/PQ, 1,600-nit
 mastering metadata and absence of residual Dolby Vision/HDR10+ signaling:
 
 | Source                                                 | AI HDR processing                              | AV1 / HEVC  |
@@ -466,6 +451,12 @@ mastering metadata and absence of residual Dolby Vision/HDR10+ signaling:
 | Dolby reference Profile 5                              | Dolby reshaping, then PQ expansion             | Pass / Pass |
 | Dolby reference Profile 8.1                            | Adaptive expansion from the PQ base signal     | Pass / Pass |
 | Dolby reference Profile 8.4                            | HLG-to-PQ adaptive mapping                     | Pass / Pass |
+
+A sampled twelve-second Avatar segment, including audio, rendered in approximately
+4.1 seconds for AV1 and 3.8 seconds for HEVC. The SDR sample took 3.3/3.5 seconds.
+These are bounded single-job measurements, not sustained or concurrent throughput
+qualification. Profile 5 uses its reshaping/reference path; the other eligible
+sources also pass sampled GPU/reference color comparisons.
 
 The untagged SDR check reproduces a source previously rejected with “AI HDR
 unavailable.” Its stream and decoded frames lack color tags, so it uses the

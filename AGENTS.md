@@ -201,9 +201,11 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   `AI_HDR_ENABLED` defaults off and gates every enhanced resource before probing or cache
   access. AI HDR is a local Plex toggle before audio normalization; its encoded variant
   must have separate URLs/cache identity and preserve the saved ordinary output choice.
-  SDR uses a fixed 203-nit reference conversion and restrained highlight enhancement;
-  PQ/HLG retain ordinary brightness through 203 nits. A frame-local GPU shader
-  bounds highlight gain and smoothly rolls bright RGB components toward 1600 nits.
+  SDR uses NVIDIA NGX TrueHDR with tested, explicit peak/contrast/midtone settings;
+  never substitute a deterministic conversion or run the PQ shader before TrueHDR.
+  HDR uses a frame-local GPU shader with a robust log-average source brightness and
+  bright-area coverage. Bound midtone exposure and highlight gain, protect near-black
+  and fades, and smoothly roll bright RGB components toward 1600 nits.
   Do not restore scene-peak stretching, temporal detector state or local sharpening.
   Shader diagnostics must fail closed even when NVEncC exits successfully.
   Inspect container and decoded color metadata; reject conflicting HDR signals.
@@ -212,7 +214,7 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   Keep other ambiguous/high-bit-depth/wide-gamut sources rejected.
   Keep canonical 4:2:0 decode/filter/encode frames on the GPU when timestamp checks
   pass; retain the normalized reference path for other colors/formats and VFR.
-  Both paths must share frame-local coverage analysis, tone/gamut mapping and the
+  Both paths must share TrueHDR settings or frame-local source analysis/grade and the
   two-second decode lead-in; grading must not depend on segment history.
   Bound and remove compressed job intermediates; never persist decoded frames.
   Never substitute a metadata-only relabel or ordinary encode after enhancement fails.

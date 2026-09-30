@@ -80,10 +80,10 @@ with a 12-hour idle expiry. Server-encoded playback targets a 24-second preload.
 `ENCODE_CONCURRENCY` accepts 1–32 simultaneous pipelines and defaults to 2.
 See [server encoding](docs/server-encoding.md) for GPU setup, settings and limits.
 Optional `AI_HDR_ENABLED=true` adds an **AI HDR** toggle before audio normalization
-for Plex media. It starts off for each title and is never saved. It uses restrained
-SDR conversion and bounded HDR highlight enhancement through a separate server
-encode, preserving ordinary picture brightness. See
-[AI HDR setup](docs/server-encoding.md#ai-hdr) for the required NVEncC/libplacebo dependencies.
+for Plex media. It starts off for each title and is never saved. It uses tuned NVIDIA
+TrueHDR for SDR and content-adaptive HDR expansion that lifts midtones and highlights
+while protecting black levels and smoothly limiting bright peaks. See
+[AI HDR setup](docs/server-encoding.md#ai-hdr) for the required NVEncC/NGX/libplacebo dependencies.
 Supported 4:2:0 sources keep decoding, enhancement and encoding on the GPU; other
 formats retain the same enhancement through the reference pipeline.
 Conventional untagged 8-bit HD H.264 sources use a checked Rec.709 SDR assumption;
