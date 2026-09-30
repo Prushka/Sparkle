@@ -15,6 +15,7 @@ import {
 } from '@/lib/player/subtitle-rendering';
 import { mergeSubtitleCues, type SubtitleMergeCue } from '@/lib/player/text-subtitle-cues';
 import { SubtitlesMenuSection } from './SubtitlesMenuSection';
+import { PlexPoster } from './PlexPoster';
 import {
 	type SubtitleTrackInfo,
 	type SelectedSubtitleTrack,
@@ -61,7 +62,6 @@ import {
 	MediaPlayer,
 	MediaProvider,
 	Menu,
-	Poster,
 	TextTrack,
 	TimeSlider,
 	useMediaState,
@@ -7306,7 +7306,7 @@ export function Player({
 									type={videoSrc?.type}
 									data-codec={videoSrc?.codec}
 								/>
-								<Poster className="vds-poster" src={posterSrc} alt="" />
+								<PlexPoster src={posterSrc} />
 								<canvas ref={canvasRef} id="sub-canvas" className="pointer-events-none absolute" />
 							</MediaProvider>
 							{job.Raw && <RawPlaybackObserver onTracks={reportRawTracks} />}

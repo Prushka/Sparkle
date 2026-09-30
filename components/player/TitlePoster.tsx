@@ -2,6 +2,7 @@
 
 import type { Title, TitleEpisode } from '@/lib/player/t';
 import { New } from '@/components/player/New';
+import { PlexArtworkImage } from '@/components/plex-artwork';
 
 export function TitlePoster({
 	title,
@@ -16,8 +17,7 @@ export function TitlePoster({
 }) {
 	return (
 		<div className="relative shrink-0 overflow-hidden">
-			{/* eslint-disable-next-line @next/next/no-img-element */}
-			<img
+			<PlexArtworkImage
 				src={poster ?? `${staticBaseUrl}/${title.id}/poster.jpg`}
 				alt={title.title}
 				loading="lazy"

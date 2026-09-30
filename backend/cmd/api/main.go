@@ -61,7 +61,7 @@ func main() {
 		mediaLibrary = plexClient.MediaLibrary
 	}
 	auth, err := plexauth.New(plexauth.Options{Identity: identity, Libraries: libraries, MediaLibrary: mediaLibrary, Origins: cfg.PlexAuthOrigins, Secure: cfg.PlexAuthCookieSecure, SameSite: cfg.PlexAuthCookieSameSite,
-		SessionDir: cfg.PlexAuthSessionDir, PublicDirs: []string{cfg.OutputDir, cfg.PFPDir}})
+		SessionDir: cfg.PlexAuthSessionDir, PublicDirs: []string{cfg.OutputDir, cfg.PFPDir}, DirectArtwork: cfg.PlexPublicURL != ""})
 	if err != nil {
 		log.Fatalf("authentication configuration error: %v", err)
 	}
@@ -99,6 +99,7 @@ func main() {
 	mux := http.NewServeMux()
 	auth.Register(mux)
 	mediaCatalog.Register(mux)
+	mediaCatalog.RegisterDirectArtwork(mux, cfg.PlexPublicURL, auth.ArtworkToken)
 	encoder.Register(mux)
 	mux.Handle("GET /static/pfp/", auth.ProfileImages(profileFiles(cfg.PFPDir, cfg.OutputDir)))
 	mux.Handle("GET /static/", staticFiles(cfg.OutputDir))

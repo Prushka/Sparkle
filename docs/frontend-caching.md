@@ -17,6 +17,7 @@ Only the dedicated asset cache is searched. API responses, runtime configuration
 sessions, room HTML/state, Plex metadata, original/encoded media and byte ranges
 are not stored. Offline navigation displays an offline page, never a cached room.
 The worker honors `private` and `no-store` responses and request `no-store`.
+Requests containing `X-Plex-Token` bypass the worker, even for manifest asset paths.
 See the [Cache API documentation](https://developer.mozilla.org/en-US/docs/Web/API/Cache)
 for why worker caches need explicit invalidation and storage limits.
 

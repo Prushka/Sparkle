@@ -1,11 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { PlexArtworkImage } from '@/components/plex-artwork';
 
 export function LibraryPoster({ src }: { src: string }) {
-	const [failed, setFailed] = useState(false);
-	return failed ? null : (
-		<img
+	return (
+		<PlexArtworkImage
 			alt=""
 			src={src}
 			// The grid already mounts only visible/overscan rows. Native lazy loading
@@ -13,7 +12,6 @@ export function LibraryPoster({ src }: { src: string }) {
 			loading="eager"
 			decoding="async"
 			className="relative h-full w-full object-cover"
-			onError={() => setFailed(true)}
 		/>
 	);
 }

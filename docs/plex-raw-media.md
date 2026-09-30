@@ -30,7 +30,9 @@ These section IDs were resolved against the supplied server: Anime `1`, Anime-R
 `11`, Demo `17`, Movies `2`, Movies-R `12`, TV `3`, TV-R `13`. IDs belong to that
 server; configure the matching IDs for another installation. An empty ID list
 allows all movie/show sections. To run without Plex, omit all Plex variables.
-Never place the token in a `NEXT_PUBLIC_*` variable or browser URL.
+Never place the configured `PLEX_TOKEN` in a `NEXT_PUBLIC_*` variable or browser URL.
+Optional `PLEX_PUBLIC_URL` enables [direct artwork](plex-auth.md#direct-artwork)
+using the signed-in viewer's server resource token, with proxy fallback.
 
 On Windows, use forward slashes in JSON and run the backend under an account
 that can read the mapped drive. Windows services commonly cannot see interactive
@@ -52,8 +54,8 @@ For Linux Docker, use `compose.example.yml`, set `PLEX_MEDIA_HOST_ROOT` to the
 host directory, and use container paths in `PLEX_PATH_MAPPINGS`. Both the raw
 mount and processed output mount are `:ro`; cache and profiles have separate
 writable mounts. Do not mount the media directory at a writable cache/profile
-location. The API container needs network access to Plex. The frontend never
-needs Plex credentials or direct filesystem access.
+location. The API container needs network access to Plex. The frontend has no
+direct filesystem access; only optional direct artwork needs a viewer Plex token.
 
 ## Catalog and storage bounds
 
@@ -92,9 +94,10 @@ and coalesces concurrent lookups. Processed IDs and playback assets remain uncha
 
 Metadata memory cache: at most 256 entries / 32 MiB, one-minute TTL. Plex
 responses: at most 8 MiB, eight concurrent metadata/artwork requests per backend.
-Artwork: at most 12 MiB per item, 512 MiB disk budget, 24-hour TTL with oldest
+Proxied artwork: at most 12 MiB per item, 512 MiB disk budget, 24-hour TTL with oldest
 entry eviction. Browsers may reuse artwork privately for five minutes, then revalidate
-with its ETag; concurrent disk-cache reads do not block each other. Raw mode caches
+with its ETag; concurrent disk-cache reads do not block each other. Direct artwork
+bypasses this cache and follows Plex's HTTP headers. Raw mode caches
 only requested metadata/artwork; optional encoded
 segments use a separate bounded cache under `MEDIA_CACHE_DIR/encoded`. File writes renew a
 60-second idle deadline and stop on request cancellation. File responses bypass

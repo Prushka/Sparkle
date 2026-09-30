@@ -158,6 +158,14 @@ test('private data, ranges, no-store and bytes inconsistent with the manifest ar
 	expect(await cachedPaths(page)).toEqual(['/offline.html']);
 });
 
+test('token-bearing URLs bypass the worker even for a manifest asset', async ({ page }) => {
+	await install(page);
+	await fetchText(page, '/scripts/app.js?X-Plex-Token=fixture');
+	await fetchText(page, '/scripts/app.js?X-Plex-Token=fixture');
+	expect(counts['/scripts/app.js']).toBe(2);
+	expect(await cachedPaths(page)).not.toContain('/scripts/app.js');
+});
+
 test('cache storage failure does not break network assets', async ({ page, context }) => {
 	await install(page);
 	await context.serviceWorkers()[0].evaluate(() => {

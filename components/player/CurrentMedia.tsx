@@ -5,6 +5,7 @@ import { IconMovie } from '@tabler/icons-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { Job } from '@/lib/player/t';
+import { PlexArtworkImage } from '@/components/plex-artwork';
 
 export function CurrentMedia({
 	job,
@@ -17,7 +18,6 @@ export function CurrentMedia({
 	summary: string;
 	children: ReactNode;
 }) {
-	const [failedPoster, setFailedPoster] = useState('');
 	const [expanded, setExpanded] = useState(false);
 	const [clamped, setClamped] = useState(false);
 	const summaryRef = useRef<HTMLParagraphElement>(null);
@@ -41,15 +41,12 @@ export function CurrentMedia({
 				<div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
 					<IconMovie className="size-8" stroke={1.25} aria-hidden="true" />
 				</div>
-				{poster && failedPoster !== poster && (
-					// The artwork URL already points to the controlled proxy or existing static assets.
-					// eslint-disable-next-line @next/next/no-img-element
-					<img
+				{poster && (
+					<PlexArtworkImage
 						src={poster}
 						alt={`${job.Title.title} cover`}
 						className="absolute inset-0 size-full object-cover"
 						decoding="async"
-						onError={() => setFailedPoster(poster)}
 					/>
 				)}
 			</div>

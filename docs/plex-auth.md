@@ -68,7 +68,8 @@ mutation endpoint is removed; room mutations use the authenticated backend API.
 ## Configuration
 
 Keep the existing backend `PLEX_URL`, `PLEX_TOKEN`, mappings and library IDs.
-There is no browser Plex token, client secret or redirect callback to configure.
+There is no client secret or redirect callback to configure. Optional direct artwork
+uses the signed-in viewer's token as described below.
 
 ```dotenv
 PLEX_AUTH_ORIGINS=https://watch.example.com
@@ -115,6 +116,40 @@ session. No global isolation headers are added.
 
 Restart the backend after changing these settings.
 
+## Direct artwork
+
+Set backend `PLEX_PUBLIC_URL` to a publicly reachable HTTPS base URL of the **same
+Plex server** as `PLEX_URL`, optionally with a path prefix. Do not include credentials,
+query parameters or a fragment. The browser must trust its certificate and reach it;
+Sparkle does not discover a public address automatically. Leave it empty to use the
+existing proxy for every cover. Restart the backend after changing it.
+
+Signed-in viewers resolve images through `POST /media/{id}/artwork/{poster|backdrop}/direct`
+or `POST /library/artwork/{signed-token}/direct` for a conservatively matched Encoded
+title. These requests require the current session, exact allowed Origin,
+`X-Sparkle-Auth: 1`, and access to the resolved media's library. Responses contain an
+HTTPS artwork URL with the viewer's server resource token in `X-Plex-Token` and use
+`Cache-Control: no-store`. The configured `PLEX_TOKEN` and sign-in account token are
+never selected for these responses. Plex may issue a server token with broad account
+privileges, especially for the server owner; it is **not an artwork-only token**.
+
+Only image elements use these private URLs. Catalog data, shared room messages,
+Vidstack/media-session metadata, casting and public previews retain proxy URLs.
+Direct lookup resolves metadata without fetching or caching the artwork bytes on
+Sparkle. An unauthorized/failed lookup, broken direct image or eight-second timeout
+falls back to the existing proxy. Anonymous covers and public GET/HEAD routes stay
+proxied. Direct images use `no-referrer` and do not require Plex CORS headers.
+
+The frontend coalesces lookups in session-scoped memory, bounded to 128 entries with
+a four-minute lookup TTL. Auth/profile/library changes clear that memory and remove
+private image URLs; outstanding lookups are aborted and late responses ignored.
+Neither localStorage nor sessionStorage stores these URLs, and Sparkle's service
+worker bypasses token-bearing requests. This is not a promise of no browser disk
+persistence: the browser's ordinary HTTP image cache follows Plex's headers and may
+retain the URL. DevTools, browser extensions, and Plex/reverse-proxy access logs can
+also expose it. Configure infrastructure query logging appropriately. Signing out
+revokes the Sparkle session, not a Plex token already received by the browser.
+
 ## Session handling
 
 The backend uses Plex's [strong-PIN hosted authentication flow](https://forums.plex.tv/t/authenticating-with-plex/609370).
@@ -125,7 +160,10 @@ requiring an exact match to the configured server's machine identifier and a
 server access token. It never trusts a browser-provided account token or server ID.
 
 The browser receives a random 256-bit, host-only HttpOnly session cookie. Plex
-tokens stay server-side, never in localStorage, browser responses or logs. Sessions
+account tokens stay server-side. The only token-bearing response is optional
+[direct artwork](#direct-artwork), using the viewer's server resource token.
+Resource tokens are held only in backend memory and reacquired during verification
+after restart; account token persistence is unchanged. Sparkle never logs tokens. Sessions
 survive browser and backend restarts until their original 14-day expiry; restarting
 does not extend it. The stable client-identifier cookie is not an access credential.
 
@@ -208,7 +246,7 @@ With the frontend and backend running:
 
 ```powershell
 $env:SPARKLE_TEST_URL='http://localhost:3001'
-npx playwright test tests/e2e/plex-auth.spec.ts tests/e2e/library.spec.ts tests/e2e/room-layout.spec.ts
+npx playwright test tests/e2e/plex-auth.spec.ts tests/e2e/plex-artwork.spec.ts tests/e2e/library.spec.ts tests/e2e/room-layout.spec.ts
 ```
 
 The browser auth suite mocks Plex authorization; it checks guest browsing,

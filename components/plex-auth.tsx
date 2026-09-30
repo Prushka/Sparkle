@@ -16,11 +16,13 @@ import * as Dialog from '@/components/ui/dialog';
 import { Pfp } from '@/components/player/Pfp';
 import { joinBackendPath, loadRuntimeConfig } from '@/lib/player/data';
 import { plexAccessRequiredEvent } from '@/lib/plex-access';
+import { PlexArtworkProvider } from '@/components/plex-artwork';
 
 type PlexSession = {
 	enabled: boolean;
 	authenticated: boolean;
 	canAccessRaw: boolean;
+	directArtwork?: boolean;
 	libraryIds?: string[];
 	name?: string;
 	profileId?: string;
@@ -177,7 +179,13 @@ export function PlexAuthProvider({ children }: { children: ReactNode }) {
 	}, [apply, request]);
 	return (
 		<Auth.Provider value={{ ...session, ready, busy, error, revision, signIn, signOut, refresh }}>
-			{children}
+			<PlexArtworkProvider
+				ready={ready}
+				enabled={session.directArtwork === true}
+				sessionKey={revision}
+			>
+				{children}
+			</PlexArtworkProvider>
 		</Auth.Provider>
 	);
 }

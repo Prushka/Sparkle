@@ -1,5 +1,6 @@
-// Package plexauth implements Plex's strong-PIN sign-in without exposing Plex
-// access tokens to the browser. Cookies contain random, revocable session IDs.
+// Package plexauth implements Plex's strong-PIN sign-in with server-held account
+// tokens. Optional direct artwork exposes the viewer's server resource token.
+// Cookies contain random, revocable session IDs.
 package plexauth
 
 import (
@@ -41,13 +42,15 @@ type Options struct {
 	Secure       bool
 	SameSite     string
 	// Empty SessionDir is for ephemeral managers (tests/embedded callers).
-	SessionDir string
-	PublicDirs []string
+	SessionDir    string
+	PublicDirs    []string
+	DirectArtwork bool
 }
 
 type session struct {
 	mu                  sync.Mutex
 	token, client, name string
+	serverToken         string // Memory only; reacquired when saved sessions are verified.
 	profileID, avatar   string
 	expires, checked    time.Time
 	access              bool
@@ -68,26 +71,28 @@ type rate struct {
 	until time.Time
 }
 type Manager struct {
-	identity     func(context.Context) (string, error)
-	libraries    func(context.Context, string) ([]string, error)
-	mediaLibrary func(context.Context, string) (string, error)
-	origins      map[string]bool
-	secure       bool
-	sameSite     http.SameSite
-	http         *http.Client
-	api          string
-	mu           sync.Mutex
-	sessions     map[[32]byte]*session
-	pins         map[[32]byte]*pending
-	rates        map[string]rate
-	avatars      map[string]*avatarEntry
-	store        *sessionStore
-	closed       bool
+	identity      func(context.Context) (string, error)
+	libraries     func(context.Context, string) ([]string, error)
+	mediaLibrary  func(context.Context, string) (string, error)
+	origins       map[string]bool
+	secure        bool
+	sameSite      http.SameSite
+	http          *http.Client
+	api           string
+	mu            sync.Mutex
+	sessions      map[[32]byte]*session
+	pins          map[[32]byte]*pending
+	rates         map[string]rate
+	avatars       map[string]*avatarEntry
+	store         *sessionStore
+	closed        bool
+	directArtwork bool
 }
 type status struct {
 	Enabled       bool     `json:"enabled"`
 	Authenticated bool     `json:"authenticated"`
 	CanAccessRaw  bool     `json:"canAccessRaw"`
+	DirectArtwork bool     `json:"directArtwork,omitempty"`
 	Name          string   `json:"name,omitempty"`
 	ProfileID     string   `json:"profileId,omitempty"`
 	LibraryIDs    []string `json:"libraryIds,omitempty"`
@@ -95,7 +100,7 @@ type status struct {
 type contextKey struct{}
 
 func New(opts Options) (*Manager, error) {
-	m := &Manager{identity: opts.Identity, libraries: opts.Libraries, mediaLibrary: opts.MediaLibrary, origins: map[string]bool{}, secure: opts.Secure, sameSite: http.SameSiteLaxMode,
+	m := &Manager{identity: opts.Identity, libraries: opts.Libraries, mediaLibrary: opts.MediaLibrary, directArtwork: opts.DirectArtwork, origins: map[string]bool{}, secure: opts.Secure, sameSite: http.SameSiteLaxMode,
 		http: &http.Client{Timeout: 15 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
 		api:  "https://plex.tv/api/v2", sessions: map[[32]byte]*session{}, pins: map[[32]byte]*pending{}, rates: map[string]rate{}, avatars: map[string]*avatarEntry{}}
 	if opts.SameSite == "none" {
@@ -198,6 +203,7 @@ func (m *Manager) state(ctx context.Context) status {
 		v.Authenticated, v.Name, v.CanAccessRaw = true, s.name, s.access && s.ctx.Err() == nil && time.Since(s.checked) < accessTTL
 		v.ProfileID = s.profileID
 		if v.CanAccessRaw {
+			v.DirectArtwork = m.directArtwork && s.serverToken != ""
 			for id := range s.libraries {
 				v.LibraryIDs = append(v.LibraryIDs, id)
 			}
@@ -237,7 +243,7 @@ func (m *Manager) refresh(ctx context.Context, s *session) {
 	if s.ctx.Err() != nil || !time.Now().Before(s.expires) || time.Since(s.checked) < accessTTL {
 		return
 	}
-	profile, libraries, err := m.verify(ctx, s.token, s.client)
+	profile, libraries, serverToken, err := m.verify(ctx, s.token, s.client)
 	if ctx.Err() != nil || s.ctx.Err() != nil {
 		return
 	}
@@ -251,6 +257,7 @@ func (m *Manager) refresh(ctx context.Context, s *session) {
 	}
 	s.access = err == nil && len(libraries) > 0
 	s.libraries = libraries
+	s.serverToken = serverToken
 	if err == nil {
 		s.name, s.profileID, s.avatar = profile.name, profile.id, profile.avatar
 	}
@@ -329,7 +336,7 @@ func (m *Manager) request(ctx context.Context, method, endpoint, client, token s
 	}
 	return nil
 }
-func (m *Manager) verify(ctx context.Context, token, client string) (accountProfile, map[string]bool, error) {
+func (m *Manager) verify(ctx context.Context, token, client string) (accountProfile, map[string]bool, string, error) {
 	var user struct {
 		ID       int64  `json:"id"`
 		Username string `json:"username"`
@@ -337,7 +344,7 @@ func (m *Manager) verify(ctx context.Context, token, client string) (accountProf
 		Thumb    string `json:"thumb"`
 	}
 	if err := m.request(ctx, "GET", "/user", client, token, nil, &user); err != nil || user.ID == 0 {
-		return accountProfile{}, nil, errors.New("Unable to verify the Plex account")
+		return accountProfile{}, nil, "", errors.New("Unable to verify the Plex account")
 	}
 	var resources []struct {
 		ClientIdentifier string `json:"clientIdentifier"`
@@ -345,11 +352,11 @@ func (m *Manager) verify(ctx context.Context, token, client string) (accountProf
 		AccessToken      string `json:"accessToken"`
 	}
 	if err := m.request(ctx, "GET", "/resources?includeHttps=1", client, token, nil, &resources); err != nil {
-		return accountProfile{}, nil, err
+		return accountProfile{}, nil, "", err
 	}
 	server, err := m.identity(ctx)
 	if err != nil {
-		return accountProfile{}, nil, errors.New("Unable to verify access to the configured Plex server")
+		return accountProfile{}, nil, "", errors.New("Unable to verify access to the configured Plex server")
 	}
 	name := user.Title
 	if name == "" {
@@ -364,11 +371,11 @@ func (m *Manager) verify(ctx context.Context, token, client string) (accountProf
 			for _, provided := range strings.Split(resource.Provides, ",") {
 				if provided == "server" {
 					if m.libraries == nil {
-						return profile, nil, errors.New("Unable to verify Plex library access")
+						return profile, nil, "", errors.New("Unable to verify Plex library access")
 					}
 					ids, err := m.libraries(ctx, resource.AccessToken)
 					if err != nil {
-						return profile, nil, errors.New("Unable to verify Plex library access")
+						return profile, nil, "", errors.New("Unable to verify Plex library access")
 					}
 					libraries := make(map[string]bool, len(ids))
 					for _, id := range ids {
@@ -376,12 +383,12 @@ func (m *Manager) verify(ctx context.Context, token, client string) (accountProf
 							libraries[id] = true
 						}
 					}
-					return profile, libraries, nil
+					return profile, libraries, resource.AccessToken, nil
 				}
 			}
 		}
 	}
-	return profile, nil, nil
+	return profile, nil, "", nil
 }
 
 // Pruning and hard caps keep unauthenticated PIN creation and sessions bounded.
@@ -519,7 +526,7 @@ func (m *Manager) poll(w http.ResponseWriter, r *http.Request) {
 		reply(w, 502, map[string]string{"error": "Invalid Plex sign-in response"})
 		return
 	}
-	profile, libraries, err := m.verify(r.Context(), pin.AuthToken, p.client)
+	profile, libraries, serverToken, err := m.verify(r.Context(), pin.AuthToken, p.client)
 	if err != nil {
 		reply(w, 502, map[string]string{"error": err.Error()})
 		return
@@ -528,7 +535,7 @@ func (m *Manager) poll(w http.ResponseWriter, r *http.Request) {
 	expires := time.Now().Add(sessionTTL)
 	sessionContext, cancel := context.WithDeadline(context.Background(), expires)
 	access := len(libraries) > 0
-	s := &session{token: pin.AuthToken, client: p.client, name: profile.name, profileID: profile.id, avatar: profile.avatar, access: access, libraries: libraries, checked: time.Now(), expires: expires, ctx: sessionContext, cancel: cancel}
+	s := &session{token: pin.AuthToken, serverToken: serverToken, client: p.client, name: profile.name, profileID: profile.id, avatar: profile.avatar, access: access, libraries: libraries, checked: time.Now(), expires: expires, ctx: sessionContext, cancel: cancel}
 	m.mu.Lock()
 	if m.closed || m.pins[key] != p || len(m.sessions) >= maxSessions {
 		m.mu.Unlock()
@@ -632,7 +639,8 @@ func (m *Manager) Middleware(next http.Handler) http.Handler {
 		allowed := m.state(r.Context()).CanAccessRaw
 		path := r.URL.Path
 		protected := (strings.HasPrefix(path, "/media/plex-") && !publicMediaRead(r)) || strings.HasPrefix(path, "/library/items/plex-")
-		if s != nil && allowed && (protected || path == "/library/items" || path == "/library/sources") {
+		directArtwork := r.Method == http.MethodPost && strings.HasPrefix(path, "/library/artwork/") && strings.HasSuffix(path, "/direct")
+		if s != nil && allowed && (protected || directArtwork || path == "/library/items" || path == "/library/sources") {
 			// Bind before the per-media decision: a concurrent library revocation
 			// must not let this request attach to a newly issued private context.
 			private := s.privateContext()

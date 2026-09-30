@@ -104,8 +104,12 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   traversal, symlink/junction, alternate-stream, and allowed-section protections. Keep
   `PFP_DIR`, `MEDIA_CACHE_DIR`, and `PLEX_AUTH_SESSION_DIR` outside mapped media roots;
   session storage must also stay outside `OUTPUT` and `PFP_DIR`. Legacy avatars remain readable.
-- Keep Plex tokens, credential-bearing URLs, and local filesystem paths out of browser
-  payloads and logs. Never expose backend secrets through public environment variables.
+- Keep Plex account/configured owner tokens and local filesystem paths out of browser
+  payloads and logs. Optional `PLEX_PUBLIC_URL` is the sole exception for viewer server
+  resource tokens: authenticated, origin-checked artwork POSTs return private no-store
+  URLs. Keep these out of shared metadata, room messages, application persistent storage,
+  and logs. Clear session-scoped frontend memory on auth changes and retain proxy fallback
+  and public previews. Never expose backend secrets through public environment variables.
 - Use `/library/items` paging and direct `/media/{id}` lookup. Never enumerate Plex to build
   a complete index or refresh the picker through `/all`; `/all` is processed-only legacy
   compatibility. Preserve processed IDs/links and version-specific Plex identities.
@@ -116,7 +120,8 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   Library URL state must preserve room context without remounting or reconnecting the room.
 - Same-room media changes preserve the mounted player and room connection while the next
   source loads. Reuse freshly loaded title metadata for initial provider setup; recovery
-  must revalidate it. Artwork has a five-minute private browser freshness window with ETags.
+  must revalidate it. Proxied artwork has a five-minute private browser freshness window with ETags;
+  direct artwork follows Plex's HTTP caching headers.
   Room links use `/<room>` and `/<room>/media/<media>`; the path owns room identity.
   Preserve root `?mediaId=` entry links, Discord root `channel_id` launches, and the
   documented oEmbed routes. Do not restore unused query-based room or `/rooms/` aliases.

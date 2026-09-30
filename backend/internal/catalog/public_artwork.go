@@ -21,11 +21,17 @@ func (s *Service) publicArtworkURL(path string) string {
 }
 
 func (s *Service) publicArt(w http.ResponseWriter, r *http.Request) {
+	if s.resolvePublicArt(w, r) {
+		s.art(w, r)
+	}
+}
+
+func (s *Service) resolvePublicArt(w http.ResponseWriter, r *http.Request) bool {
 	token := r.PathValue("token")
 	parts := strings.Split(token, ".")
 	if len(parts) != 2 || len(token) > 512 {
 		http.NotFound(w, r)
-		return
+		return false
 	}
 	path, err := base64.RawURLEncoding.DecodeString(parts[0])
 	sig, sigErr := base64.RawURLEncoding.DecodeString(parts[1])
@@ -33,14 +39,14 @@ func (s *Service) publicArt(w http.ResponseWriter, r *http.Request) {
 	mac.Write([]byte("encoded-artwork:" + string(path)))
 	if err != nil || sigErr != nil || !hmac.Equal(sig, mac.Sum(nil)) {
 		http.NotFound(w, r)
-		return
+		return false
 	}
 	segments := strings.Split(string(path), "/")
 	if len(segments) != 5 || segments[1] != "media" || segments[3] != "artwork" || (segments[4] != "poster" && segments[4] != "backdrop") {
 		http.NotFound(w, r)
-		return
+		return false
 	}
 	r.SetPathValue("id", segments[2])
 	r.SetPathValue("kind", segments[4])
-	s.art(w, r)
+	return true
 }

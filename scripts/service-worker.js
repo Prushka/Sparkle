@@ -202,7 +202,8 @@ self.addEventListener('fetch', (event) => {
 		request.method !== 'GET' ||
 		url.origin !== self.location.origin ||
 		request.headers.has('range') ||
-		request.cache === 'no-store'
+		request.cache === 'no-store' ||
+		url.searchParams.has('X-Plex-Token')
 	)
 		return;
 	if (url.pathname === '/sw.js' || url.pathname.startsWith('/_sparkle/')) return;

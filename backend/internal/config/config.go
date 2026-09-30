@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -26,6 +27,7 @@ type Config struct {
 	EncodePreset                      string
 	EncodeAudioSurroundKbpsPerChannel int64
 	PlexURL                           string
+	PlexPublicURL                     string
 	PlexToken                         string
 	PlexMappings                      string
 	PlexLibraryIDs                    string
@@ -60,6 +62,7 @@ func Load() (Config, error) {
 		EncodePreset:                      getenv("ENCODE_PRESET", "p3"),
 		EncodeAudioSurroundKbpsPerChannel: 80,
 		PlexURL:                           os.Getenv("PLEX_URL"),
+		PlexPublicURL:                     os.Getenv("PLEX_PUBLIC_URL"),
 		PlexToken:                         os.Getenv("PLEX_TOKEN"),
 		PlexMappings:                      os.Getenv("PLEX_PATH_MAPPINGS"),
 		PlexLibraryIDs:                    os.Getenv("PLEX_LIBRARY_IDS"),
@@ -83,6 +86,12 @@ func Load() (Config, error) {
 	}
 
 	var err error
+	if cfg.PlexPublicURL != "" {
+		u, parseErr := url.Parse(cfg.PlexPublicURL)
+		if parseErr != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" {
+			return Config{}, fmt.Errorf("PLEX_PUBLIC_URL must be an HTTPS base URL without credentials, query or fragment")
+		}
+	}
 	if value := os.Getenv("PLEX_AUTH_COOKIE_SECURE"); value != "" {
 		cfg.PlexAuthCookieSecure, err = strconv.ParseBool(value)
 		if err != nil {

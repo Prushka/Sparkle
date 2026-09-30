@@ -232,24 +232,25 @@ a username or password are ignored.
 
 ### Backend
 
-| Variable                    | Purpose / example                                                                                                |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `ADDR`                      | Listening address; `:1323`                                                                                       |
-| `OUTPUT`                    | Existing processed-media root; `./output` in `.env.example`                                                      |
-| `JOBS_CACHE_TTL`            | Processed catalog refresh interval; `15m` in the example/startup scripts                                         |
-| `PFP_DIR`                   | Writable directory for new avatars; `./data/pfp`                                                                 |
-| `MAX_PFP_BYTES`             | Avatar upload limit; `12000000` bytes                                                                            |
-| `MEDIA_CACHE_DIR`           | Writable artwork and optional encoded-segment cache; `./cache/media`                                             |
-| `VOICE_TURN_URLS`           | Optional comma-separated public `turn:`/`turns:` URLs; see [voice relay setup](docs/voice-chat.md#deploy-coturn) |
-| `VOICE_TURN_SECRET`         | Server-only coturn shared secret; required together with `VOICE_TURN_URLS`                                       |
-| `PLEX_URL`                  | Plex server base URL, without a token or credentials in the URL                                                  |
-| `PLEX_TOKEN`                | Server-only Plex token                                                                                           |
-| `PLEX_LIBRARY_IDS`          | Comma-separated allowed section IDs; empty allows all movie/show sections                                        |
-| `PLEX_PATH_MAPPINGS`        | JSON array mapping absolute Plex roots to absolute backend-visible roots                                         |
-| `PLEX_AUTH_ORIGINS`         | Exact trusted frontend origins; defaults to localhost and 127.0.0.1 on port 3001                                 |
-| `PLEX_AUTH_COOKIE_SECURE`   | Secure cookies; `true` by default, `false` allowed only for loopback development                                 |
-| `PLEX_AUTH_COOKIE_SAMESITE` | `lax` by default; `none` enables Secure partitioned cookies for cross-site embedding                             |
-| `PLEX_AUTH_SESSION_DIR`     | Private persistent Plex sessions; `./data/plex-auth`, outside public/media roots                                 |
+| Variable                    | Purpose / example                                                                                                           |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `ADDR`                      | Listening address; `:1323`                                                                                                  |
+| `OUTPUT`                    | Existing processed-media root; `./output` in `.env.example`                                                                 |
+| `JOBS_CACHE_TTL`            | Processed catalog refresh interval; `15m` in the example/startup scripts                                                    |
+| `PFP_DIR`                   | Writable directory for new avatars; `./data/pfp`                                                                            |
+| `MAX_PFP_BYTES`             | Avatar upload limit; `12000000` bytes                                                                                       |
+| `MEDIA_CACHE_DIR`           | Writable artwork and optional encoded-segment cache; `./cache/media`                                                        |
+| `VOICE_TURN_URLS`           | Optional comma-separated public `turn:`/`turns:` URLs; see [voice relay setup](docs/voice-chat.md#deploy-coturn)            |
+| `VOICE_TURN_SECRET`         | Server-only coturn shared secret; required together with `VOICE_TURN_URLS`                                                  |
+| `PLEX_URL`                  | Plex server base URL, without a token or credentials in the URL                                                             |
+| `PLEX_TOKEN`                | Server-only Plex token                                                                                                      |
+| `PLEX_PUBLIC_URL`           | Optional HTTPS base of the same Plex server; signed-in covers use the viewer's token, with proxy fallback; empty by default |
+| `PLEX_LIBRARY_IDS`          | Comma-separated allowed section IDs; empty allows all movie/show sections                                                   |
+| `PLEX_PATH_MAPPINGS`        | JSON array mapping absolute Plex roots to absolute backend-visible roots                                                    |
+| `PLEX_AUTH_ORIGINS`         | Exact trusted frontend origins; defaults to localhost and 127.0.0.1 on port 3001                                            |
+| `PLEX_AUTH_COOKIE_SECURE`   | Secure cookies; `true` by default, `false` allowed only for loopback development                                            |
+| `PLEX_AUTH_COOKIE_SAMESITE` | `lax` by default; `none` enables Secure partitioned cookies for cross-site embedding                                        |
+| `PLEX_AUTH_SESSION_DIR`     | Private persistent Plex sessions; `./data/plex-auth`, outside public/media roots                                            |
 
 Plex sign-in requires HTTPS for LAN/public addresses. On the computer running
 Sparkle, use `http://localhost:3001` for local development. An HTTP LAN URL cannot
@@ -310,7 +311,9 @@ docker compose -f compose.example.yml up -d
 ```
 
 The frontend listens on port `3000`; internal requests use `sparkle-api:1323`.
-Plex credentials are passed only to the backend. The API needs network access
+Configured Plex credentials are passed only to the backend. Optional
+[direct artwork](docs/plex-auth.md#direct-artwork) sends the viewer's server resource
+token to their browser. The API needs network access
 to Plex and read access to the mounted media. CI checks both containers together
 using disposable fixtures; deployment-specific Plex mounts and physical HDR output
 still need validation on the target installation.

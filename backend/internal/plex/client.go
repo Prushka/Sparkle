@@ -477,22 +477,31 @@ func (c *Client) File(ctx context.Context, id, partID string) (*os.File, error) 
 	return nil, ErrNotFound
 }
 
-func (c *Client) Artwork(ctx context.Context, id, kind string) ([]byte, string, error) {
+// ArtworkPath resolves only allowlisted metadata, without downloading image bytes.
+func (c *Client) ArtworkPath(ctx context.Context, id, kind string) (string, error) {
 	m, _, err := c.Item(ctx, id)
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
 	p := m.Thumb
 	if kind == "backdrop" {
 		p = m.Art
 	} else if kind != "poster" {
-		return nil, "", ErrNotFound
+		return "", ErrNotFound
 	}
 	if p == "" {
 		p = m.ParentThumb
 	}
 	if !regexp.MustCompile(`^/library/metadata/[0-9]+/(thumb|art)(/[0-9]+)?$`).MatchString(p) {
-		return nil, "", ErrNotFound
+		return "", ErrNotFound
+	}
+	return p, nil
+}
+
+func (c *Client) Artwork(ctx context.Context, id, kind string) ([]byte, string, error) {
+	p, err := c.ArtworkPath(ctx, id, kind)
+	if err != nil {
+		return nil, "", err
 	}
 	select {
 	case c.requests <- struct{}{}:
