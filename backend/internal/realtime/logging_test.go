@@ -78,3 +78,61 @@ func TestPlaybackLogsOnlyAcceptedMeaningfulEvents(t *testing.T) {
 		t.Fatal("voice signaling was logged")
 	}
 }
+
+func TestTabLogsPreserveVerifiedAccount(t *testing.T) {
+	var output bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&output)
+	defer log.SetOutput(previous)
+	for _, role := range []string{YouTubeSync, ChessSync, WordleSync, CottageSync} {
+		for _, tc := range []struct {
+			name, parentProfile, tabProfile, tabName, wantName, wantIdentity string
+			discord                                                          bool
+		}{
+			{"anonymous", "plex-alice", "", "", "Guest", "guest", false},
+			{"different account", "plex-alice", "plex-bob", "Bob", "Bob", "plex", false},
+			{"same account keeps session name", "plex-alice", "plex-alice", "Alice", "Alice", "plex", false},
+			{"guest cannot replace account", "guest-avatar", "plex-bob", "Bob", "Bob", "plex", false},
+			{"guest inheritance", "guest-avatar", "", "", "Main name", "guest", false},
+			{"Discord inheritance", "guest-avatar", "", "", "Discord guest", "discord", true},
+		} {
+			t.Run(role+"/"+tc.name, func(t *testing.T) {
+				h := NewHub(Options{MediaTitle: func(string) string { return "A Movie" }})
+				h.upsertRoom("room", "movie", nil)
+				parent := newPlayer(nil, "viewer")
+				parent.state.Name, parent.state.ProfileId = "Main name", tc.parentProfile
+				if tc.discord {
+					parent.state.DiscordUser = &DiscordUser{ID: "123", Username: "Discord guest"}
+				}
+				h.addPlayerToRoom("room", parent)
+				child := newPlayer(nil, "viewer-"+role)
+				child.state.Name, child.state.ProfileId = tc.tabName, tc.tabProfile
+				output.Reset()
+				// Test logging independently of the profile copied on connection.
+				h.logRoomEvent(role+":room", child.state, "connected", "connection", "")
+				for _, fragment := range []string{`user="` + tc.wantName + `"`, "identity=" + tc.wantIdentity, `media="A Movie"`, `media_id="movie"`, `sync="` + role + `"`} {
+					if !strings.Contains(output.String(), fragment) {
+						t.Fatalf("missing %s: %s", fragment, output.String())
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestMediaWatcherLogKeepsVerifiedSessionName(t *testing.T) {
+	var output bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&output)
+	defer log.SetOutput(previous)
+	h := NewHub(Options{})
+	parent := newPlayer(nil, "viewer")
+	parent.state.Name, parent.state.ProfileId = "Old name", "plex-alice"
+	h.addPlayerToRoom("room", parent)
+	watcher := newPlayer(nil, "media_watcher")
+	watcher.state.Name, watcher.state.ProfileId = "Current name", "plex-alice"
+	h.logRoomEvent("room", watcher.state, "connected", "connection", "")
+	if !strings.Contains(output.String(), `user="Current name" identity=plex`) {
+		t.Fatalf("watcher lost its session identity: %s", output.String())
+	}
+}

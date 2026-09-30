@@ -84,8 +84,10 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   Anonymous users get existing Encoded
   media only. Keep exact-origin CORS/CSRF checks and credentialed backend/player fetches.
   See [authentication](docs/plex-auth.md); never bypass it using the owner token in a browser.
-  Signed-in room profiles use the server-verified Plex name and proxied avatar. Reserve
-  the Plex profile namespace and preserve guest preferences on sign-out. Single-title
+  Signed-in room profiles use the connecting socket's server-verified Plex name and
+  proxied avatar; public player IDs must never confer or replace that identity, including
+  for tab sockets and logs. Reserve the Plex profile namespace and preserve guest
+  preferences on sign-out. Single-title
   metadata and poster/backdrop GET/HEAD requests are public for full link previews;
   `/share/rooms/{room}` exposes only the current media identity. Keep files, derivatives,
   hierarchy, room mutations and WebSockets protected; never forward sessions into previews.

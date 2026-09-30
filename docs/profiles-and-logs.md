@@ -59,9 +59,11 @@ Connection, disconnection, profile identification and connection errors include:
 
 Accepted play/pause changes, shared seeks and socket media changes include the
 same context. Periodic timeline updates and duplicate pause messages do not add
-log entries. Tab sockets use the participant's main-room identity and media.
-Media watchers can identify their profile without joining room presence or
-changing the shared timeline.
+log entries. Tab sockets use the main room's media context and may reuse its
+guest or Discord profile. Plex identity always comes from the connecting socket's
+verified session, including in logs; a matching public player ID cannot confer
+or replace it. Media watchers can identify their profile without joining room
+presence or changing the shared timeline.
 
 For example, a pause event includes:
 

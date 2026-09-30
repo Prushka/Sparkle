@@ -278,8 +278,9 @@ new uploads go to `PFP_DIR`.
 The browser reads active profile limits from `GET /profile/limits`; the backend
 enforces both limits independently. Oversized avatars and guest names show an
 error without replacing the saved profile. Plex and Discord names retain their
-account identity. Room logs include the display name, identity source, media title,
-connection role and meaningful play/pause/seek events. See
+account identity. Plex identity always comes from each socket's verified session,
+including tab connections and logs. Room logs include the display name, identity
+source, media title, connection role and meaningful play/pause/seek events. See
 [profiles and room logs](docs/profiles-and-logs.md).
 
 The API's direct configuration defaults and optional HTTP timeout settings are

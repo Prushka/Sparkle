@@ -529,7 +529,7 @@ func (h *Hub) addPlayerToRoom(id string, player *Player) *Room {
 	baseRoom, role := socketRole(id, player.state.Id)
 	if parentRoom := h.rooms[baseRoom]; baseRoom != id && parentRoom != nil {
 		parentRoom.mu.RLock()
-		if parent := parentRoom.players[strings.TrimSuffix(player.state.Id, "-"+role)]; parent != nil {
+		if parent := parentRoom.players[strings.TrimSuffix(player.state.Id, "-"+role)]; parent != nil && canInheritGuestProfile(player.state, parent.state) {
 			player.state.Name, player.state.ProfileId, player.state.DiscordUser = parent.state.Name, parent.state.ProfileId, parent.state.DiscordUser
 		}
 		parentRoom.mu.RUnlock()

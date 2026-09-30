@@ -48,15 +48,15 @@ func (h *Hub) logRoomEvent(roomID string, player PlayerSnapshot, event, syncType
 		room.mu.RLock()
 		mediaID = room.mediaID
 		if baseRoom != roomID {
-			// Tab sockets share their participant's identity with the main room.
-			if parent := room.players[strings.TrimSuffix(player.Id, "-"+role)]; parent != nil {
+			// Only unverified guest/Discord profiles may follow a public player ID.
+			if parent := room.players[strings.TrimSuffix(player.Id, "-"+role)]; parent != nil && canInheritGuestProfile(player, parent.state) {
 				id := player.Id
 				player = parent.state
 				player.Id = id
 			}
 		} else if role == "media watcher" && player.ProfileId != "" {
 			for _, parent := range room.players {
-				if parent.state.ProfileId == player.ProfileId {
+				if parent.state.ProfileId == player.ProfileId && canInheritGuestProfile(player, parent.state) {
 					id := player.Id
 					player = parent.state
 					player.Id = id

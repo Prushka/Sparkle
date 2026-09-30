@@ -22,6 +22,13 @@ func (h *Hub) avatarSizeError() string {
 	return fmt.Sprintf("Avatar file is too large. Maximum size is %d bytes.", h.maxUploadBytes)
 }
 
+// Public player/profile IDs do not prove that two sockets share an account.
+// Preserve the existing guest/Discord policy, but always keep Plex identity
+// from the connecting socket's verified session.
+func canInheritGuestProfile(player, parent PlayerSnapshot) bool {
+	return !strings.HasPrefix(player.ProfileId, "plex-") && !strings.HasPrefix(parent.ProfileId, "plex-")
+}
+
 func (r *Room) updateProfile(player *Player, payload ClientPayload, now time.Time) {
 	name := strings.TrimSpace(payload.Name)
 	profileID := strings.TrimSpace(payload.ProfileId)
