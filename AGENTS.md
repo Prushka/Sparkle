@@ -8,6 +8,8 @@ files. Optional on-demand NVENC encoding serves cached derivatives of Plex media
 
 - These instructions apply throughout the repository. Read any closer `AGENTS.md` before
   editing its subtree; explicit task instructions take precedence over repository guidance.
+- Always ask the user whenever you have any questions or uncertainties. Clarify them before
+  proceeding with work that depends on the answer.
 - Treat current code, configuration, and tests as the source of truth. Inspect the relevant
   implementation before changing behavior; preserve unrelated working-tree changes.
 - Keep this guide, [README.md](README.md), and the relevant `docs/` reference consistent when
