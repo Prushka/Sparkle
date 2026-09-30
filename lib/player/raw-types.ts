@@ -50,6 +50,8 @@ export type HDRPreference = 'auto' | 'compatible' | 'sdr' | EncodedCodec;
 export interface RawPlaybackTrack {
 	id: number;
 	title: string;
+	/** Display only; never part of saved track identity or language matching. */
+	outputDescription?: string;
 	index?: number;
 	language?: string;
 	codec?: string;

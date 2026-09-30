@@ -12,6 +12,7 @@ import type { Job } from './t';
 import type { EncodedCodec, HDRPreference, RawMedia, RawPlaybackStatus } from './raw-types';
 import {
 	encodedCapabilities,
+	encodedAudioDescription,
 	encodedNativeAudio,
 	encodedURL,
 	loadEncodedPart,
@@ -731,6 +732,8 @@ export class RawProvider implements MediaProviderAdapter {
 						language:
 							original?.languageCode || String(s.metadata.language || original?.language || ''),
 						codec: original?.codec || String(s.codecparProxy.codecId),
+						outputDescription:
+							type === 'audio' ? encodedAudioDescription(this.encoded, index) : undefined,
 						size: type === 'subtitle' ? rawSubtitleByteSize(s.metadata) : undefined,
 						title:
 							original?.displayTitle ||
@@ -885,6 +888,11 @@ export class RawProvider implements MediaProviderAdapter {
 				if (this.paused) await Promise.all([this.engine?.pause(), this.audioEngine?.pause()]);
 			}
 			const ms = BigInt(Math.round((target - this.raw.parts[index].start) * 1000));
+			// A large audio fragment can seek more slowly than native video.
+			// Hold both clocks until both seeks finish, then resume together.
+			// `paused` remains the requested playback state throughout the hold.
+			const resumeTogether = !!this.audioEngine && !this.paused;
+			if (resumeTogether) await Promise.all([this.engine?.pause(), this.audioEngine?.pause()]);
 			// A real timeline change invalidates old captions. The sink's later
 			// resume/reset may retain packets prefetched during this seek.
 			this.clearSubtitleTimeline();
@@ -892,6 +900,8 @@ export class RawProvider implements MediaProviderAdapter {
 			// audio decoder even starts moving to the requested position.
 			await Promise.all([this.engine?.seek(ms), this.audioEngine?.seek(ms)]);
 			this.encodedCaptions?.update(Number(ms), true);
+			if (sequence !== this.seekSequence) return;
+			if (resumeTogether) await this.start();
 			if (sequence !== this.seekSequence) return;
 			this.lastTime = -1;
 			this.lastProgress = performance.now();

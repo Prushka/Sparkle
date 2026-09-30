@@ -52,9 +52,21 @@ export interface EncodedPart {
 	audio: boolean;
 	/** Largest encoded track width; absent on older servers. */
 	audioChannels?: number;
+	audioTracks?: {
+		sourceChannels: number;
+		channels: number;
+		layout: string;
+		conversion: 'preserved' | 'padded' | 'downmix' | 'unknown';
+	}[];
 	subtitleTracks: (RawPlaybackTrack & { default?: boolean })[];
 	hasFonts: boolean;
 	segmentSeconds: number;
+}
+export function encodedAudioDescription(part: EncodedPart | undefined, index: number) {
+	const track = part?.audioTracks?.[index];
+	if (track?.conversion === 'unknown') return 'Stereo mix (unknown layout)';
+	if (track?.conversion === 'downmix') return `${track.layout} mix`;
+	return undefined;
 }
 export function encodedURL(part: EncodedPart, resource: string) {
 	return `${part.base}/${resource}?v=${encodeURIComponent(part.fingerprint)}${part.aiHDR ? '&aiHDR=1' : ''}`;

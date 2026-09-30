@@ -14,7 +14,7 @@ import (
 )
 
 const SegmentSeconds = 12
-const profileVersion = "nvenc-segments-v7"
+const profileVersion = "nvenc-segments-v8"
 
 // Four 20 ms Opus packets minus libopus's 312-sample encoder lookahead.
 // Encode a short lead-in, then discard it so each cached clip starts with
@@ -206,23 +206,16 @@ func encodeArgs(input, dir, codec string, segment int, duration float64, p Profi
 			if stream.Type != "audio" {
 				continue
 			}
-			layout, _ := opusLayout(stream)
-			streamFilter := filter
-			// Opus 5.x labels its surrounds BL/BR. Preserve side positions on
-			// 7.1 devices by adding silent back channels, without mixing samples.
-			if stream.ChannelLayout == "5.1(side)" {
-				streamFilter += ",pan=7.1|FL=FL|FR=FR|FC=FC|LFE=LFE|SL=SL|SR=SR"
-			} else if stream.ChannelLayout == "5.0(side)" {
-				streamFilter += ",pan=7.1|FL=FL|FR=FR|FC=FC|SL=SL|SR=SR"
-			} else if layout != "" {
-				streamFilter += ",aformat=channel_layouts=" + layout
-			}
+			plan, _ := planAudio(stream)
+			// Establish the explicit layout before resampling, including when
+			// the source has unidentified channels.
+			streamFilter := plan.filter + "," + filter
 			family := "0"
-			if stream.Channels > 2 {
+			if plan.Channels > 2 {
 				family = "1"
 			}
 			suffix := ":a:" + strconv.Itoa(index)
-			args = append(args, "-b"+suffix, strconv.Itoa(p.audioKbps(stream.Channels))+"k", "-mapping_family"+suffix, family, "-filter"+suffix, streamFilter)
+			args = append(args, "-b"+suffix, strconv.Itoa(p.audioKbps(min(stream.Channels, plan.Channels)))+"k", "-mapping_family"+suffix, family, "-filter"+suffix, streamFilter)
 			index++
 		}
 		args = append(args, "-ar", "48000", "-frame_duration", "20",
@@ -279,38 +272,4 @@ func validProfile(p Profile) bool {
 
 func (p Profile) audioKbps(channels int) int {
 	return channels * p.AudioSurroundKbpsPerChannel
-}
-
-// Family 1 has defined speaker positions, unlike family 255's discrete channels.
-// Refuse unknown/unsupported layouts instead of silently reducing them to stereo.
-func opusLayout(s Stream) (string, bool) {
-	layouts := []string{"", "mono", "stereo", "3.0", "quad", "5.0", "5.1", "6.1", "7.1"}
-	if s.Channels < 1 || s.Channels >= len(layouts) {
-		return "", false
-	}
-	layout := layouts[s.Channels]
-	if (s.ChannelLayout == "5.1(side)" && s.Channels == 6) || (s.ChannelLayout == "5.0(side)" && s.Channels == 5) {
-		return "7.1", true
-	}
-	if s.ChannelLayout == layout || (s.Channels <= 2 && s.ChannelLayout == "") {
-		return layout, true
-	}
-	return "", false
-}
-
-func (p Probe) audioChannels() int {
-	channels := 0
-	for _, s := range p.Streams {
-		if s.Type == "audio" {
-			if s.Channels < 1 {
-				return 0
-			}
-			width := s.Channels
-			if layout, ok := opusLayout(s); ok && layout == "7.1" {
-				width = 8
-			}
-			channels = max(channels, width)
-		}
-	}
-	return channels
 }

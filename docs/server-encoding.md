@@ -40,7 +40,7 @@ FFMPEG=C:/tools/ffmpeg/bin/ffmpeg.exe
 FFPROBE=C:/tools/ffmpeg/bin/ffprobe.exe
 ENCODE_QUALITY=24
 ENCODE_PRESET=p3
-# Opus target kbps per source channel, including mono and stereo.
+# Opus target kbps per retained channel; silent padding does not increase the target.
 ENCODE_AUDIO_SURROUND_KBPS_PER_CHANNEL=80
 ENCODE_CONCURRENCY=2
 ENCODE_CACHE_BYTES=42949672960
@@ -179,7 +179,7 @@ These are signal/throughput measurements, not physical-display HDR qualification
 ## Encoder profile and HDR
 
 The defaults use constant quality **24**, **10-bit**, variable frame rate, source
-dimensions/color range, and **Opus preserving each audio track's channel count**.
+dimensions/color range, and **Opus with explicit speaker-layout handling**.
 Every audio track defaults to 80 kbps per source channel: 80 kbps mono, 160 kbps
 stereo, 480 kbps for 5.1, and 640 kbps for 7.1. Both video
 outputs exclusively use **NVENC** (FFmpeg or NVEncC) with **p3 (fast)** by
@@ -196,19 +196,45 @@ settings follow [HandBrake's NVENC mapping](https://github.com/HandBrake/HandBra
 No resolution or frame-rate reduction is imposed.
 `ENCODE_AUDIO_SURROUND_KBPS_PER_CHANNEL` is the only audio bitrate setting and
 accepts 32-128 (default 80). Despite its name, it applies to mono and stereo too.
-Each track's VBR target is this value times its source channel count, in kilobits
-per second; it is not measured media bitrate. The removed `ENCODE_AUDIO_KBPS` and
+Each track's VBR target is this value times the smaller of its source and encoded
+channel counts, in kilobits per second. Silent padding does not increase the
+target; a 12-channel source mixed to 7.1 targets 640 kbps, and an unidentified
+12-channel source folded to stereo targets 160 kbps. This is not measured media
+bitrate. The removed `ENCODE_AUDIO_KBPS` and
 `ENCODE_AUDIO_MONO_KBPS` settings are ignored. All settings participate in the
 shared cache identity.
 
-Supported input layouts are mono, stereo, 3.0, quad, 5.0, 5.1, 6.1 and 7.1.
-Side-labelled 5.0/5.1 is carried in 7.1 Opus with silent back channels (and silent
-LFE for 5.0). This preserves side speaker positions instead of relabelling them
-as the back pair on 7.1 devices. The bitrate uses the source channel count; silent
-padding does not increase the target. Unknown, height, wide, and other nonstandard layouts are rejected
-instead of silently dropping channels; select Compatible for those sources.
+Decodable input tracks with 1-64 channels are accepted. Known speaker positions
+are preserved whenever a standard Opus layout can carry them, with silent padding
+as needed:
+
+| Source layout                                          | Encoded layout | Treatment                                        |
+| ------------------------------------------------------ | -------------- | ------------------------------------------------ |
+| Mono, stereo, 3.0, quad, 5.0, 5.1, 6.1, 7.1            | Same           | Preserve                                         |
+| 2.1, 3.1                                               | 5.1            | Silent missing speakers                          |
+| 3.0(back), 4.0, 4.1, 6.0                               | 6.1            | Preserve back center; silent missing speakers    |
+| Quad(side), 5.0(side), 5.1(side), 7.0                  | 7.1            | Preserve side positions; silent missing speakers |
+| Wide, height, other named combinations that do not fit | 7.1            | Explicit horizontal surround mix                 |
+| Unidentified channels                                  | Stereo         | Fold all even/odd channel indices to left/right  |
+
+Named layouts include 7.1(wide), 7.1(wide-side), 5.1.2/5.1.4, 7.1.2/7.1.4,
+9.1.4/9.1.6 and 22.2, plus ordered speaker lists reported by FFprobe. Height
+channels feed corresponding horizontal speakers at -3 dB; wide fronts feed the
+front pair. Back center splits across the rear pair when a direct back-center
+position cannot be retained. Top back center splits at -6 dB per rear speaker;
+extra LFE feeds LFE. A common gain bounds the matrix sums without changing the
+relative speaker balance. No channel is silently discarded by the server mix.
+
+Unidentified, inconsistent, or unrecognized layout metadata uses the labelled
+stereo fallback; it does not invent speaker positions or assign an unknown channel
+to LFE. This includes every input channel but cannot recover missing spatial
+information. The audio menu shows **7.1 mix** or **Stereo mix (unknown layout)**
+for converted tracks, without changing saved track identity. The manifest exposes
+per-track source/encoded widths, layout, and conversion alongside its maximum
+encoded width. Compatible remains available for original client decoding.
 Opus mapping family 0 is used for mono/stereo and family 1 for surround.
-Atmos/DTS:X objects and compressed bitstream passthrough are not preserved.
+Height/wide positions after mixing, Atmos/DTS:X objects, and compressed bitstream
+passthrough are not preserved. Browser speaker output remains at most 7.1.
 
 Multichannel titles use the same locally served WASM audio decoder and layout-aware
 PCM remix as Compatible. Video remains native MSE/ManagedMediaSource; audio loads
@@ -227,7 +253,7 @@ AV1 disables S12M timecode insertion (`-s12m_tc 0`) to avoid the
 [FFmpeg/NVENC malformed timecode metadata bug](https://forums.developer.nvidia.com/t/ffmpeg-av1-nvenc-encoder-sometimes-generates-undecodeable-bitstreams/364011),
 which can make Chrome stop with a native decode error. This removes only timecode
 insertion; it retains HDR color, mastering and light-level metadata. Encode profile
-revision v7 separates multichannel audio from older stereo cache entries;
+revision v8 separates the expanded layout policy from earlier cache entries;
 segments remain 12 seconds.
 Native decoder failures reach the player's error state instead of leaving it buffering; users
 can choose another output mode while staying in the room.

@@ -95,11 +95,11 @@ func TestEncodingRequiresAllowedPlexSectionAndHidesPaths(t *testing.T) {
 		}
 	}
 	encodedFingerprint := s.fingerprint(s.sources[fingerprint])
-	oldFingerprint := fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("nvenc-segments-v6:%s:%s:%+v", s.revision, fingerprint, s.options.Profile))))
+	oldFingerprint := fmt.Sprintf("%x", sha256.Sum256([]byte(fmt.Sprintf("nvenc-segments-v7:%s:%s:%+v", s.revision, fingerprint, s.options.Profile))))
 	old := httptest.NewRecorder()
 	mux.ServeHTTP(old, httptest.NewRequest("GET", "/media/"+id+"/parts/20/encoded/av1/video.m3u8?v="+oldFingerprint, nil))
 	if old.Code != http.StatusConflict {
-		t.Fatal("accepted a six-second cache fingerprint")
+		t.Fatal("accepted a previous audio-layout cache fingerprint")
 	}
 	s.sources[fingerprint].duration = 25
 	playlist := httptest.NewRecorder()
@@ -156,7 +156,12 @@ func TestEncodingRequiresAllowedPlexSectionAndHidesPaths(t *testing.T) {
 			if audioManifest.Code != 200 || !strings.Contains(audioManifest.Body.String(), `"audioChannels":8`) {
 				t.Fatalf("missing probed surround channels: %s", audioManifest.Body)
 			}
-
+			var audioMetadata struct {
+				AudioTracks []audioPlan `json:"audioTracks"`
+			}
+			if err := json.Unmarshal(audioManifest.Body.Bytes(), &audioMetadata); err != nil || len(audioMetadata.AudioTracks) != 1 || audioMetadata.AudioTracks[0].Layout != "7.1" || audioMetadata.AudioTracks[0].Conversion != "preserved" {
+				t.Fatalf("missing per-track audio layout: %s", audioManifest.Body)
+			}
 		}
 		master := httptest.NewRecorder()
 		mux.ServeHTTP(master, httptest.NewRequest("GET", "/media/"+id+"/parts/20/encoded/av1/master.m3u8?v="+encodedFingerprint, nil))

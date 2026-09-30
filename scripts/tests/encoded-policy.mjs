@@ -14,6 +14,7 @@ const {
 	readAIHDRPreference,
 	saveAIHDRPreference,
 	encodedCapabilities,
+	encodedAudioDescription,
 	encodedNativeAudio,
 	encodedURL,
 	loadEncodedPart
@@ -64,6 +65,15 @@ Object.defineProperty(globalThis, 'navigator', {
 });
 globalThis.MediaSource = { isTypeSupported: () => true };
 const audioPart = { playlist: 'master.m3u8', audio: true };
+assert.equal(encodedAudioDescription(audioPart, 0), undefined);
+for (const [conversion, want] of [
+	['preserved', undefined],
+	['padded', undefined],
+	['downmix', '7.1 mix'],
+	['unknown', 'Stereo mix (unknown layout)']
+]) {
+	assert.equal(encodedAudioDescription({ audioTracks: [{ layout: '7.1', conversion }] }, 0), want);
+}
 for (const audioChannels of [1, 2])
 	assert.equal(encodedNativeAudio({ ...audioPart, audioChannels }), true);
 for (const audioChannels of [undefined, 0, 3, 6, 8, NaN])

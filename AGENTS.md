@@ -158,11 +158,15 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   outputs. Quad requires an explicit FL/FR/BL/BR layout; FFmpeg's default four-channel
   layout has center/back-center positions. Restore the shared context when the last
   PCM player stops.
-  Server encodes preserve supported speaker layouts up to 7.1 with per-track Opus
-  bitrates calculated from `ENCODE_AUDIO_SURROUND_KBPS_PER_CHANNEL` (default 80)
-  times the source channel count, including mono and stereo.
+  Server encodes accept decodable 1-64-channel audio, preserving speaker positions
+  in standard Opus layouts with silent padding where possible. Explicitly mix
+  height/wide and other unrepresentable named layouts to 7.1; unidentified layouts
+  fold all channels to labelled stereo without inventing speaker positions. Show
+  conversions in the audio menu without altering saved track identity. Per-track Opus
+  targets use `ENCODE_AUDIO_SURROUND_KBPS_PER_CHANNEL` (default 80) times the smaller
+  source/encoded channel count, including mono and stereo.
   Multichannel titles use WASM PCM even when native Opus is advertised;
-  mono/stereo-only titles can share the native video clock. Processed media keeps
+  mono/stereo-only encoded outputs can share the native video clock. Processed media keeps
   its existing stereo behavior. Output is decoded PCM, not Dolby/DTS/Atmos bitstream passthrough.
 - Server encodes use 12-second segments, including AI HDR; bump the profile revision when
   duration changes. Share cache keys by source fingerprint, codec, profile and time segment,
@@ -207,6 +211,8 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   Background clock updates must not change the shared timeline. Prime unstarted
   decoders before restoring paused positions, and let the latest room seek replace
   an unfinished seek even when the native clock still matches the latest target.
+  Hold both PCM playback clocks until both decoders finish seeking, then restore
+  the requested play state without publishing a stale seek or an internal pause.
   Automatic connections after media replacement preserve room pause state; only
   an explicit initial join may request the solo-room autoplay policy.
 - Software tone mapping is temporarily disabled by `SOFTWARE_TONE_MAPPING_ENABLED`.

@@ -10,11 +10,15 @@ import {
 	defaultLayoutIcons
 } from '@vidstack/react/player/layouts/default';
 import { RAW_STATUS_EVENT, RawProvider } from '@/lib/player/raw-provider';
-import type { RawMedia, RawPlaybackStatus } from '@/lib/player/raw-types';
+import type { RawMedia, RawPlaybackStatus, RawPlaybackTrack } from '@/lib/player/raw-types';
 import type { HDRPreference } from '@/lib/player/raw-types';
 import { SOFTWARE_TONE_MAPPING_ENABLED } from '@/lib/player/raw-hdr';
 import { SubtitlesMenuSection } from './SubtitlesMenuSection';
 import { getSubtitleFormatName } from '@/lib/player/t';
+
+function audioLabel(track?: RawPlaybackTrack) {
+	return track ? [track.title, track.outputDescription].filter(Boolean).join(' · ') : 'Default';
+}
 
 function formatBitrate(bits?: number) {
 	if (bits === undefined || !Number.isFinite(bits) || bits < 0) return 'Measuring…';
@@ -206,7 +210,7 @@ export function RawVideoSettings({
 	onVersion: (id: string) => void;
 }) {
 	const { status, provider } = useRawPlayback();
-	const audio = status?.audioTracks.find((t) => t.id === status.audio)?.title ?? 'Default';
+	const audio = audioLabel(status?.audioTracks.find((t) => t.id === status.audio));
 	const bitrate = status?.bitrate;
 	const totalBitrate =
 		bitrate?.video === undefined ? undefined : bitrate.video + (bitrate.audio ?? 0);
@@ -231,7 +235,10 @@ export function RawVideoSettings({
 					<DefaultMenuSection label="Audio Track" value={audio}>
 						<DefaultMenuRadioGroup
 							value={String(status.audio ?? '')}
-							options={status.audioTracks.map((t) => ({ value: String(t.id), label: t.title }))}
+							options={status.audioTracks.map((t) => ({
+								value: String(t.id),
+								label: audioLabel(t)
+							}))}
 							onChange={(value) =>
 								void provider?.selectTrack('audio', Number(value)).catch(() => {})
 							}

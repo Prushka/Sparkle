@@ -3,7 +3,7 @@
 // in this test context without changing Windows or user browser preferences.
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { createReadStream, existsSync } from 'node:fs';
+import { createReadStream, existsSync, readFileSync } from 'node:fs';
 import { mkdir, stat, writeFile } from 'node:fs/promises';
 import { resolve, join, extname } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -14,6 +14,10 @@ const encodedRoot = process.env.SPARKLE_ENCODE_AUDIO_FIXTURE_DIR;
 // Inspect pre-destination PCM buses without claiming physical surround output.
 const virtual = process.env.SPARKLE_AUDIO_VIRTUAL_OUTPUT === '1';
 const root = resolve(encodedRoot || 'cache/surround-audio');
+const layoutMetadata =
+	encodedRoot && existsSync(join(root, 'layout-fixtures.json'))
+		? JSON.parse(readFileSync(join(root, 'layout-fixtures.json'), 'utf8'))
+		: undefined;
 const capacities = process.env.SPARKLE_AUDIO_OUTPUTS
 	? process.env.SPARKLE_AUDIO_OUTPUTS.split(',').map(Number)
 	: [1, 2, 3, 4, 5, 6, 7, 8];
@@ -25,7 +29,12 @@ const fixtures = encodedRoot
 			...['av1', 'hevc'].flatMap((codec) => [
 				{ name: `${codec} Opus 5.1`, codec, channels: 6, track: 2, layout: '5.1' },
 				{ name: `${codec} Opus 7.1`, codec, channels: 8, track: 3, layout: '7.1' },
-				{ name: `${codec} Opus 5.1(side)`, codec, channels: 6, track: 4, layout: '5.1(side)' }
+				{ name: `${codec} Opus 5.1(side)`, codec, channels: 6, track: 4, layout: '5.1(side)' },
+				...(layoutMetadata?.fixtures ?? []).map((fixture) => ({
+					...fixture,
+					codec,
+					name: `${codec} Opus ${fixture.layout}`
+				}))
 			])
 		]
 	: [
@@ -142,7 +151,10 @@ const server = createServer(async (req, res) => {
 							duration: encodedRoot ? 30 : 18,
 							streams: [
 								{ id: 0, index: 0, streamType: 1, codec: 'h264', bitDepth: 8 },
-								...(encodedRoot ? [1, 1, 6, 8, 6] : [fixture.channels]).map((channels, i) => ({
+								...(encodedRoot
+									? (layoutMetadata?.sourceChannels ?? [1, 1, 6, 8, 6])
+									: [fixture.channels]
+								).map((channels, i) => ({
 									id: i + 1,
 									index: i + 1,
 									streamType: 2,
@@ -169,6 +181,7 @@ const server = createServer(async (req, res) => {
 				height: 180,
 				audio: true,
 				audioChannels: 8,
+				audioTracks: layoutMetadata?.audioTracks,
 				subtitleTracks: [],
 				hasFonts: false,
 				segmentSeconds: 12
@@ -226,7 +239,7 @@ try {
 			const page = await browser.newPage();
 			await page.goto(`http://127.0.0.1:${server.address().port}`);
 			const result = await page.evaluate(
-				async ({ channels, tones, encoded, codec, track, virtual }) => {
+				async ({ channels, tones, encoded, codec, track, virtual, extendedChecks }) => {
 					const NativeContext = window.AudioContext;
 					if (!NativeContext)
 						throw new Error(
@@ -301,7 +314,7 @@ try {
 					await sleep(1000);
 					const afterSeek = spectra();
 					let afterNormalization;
-					if (encoded && virtual && channels === 8 && track === 3) {
+					if (encoded && virtual && channels === 8 && (track === 3 || extendedChecks)) {
 						const { saveNormalization } = await import('/controller.js');
 						saveNormalization(true);
 						for (let i = 0; i < 100 && normalizer.status.state !== 'active'; i++) await sleep(20);
@@ -314,7 +327,7 @@ try {
 					}
 					const boundaries = [];
 					// Exercise actual PCM across both independently encoded boundaries.
-					if (encoded && track === 3 && channels === 2 && !virtual) {
+					if (encoded && (track === 3 || extendedChecks) && channels === 2 && !virtual) {
 						const samples = new Float32Array(2048);
 						const meter = context.createAnalyser();
 						meter.fftSize = 2048;
@@ -354,11 +367,13 @@ try {
 						? Number(provider.audioEngine.currentTime - provider.engine.currentTime)
 						: 0;
 					const native = provider.engine.isMSE();
+					const audioDescription = provider.status.audioTracks[track]?.outputDescription;
 					normalizer.destination.disconnect(splitter);
 					splitter.disconnect();
 					provider.destroy();
 					for (let i = 0; i < 100 && context.destination.channelCount !== 2; i++) await sleep(50);
 					return {
+						audioDescription,
 						boundaries,
 						separateAudio,
 						inputChannels,
@@ -375,11 +390,12 @@ try {
 				},
 				{
 					channels,
-					tones,
+					tones: fixture.tones ?? tones,
 					encoded: !!encodedRoot,
 					codec: fixture.codec,
 					track: fixture.track,
-					virtual
+					virtual,
+					extendedChecks: fixture.layout === '7.1.4' || fixture.layout === 'unknown'
 				}
 			);
 			assert.ok(result.native, 'native video retained');
@@ -387,10 +403,16 @@ try {
 				assert.equal(result.separateAudio, true, 'multichannel titles must use client PCM');
 				assert.deepEqual(
 					result.inputChannels,
-					[1, 1, 6, 8, 8],
+					layoutMetadata?.encodedChannels ?? [1, 1, 6, 8, 8],
 					'encoded track channel counts retained'
 				);
 				assert.ok(Math.abs(result.drift) < 500, `audio/video drift: ${result.drift} ms`);
+				if (fixture.layout === 'unknown')
+					assert.equal(result.audioDescription, 'Stereo mix (unknown layout)');
+				else if (
+					['7.1.4', '22.2', '7.1(wide)', '7.1(wide-side)', '6.1(back)'].includes(fixture.layout)
+				)
+					assert.equal(result.audioDescription, '7.1 mix');
 				for (const b of result.boundaries) {
 					assert.ok(b.end >= b.boundary + 1 && b.count > 40, 'boundary playback stalled');
 					assert.ok(b.min > 0.002, `PCM dropout at ${b.boundary}s: ${b.min}`);
@@ -411,7 +433,7 @@ try {
 			// the decoded speaker layout, including its side/back distinction.
 			const sideSurrounds =
 				fixture.layout === '5.1(side)' || (fixture.codec === 'flac' && fixture.channels === 6);
-			const maps =
+			let maps =
 				result.output === 1
 					? [[0], [0], [0], [], [0], [0], [0], [0]]
 					: result.output === 2
@@ -421,6 +443,20 @@ try {
 							: result.output === 6
 								? [[0], [1], [2], [3], [4], [5], [4], [5]]
 								: [[0], [1], [2], [3], [sideSurrounds ? 6 : 4], [sideSurrounds ? 7 : 5], [6], [7]];
+			if (fixture.targets) {
+				const speakers = ['FL', 'FR', 'FC', 'LFE', 'BL', 'BR', 'SL', 'SR'];
+				maps = fixture.targets.map((speaker) => {
+					if (speaker === 'BC')
+						return result.output <= 2
+							? Array.from({ length: result.output }, (_, i) => i)
+							: result.output === 4
+								? [2, 3]
+								: [4, 5];
+					const i = speakers.indexOf(speaker);
+					assert.ok(i >= 0, `unknown expected speaker ${speaker}`);
+					return result.output === 8 ? [i] : maps[i];
+				});
+			}
 			for (const spectra of [result.off, result.afterSeek, result.afterNormalization].filter(
 				Boolean
 			)) {

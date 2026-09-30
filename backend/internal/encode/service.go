@@ -167,8 +167,8 @@ func (s *Service) resolve(ctx context.Context, id, part string) (*source, *os.Fi
 	}
 	for _, stream := range p.Streams {
 		if stream.Type == "audio" {
-			if _, ok := opusLayout(stream); !ok {
-				return nil, nil, errors.New("This audio speaker layout cannot be preserved by the encoder; select Compatible")
+			if _, ok := planAudio(stream); !ok {
+				return nil, nil, errors.New("This audio channel count is not supported by the encoder; select Compatible")
 			}
 		}
 	}
@@ -314,7 +314,7 @@ func (s *Service) serve(w http.ResponseWriter, r *http.Request) {
 		if aiHDR {
 			output = "HDR10"
 		}
-		writeJSON(w, map[string]any{"fingerprint": fingerprint, "playlist": "master.m3u8", "codec": codec, "aiHDR": aiHDR, "aiHDRMode": enhancement.Mode, "output": output, "duration": source.duration, "width": video.Width, "height": video.Height, "audio": source.probe.count("audio") > 0, "audioChannels": source.probe.audioChannels(), "subtitleTracks": tracks, "hasFonts": hasFonts, "segmentSeconds": SegmentSeconds})
+		writeJSON(w, map[string]any{"fingerprint": fingerprint, "playlist": "master.m3u8", "codec": codec, "aiHDR": aiHDR, "aiHDRMode": enhancement.Mode, "output": output, "duration": source.duration, "width": video.Width, "height": video.Height, "audio": source.probe.count("audio") > 0, "audioChannels": source.probe.audioChannels(), "audioTracks": source.probe.audioPlans(), "subtitleTracks": tracks, "hasFonts": hasFonts, "segmentSeconds": SegmentSeconds})
 		return
 	}
 	if strings.HasSuffix(resource, ".m3u8") {

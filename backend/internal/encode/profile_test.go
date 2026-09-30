@@ -51,7 +51,7 @@ func TestAudioProfilesPreserveEachTrack(t *testing.T) {
 		layout   string
 	}{{1, "mono"}, {2, "stereo"}, {3, "3.0"}, {4, "quad"}, {5, "5.0"}, {6, "5.1(side)"}, {7, "6.1"}, {8, "7.1"}} {
 		s := Stream{Type: "audio", Channels: layout.channels, ChannelLayout: layout.layout}
-		if _, ok := opusLayout(s); !ok {
+		if _, ok := planAudio(s); !ok {
 			t.Fatalf("rejected %s", layout.layout)
 		}
 		streams = append(streams, s)
@@ -76,16 +76,16 @@ func TestAudioProfilesPreserveEachTrack(t *testing.T) {
 				t.Fatal("incorrect Opus mapping family")
 			}
 		}
-		if !strings.Contains(strings.Join(args, " "), "pan=7.1|FL=FL|FR=FR|FC=FC|LFE=LFE|SL=SL|SR=SR") {
+		if !strings.Contains(strings.Join(args, " "), "pan=7.1|FL=1.000000000*c0|FR=1.000000000*c1|FC=1.000000000*c2|LFE=1.000000000*c3|SL=1.000000000*c4|SR=1.000000000*c5") {
 			t.Fatal("side surrounds were not preserved")
 		}
 	}
 	if (Probe{Streams: []Stream{{Type: "audio", Channels: 6, ChannelLayout: "5.1(side)"}}}).audioChannels() != 8 {
 		t.Fatal("manifest must report padded encoded width")
 	}
-	for _, stream := range []Stream{{Channels: 0}, {Channels: 9}, {Channels: 6}, {Channels: 8, ChannelLayout: "7.1(wide)"}} {
-		if _, ok := opusLayout(stream); ok {
-			t.Fatalf("accepted ambiguous layout: %+v", stream)
+	for _, stream := range []Stream{{Channels: 0}, {Channels: 65}} {
+		if _, ok := planAudio(stream); ok {
+			t.Fatalf("accepted unbounded channel count: %+v", stream)
 		}
 	}
 	if !validProfile(p) {

@@ -17,14 +17,27 @@ import (
 // PCM continuity test. Nothing is written to Plex/media roots; callers opt into
 // an explicit disposable fixture directory and a physical NVENC GPU.
 func TestNVENCAudioContinuityFixture(t *testing.T) {
-	nvencAudioFixture(t, false)
+	nvencAudioFixture(t, false, false)
 }
 
 func TestNVENCSurroundAudioFixture(t *testing.T) {
-	nvencAudioFixture(t, true)
+	nvencAudioFixture(t, true, false)
 }
 
-func nvencAudioFixture(t *testing.T, surround bool) {
+func TestNVENCLayoutAudioFixture(t *testing.T) {
+	nvencAudioFixture(t, true, true)
+}
+
+type layoutFixture struct {
+	Layout   string   `json:"layout"`
+	Channels int      `json:"channels"`
+	Width    int      `json:"width"`
+	Targets  []string `json:"targets"`
+	Tones    []int    `json:"tones"`
+	Track    int      `json:"track"`
+}
+
+func nvencAudioFixture(t *testing.T, surround, extended bool) {
 	t.Helper()
 	root := os.Getenv("SPARKLE_ENCODE_AUDIO_FIXTURE_DIR")
 	if root == "" {
@@ -45,6 +58,37 @@ func nvencAudioFixture(t *testing.T, surround bool) {
 		layouts = []string{"5.1", "7.1", "5.1(side)"}
 		wantChannels = append(wantChannels, 6, 8, 8)
 	}
+	extra := []layoutFixture{}
+	if extended {
+		// Expected destinations are independent of the production mix planner.
+		for _, tc := range []struct {
+			layout, targets string
+			width           int
+		}{
+			{"2.1", "FL FR LFE", 6},
+			{"4.0", "FL FR FC BC", 7},
+			{"4.1", "FL FR FC LFE BC", 7},
+			{"quad(side)", "FL FR SL SR", 8},
+			{"6.1(back)", "FL FR FC LFE BL BR BC", 8},
+			{"7.1(wide)", "FL FR FC LFE BL BR FL FR", 8},
+			{"7.1(wide-side)", "FL FR FC LFE FL FR SL SR", 8},
+			{"7.1.4", "FL FR FC LFE BL BR SL SR FL FR BL BR", 8},
+			{"22.2", "FL FR FC LFE BL BR FL FR BC SL SR FC FL FC FR BL BC BR LFE SL SR FC FL FR", 8},
+			{"unknown", "FL FR FL FR FL FR FL FR FL FR FL FR", 2},
+		} {
+			positions := strings.Fields(tc.targets)
+			f := layoutFixture{Layout: tc.layout, Channels: len(positions), Width: tc.width, Targets: positions, Track: len(wantChannels)}
+			for i, target := range positions {
+				hz := 280 + 80*i
+				if target == "LFE" {
+					hz = 60 + i
+				}
+				f.Tones = append(f.Tones, hz)
+			}
+			extra = append(extra, f)
+			wantChannels = append(wantChannels, tc.width)
+		}
+	}
 	for _, layout := range layouts {
 		count := 6
 		if layout == "7.1" {
@@ -56,14 +100,33 @@ func nvencAudioFixture(t *testing.T, surround bool) {
 		}
 		args = append(args, "-f", "lavfi", "-i", "aevalsrc="+strings.Join(expressions, "|")+":s=48000:c="+layout)
 	}
+	for _, f := range extra {
+		expressions := []string{}
+		for _, hz := range f.Tones {
+			// Leave enough analysis headroom after two bounded downmixes (e.g.
+			// 22.2 -> 7.1 -> mono), while each source remains below full scale.
+			expressions = append(expressions, fmt.Sprintf("0.1*sin(2*PI*%d*t)", hz))
+		}
+		layout := f.Layout
+		if layout == "unknown" {
+			layout = "7.1.4"
+		}
+		args = append(args, "-f", "lavfi", "-i", "aevalsrc="+strings.Join(expressions, "|")+":s=48000:c="+layout)
+	}
 	args = append(args, "-t", "30", "-map", "0:v")
 	for i := range wantChannels {
 		args = append(args, "-map", fmt.Sprintf("%d:a", i+1))
 	}
 	args = append(args, "-c:v", "ffv1", "-c:a", "pcm_s16le")
 	if surround {
-		// Matroska PCM does not retain the side/back distinction. AC-3 does.
-		args = append(args, "-c:a:4", "ac3", "-b:a:4", "640k")
+		// Matroska PCM drops speaker masks. WavPack and AC-3 retain them.
+		args = append(args, "-c:a", "wavpack", "-c:a:4", "ac3", "-b:a:4", "640k")
+	}
+	for _, f := range extra {
+		if f.Layout == "unknown" {
+			// PCM intentionally strips the unknown case's mask.
+			args = append(args, fmt.Sprintf("-c:a:%d", f.Track), "pcm_s16le")
+		}
 	}
 	args = append(args, input)
 	if err := run(ctx, ffmpeg, args, nil); err != nil {
@@ -73,8 +136,18 @@ func nvencAudioFixture(t *testing.T, surround bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if surround && p.Streams[len(p.Streams)-1].ChannelLayout != "5.1(side)" {
+	if surround && p.Streams[5].ChannelLayout != "5.1(side)" {
 		t.Fatal("fixture lost its side speaker positions")
+	}
+	for _, f := range extra {
+		stream := p.Streams[f.Track+1]
+		layout := f.Layout
+		if layout == "unknown" {
+			layout = ""
+		}
+		if stream.ChannelLayout != layout || stream.Channels != f.Channels {
+			t.Fatalf("fixture lost layout %s: %s (%d)", f.Layout, stream.ChannelLayout, stream.Channels)
+		}
 	}
 	for _, codec := range []string{"av1", "hevc"} {
 		dir := filepath.Join(root, codec)
@@ -166,6 +239,21 @@ func nvencAudioFixture(t *testing.T, surround bool) {
 		}
 		master := "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"audio\",NAME=\"Audio\",DEFAULT=YES,URI=\"audio.m3u8\"\n#EXT-X-STREAM-INF:BANDWIDTH=1000000,AUDIO=\"audio\"\nvideo.m3u8\n"
 		if err := os.WriteFile(filepath.Join(dir, "master.m3u8"), []byte(master), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if extended {
+		sources := []int{}
+		for _, stream := range p.Streams {
+			if stream.Type == "audio" {
+				sources = append(sources, stream.Channels)
+			}
+		}
+		metadata, err := json.Marshal(map[string]any{"fixtures": extra, "sourceChannels": sources, "encodedChannels": wantChannels, "audioTracks": p.audioPlans()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, "layout-fixtures.json"), metadata, 0644); err != nil {
 			t.Fatal(err)
 		}
 	}

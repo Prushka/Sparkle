@@ -86,7 +86,7 @@ function serveBytes(route: Route, bytes: Buffer, contentType = 'application/octe
 	});
 }
 
-async function fixture(page: Page, nextDuration = 48, sizedSubtitles = false) {
+async function fixture(page: Page, nextDuration = 48, sizedSubtitles = false, audioMixes = false) {
 	const streams = subtitleStreams.map((s) => ({
 		...s,
 		Title:
@@ -198,7 +198,10 @@ async function fixture(page: Page, nextDuration = 48, sizedSubtitles = false) {
 			resource = segments.at(-1)!,
 			// These older timeline fixtures multiplex audio/video in one playlist.
 			// The real surround qualifier separately uses production split playlists.
-			file = encodedPCM && /^(video|audio)\.m3u8$/.test(resource) ? 'master.m3u8' : resource;
+			file =
+				(encodedPCM || audioMixes) && /^(video|audio)\.m3u8$/.test(resource)
+					? 'master.m3u8'
+					: resource;
 		if (file === 'manifest')
 			return route.fulfill({
 				json: {
@@ -210,7 +213,16 @@ async function fixture(page: Page, nextDuration = 48, sizedSubtitles = false) {
 					width: 320,
 					height: 180,
 					audio: true,
-					audioChannels: encodedPCM ? undefined : 2,
+					audioChannels: audioMixes ? 8 : encodedPCM ? undefined : 2,
+					// Metadata exercises display/identity only; real multichannel
+					// samples and layouts are checked by the NVENC browser qualifier.
+					audioTracks: audioMixes
+						? [
+								{ sourceChannels: 12, channels: 8, layout: '7.1', conversion: 'downmix' },
+								{ sourceChannels: 12, channels: 2, layout: 'stereo', conversion: 'unknown' },
+								{ sourceChannels: 2, channels: 2, layout: 'stereo', conversion: 'preserved' }
+							]
+						: undefined,
 					subtitleTracks: streams.map((s, id) => ({
 						id,
 						title: s.Title,
@@ -1342,6 +1354,69 @@ test('Encoded keeps its subtitle layout and per-format choices; preferences cros
 	await openSubtitles(page);
 	await expect(page.getByRole('menuitemcheckbox', { checked: true })).toHaveCount(0);
 });
+
+for (const codec of ['av1', 'hevc']) {
+	test(`encoded ${codec} shows audio conversions on mobile and holds video during a slow PCM seek`, async ({
+		page,
+		request,
+		baseURL
+	}) => {
+		test.skip(!existsSync(`${root}/${codec}/master.m3u8`), 'Prepare multilingual/NVENC fixtures');
+		await page.setViewportSize({ width: 375, height: 812 });
+		await fixture(page, 48, false, true);
+		await page.addInitScript((codec) => localStorage.setItem('sparkle.raw.hdr', codec), codec);
+		const room = `audio-mix-${codec}-${Date.now()}`;
+		await request.post('/be/rooms', { data: { roomId: room, mediaId: rawId } });
+		await page.goto(`${baseURL}/${room}/media/${rawId}`);
+		await expect(page.locator('[data-media-player]')).toHaveAttribute('data-raw-ready', 'true');
+		await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+		await expect.poll(() => audioTitle(page)).toBe('Japanese');
+		await openVideoSettings(page);
+		const mixed = page.getByRole('menuitemradio', { name: 'English · 7.1 mix', exact: true });
+		const unknown = page.getByRole('menuitemradio', {
+			name: 'Chinese · Stereo mix (unknown layout)',
+			exact: true
+		});
+		await expect(mixed).toBeVisible();
+		await expect(unknown).toBeVisible();
+		const box = await unknown.boundingBox();
+		expect(box!.x).toBeGreaterThanOrEqual(0);
+		expect(box!.x + box!.width).toBeLessThanOrEqual(375);
+		await page.screenshot({ path: test.info().outputPath(`${codec}-mobile-audio-mix.png`) });
+		await mixed.click();
+		await expect.poll(() => audioTitle(page)).toBe('English');
+		expect(
+			await page.evaluate(() => JSON.parse(localStorage.getItem('audioSelection') || '{}').title)
+		).toBe('English');
+		await page.keyboard.press('Escape');
+		const result = await page.evaluate(async () => {
+			const provider = (window as any).trackTestProvider;
+			const audio = provider.audioEngine;
+			const seek = audio.seek.bind(audio);
+			let duringHold = 0;
+			audio.seek = async (...args: unknown[]) => {
+				// Native video has already landed while audio is deliberately late.
+				await new Promise((resolve) => setTimeout(resolve, 300));
+				const before = provider.engine.currentTime;
+				await new Promise((resolve) => setTimeout(resolve, 700));
+				duringHold = Number(provider.engine.currentTime - before);
+				return seek(...args);
+			};
+			provider.setCurrentTime(18);
+			await provider.commands;
+			audio.seek = seek;
+			await new Promise((resolve) => setTimeout(resolve, 900));
+			return {
+				duringHold,
+				time: provider.timeline,
+				drift: Number(audio.currentTime - provider.engine.currentTime)
+			};
+		});
+		expect(Math.abs(result.duringHold)).toBeLessThan(100);
+		expect(result.time).toBeGreaterThan(18.3);
+		expect(Math.abs(result.drift)).toBeLessThan(500);
+	});
+}
 
 for (const source of ['raw', 'encoded']) {
 	test(`${source} subtitle menu fits a narrow mobile viewport`, async ({

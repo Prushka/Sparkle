@@ -98,9 +98,12 @@ Windows playback device for the connected speakers before starting Chrome.
 Mono, stereo, quad, 5.1 and 7.1 are supported; intermediate reported channel counts
 use the next smaller supported layout.
 This is PCM output; compressed Dolby/DTS/Atmos passthrough is not implemented.
-Server Encoded AV1/HEVC retains supported source layouts up to 7.1, with configurable
+Server Encoded AV1/HEVC preserves speaker positions with silent padding when needed,
+mixes height/wide layouts to 7.1, and folds unidentified layouts to labelled stereo.
+It accepts decodable tracks with 1-64 channels, with configurable
 Opus targets from `ENCODE_AUDIO_SURROUND_KBPS_PER_CHANNEL` (default 80): 80 kbps mono,
-160 kbps stereo, 480 kbps 5.1, and 640 kbps 7.1. See
+160 kbps stereo, 480 kbps 5.1, and 640 kbps 7.1. Downmix targets use the encoded
+channel count; silent padding does not increase bitrate. See
 [encoder audio settings and layout limits](docs/server-encoding.md#encoder-profile-and-hdr).
 Processed media retains its existing stereo output.
 

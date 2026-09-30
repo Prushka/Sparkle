@@ -40,9 +40,10 @@ complete stereo mix before the normalizer, while surround devices supply canonic
 multichannel PCM. The normalizer measures an existing stereo mix without downmixing
 it again. Disabling restores this device-mapped PCM route; the source may have more
 channels than the device can reproduce.
-AV1/HEVC server modes retain supported source layouts up to 7.1 in Opus and use
+AV1/HEVC server modes preserve representable positions in Opus, explicitly mix
+height/wide layouts to 7.1 and unidentified channels to labelled stereo, and use
 this same PCM path for multichannel titles, including on Safari. Mono/stereo-only
-titles can use native audio. Compressed bitstream/Atmos passthrough is not provided.
+encoded outputs can use native audio. Compressed bitstream/Atmos passthrough is not provided.
 
 Turning off crossfades to the original PCM route over 5 ms, restoring its original
 channel count and sample-exact unity gain. Turning on crossfades to the stereo

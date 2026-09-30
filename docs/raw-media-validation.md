@@ -174,23 +174,36 @@ fallback; the full matrix requires an eight-channel device. Filtered runs write
 
 ## Encoded multichannel audio
 
-Validated September 29, 2026 with Chrome **154.0.8037.92** on Windows and real
-NVENC AV1/HEVC output. The fixture encoder preserves mono, 5.1, 7.1 and
-side-labelled 5.1 as independent Opus tracks, with exact 20 ms packets through
-three segments. Side-labelled 5.1 retains its six active channels in 7.1 Opus
-with silent back channels, preserving side placement on 7.1 devices. The encoder profile is v7; older stereo cache entries are separate.
+Validated September 30, 2026 with Chrome **154.0.8037.92** on Windows and real
+NVENC AV1/HEVC output. Profile v8 accepts decodable tracks with 1-64 channels,
+preserves representable speaker positions, and explicitly mixes wider/height
+layouts to 7.1 or unidentified layouts to stereo. The fixture contains 15 audio
+tracks, with exact 20 ms packets across three 12-second segments. WavPack/AC-3
+sources retain their speaker masks; an intentionally unlabelled 12-channel PCM
+source exercises the unknown-layout policy. Source probing checks those masks
+before encoding. Older profile cache entries are separate.
 
-Six real encoded codec/layout combinations passed stereo output routing and seek
-checks. The 7.1 cases also crossed the 12- and 24-second boundaries with continuous
-PCM and advancing native video. Twenty-four additional combinations passed on
-virtual mono, quad, 5.1 and 7.1 PCM buses, including speaker isolation and LFE
-routing. The 7.1 AV1/HEVC cases also restored all speaker channels after toggling
-normalization on and off. Those inspect samples before the physical destination: the host reported
-only two output channels, so they do **not** qualify physical surround speakers.
+Twenty-six real encoded codec/layout combinations passed stereo output routing
+and seek checks: both codecs with 5.1, 7.1, 5.1(side), 2.1, 4.0, 4.1, quad(side),
+6.1(back), 7.1(wide), 7.1(wide-side), 7.1.4, 22.2 and unidentified 12-channel input.
+The 7.1, height and unknown-layout cases crossed the 12- and 24-second boundaries
+with continuous PCM and advancing native video. Large audio fragments exposed
+unequal seek completion times; PCM playback now holds both clocks until both
+seeks finish, preserving the requested pause/play state.
 
-Thirteen focused room/fullscreen cases passed on both the native mono/stereo and
-PCM paths: pause/play, seek, local tracks, delayed readiness, reconnect, and rapid
-source changes. Suspended PCM contexts resumed directly in trusted user gestures.
+An additional 104 codec/layout/output combinations passed on virtual mono, quad,
+5.1 and 7.1 PCM buses, including speaker isolation and LFE routing. The 7.1,
+height and unknown-layout cases restored their speaker routes after normalization
+was enabled and disabled. Sampled clock differences stayed within 354 ms (234 ms
+on stereo runs). These checks inspect samples before the physical destination:
+the host reported two output channels, so they do **not** qualify physical
+surround speakers.
+
+Fifteen focused room/fullscreen cases passed through the PCM path: pause/play,
+seek, local tracks, delayed readiness, reconnect, rapid source changes, converted
+audio labels in a 375-pixel mobile menu, and a deliberately delayed audio seek.
+Conversion labels do not change saved track identity. Suspended PCM contexts
+resumed directly in trusted user gestures.
 The iOS fullscreen checks emulate the native and presentation APIs in Chrome;
 they are not physical iOS qualification. Windows Playwright WebKit 26.6 exposes
 no AudioContext here and cannot run the audio checks. Physical iPhone/iPad Safari,
@@ -201,10 +214,10 @@ depending on native multichannel Opus/WebCodecs.
 To reproduce from the repository root (requires NVENC and FFmpeg/FFprobe):
 
 ```powershell
-$env:SPARKLE_ENCODE_AUDIO_FIXTURE_DIR="$PWD/cache/encoded-surround-fixture"
+$env:SPARKLE_ENCODE_AUDIO_FIXTURE_DIR="$PWD/cache/encoded-layout-fixture"
 $env:FFMPEG=(Get-Command ffmpeg).Source
 $env:FFPROBE=(Get-Command ffprobe).Source
-go -C backend test ./internal/encode -run '^TestNVENCSurroundAudioFixture$' -count=1
+go -C backend test ./internal/encode -run '^TestNVENCLayoutAudioFixture$' -count=1
 $env:SPARKLE_AUDIO_OUTPUTS='2'
 npm run test:surround
 $env:SPARKLE_AUDIO_VIRTUAL_OUTPUT='1'
