@@ -26,7 +26,16 @@ test.afterEach(async ({ page }, info) => {
 					canPublishPlayback: provider.canPublishPlayback,
 					canPlay: provider.ctx.player.state.canPlay,
 					paused: provider.ctx.player.state.paused,
-					error: provider.ctx.player.state.error
+					error: provider.ctx.player.state.error,
+					videos: [...provider.container.querySelectorAll('video')].map((video) => ({
+						time: video.currentTime,
+						readyState: video.readyState,
+						seeking: video.seeking,
+						buffered: Array.from({ length: video.buffered.length }, (_, i) => [
+							video.buffered.start(i),
+							video.buffered.end(i)
+						])
+					}))
 				},
 				selected: captions?.selected,
 				chunks: captions && [...captions.chunks.keys()],
@@ -1595,57 +1604,72 @@ test('AI HDR and normalization reset per title and ignore legacy saved preferenc
 	await assertOff();
 });
 
-test('unavailable AI HDR reports failure and disabling it restores playback controls', async ({
-	page,
-	request
-}) => {
-	test.skip(!existsSync(`${root}/hevc/master.m3u8`), 'Prepare multilingual/NVENC fixtures');
-	await fixture(page);
-	await page.addInitScript(() => localStorage.setItem('sparkle.raw.hdr', 'hevc'));
-	await page.route('**/encoding/capabilities', (route) =>
-		route.fulfill({ json: { codecs: ['hevc'], aiHDREnabled: true, aiHDRCodecs: ['hevc'] } })
-	);
-	await page.route('**/encoded/hevc/manifest?aiHDR=1', (route) => route.fulfill({ status: 422 }));
-	const sent: any[] = [];
-	page.on('websocket', (socket) => {
-		if (!socket.url().includes('/sync/') || socket.url().includes('/media_')) return;
-		socket.on('framesent', ({ payload }) => sent.push(JSON.parse(String(payload))));
-	});
-	const room = `ai-hdr-rejected-${Date.now()}`;
-	await request.post('/be/rooms', { data: { roomId: room, mediaId: rawId } });
-	await page.goto(`/${room}/media/${rawId}`);
-	await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
-	await expect.poll(() => audioTitle(page), { timeout: 30000 }).toBe('Japanese');
-	const player = page.locator('[data-media-player]');
-	// Default track publication occurs during silent decoder priming. Wait for
-	// actual playback before using the play/pause keyboard toggle.
-	await expect(player).not.toHaveAttribute('data-paused');
-	await expect
-		.poll(() => page.evaluate(() => (window as any).trackTestProvider.canPublishPlayback))
-		.toBe(true);
-	await player.press('k');
-	await expect(player).toHaveAttribute('data-paused');
-	await seekRaw(page, 12);
-	await expect
-		.poll(() => sent.some((message) => message.type === 'time' && message.time === 12))
-		.toBe(true);
-	await player.hover();
-	await page.getByRole('button', { name: 'AI HDR', exact: true }).click();
-	await expect(page.getByText('Playback interrupted', { exact: true })).toBeVisible();
-	await expect(page.getByText(/AI HDR is unavailable for this media/)).toBeVisible();
-	await page.getByRole('button', { name: 'AI HDR', exact: true }).click();
-	await expect(player).toHaveAttribute('data-raw-ready', 'true', { timeout: 30000 });
-	await expect
-		.poll(() => page.evaluate(() => (window as any).trackTestProvider.canPublishPlayback))
-		.toBe(true);
-	await expect(player).toHaveAttribute('data-paused');
-	await expect
-		.poll(() => page.evaluate(() => Math.round((window as any).trackTestProvider.timeline)))
-		.toBe(12);
-	await seekRaw(page, 18);
-	await player.press('k');
-	await expect(player).not.toHaveAttribute('data-paused');
-});
+for (const codec of ['av1', 'hevc']) {
+	for (const resumeTime of [12, 13]) {
+		test(`unavailable AI HDR restores ${codec} playback controls at ${resumeTime}s`, async ({
+			page,
+			request
+		}) => {
+			test.skip(!existsSync(`${root}/${codec}/master.m3u8`), 'Prepare multilingual/NVENC fixtures');
+			await fixture(page);
+			await page.addInitScript((codec) => localStorage.setItem('sparkle.raw.hdr', codec), codec);
+			await page.route('**/encoding/capabilities', (route) =>
+				route.fulfill({ json: { codecs: [codec], aiHDREnabled: true, aiHDRCodecs: [codec] } })
+			);
+			await page.route(`**/encoded/${codec}/manifest?aiHDR=1`, (route) =>
+				route.fulfill({ status: 422 })
+			);
+			const sent: any[] = [];
+			page.on('websocket', (socket) => {
+				if (!socket.url().includes('/sync/') || socket.url().includes('/media_')) return;
+				socket.on('framesent', ({ payload }) => sent.push(JSON.parse(String(payload))));
+			});
+			const room = `ai-hdr-rejected-${Date.now()}`;
+			await request.post('/be/rooms', { data: { roomId: room, mediaId: rawId } });
+			await page.goto(`/${room}/media/${rawId}`);
+			await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+			await expect.poll(() => audioTitle(page), { timeout: 30000 }).toBe('Japanese');
+			const player = page.locator('[data-media-player]');
+			// Default track publication occurs during silent decoder priming. Wait for
+			// actual playback before using the play/pause keyboard toggle.
+			await expect(player).not.toHaveAttribute('data-paused');
+			await expect
+				.poll(() => page.evaluate(() => (window as any).trackTestProvider.canPublishPlayback))
+				.toBe(true);
+			await player.press('k');
+			await expect(player).toHaveAttribute('data-paused');
+			// The HEVC fixture's first presentation frame is 100 ms after each
+			// playlist boundary. Recovery must finish even when its target is in that
+			// initial gap, and preserve exact targets that are already inside the buffer.
+			await seekRaw(page, resumeTime);
+			await expect
+				.poll(() => sent.some((message) => message.type === 'time' && message.time === resumeTime))
+				.toBe(true);
+			await player.hover();
+			await page.getByRole('button', { name: 'AI HDR', exact: true }).click();
+			await expect(page.getByText('Playback interrupted', { exact: true })).toBeVisible();
+			await expect(page.getByText(/AI HDR is unavailable for this media/)).toBeVisible();
+			await page.getByRole('button', { name: 'AI HDR', exact: true }).click();
+			await expect(player).toHaveAttribute('data-raw-ready', 'true', { timeout: 30000 });
+			await expect
+				.poll(() => page.evaluate(() => (window as any).trackTestProvider.canPublishPlayback))
+				.toBe(true);
+			await expect(player).toHaveAttribute('data-paused');
+			await expect
+				.poll(() => page.evaluate(() => Math.round((window as any).trackTestProvider.timeline)))
+				.toBe(resumeTime);
+			await expect(page.getByText('Playback interrupted', { exact: true })).not.toBeVisible();
+			// Timestamp-start recovery must retain earlier parts of the VOD timeline.
+			await seekRaw(page, 6);
+			await expect
+				.poll(() => page.evaluate(() => Math.round((window as any).trackTestProvider.timeline)))
+				.toBe(6);
+			await seekRaw(page, 18);
+			await player.press('k');
+			await expect(player).not.toHaveAttribute('data-paused');
+		});
+	}
+}
 
 test('online recovery restores two-client pause and seek after a decoder network failure', async ({
 	browser,

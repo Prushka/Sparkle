@@ -86,6 +86,10 @@ Encoded VOD loads can pass `ioLoaderOptions.startTimestamp` in milliseconds. The
 HLS readers select that fragment before the first probe/prefetch, and native/PCM
 renderers start at the requested timestamp. Positive initial packet timestamps do
 not shift the full playlist's origin; subsequent backward seeks remain absolute.
+Native startup clamps the requested time to the common buffered audio/video start
+when frame reordering places the first presentation frame after a segment boundary.
+This avoids a pending native `play()` in an unbuffered gap during replacement or
+recovery; timestamps already inside the buffer are preserved.
 Original and multichannel server-encoded Plex playback opt into `speakerOutput`. The hash-pinned `audio-output.ts`
 helper configures the shared AudioContext destination to an accepted canonical
 speaker layout (up to eight channels), with reference-counted restoration on stop.

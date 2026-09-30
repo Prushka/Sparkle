@@ -392,6 +392,15 @@ const msePipeline = 'packages/avplayer/src/mse/MSEPipeline.ts';
 // clock alignment must not undo an explicit seek completed during that window.
 patch(msePipeline, '  seeking: boolean', '  seeking: boolean\n  seekGeneration: number');
 patch(msePipeline, '      seeking: false,', '      seeking: false,\n      seekGeneration: 0,');
+// A fragment's first decodable presentation timestamp can follow its nominal
+// playlist boundary (for example, reordered video starts at 12.100 for 12.000).
+// Seeking into that initial gap leaves native play() pending forever. Start at
+// the common buffered A/V range without moving requests already inside it.
+patch(
+	msePipeline,
+	'        task.currentTime = common.milliSecond2Second(startTimestamp)',
+	'        task.currentTime = Math.max(common.milliSecond2Second(startTimestamp), min)'
+);
 patch(
 	msePipeline,
 	'      await new Sleep(0.1)\n\n      let min = 0',

@@ -413,11 +413,16 @@ Go service tests check target-init cache reuse, unchanged full playlists and fra
 URLs, AI HDR identity, and rejection of invalid/out-of-range startup hints.
 The focused room cases pass local tracks, pause/play, seeks, delayed readiness,
 reconnect, rapid media changes, stuck-seek recovery and temporary
-toggle retention/reset. The rejected-AI-HDR recovery case currently times out waiting
-for the provider to allow playback commands after AI HDR is disabled. It reproduces
-with Next.js 16.3.2 / React 19.2.8 and 16.3.8 / 19.3.0; that recovery path remains
-unqualified. Six mocked iOS fullscreen API cases also pass; physical
-iOS Safari and HDR display qualification remain outstanding.
+toggle retention/reset. Rejected-AI-HDR recovery now passes after correcting native
+startup alignment: the HEVC fixture's first presentation frame is at 12.100 seconds,
+so seeking its replacement to the nominal 12.000-second boundary left native
+`play()` pending in an unbuffered gap. Startup now uses the later of the requested
+time and the common buffered audio/video start. Three repeated AV1/HEVC runs at
+12 and 13 seconds on both native and PCM audio paths pass (24 cases), including
+paused position restoration, backward/forward seeking and resumed playback.
+Real encoded timestamp-start checks also pass all four AV1/HEVC × native/PCM
+combinations without requesting opening fragments. Six mocked iOS fullscreen API
+cases also pass; physical iOS Safari and HDR display qualification remain outstanding.
 
 The live Avatar Chrome tab reported an eight-channel speaker destination.
 Normalization reported active stereo processing when enabled and an eight-channel,
