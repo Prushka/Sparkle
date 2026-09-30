@@ -5,7 +5,7 @@ import { DefaultTooltip } from '@vidstack/react/player/layouts/default';
 import { IconWaveSine } from '@tabler/icons-react';
 import {
 	readNormalization,
-	saveNormalization,
+	setNormalization,
 	subscribeNormalization,
 	type NormalizationStatus
 } from '@/lib/player/audio-normalization';
@@ -39,7 +39,7 @@ export function AudioNormalizationButton() {
 				aria-pressed={enabled}
 				title={label}
 				data-active={enabled && state !== 'unavailable' ? '' : undefined}
-				onClick={() => saveNormalization(!enabled)}
+				onClick={() => setNormalization(!enabled)}
 			>
 				<IconWaveSine className="vds-icon" style={{ opacity: enabled ? 1 : 0.6 }} />
 			</button>

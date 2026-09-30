@@ -209,6 +209,10 @@ async function fixture(page: Page, nextDuration = 48, sizedSubtitles = false, au
 					playlist: 'master.m3u8',
 					codec,
 					output: 'SDR',
+					// Toggle lifecycle only; actual enhanced pixels use the AI HDR qualifier.
+					...(new URL(route.request().url()).searchParams.get('aiHDR') === '1'
+						? { aiHDR: true, aiHDRMode: 'hdr-expansion', output: 'HDR10' }
+						: {}),
 					duration,
 					width: 320,
 					height: 180,
@@ -1513,6 +1517,73 @@ test('same-room Plex media switch escapes an unfinished seek', async ({ page, re
 	await expect
 		.poll(() => page.evaluate(() => !!(window as any).retiredProvider.engine))
 		.toBe(false);
+});
+
+test('AI HDR and normalization reset per title and ignore legacy saved preferences', async ({
+	page,
+	request
+}) => {
+	test.skip(!existsSync(`${root}/hevc/master.m3u8`), 'Prepare multilingual/NVENC fixtures');
+	await fixture(page);
+	await page.addInitScript(() => {
+		localStorage.setItem('sparkle.raw.hdr', 'hevc');
+		localStorage.setItem('sparkle.raw.aiHDR', 'true');
+		localStorage.setItem('sparkle.audio.normalize', 'true');
+	});
+	await page.route('**/encoding/capabilities', (route) =>
+		route.fulfill({ json: { codecs: ['hevc'], aiHDREnabled: true, aiHDRCodecs: ['hevc'] } })
+	);
+	const room = `temporary-toggles-${Date.now()}`;
+	await request.post('/be/rooms', { data: { roomId: room, mediaId: rawId } });
+	await page.goto(`/${room}/media/${rawId}`);
+	await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+	const player = page.locator('[data-media-player]');
+	const hdr = page.getByRole('button', { name: 'AI HDR', exact: true });
+	const normalize = page.getByRole('button', { name: 'Normalize audio', exact: true });
+	const assertOff = async () => {
+		await expect(player).toHaveAttribute('data-raw-ready', 'true');
+		await player.hover();
+		await expect(hdr).toHaveAttribute('aria-pressed', 'false');
+		await expect(normalize).toHaveAttribute('aria-pressed', 'false');
+	};
+	const enable = async () => {
+		await player.hover();
+		await hdr.click();
+		await expect(player).toHaveAttribute('data-raw-ready', 'true');
+		await normalize.click();
+		await expect(hdr).toHaveAttribute('aria-pressed', 'true');
+		await expect(normalize).toHaveAttribute('aria-pressed', 'true');
+		await expect.poll(async () => (await status(page)).changing).toBe(false);
+		await expect.poll(async () => (await status(page)).audioTracks.length).toBeGreaterThan(0);
+	};
+	await assertOff();
+	await enable();
+	await page.evaluate(async () => {
+		const provider = (window as any).trackTestProvider;
+		await provider.selectTrack('audio', provider.status.audioTracks[0].id);
+		await provider.recoverPlayback();
+	});
+	await expect(hdr).toHaveAttribute('aria-pressed', 'true');
+	await expect(normalize).toHaveAttribute('aria-pressed', 'true');
+	await expect(player).toHaveAttribute('data-normalization-state', 'active');
+	await request.put(`/be/rooms/${room}`, { data: { mediaId: rawNextId } });
+	await expect(page).toHaveURL(new RegExp(`/media/${rawNextId}$`));
+	await assertOff();
+	await enable();
+	await page.reload();
+	await page.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
+	await assertOff();
+	await enable();
+	await request.put(`/be/rooms/${room}`, { data: { mediaId: encodedId } });
+	await expect(page).toHaveURL(new RegExp(`/media/${encodedId}$`));
+	await expect(normalize).toHaveAttribute('aria-pressed', 'false');
+	await expect(hdr).toHaveCount(0);
+	await player.hover();
+	await normalize.click();
+	await expect(normalize).toHaveAttribute('aria-pressed', 'true');
+	await request.put(`/be/rooms/${room}`, { data: { mediaId: rawId } });
+	await expect(page).toHaveURL(new RegExp(`/media/${rawId}$`));
+	await assertOff();
 });
 
 test('unavailable AI HDR reports failure and disabling it restores playback controls', async ({

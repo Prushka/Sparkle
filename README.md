@@ -41,7 +41,7 @@ library from the same Library view.
   matches are preserved. Automatic subtitle ties within
   a format/language prefer the largest known byte size, after saved preferences and
   subtitle-category priorities.
-- Optional client-side audio normalization beside Captions, with a saved local preference
+- Optional client-side audio normalization beside Captions, enabled only for the current title
   for Encoded MP4 and every Raw playback mode. Multichannel audio is downmixed to
   stereo before normalization; disabling restores the original audio routing.
 - Optional shared NVENC AV1/HEVC playback for Plex, with on-demand cached segments and a
@@ -78,8 +78,8 @@ with a 12-hour idle expiry. Server-encoded playback targets a 24-second preload.
 `ENCODE_CONCURRENCY` accepts 1–32 simultaneous pipelines and defaults to 2.
 See [server encoding](docs/server-encoding.md) for GPU setup, settings and limits.
 Optional `AI_HDR_ENABLED=true` adds an **AI HDR** toggle before audio normalization
-for Plex media. It uses NVIDIA TrueHDR for SDR and adaptive HDR expansion up to
-1,600 nits for HDR, through a separate server encode. See
+for Plex media. It starts off for each title and is never saved. It uses NVIDIA TrueHDR
+for SDR and adaptive HDR expansion up to 1,600 nits for HDR, through a separate server encode. See
 [AI HDR setup](docs/server-encoding.md#ai-hdr) for the required NVEncC/NGX dependencies.
 Supported 4:2:0 sources keep decoding, enhancement and encoding on the GPU; other
 formats retain the same enhancement through the reference pipeline.
@@ -110,7 +110,7 @@ Processed media retains its existing stereo output.
 The waveform button beside Captions enables [audio normalization](docs/audio-normalization.md).
 It downmixes multichannel audio to stereo before adjusting loudness in an AudioWorklet,
 preserves stereo balance and the playback clock, and restores the original samples and
-channel routing when off. The preference is local to each browser.
+channel routing when off. It starts off for each title and is never saved.
 
 Raw playback supports client WASM fallbacks, including TrueHD audio and embedded
 subtitles. TrueHD output is decoded PCM, not Atmos bitstream passthrough. Raw

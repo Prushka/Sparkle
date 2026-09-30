@@ -11,8 +11,6 @@ const bundle = await build({
 const {
 	readHDRPreference,
 	saveHDRPreference,
-	readAIHDRPreference,
-	saveAIHDRPreference,
 	encodedCapabilities,
 	encodedAudioDescription,
 	encodedNativeAudio,
@@ -30,11 +28,6 @@ for (const mode of ['auto', 'compatible', 'av1', 'hevc']) {
 	saveHDRPreference(mode);
 	assert.equal(readHDRPreference(), mode);
 }
-assert.equal(readAIHDRPreference(), false);
-saveAIHDRPreference(true);
-assert.equal(readAIHDRPreference(), true);
-saveAIHDRPreference(false);
-assert.equal(readAIHDRPreference(), false);
 assert.equal(
 	encodedURL({ base: '/test', fingerprint: 'a b', aiHDR: true }, 'video-init.mp4'),
 	'/test/video-init.mp4?v=a%20b&aiHDR=1'

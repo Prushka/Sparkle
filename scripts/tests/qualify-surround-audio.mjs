@@ -276,7 +276,6 @@ try {
 						delegate: { async ready() {} }
 					};
 					localStorage.setItem('sparkle.raw.hdr', encoded ? codec : 'compatible');
-					localStorage.setItem('sparkle.audio.normalize', 'false');
 					provider = new RawProvider(placeholder, ctx, {});
 					provider.setup();
 					await provider.loadSource({ src: location.origin + '/media/test', type: RAW_MEDIA_TYPE });
@@ -315,13 +314,13 @@ try {
 					const afterSeek = spectra();
 					let afterNormalization;
 					if (encoded && virtual && channels === 8 && (track === 3 || extendedChecks)) {
-						const { saveNormalization } = await import('/controller.js');
-						saveNormalization(true);
+						const { setNormalization } = await import('/controller.js');
+						setNormalization(true);
 						for (let i = 0; i < 100 && normalizer.status.state !== 'active'; i++) await sleep(20);
 						if (normalizer.status.state !== 'active')
 							throw new Error('normalization did not start');
 						await sleep(800);
-						saveNormalization(false);
+						setNormalization(false);
 						await sleep(800);
 						afterNormalization = spectra();
 					}

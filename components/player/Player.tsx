@@ -54,6 +54,7 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { AudioNormalizationButton } from './AudioNormalization';
+import { setNormalization } from '@/lib/player/audio-normalization';
 import { normalizeVideoProvider } from '@/lib/player/normalized-video-provider';
 import { AnimatePresence, motion } from 'motion/react';
 import {
@@ -3801,6 +3802,10 @@ export function Player({
 	const playbackSyncSuppressionTimerRef = useRef<number | null>(null);
 	const onRoomMediaChangedRef = useLatestRef(onRoomMediaChanged);
 	const [mounted, setMounted] = useState(false);
+	useEffect(() => {
+		setNormalization(false);
+		return () => setNormalization(false);
+	}, [job.Id]);
 	const [playerEl, setPlayerEl] = useState<MediaPlayerInstance | null>(null);
 	const [mediaProviderEl, setMediaProviderEl] = useState<MediaProviderInstance | null>(null);
 	const [socketConnected, setSocketConnected] = useState(false);

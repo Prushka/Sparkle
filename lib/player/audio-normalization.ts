@@ -1,5 +1,4 @@
-// Local playback preference, deliberately independent of room playback state.
-export const NORMALIZATION_KEY = 'sparkle.audio.normalize';
+// In-memory playback choice, deliberately independent of room playback state.
 export const NORMALIZATION_EVENT = 'sparkle-audio-normalization';
 export type NormalizationStatus = {
 	state: 'off' | 'loading' | 'active' | 'unavailable';
@@ -12,41 +11,19 @@ const bindings = new Set<AudioNormalization>();
 const modules = new WeakMap<BaseAudioContext, Promise<void>>();
 const nativeSources = new WeakMap<HTMLMediaElement, MediaElementAudioSourceNode>();
 let nativeContext: AudioContext | undefined;
-let preference: boolean | undefined;
+let enabled = false;
 
 export function readNormalization() {
-	if (typeof window === 'undefined') return false;
-	if (preference !== undefined) return preference;
-	try {
-		return localStorage.getItem(NORMALIZATION_KEY) === 'true';
-	} catch {
-		return false;
-	}
+	return enabled;
 }
 export function subscribeNormalization(update: () => void) {
-	const changed = (event: Event) => {
-		if (event instanceof StorageEvent) {
-			if (event.key !== NORMALIZATION_KEY && event.key !== null) return;
-			preference = undefined;
-		}
-		update();
-	};
-	window.addEventListener(NORMALIZATION_EVENT, changed);
-	window.addEventListener('storage', changed);
-	return () => {
-		window.removeEventListener(NORMALIZATION_EVENT, changed);
-		window.removeEventListener('storage', changed);
-	};
+	window.addEventListener(NORMALIZATION_EVENT, update);
+	return () => window.removeEventListener(NORMALIZATION_EVENT, update);
 }
-export function saveNormalization(enabled: boolean) {
-	preference = enabled;
-	try {
-		localStorage.setItem(NORMALIZATION_KEY, String(enabled));
-	} catch {
-		/* Memory fallback. */
-	}
+export function setNormalization(value: boolean) {
+	enabled = value;
 	// Resume synchronously in the user's gesture, before awaiting worklet modules.
-	for (const binding of bindings) binding.resume();
+	if (enabled) for (const binding of bindings) binding.resume();
 	window.dispatchEvent(new Event(NORMALIZATION_EVENT));
 }
 async function loadModule(context: BaseAudioContext) {

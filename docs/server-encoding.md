@@ -71,7 +71,10 @@ is separate from a successful image build.
 `AI_HDR_ENABLED=false` (the default) hides the **AI HDR** button and rejects every
 enhanced API request, including already cached segments. With the flag enabled,
 Plex players show the button immediately before audio normalization. The choice is
-local (`sparkle.raw.aiHDR`); it does not change anyone else's room playback setting.
+local and held only in memory for the current title. It starts off for each title
+and after reload or leaving the player; old `sparkle.raw.aiHDR` values are ignored.
+Track/output changes and recovery of the current title retain an explicit choice.
+It does not change anyone else's room playback setting.
 Turning it on uses an enhanced AV1/HEVC encode, including from Compatible mode.
 Turning it off restores the saved ordinary output choice, position and pause state.
 Missing GPU/filter support leaves the button disabled. Processing failures are

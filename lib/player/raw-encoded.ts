@@ -3,20 +3,6 @@ import type { EncodedCodec, HDRPreference, RawPart, RawPlaybackTrack } from './r
 import { normalizeHDRPreference } from './raw-hdr';
 
 const preferenceKey = 'sparkle.raw.hdr';
-export function readAIHDRPreference(): boolean {
-	try {
-		return localStorage.getItem('sparkle.raw.aiHDR') === 'true';
-	} catch {
-		return false;
-	}
-}
-export function saveAIHDRPreference(enabled: boolean) {
-	try {
-		localStorage.setItem('sparkle.raw.aiHDR', String(enabled));
-	} catch {
-		/* Local storage is optional. */
-	}
-}
 export function readHDRPreference(): HDRPreference {
 	try {
 		const value = localStorage.getItem(preferenceKey);

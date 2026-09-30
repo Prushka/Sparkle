@@ -4,7 +4,7 @@ import { readFileSync, existsSync } from 'node:fs';
 // Exercise ordinary browser autoplay policy, including cold encoder startup.
 test.use({ launchOptions: { args: [] } });
 
-test('normalization is local, persistent, responsive, and leaves room playback controls intact', async ({
+test('normalization is local, temporary, responsive, and leaves room playback controls intact', async ({
 	browser,
 	request,
 	baseURL
@@ -103,7 +103,7 @@ test('normalization is local, persistent, responsive, and leaves room playback c
 				timeout: 10000
 			})
 			.toBeGreaterThan(1);
-		expect(await a.evaluate(() => localStorage.getItem('sparkle.audio.normalize'))).toBe('true');
+		expect(await a.evaluate(() => localStorage.getItem('sparkle.audio.normalize'))).toBeNull();
 		await player.focus();
 		await a.keyboard.press('k');
 		await expect(other).toHaveAttribute('data-paused', '');
@@ -134,7 +134,9 @@ test('normalization is local, persistent, responsive, and leaves room playback c
 		await expect.poll(() => a.locator('video').evaluate((v) => v.readyState)).toBeGreaterThan(1);
 		await a.mouse.move(0, 840);
 		await player.hover();
-		await expect(button).toHaveAttribute('aria-pressed', 'true');
+		await expect(button).toHaveAttribute('aria-pressed', 'false');
+		await expect(player).toHaveAttribute('data-normalization-state', 'off');
+		await button.click();
 		await expect(player).toHaveAttribute('data-normalization-state', 'active');
 		// The reverse order and clearing Boost must retain the normalization graph.
 		expect(await boost(1.5)).toBe(1.5);
@@ -150,7 +152,7 @@ test('normalization is local, persistent, responsive, and leaves room playback c
 });
 
 for (const mode of ['compatible', 'av1', 'hevc'] as const) {
-	test(`Raw ${mode} survives saved normalization, room startup, toggles and reconnect`, async ({
+	test(`Raw ${mode} ignores saved normalization and supports explicit toggles and reconnect`, async ({
 		browser,
 		request,
 		baseURL
@@ -173,6 +175,13 @@ for (const mode of ['compatible', 'av1', 'hevc'] as const) {
 						localStorage.setItem('sparkle.audio.normalize', String(enabled));
 						localStorage.setItem('sparkle.raw.hdr', mode);
 						if (mode !== 'compatible') localStorage.setItem('sparkle.raw.audio', 'Alternate test');
+						document.addEventListener(
+							'provider-setup',
+							(event) => {
+								(window as any).normalizationTestProvider = (event as CustomEvent).detail;
+							},
+							true
+						);
 					},
 					{ enabled: index === 0, mode }
 				);
@@ -311,6 +320,14 @@ for (const mode of ['compatible', 'av1', 'hevc'] as const) {
 			const [a, b] = pages,
 				player = a.locator('[data-media-player]'),
 				other = b.locator('[data-media-player]');
+			await expect(player).toHaveAttribute('data-normalization-state', 'off');
+			await player.hover();
+			await expect(a.getByRole('button', { name: 'Normalize audio', exact: true })).toHaveAttribute(
+				'aria-pressed',
+				'false'
+			);
+			await player.hover();
+			await a.getByRole('button', { name: 'Normalize audio', exact: true }).click();
 			await expect(player).toHaveAttribute('data-normalization-state', 'active');
 			await expect(player).toHaveAttribute('data-normalization-channels', '2');
 			await expect(other).toHaveAttribute('data-normalization-state', 'off');
@@ -327,8 +344,12 @@ for (const mode of ['compatible', 'av1', 'hevc'] as const) {
 			await player.focus();
 			await a.keyboard.press('ArrowRight');
 			await expect
-				.poll(() =>
-					b.locator('.sparkle-raw-surface video').evaluate((v: HTMLVideoElement) => v.currentTime)
+				.poll(
+					() =>
+						b
+							.locator('.sparkle-raw-surface video')
+							.evaluate((v: HTMLVideoElement) => v.currentTime),
+					{ timeout: 15000 }
 				)
 				.toBeGreaterThan(beforeSeek + 4.5);
 			await a.reload();
@@ -337,16 +358,21 @@ for (const mode of ['compatible', 'av1', 'hevc'] as const) {
 			await expect(a.locator('.sparkle-raw-surface')).toHaveCount(1);
 			await expect(a.getByRole('button', { name: 'Normalize audio', exact: true })).toHaveAttribute(
 				'aria-pressed',
-				'true'
+				'false'
 			);
 			await expect(a.getByRole('button', { name: 'Send message', exact: true })).toBeEnabled();
 			await a.getByRole('button', { name: 'Play', exact: true }).click({ force: true });
-			await expect(other).not.toHaveAttribute('data-paused', '');
+			// AV1 initialization is deliberately delayed by 6.5 seconds above.
+			await expect(other).not.toHaveAttribute('data-paused', '', { timeout: 15000 });
+			await player.hover();
+			await a.getByRole('button', { name: 'Normalize audio', exact: true }).click();
 			await expect(player).toHaveAttribute('data-normalization-state', 'active');
 			// A native decoder failure used to leave the room looking permanently
 			// buffered. Exercise libmedia's native error bridge without publishing
 			// the browser's detailed diagnostic or pausing the other participant.
 			await a.locator('.sparkle-raw-surface video').evaluate((video) => {
+				// Keep the failed state observable instead of immediately recovering.
+				(window as any).normalizationTestProvider.recoveryAttempts = 2;
 				Object.defineProperty(video, 'error', {
 					configurable: true,
 					value: { code: 3, message: 'Private native pipeline diagnostic' }

@@ -17,8 +17,6 @@ import {
 	encodedURL,
 	loadEncodedPart,
 	readHDRPreference,
-	readAIHDRPreference,
-	saveAIHDRPreference,
 	saveHDRPreference,
 	type EncodedPart
 } from './raw-encoded';
@@ -407,6 +405,8 @@ export class RawProvider implements MediaProviderAdapter {
 		return recovery;
 	}
 	async loadSource(src: Src) {
+		// Keep an explicit choice through recovery of this source only.
+		const aiHDR = this.currentSrc?.src === src.src && this.aiHDR;
 		const generation = ++this.generation;
 		this.abort.abort();
 		this.abort = new AbortController();
@@ -415,7 +415,7 @@ export class RawProvider implements MediaProviderAdapter {
 		// recovery must fetch it again so removed/remapped parts are revalidated.
 		this.currentSrc = { ...src, job: undefined } as Src<string>;
 		this.hdrPreference = readHDRPreference();
-		this.aiHDR = false;
+		this.aiHDR = aiHDR;
 		this.aiHDRCodecs = [];
 		this.availableEncoders = [];
 		this.desiredTime = 0;
@@ -430,7 +430,7 @@ export class RawProvider implements MediaProviderAdapter {
 			reason: undefined,
 			aiHDRAllowed: false,
 			aiHDRAvailable: [],
-			aiHDR: false
+			aiHDR
 		});
 		this.notify('load-start');
 		const loading = this.commands.then(async () => {
@@ -464,7 +464,7 @@ export class RawProvider implements MediaProviderAdapter {
 						(allowed, codecs) => {
 							if (generation !== this.generation) return;
 							capabilitiesKnown = true;
-							this.aiHDR = allowed && readAIHDRPreference();
+							this.aiHDR = allowed && aiHDR;
 							this.aiHDRCodecs = codecs;
 							this.publish({ aiHDRAllowed: allowed, aiHDRAvailable: codecs, aiHDR: this.aiHDR });
 						}
@@ -472,7 +472,7 @@ export class RawProvider implements MediaProviderAdapter {
 					this.abort.signal
 				);
 				if (generation !== this.generation) return;
-				if (!capabilitiesKnown && readAIHDRPreference())
+				if (!capabilitiesKnown && aiHDR)
 					throw new Error(
 						'Cannot check AI HDR availability. Retry playback to reconnect to the server.'
 					);
@@ -1122,7 +1122,7 @@ export class RawProvider implements MediaProviderAdapter {
 		preference = normalizeHDRPreference(preference);
 		if (this.abort.signal.aborted) {
 			saveHDRPreference(preference);
-			saveAIHDRPreference(aiHDR);
+			this.aiHDR = aiHDR;
 			return this.recoverPlayback();
 		}
 		if (
@@ -1147,7 +1147,6 @@ export class RawProvider implements MediaProviderAdapter {
 			try {
 				this.hdrPreference = preference;
 				this.aiHDR = aiHDR;
-				saveAIHDRPreference(aiHDR);
 				saveHDRPreference(preference);
 				await this.loadPart(this.part, generation);
 				if (generation !== this.generation || this.destroyed) return;

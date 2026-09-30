@@ -261,7 +261,7 @@ try {
 		const page = await browser.newPage();
 		await page.goto(`http://127.0.0.1:${server.address().port}`);
 		const graph = await page.evaluate(async () => {
-			const { AudioNormalization, saveNormalization } = await import('/controller.js');
+			const { AudioNormalization, setNormalization } = await import('/controller.js');
 			const ctx = new AudioContext({ sampleRate: 48000 });
 			await ctx.audioWorklet.addModule('/capture.js');
 			const buffer = ctx.createBuffer(8, 48000, 48000);
@@ -273,7 +273,7 @@ try {
 			const destination = ctx.createGain();
 			destination.connect(ctx.destination);
 			const normalizer = new AudioNormalization();
-			saveNormalization(true);
+			setNormalization(true);
 			await ctx.resume();
 			await normalizer.bindPCM(source, destination);
 			const capture = new AudioWorkletNode(ctx, 'capture', {
@@ -314,13 +314,13 @@ try {
 			split.disconnect();
 			normalizer.node.disconnect(split);
 			for (let i = 0; i < 8; i++) {
-				saveNormalization(i % 2 === 0);
+				setNormalization(i % 2 === 0);
 				await sleep(2);
 			}
-			saveNormalization(false);
+			setNormalization(false);
 			await sleep(150);
 			const off = await measure();
-			saveNormalization(true);
+			setNormalization(true);
 			await sleep(500);
 			const restored = await measure();
 			source.stop();
@@ -389,7 +389,7 @@ try {
 		console.log(`Testing ${fixture.name}`);
 		const result = await page.evaluate(async (fixture) => {
 			fixture.file = new URL(fixture.file, location.href).href;
-			const { AudioNormalization, saveNormalization, readNormalization } =
+			const { AudioNormalization, setNormalization, readNormalization } =
 				await import('/controller.js');
 			let status, normalizer;
 			const hook = async (source, destination) => {
@@ -399,7 +399,7 @@ try {
 					: normalizer.bindNative(source);
 			};
 			const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-			saveNormalization(true);
+			setNormalization(true);
 			let element, engine, audioEngine, provider;
 			if (fixture.mode === 'element') {
 				element = document.createElement('video');
@@ -511,7 +511,7 @@ try {
 			const muted = await measure(300);
 			volume(1);
 			await sleep(1800);
-			saveNormalization(false);
+			setNormalization(false);
 			await sleep(200);
 			const off = await measure(500);
 			const offStatus = { ...normalizer.status };
@@ -542,7 +542,7 @@ try {
 			await pause();
 			await sleep(500);
 			const paused = clock();
-			saveNormalization(true);
+			setNormalization(true);
 			await sleep(300);
 			if (fixture.mode === 'element') normalizer.node.connect(capture);
 			const pausedAfterToggle = clock();
@@ -557,7 +557,7 @@ try {
 			await sleep(1500);
 			const resumed = await measure(600);
 			const resumedTime = clock();
-			const persisted = readNormalization();
+			const retained = readNormalization();
 			const stats = engine?.getStats();
 			const drift = audioEngine
 				? Number(engine.currentTime - audioEngine.currentTime) / 1000
@@ -616,7 +616,7 @@ try {
 				pausedAfterToggle,
 				resumed,
 				resumedTime,
-				persisted,
+				retained,
 				drift,
 				isolated: crossOriginIsolated,
 				corrections,
@@ -692,7 +692,7 @@ try {
 				preference: true
 			});
 		}
-		assert.equal(result.persisted, true);
+		assert.equal(result.retained, true);
 		await page.close();
 	}
 	for (const scenario of ['missing-worklet', 'cancel-loading']) {
@@ -700,7 +700,7 @@ try {
 		const page = await browser.newPage();
 		await page.goto(`http://127.0.0.1:${server.address().port}`);
 		const result = await page.evaluate(async (scenario) => {
-			const { AudioNormalization, saveNormalization } = await import('/controller.js');
+			const { AudioNormalization, setNormalization } = await import('/controller.js');
 			const video = document.createElement('video');
 			video.src = '/fixture/stereo.mp4';
 			document.body.append(video);
@@ -708,9 +708,9 @@ try {
 			const normalizer = new AudioNormalization((s) => {
 				state = s.state;
 			});
-			saveNormalization(true);
+			setNormalization(true);
 			const pending = normalizer.bindNative(video);
-			if (scenario === 'cancel-loading') saveNormalization(false);
+			if (scenario === 'cancel-loading') setNormalization(false);
 			await pending;
 			// Creation succeeds only if failure/cancellation left native playback
 			// untouched; browsers permit just one source for an element.
@@ -738,12 +738,12 @@ try {
 		const page = await browser.newPage();
 		await page.goto(`http://127.0.0.1:${server.address().port}`);
 		const result = await page.evaluate(async () => {
-			const { AudioNormalization, saveNormalization } = await import('/controller.js');
+			const { AudioNormalization, setNormalization } = await import('/controller.js');
 			const video = document.createElement('video');
 			video.src = '/fixture/stereo.mp4';
 			document.body.append(video);
 			const normalizer = new AudioNormalization();
-			saveNormalization(false);
+			setNormalization(false);
 			await normalizer.bindNative(video);
 			normalizer.setNativeGain(2);
 			await video.play();
@@ -760,11 +760,11 @@ try {
 			const boostFirst = await measure();
 			normalizer.setNativeGain(1);
 			const original = await measure();
-			saveNormalization(true);
+			setNormalization(true);
 			const normalized = await measure(6500);
 			normalizer.setNativeGain(2);
 			const both = await measure();
-			saveNormalization(false);
+			setNormalization(false);
 			const disabled = await measure();
 			normalizer.setNativeGain(1);
 			const cleared = await measure();

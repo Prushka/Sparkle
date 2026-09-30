@@ -146,7 +146,10 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   monotonically, even after dedupe entries expire, and consume due preroll before it can
   evict upcoming packets. Preserve prefetched captions on sink resume; clear old caption
   state explicitly for a real provider seek or track reset.
-- Audio normalization is a local control beside Captions. Preserve the PCM hook before
+- Audio normalization is a local control beside Captions. AI HDR and normalization
+  start off for each title and after reload or leaving the player; never persist them
+  or restore legacy saved values. Keep explicit choices through track/output changes
+  and recovery of the current title. Preserve the PCM hook before
   user volume and the native element's clock, volume and mute. Downmix to stereo before
   measuring loudness; link left/right gain and guard peaks after mixing. Keep bounded
   AudioWorklet processing and an exact original-channel bypass when disabled; never

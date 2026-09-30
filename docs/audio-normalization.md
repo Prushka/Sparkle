@@ -2,8 +2,9 @@
 
 The waveform toggle immediately left of Captions applies to existing Encoded MP4
 and Raw Compatible, Tone mapping, Encoded AV1 and Encoded HEVC playback. It is off
-by default. `sparkle.audio.normalize` in localStorage remembers the choice across
-reloads, media, tracks and HDR output modes. It does not change other participants'
+for each title and after reload or leaving the player. The choice is held only in
+memory through track/HDR output changes and recovery of the current title; old
+`sparkle.audio.normalize` values are ignored. It does not change other participants'
 settings, voice chat, files, server encoding parameters or room messages.
 
 ## Processing
@@ -63,7 +64,7 @@ video/audio route and separate WASM audio route use the same controller. Existin
 Encoded MP4 configures Vidstack's native provider before setup. Its existing Audio
 Boost control shares the native source and applies its gain after normalization;
 neither control competes for the browser's single media-element source. Mode changes
-create a fresh binding with the saved preference; they retain the existing room
+create a fresh binding with the current in-memory choice; they retain the existing room
 readiness/synchronization rules.
 The native-video startup recovery loop excludes Raw playback: its asynchronously
 created video is a child of the Raw provider, not a replacement Vidstack target.
@@ -109,9 +110,9 @@ when its graph hooks change; see [the build guide](../scripts/libmedia/README.md
   `SPARKLE_AUDIO_CASE` optionally selects a case by name; `SPARKLE_TEST_CHANNEL`
   can select installed Chrome or Edge.
 - With the app/API running, `SPARKLE_TEST_URL=http://localhost:3001`
-  `npx playwright test tests/e2e/audio-normalization.spec.ts` checks the saved
-  toggle, local independence, desktop/320/390 px placement, reload, and two-client
-  pause/seek/resume for Encoded MP4 and Raw Compatible/AV1/HEVC. Encoded Raw
+  `npx playwright test tests/e2e/audio-normalization.spec.ts` checks the temporary
+  toggle, ignored legacy preferences, local independence, desktop/320/390 px placement,
+  reload, and two-client pause/seek/resume for Encoded MP4 and Raw Compatible/AV1/HEVC. Encoded Raw
   cases also restore a saved alternate audio track. Generate the above media
   fixtures first. The AV1 startup check delays initialization by 6.5 seconds under
   ordinary autoplay policy. Native decoder errors must leave chat available and

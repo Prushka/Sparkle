@@ -28,7 +28,7 @@ import {RawAIHDRButton,RawPlaybackObserver} from './components/player/RawControl
 import {AudioNormalizationButton} from './components/player/AudioNormalization';
 import '@vidstack/react/player/styles/default/theme.css';
 import '@vidstack/react/player/styles/default/layouts/video.css';
-localStorage.setItem('sparkle.raw.hdr','compatible');localStorage.setItem('sparkle.raw.aiHDR','false');
+localStorage.setItem('sparkle.raw.hdr','compatible');
 const controls=()=> <><RawAIHDRButton/><AudioNormalizationButton/></>;
 createRoot(document.querySelector('#root')).render(<MediaPlayer ref={p=>window.testPlayer=p} title="AI HDR qualification" src={{src:location.origin+'/media/smpte2084',type:RAW_MEDIA_TYPE}} load="eager" muted playsInline viewType="video" style={{width:'100%',aspectRatio:'16/9'}}><MediaProvider loaders={[RawProviderLoader]}/><RawPlaybackObserver onTracks={(s)=>window.uiStatus=s}/><DefaultVideoLayout icons={defaultLayoutIcons} slots={{largeLayout:{beforeCaptionButton:controls()},smallLayout:{beforeCaptionButton:controls()}}}/></MediaPlayer>);
 `,
@@ -316,7 +316,9 @@ try {
 	assert.ok(!requests.slice(start).some((r) => r.aiHDR));
 	await disabled.close();
 	capabilitiesUnavailable = true;
-	await assert.rejects(client('bt709', 'compatible', true), /Cannot check AI HDR availability/);
+	const legacy = await client('bt709', 'compatible', true);
+	assert.equal(await legacy.evaluate(() => provider.status.aiHDR), false);
+	await legacy.close();
 	capabilitiesUnavailable = false;
 	const controls = await browser.newPage();
 	await controls.goto(`http://127.0.0.1:${server.address().port}/ui`);
