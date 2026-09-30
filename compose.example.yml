@@ -9,6 +9,8 @@ services:
       MAX_PFP_BYTES: '12000000'
       PFP_DIR: /data/pfp
       MEDIA_CACHE_DIR: /cache/media
+      VOICE_TURN_URLS: ${VOICE_TURN_URLS:-}
+      VOICE_TURN_SECRET: ${VOICE_TURN_SECRET:-}
       PLEX_URL: ${PLEX_URL}
       PLEX_TOKEN: ${PLEX_TOKEN}
       PLEX_AUTH_ORIGINS: ${PLEX_AUTH_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}

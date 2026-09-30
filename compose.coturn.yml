@@ -1,0 +1,38 @@
+# Standalone TURN relay for a Linux Docker host. See docs/voice-chat.md#deploy-coturn.
+# Start separately: docker compose --env-file .env -f compose.coturn.yml -p sparkle-turn up -d
+services:
+  coturn:
+    image: coturn/coturn:4.18.0-r0-alpine@sha256:c29135c08565810d37053f384584392b7c24b69570fc81a721b878d6fe63e04e
+    restart: unless-stopped
+    # Preserve relay ports/IPs without a second Docker NAT layer. Linux hosts only.
+    network_mode: host
+    read_only: true
+    entrypoint: [/bin/sh, /opt/sparkle/coturn-entrypoint.sh]
+    command: []
+    environment:
+      TURN_REALM: ${TURN_REALM:?Set TURN_REALM to your TURN DNS hostname}
+      TURN_EXTERNAL_IP: ${TURN_EXTERNAL_IP:?Set TURN_EXTERNAL_IP to the public IPv4 address}
+      TURN_RELAY_IP: ${TURN_RELAY_IP:?Set TURN_RELAY_IP to the IPv4 address on the Docker host}
+      VOICE_TURN_SECRET: ${VOICE_TURN_SECRET:?Set the same VOICE_TURN_SECRET on coturn and Sparkle}
+      TURN_TLS_ENABLED: ${TURN_TLS_ENABLED:-false}
+    volumes:
+      - type: bind
+        source: ./scripts/coturn-entrypoint.sh
+        target: /opt/sparkle/coturn-entrypoint.sh
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${TURN_TLS_CERT_DIR:-./data/coturn/certs}
+        target: /certs
+        read_only: true
+        bind:
+          create_host_path: false
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=1m,mode=1777
+      - /var/lib/coturn:rw,noexec,nosuid,size=1m,mode=1777
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'

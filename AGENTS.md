@@ -237,7 +237,11 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   and established connections across mute toggles. Cancel pending microphone requests
   on leave/disposal; audio-device errors must not crash the room. Never log SDP, ICE,
   or TURN credentials. Optional `VOICE_TURN_URLS`/`VOICE_TURN_SECRET` use temporary
-  browser credentials; the shared secret stays in Go. See [voice chat](docs/voice-chat.md).
+  browser credentials; the shared secret stays server-side. See [voice chat](docs/voice-chat.md).
+  `compose.coturn.yml` runs an optional separate relay with Linux host networking;
+  preserve matching public/private relay addresses, bounded ports/quotas, and optional
+  TLS certificate checks. Keep TURN secrets out of command arguments and frontend
+  settings. Validate Compose using disposable env values and `config --quiet`.
   Raw fullscreen must target the active libmedia video when only iOS native fullscreen
   is available, refresh support after metadata loads, and detach listeners on media changes.
   Prefer whole-player element fullscreen on Android and desktop to retain controls and overlays.
