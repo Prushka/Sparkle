@@ -46,6 +46,9 @@ and artwork for configured libraries only; credentials and filesystem paths stay
 private. Referenced file/encode URLs still require authorization. `/share/rooms/{room}`
 provides only room ID, current media ID and its update timestamp for room-only links;
 it cannot join, create or change a room, or expose chat/participants/playback state.
+Opening a missing room in the app creates it through `POST /rooms`; media links
+still require access to the requested library. Repeated creation returns the existing
+authorized room without replacing its media. GET requests and previews never create rooms.
 Preview requests do not forward viewer cookies and never enumerate the Plex library.
 Public Encoded titles continue to reuse conservatively matched Plex descriptions
 and signed artwork URLs.

@@ -272,13 +272,15 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 				return;
 			}
 
-			const room = await fetchRoomRecord(config.backendBaseUrl, effectiveRoomId);
+			let room = await fetchRoomRecord(config.backendBaseUrl, effectiveRoomId);
 			if (loadGenerationRef.current !== generation) {
 				return;
 			}
 			if (!room) {
-				router.replace('/');
-				return;
+				room = await createRoomRecord(config.backendBaseUrl, routeMediaId, effectiveRoomId);
+				if (loadGenerationRef.current !== generation) {
+					return;
+				}
 			}
 			if (typeof room.mediaUpdated === 'number') {
 				latestMediaUpdatedRef.current = Math.max(latestMediaUpdatedRef.current, room.mediaUpdated);

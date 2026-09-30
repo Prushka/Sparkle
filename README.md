@@ -19,6 +19,9 @@ library from the same Library view.
   covers without sign-in; playback remains protected. See [authentication setup](docs/plex-auth.md).
 - **Go back to library** beside **Change media** clears the room's selected media and
   returns everyone to Library while keeping the same room ID and library filters.
+- Opening a missing or expired room recreates that room ID. Room-only links open
+  Library; media links restore their selected title after the usual access checks.
+  If another visitor already recreated the room, its current media takes precedence.
 - A paged, searchable poster Library with source filters, seasons, episodes, and **Plex**
   and **Encoded** badges. Back/Forward preserves the room, hierarchy, and filters.
   Search applies to the current level; opening a show or season clears it, and going

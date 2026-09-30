@@ -384,7 +384,16 @@ func (h *Hub) writeAuthorizedRoom(w http.ResponseWriter, r *http.Request, roomID
 		room.accessMu.Unlock()
 		return
 	}
-	response := room.updateMediaID(mediaID, nil)
+	var response roomResponse
+	if create {
+		// Concurrent visitors may recreate an expired link. Creation must never
+		// replace another visitor's media or reset the room's playback state.
+		room.mu.RLock()
+		response = room.snapshotLocked()
+		room.mu.RUnlock()
+	} else {
+		response = room.updateMediaID(mediaID, nil)
+	}
 	room.accessMu.Unlock()
 	writeJSON(w, response)
 }

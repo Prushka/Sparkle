@@ -180,6 +180,10 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   Bound and remove compressed job intermediates; never persist decoded frames.
   Never substitute a metadata-only relabel or ordinary encode after enhancement fails.
   NVENC tests need a GPU; CI exercises the scheduling/cache contracts with temporary fixtures.
+- Missing room links are recreated by the client through `POST /rooms`, including
+  media links after authorization. Creation is idempotent for an existing room ID;
+  only `PUT /rooms/{room}` or authorized socket changes replace its media. GET and
+  share previews must not create rooms.
 - Room time is seconds; libmedia time is milliseconds. Preserve serialized provider commands,
   media-generation checks, stale-message rejection, and remote-event suppression through
   readiness, seeks, buffering, track changes, recovery, and teardown. Loading must not emit
