@@ -114,6 +114,9 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
 - Processed/Plex artwork matching must remain conservative and bounded: compare title/year
   or series/season/episode identity, reject ambiguity, and enrich only requested items.
   Library URL state must preserve room context without remounting or reconnecting the room.
+- Same-room media changes preserve the mounted player and room connection while the next
+  source loads. Reuse freshly loaded title metadata for initial provider setup; recovery
+  must revalidate it. Artwork has a five-minute private browser freshness window with ETags.
   Room links use `/<room>` and `/<room>/media/<media>`; the path owns room identity.
   Preserve root `?mediaId=` entry links, Discord root `channel_id` launches, and the
   documented oEmbed routes. Do not restore unused query-based room or `/rooms/` aliases.

@@ -60,7 +60,7 @@ func (w *streamWriter) Write(p []byte) (int, error) {
 
 type artCache struct {
 	dir      string
-	mu       sync.Mutex
+	mu       sync.RWMutex
 	maxBytes int64
 }
 
@@ -90,7 +90,9 @@ func (s *Service) art(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", http.DetectContentType(data))
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Cache-Control", "private, no-cache")
+	// Artwork is already retained on disk for up to a day. A short private
+	// freshness window avoids a remote round trip whenever a poster remounts.
+	w.Header().Set("Cache-Control", "private, max-age=300")
 	etag := fmt.Sprintf(`"%x"`, sha256.Sum256(data))
 	w.Header().Set("ETag", etag)
 	if r.Header.Get("If-None-Match") == etag {
@@ -103,8 +105,8 @@ func (c *artCache) read(key string) []byte {
 	if c.dir == "" {
 		return nil
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	name := filepath.Join(c.dir, key+".art")
 	info, err := os.Stat(name)
 	if err != nil || info.Size() > 12*1024*1024 || time.Since(info.ModTime()) > 24*time.Hour {

@@ -395,7 +395,10 @@ export class RawProvider implements MediaProviderAdapter {
 		const generation = ++this.generation;
 		this.abort.abort();
 		this.abort = new AbortController();
-		this.currentSrc = src as Src<string>;
+		const initialJob = (src as Src & { job?: Job }).job;
+		// The room has just fetched this metadata. Reuse it for this load only;
+		// recovery must fetch it again so removed/remapped parts are revalidated.
+		this.currentSrc = { ...src, job: undefined } as Src<string>;
 		this.hdrPreference = readHDRPreference();
 		this.aiHDR = false;
 		this.aiHDRCodecs = [];
@@ -422,12 +425,15 @@ export class RawProvider implements MediaProviderAdapter {
 			try {
 				const url = new URL(String(src.src), location.href);
 				this.baseURL = url.href.slice(0, url.href.indexOf('/media/'));
-				const response = await playbackOperation(
-					backendFetch(url, { signal: this.abort.signal, cache: 'no-store' }),
-					this.abort.signal
-				);
-				if (!response.ok) throw new Error('This Plex item is unavailable.');
-				const job: Job = await playbackOperation(response.json(), this.abort.signal);
+				let job = initialJob;
+				if (!job || !url.pathname.endsWith(`/media/${encodeURIComponent(job.Id)}`)) {
+					const response = await playbackOperation(
+						backendFetch(url, { signal: this.abort.signal, cache: 'no-store' }),
+						this.abort.signal
+					);
+					if (!response.ok) throw new Error('This Plex item is unavailable.');
+					job = (await playbackOperation(response.json(), this.abort.signal)) as Job;
+				}
 				if (generation !== this.generation) return;
 				if (!job.Raw?.parts.length) throw new Error('No mapped media parts are available.');
 				this.raw = job.Raw;

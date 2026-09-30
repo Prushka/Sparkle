@@ -72,7 +72,8 @@ the backend can also create 12-second NVENC AV1/HEVC segments on demand for Plex
 the fast `p3` preset by default with no software video encoding fallback. Identical
 requests share one GPU job and cache, including across rooms. Original media stays read-only;
 Sparkle never starts a Plex transcoding session or changes Plex watched state. No complete
-original file is cached. Artwork has a 512 MiB budget; encoded segments default to 40 GiB
+original file is cached. Artwork has a 512 MiB budget and five-minute private browser caching;
+encoded segments default to 40 GiB
 with a 12-hour idle expiry. Server-encoded playback targets a 24-second preload.
 `ENCODE_CONCURRENCY` accepts 1–32 simultaneous pipelines and defaults to 2.
 See [server encoding](docs/server-encoding.md) for GPU setup, settings and limits.

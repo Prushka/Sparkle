@@ -93,7 +93,9 @@ and coalesces concurrent lookups. Processed IDs and playback assets remain uncha
 Metadata memory cache: at most 256 entries / 32 MiB, one-minute TTL. Plex
 responses: at most 8 MiB, eight concurrent metadata/artwork requests per backend.
 Artwork: at most 12 MiB per item, 512 MiB disk budget, 24-hour TTL with oldest
-entry eviction. Raw mode caches only requested metadata/artwork; optional encoded
+entry eviction. Browsers may reuse artwork privately for five minutes, then revalidate
+with its ETag; concurrent disk-cache reads do not block each other. Raw mode caches
+only requested metadata/artwork; optional encoded
 segments use a separate bounded cache under `MEDIA_CACHE_DIR/encoded`. File writes renew a
 60-second idle deadline and stop on request cancellation. File responses bypass
 compression. Browser range reads use 4 MiB chunks and decoder preload is four

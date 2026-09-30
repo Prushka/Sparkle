@@ -24,11 +24,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 	const pathname = usePathname();
 	const searchParams = useSearchParams();
 	const { pageReloadCounter } = useAppState();
-	// Browsing the catalog must not remount the room or reconnect its socket.
+	// Catalog browsing and media replacement are part of the same room visit.
+	// Keep room state mounted; changing rooms or an explicit reload still resets it.
 	const routeParams = new URLSearchParams(searchParams.toString());
 	for (const name of ['libraryPath', 'source', 'libraryId', 'kind', 'sort', 'query'])
 		routeParams.delete(name);
-	const key = `${pathname}?${routeParams}${pageReloadCounter}`;
+	const roomPath = pathname.split('/').slice(0, 2).join('/');
+	const key = `${roomPath}?${routeParams}${pageReloadCounter}`;
 
 	return (
 		<AppShellFrame>

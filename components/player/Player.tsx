@@ -207,6 +207,7 @@ type VideoSource = {
 	codec: string;
 	sCodec: string;
 	audio: string;
+	job?: Job;
 };
 
 type MoveToastState = {
@@ -3958,7 +3959,8 @@ export function Player({
 				type: RAW_MEDIA_TYPE,
 				codec: job.Raw.videoCodec,
 				sCodec: 'raw',
-				audio: 'local'
+				audio: 'local',
+				job
 			};
 		const encodedCodecs = job.EncodedCodecs || [];
 		const autoCodec =
@@ -3981,17 +3983,7 @@ export function Player({
 			sCodec: effectiveCodec,
 			audio: effectiveAudio
 		};
-	}, [
-		BASE_STATIC,
-		backendBaseUrl,
-		job.Id,
-		job.Raw,
-		job.EncodedCodecs,
-		job.MappedAudio,
-		selectedAudio,
-		selectedCodec,
-		supportedCodecs
-	]);
+	}, [BASE_STATIC, backendBaseUrl, job, selectedAudio, selectedCodec, supportedCodecs]);
 	const playerSrcUrl = videoSrc?.src ?? '';
 	const effectiveAudio = videoSrc?.audio || selectedAudio;
 	const autoCodec =
@@ -7312,7 +7304,7 @@ export function Player({
 							onProviderLoaderChange={normalizeVideoProvider}
 							className={mediaPlayerClassName}
 							key={`${job.Id}:${playerSrcUrl}:${audioRemountKey}:${thumbnailVttSrc}`}
-							src={{ src: playerSrcUrl, type: videoSrc?.type ?? 'video/mp4' } as PlayerSrc}
+							src={videoSrc as PlayerSrc}
 							style={mediaPlayerStyle}
 							title={job.Input}
 							artist="Let's watch anime!"

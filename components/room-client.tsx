@@ -224,7 +224,15 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 	const loadRoom = useCallback(
 		async (generation: number) => {
 			const redirectSuffix = redirectSuffixRef.current;
-			setState({ status: 'loading' });
+			// A title change is still the same room visit. Keep its player, sockets,
+			// chat and voice mounted while resolving the next source.
+			setState((current) =>
+				current.status === 'player' &&
+				route.view === 'media' &&
+				current.data.roomId === route.roomId
+					? current
+					: { status: 'loading' }
+			);
 			const previousRoute = previousRouteForLoadRef.current;
 			previousRouteForLoadRef.current = null;
 			const config = await loadRuntimeConfig();
@@ -280,7 +288,14 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 			}
 
 			if (room.mediaId && room.mediaId !== routeMediaId) {
-				router.replace(buildMediaPath(effectiveRoomId, room.mediaId, redirectSuffix));
+				const canonicalPath = buildMediaPath(effectiveRoomId, room.mediaId, redirectSuffix);
+				if (previousRoute?.view === 'media' && previousRoute.roomId === effectiveRoomId) {
+					// Back/Forward can point at a previous title in this room. Restore
+					// the current shared URL without replacing the mounted room.
+					window.history.replaceState(null, '', canonicalPath);
+				} else {
+					router.replace(canonicalPath);
+				}
 				return;
 			}
 
@@ -374,7 +389,13 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 			const nextPath = buildMediaPath(currentRoomId, mediaId, redirectSuffix);
 			const currentPath = `${window.location.pathname}${window.location.search}`;
 			if (currentPath !== nextPath) {
-				router.push(nextPath);
+				if (state.status === 'player' && state.data.roomId === route.roomId) {
+					// AppClient observes usePathname. This avoids an extra server metadata
+					// render before the client can load a confirmed room media change.
+					window.history.pushState(null, '', nextPath);
+				} else {
+					router.push(nextPath);
+				}
 				return;
 			}
 			if (state.status !== 'player') {
