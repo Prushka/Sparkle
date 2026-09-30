@@ -23,27 +23,13 @@ function parseAppRoute(pathname: string): AppRoute {
 	if (segments.length === 0) {
 		return { kind: 'home' };
 	}
-	if (segments[0] === 'rooms' && segments[1] === 'new') {
-		return { kind: 'home' };
-	}
-	if (segments[0] === 'rooms' && segments.length >= 4 && segments[2] === 'media') {
-		return {
-			kind: 'room',
-			roomId: segments[1],
-			view: 'media',
-			mediaId: segments[3]
-		};
-	}
-	if (segments.length >= 3 && segments[1] === 'media') {
+	if (segments.length === 3 && segments[1] === 'media') {
 		return {
 			kind: 'room',
 			roomId: segments[0],
 			view: 'media',
 			mediaId: segments[2]
 		};
-	}
-	if (segments[1] === 'library') {
-		return { kind: 'room', roomId: segments[0], view: 'library' };
 	}
 	return { kind: 'room', roomId: segments[0], view: 'library' };
 }

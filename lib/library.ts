@@ -19,13 +19,6 @@ export interface LibraryPage {
 	total: number;
 	warnings?: string[];
 }
-export interface MediaDetails extends LibraryItem {
-	artwork: { poster?: string; backdrop?: string };
-	versions: { id: string; label: string; codecs?: string[] }[];
-	parts: import('@/lib/player/raw-types').RawPart[];
-	tracks: unknown[];
-	chapters: unknown[];
-}
 export interface LibrarySource {
 	id: string;
 	title: string;

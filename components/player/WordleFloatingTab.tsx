@@ -404,7 +404,6 @@ function tileClass(status: WordleTileStatus, mini: boolean, translucent: boolean
 function tileAnimationClass(
 	status: WordleTileStatus,
 	letter: string,
-	submitted: boolean,
 	mini: boolean,
 	animatePop: boolean
 ) {
@@ -1121,7 +1120,6 @@ export function WordleFloatingTab({
 								const animationClass = tileAnimationClass(
 									status,
 									letter,
-									row.submitted,
 									mini,
 									Boolean(popAnimation)
 								);

@@ -112,6 +112,9 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
 - Processed/Plex artwork matching must remain conservative and bounded: compare title/year
   or series/season/episode identity, reject ambiguity, and enrich only requested items.
   Library URL state must preserve room context without remounting or reconnecting the room.
+  Room links use `/<room>` and `/<room>/media/<media>`; the path owns room identity.
+  Preserve root `?mediaId=` entry links, Discord root `channel_id` launches, and the
+  documented oEmbed routes. Do not restore unused query-based room or `/rooms/` aliases.
 - Shared UI components follow shadcn/Tailwind 4 conventions. Select uses Base UI's
   non-modal primitive; other controls use Radix. Menus, selects and room dialogs must
   leave page scrolling enabled. Preserve Tabler

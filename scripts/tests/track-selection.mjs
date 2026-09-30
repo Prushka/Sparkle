@@ -19,7 +19,6 @@ const {
 	saveStoredAudioSelection,
 	pickPrioritySubtitleStream,
 	pickRawAudioTrack,
-	pickRawSubtitleTrack,
 	rawSubtitleFormat,
 	rawSubtitleByteSize,
 	getRawSubtitleTracks,
@@ -320,20 +319,23 @@ const rawSubtitles = subtitles.map((s) => ({
 	language: s.Language,
 	codec: s.Location.split('.').pop()
 }));
-assert.equal(pickRawSubtitleTrack(rawSubtitles, false).id, 5);
-assert.equal(pickRawSubtitleTrack(rawSubtitles, true).id, 3);
+assert.equal(getRawSubtitleTracks(rawSubtitles, '', false).find((track) => track.default).id, 5);
+assert.equal(getRawSubtitleTracks(rawSubtitles, '', true).find((track) => track.default).id, 3);
 assert.equal(storage.size, 0, 'automatic subtitles must not persist');
 storage.set('sparkle.raw.subtitle', 'Subtitle 1');
-assert.equal(pickRawSubtitleTrack(rawSubtitles).id, 1);
+assert.equal(getRawSubtitleTracks(rawSubtitles, '').find((track) => track.default).id, 1);
 storage.set('sparkle.raw.subtitle', 'off');
-assert.equal(pickRawSubtitleTrack(rawSubtitles), null);
 assert.equal(
-	pickRawSubtitleTrack(rawSubtitles, false, null).id,
+	getRawSubtitleTracks(rawSubtitles, '').find((track) => track.default),
+	undefined
+);
+assert.equal(
+	getRawSubtitleTracks(rawSubtitles, '', false, null).find((track) => track.default).id,
 	5,
 	'turning captions on uses the shared default'
 );
 storage.set('sparkle.raw.subtitle', 'Not present');
-assert.equal(pickRawSubtitleTrack(rawSubtitles).id, 5);
+assert.equal(getRawSubtitleTracks(rawSubtitles, '').find((track) => track.default).id, 5);
 assert.equal(storage.get('sparkle.raw.subtitle'), 'Not present');
 assert.equal(rawSubtitleFormat('ssa'), 'ass');
 assert.equal(rawSubtitleFormat(String(0x17016)), 'ass');
@@ -480,7 +482,7 @@ globalThis.localStorage = {
 	}
 };
 assert.equal(pickRawAudioTrack(rawAudio, 'movie').id, 11);
-assert.equal(pickRawSubtitleTrack(rawSubtitles).id, 5);
+assert.equal(getRawSubtitleTracks(rawSubtitles, '').find((track) => track.default).id, 5);
 assert.doesNotThrow(() => saveStoredAudioSelection(audio[0], 'movie'));
 console.log(
 	'Shared audio/subtitle priorities, language aliases, explicit preferences, legacy choices and blocked storage passed.'

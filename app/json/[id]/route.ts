@@ -11,10 +11,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 	const resolvedParams = await Promise.resolve(params);
 	const url = new URL(request.url);
 	const origin = getRequestOrigin(request.headers);
-	const legacyRoom = url.searchParams.get('room') || url.searchParams.get('channel_id');
-	const roomId = legacyRoom || resolvedParams.id;
+	// Metadata emits /json/<media>?room=<room>; this is the active oEmbed contract.
+	const requestedRoom = url.searchParams.get('room');
+	const roomId = requestedRoom || resolvedParams.id;
 	const room = await getRoomPreviewRecord(fetch, roomId);
-	const mediaId = legacyRoom ? resolvedParams.id : (room?.mediaId ?? resolvedParams.id);
+	const mediaId = requestedRoom ? resolvedParams.id : (room?.mediaId ?? resolvedParams.id);
 	const to = toAbsoluteUrl(`/${room?.roomId ?? roomId}`, origin);
 	if (!mediaId) {
 		return NextResponse.json({

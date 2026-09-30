@@ -185,36 +185,6 @@ func handleAll(store *jobs.Store) http.HandlerFunc {
 	}
 }
 
-func handleMedia(store *jobs.Store) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		mediaID := strings.TrimSpace(r.PathValue("id"))
-		if mediaID == "" {
-			http.Error(w, "media id is required", http.StatusBadRequest)
-			return
-		}
-
-		payload, etag, err := store.Job(r.Context(), mediaID)
-		if err != nil {
-			if errors.Is(err, jobs.ErrJobNotFound) {
-				http.NotFound(w, r)
-				return
-			}
-			writeJSONError(w, http.StatusInternalServerError, err)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("Cache-Control", "no-cache")
-		if etag != "" {
-			w.Header().Set("ETag", etag)
-			if r.Header.Get("If-None-Match") == etag {
-				w.WriteHeader(http.StatusNotModified)
-				return
-			}
-		}
-		_, _ = w.Write(payload)
-	}
-}
-
 type gzipResponseWriter struct {
 	http.ResponseWriter
 	writer      *gzip.Writer

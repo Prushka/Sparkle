@@ -2808,11 +2808,7 @@ function shouldAutoStand(player: CottagePlayerSyncState) {
 	return player.action === 'interacting';
 }
 
-function applyIncomingCottagePlayer(
-	existing: CottagePlayerSyncState | undefined,
-	incoming: CottagePlayerSyncState,
-	now: number
-) {
+function applyIncomingCottagePlayer(incoming: CottagePlayerSyncState, now: number) {
 	const target = getMoveTarget(incoming);
 	if (target) {
 		const movementStartAt = incoming.updatedAt || now;
@@ -3150,7 +3146,7 @@ export function CottageGame({
 					}
 					const existingPlayer = nextPlayers[incomingPlayer.id];
 					incomingClockRef.current[incomingPlayer.id] = incomingPlayer.updatedAt;
-					const nextPlayer = applyIncomingCottagePlayer(existingPlayer, incomingPlayer, Date.now());
+					const nextPlayer = applyIncomingCottagePlayer(incomingPlayer, Date.now());
 					if (!existingPlayer || hasPlayerChanged(existingPlayer, nextPlayer)) {
 						nextPlayers[incomingPlayer.id] = nextPlayer;
 						if (shouldAutoStand(nextPlayer)) {

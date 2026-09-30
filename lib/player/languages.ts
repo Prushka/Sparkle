@@ -287,34 +287,6 @@ export const cueForgeLanguageById = Object.freeze(
 
 export const cueForgeLanguageNameById = cueForgeLanguageById;
 
-export const cueForgeLanguageTagById = Object.freeze(
-	cueForgeLanguages.reduce<Record<string, string>>((acc, language) => {
-		const metadata = cueForgeLanguageMetadataByName[language.name];
-		for (const id of language.ids) {
-			acc[normalizeLanguageId(id)] = metadata.languageTag;
-		}
-		return acc;
-	}, {})
-);
-
-export const cueForgeLanguageScriptById = Object.freeze(
-	cueForgeLanguages.reduce<Record<string, CueForgeLanguageScript>>((acc, language) => {
-		const metadata = cueForgeLanguageMetadataByName[language.name];
-		for (const id of language.ids) {
-			acc[normalizeLanguageId(id)] = metadata.script;
-		}
-		return acc;
-	}, {})
-);
-
 export function getCueForgeLanguageName(id: string) {
 	return cueForgeLanguageNameById[normalizeLanguageId(id)] || '';
-}
-
-export function getCueForgeLanguageTag(id: string) {
-	return cueForgeLanguageTagById[normalizeLanguageId(id)] || '';
-}
-
-export function getCueForgeLanguageScript(id: string) {
-	return cueForgeLanguageScriptById[normalizeLanguageId(id)] || '';
 }

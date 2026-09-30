@@ -65,18 +65,6 @@ export function pickRawAudioTrack(tracks: RawPlaybackTrack[], mediaId: string) {
 	);
 }
 
-export function pickRawSubtitleTrack(
-	tracks: RawPlaybackTrack[],
-	preferMobileNative = isIOSOrAndroidDevice(),
-	preference?: string | null,
-	mediaId = ''
-) {
-	const selected = getRawSubtitleTracks(tracks, mediaId, preferMobileNative, preference).find(
-		(track) => track.default
-	);
-	return tracks.find((track) => track.id === selected?.id) ?? null;
-}
-
 /** Transport IDs differ between original MKV and NVENC subtitle packets.
  * Persist the original stream index scoped to this version-specific media ID. */
 export function getRawSubtitleTracks(

@@ -1,11 +1,5 @@
 import { backendFetch } from '@/lib/plex-access';
-import {
-	preprocessJob,
-	preprocessLibraryJobs,
-	type Job,
-	type LibraryJob,
-	type ServerData
-} from '@/lib/player/t';
+import { preprocessJob, type Job, type ServerData } from '@/lib/player/t';
 
 export type RoomRecord = {
 	roomId: string;
@@ -22,7 +16,6 @@ export type RuntimeConfig = {
 type RuntimeConfigPayload = Partial<RuntimeConfig>;
 
 let runtimeConfigPromise: Promise<RuntimeConfig> | null = null;
-let jobsPromise: Promise<LibraryJob[]> | null = null;
 
 export function joinBackendPath(base: string, path: string) {
 	if (!base) {
@@ -33,7 +26,6 @@ export function joinBackendPath(base: string, path: string) {
 
 export function resetClientDataCache() {
 	runtimeConfigPromise = null;
-	jobsPromise = null;
 }
 
 export async function loadRuntimeConfig(): Promise<RuntimeConfig> {
@@ -119,23 +111,6 @@ export async function updateRoomRecord(
 	return response.json();
 }
 
-export async function fetchJobs(backendBaseUrl: string, force = false): Promise<LibraryJob[]> {
-	if (force) {
-		jobsPromise = null;
-	}
-	if (!jobsPromise) {
-		jobsPromise = backendFetch(joinBackendPath(backendBaseUrl, '/all'), { cache: 'no-store' }).then(
-			async (response) => {
-				if (!response.ok) {
-					throw new Error(`Failed to load media library: ${response.status}`);
-				}
-				return preprocessLibraryJobs(await response.json());
-			}
-		);
-	}
-	return jobsPromise;
-}
-
 export async function fetchJob(backendBaseUrl: string, mediaId: string): Promise<Job> {
 	const response = await backendFetch(
 		joinBackendPath(backendBaseUrl, `/media/${encodeURIComponent(mediaId)}`),
@@ -182,7 +157,6 @@ export async function fetchMediaData(
 			: job.Title.title,
 		plot: job.Summary ?? '',
 		dominantColor: job.DominantColors?.[0] ?? '#EC275F',
-		oembedJson: `/json/${encodeURIComponent(roomId)}`,
 		staticBaseUrl: runtimeConfig.staticBaseUrl,
 		backendBaseUrl: runtimeConfig.backendBaseUrl,
 		roomId

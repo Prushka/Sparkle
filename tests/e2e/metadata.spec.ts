@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { load } from 'cheerio';
 import { getJob } from '../../lib/server/jobs';
-import { getRoomPreviewRecord, getRoomRecord } from '../../lib/server/rooms';
+import { getRoomPreviewRecord } from '../../lib/server/rooms';
 
 test('Plex share metadata and room resolution use public reads without credentials', async () => {
 	const previous = process.env.SERVER_INTERNAL_BE;
@@ -38,21 +38,18 @@ test('Plex share metadata and room resolution use public reads without credentia
 	}
 });
 
-test('private and missing rooms use public fallback metadata; server faults still surface', async () => {
+test('missing rooms use fallback metadata; preview server faults still surface', async () => {
 	const previous = process.env.SERVER_INTERNAL_BE;
 	process.env.SERVER_INTERNAL_BE = 'http://backend.test';
 	try {
-		for (const status of [401, 403, 404]) {
-			const fetchRoom: typeof fetch = async () => new Response(null, { status });
-			expect(await getRoomRecord(fetchRoom, 'private-room')).toBeNull();
-		}
+		const missing: typeof fetch = async () => new Response(null, { status: 404 });
+		expect(await getRoomPreviewRecord(missing, 'missing-room')).toBeNull();
 		const unavailable: typeof fetch = async () => new Response(null, { status: 503 });
-		await expect(getRoomRecord(unavailable, 'private-room')).rejects.toThrow('503');
 		await expect(getRoomPreviewRecord(unavailable, 'private-room')).rejects.toThrow('503');
 		await expect(getJob(unavailable, 'encoded-media')).rejects.toThrow('503');
 		const fetchRoom: typeof fetch = async () =>
 			Response.json({ roomId: 'public-room', mediaId: 'encoded-media' });
-		expect(await getRoomRecord(fetchRoom, 'public-room')).toEqual({
+		expect(await getRoomPreviewRecord(fetchRoom, 'public-room')).toEqual({
 			roomId: 'public-room',
 			mediaId: 'encoded-media'
 		});
@@ -109,8 +106,7 @@ test('anonymous Raw links render complete crawler previews while playback stays 
 	}
 	expect((await request.get('/be/library/items?source=plex')).status()).toBe(401);
 	if (!process.env.SPARKLE_RAW_TEST_ROOM) {
-		// An expired/missing room correctly redirects to Library. Create an empty
-		// disposable room so the UI must authorize selecting this public metadata.
+		// An existing empty room still requires authorization before selecting Plex media.
 		expect((await request.post('/be/rooms', { data: { roomId } })).status()).toBe(200);
 	}
 	await page.goto(link);

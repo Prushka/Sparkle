@@ -53,6 +53,18 @@ Preview requests do not forward viewer cookies and never enumerate the Plex libr
 Public Encoded titles continue to reuse conservatively matched Plex descriptions
 and signed artwork URLs.
 
+## Shared link formats
+
+Room links use `/<room>` and `/<room>/media/<media>`. The room path selects the room;
+query parameters cannot override it. Root `/?mediaId=<media>` entry links create a
+room for a title, and Discord Activity launches retain `channel_id` at the root.
+Library filter query parameters remain supported.
+
+Previews use `/json/<room>` and `/json/<media>?room=<room>` for oEmbed.
+Unused aliases `/rooms/new`, `/rooms/<room>/media/<media>`, `/<room>/library`,
+and `/<media>?room=<room>` are no longer supported. The unused frontend `/api/cm`
+mutation endpoint is removed; room mutations use the authenticated backend API.
+
 ## Configuration
 
 Keep the existing backend `PLEX_URL`, `PLEX_TOKEN`, mappings and library IDs.

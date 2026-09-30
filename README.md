@@ -22,6 +22,8 @@ library from the same Library view.
 - Opening a missing or expired room recreates that room ID. Room-only links open
   Library; media links restore their selected title after the usual access checks.
   If another visitor already recreated the room, its current media takes precedence.
+  Share `/<room>` or `/<room>/media/<media>` links; see the
+  [supported link formats](docs/plex-auth.md#shared-link-formats).
 - A paged, searchable poster Library with source filters, seasons, episodes, and **Plex**
   and **Encoded** badges. Back/Forward preserves the room, hierarchy, and filters.
   Search applies to the current level; opening a show or season clears it, and going

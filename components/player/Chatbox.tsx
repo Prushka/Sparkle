@@ -48,7 +48,6 @@ type Props = {
 	onPickerOpenChange?: (_open: boolean) => void;
 	chatFocused?: boolean;
 	showPlayerCount?: boolean;
-	controlsShowing?: boolean | null;
 	formId: string;
 	inputId: string;
 	useButton?: boolean;
@@ -367,7 +366,6 @@ export function Chatbox({
 	onPickerOpenChange,
 	chatFocused = false,
 	showPlayerCount = false,
-	controlsShowing = null,
 	formId,
 	inputId,
 	useButton = false,

@@ -30,7 +30,6 @@ const ASS_CHINESE_FONT = fallbackFontsByScript.Han[0] ?? 'Noto Sans SC Thin';
 const ASS_MISSING_GLYPH_FALLBACK_FONT = ASS_CHINESE_FONT;
 const ASS_DEVANAGARI_FONT = fallbackFontsByScript.Devanagari[0] ?? 'Noto Sans Devanagari';
 const ASS_ETHIOPIC_FONT = fallbackFontsByScript.Ethiopic[0] ?? 'Noto Sans Ethiopic';
-const ASS_GEORGIAN_FONT = 'Noto Sans Georgian';
 const ASS_GUJARATI_FONT = fallbackFontsByScript.Gujarati[0] ?? 'Noto Sans Gujarati';
 const ASS_GURMUKHI_FONT = fallbackFontsByScript.Gurmukhi[0] ?? 'Noto Sans Gurmukhi';
 const ASS_HEBREW_FONT = fallbackFontsByScript.Hebrew[0] ?? 'Noto Sans Hebrew';
@@ -731,7 +730,7 @@ function isAssPhoneticAnnotationOverride(text: string) {
 }
 
 function normalizeAssRendererOverrideFonts(text: string, fallbackFont: string | null) {
-	return text.replace(/\{([^}]*)\}/g, (block, overrideText: string) => {
+	return text.replace(/\{([^}]*)\}/g, (_block, overrideText: string) => {
 		const phoneticAnnotation = isAssPhoneticAnnotationOverride(overrideText);
 		return `{${overrideText.replace(/\\fn([^\\}]*)/gi, (match, fontName: string) => {
 			const rendererFontName = getAssRendererFontName(fontName, {

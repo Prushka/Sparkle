@@ -336,7 +336,7 @@ test('a member with another shared library cannot enter an unshared Raw room', a
 	expect(f.roomWrites()).toBe(0);
 });
 
-test('legacy media links keep the library permission gate after member sign-in', async ({
+test('media entry links keep the library permission gate after member sign-in', async ({
 	page
 }) => {
 	await fixture(page, true, { roomLibraryDenied: true });

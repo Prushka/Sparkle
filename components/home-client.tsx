@@ -58,8 +58,8 @@ export function HomeClient() {
 	const searchValues = useMemo<SearchValues>(
 		() => ({
 			mediaId: searchParams.get('mediaId')?.trim() || undefined,
-			requestedRoomId:
-				searchParams.get('room')?.trim() || searchParams.get('channel_id')?.trim() || undefined,
+			// Discord Activities still use channel_id to join a shared launch room.
+			requestedRoomId: searchParams.get('channel_id')?.trim() || undefined,
 			redirectQuery: getRedirectQuery(searchParams)
 		}),
 		[searchParams]

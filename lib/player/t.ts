@@ -339,11 +339,8 @@ function getAutoCodecPriority(codec: string) {
 
 const subtitleTypePriorityNormal = ['ass', 'sup', 'vtt'] as const;
 const subtitleTypePriorityIOS = ['vtt', 'ass', 'sup'] as const;
-const subtitleLanguagePriority = ['en'];
 
 type SubtitleTypePriorityFormat = (typeof subtitleTypePriorityNormal)[number];
-
-export const chatLayouts = ['show', 'hide'];
 
 const externalSubtitleExtensions = new Set(['ass', 'vtt', 'srt', 'sup']);
 
@@ -387,9 +384,7 @@ export enum SyncTypes {
 	AudioSwitch = 'audio',
 	CodecSwitch = 'codec',
 	SubtitleSwitch = 'subtitle',
-	ExitSync = 'exit',
-	PlayerLeft = 'left',
-	PlayerJoined = 'joined'
+	ExitSync = 'exit'
 }
 
 export enum BroadcastTypes {
@@ -739,35 +734,6 @@ export function randomString(length: number): string {
 	return result;
 }
 
-export function secondsSince(date: Date): number {
-	return Math.floor((new Date().getTime() - date.getTime()) / 1000);
-}
-
-export function setGetLS(key: string, value: string, onNotExist = (_v: string) => {}): string {
-	if (typeof window === 'undefined') {
-		return value;
-	}
-	const v = localStorage.getItem(key);
-	if (v) {
-		return v;
-	}
-	onNotExist(value);
-	localStorage.setItem(key, value);
-	return value;
-}
-
-export function setGetLsBoolean(key: string, value: boolean): boolean {
-	if (typeof window === 'undefined') {
-		return value;
-	}
-	const v = localStorage.getItem(key);
-	if (v) {
-		return v === 'true';
-	}
-	localStorage.setItem(key, value.toString());
-	return value;
-}
-
 export function setGetLsNumber(key: string, value: number): number {
 	if (typeof window === 'undefined') {
 		return value;
@@ -781,13 +747,6 @@ export function setGetLsNumber(key: string, value: number): number {
 	}
 	localStorage.setItem(key, value.toString());
 	return value;
-}
-
-export function getMbps(job: Job | undefined | null, codec: string): number {
-	if (!job?.Files?.[`${codec}.mp4`] || !job?.Duration) {
-		return 0;
-	}
-	return job.Files[`${codec}.mp4`] / 1024 / 1024 / job.Duration / 0.125;
 }
 
 export function formatMbps(job: Job | undefined | null, codec: string): string {
@@ -965,27 +924,6 @@ export function preprocessJob(job: Job) {
 	return job;
 }
 
-export function preprocessJobs(jobs: Job[]) {
-	const filtered = jobs.filter((job) => job.State === 'complete');
-	return filtered.map(preprocessJob).sort((a, b) => a.Input.localeCompare(b.Input));
-}
-
-export function preprocessLibraryJobs(jobs: LibraryJob[]) {
-	const filtered = jobs.filter((job) => !job.State || job.State === 'complete');
-	return filtered
-		.map((job) => {
-			const i = job.Input.replace(/\.[^/.]+$/, '');
-			const ks = replaceKeywordsAtEnd(i, '');
-			job.Input = ks.result;
-			job.ExtractedQuality = `${ks.replacedWord || ''}`;
-			job.EncodedCodecs = [...new Set(job.EncodedCodecs ?? [])];
-			job.Files = job.Files ?? {};
-			job.Title = extractTitle(job as Job);
-			return job;
-		})
-		.sort((a, b) => a.Input.localeCompare(b.Input));
-}
-
 export interface Title {
 	titleId: string;
 	title: string;
@@ -1000,15 +938,6 @@ export interface TitleEpisode {
 	se: string;
 	season: number;
 	episode: number;
-}
-
-export interface Show extends Title {
-	rep?: TitleEpisode;
-	episodes?: TitleEpisode[];
-}
-
-export interface Titles {
-	[key: string]: Show;
 }
 
 export function extractTitle(job: Job): Title {
@@ -1037,57 +966,6 @@ export function extractTitle(job: Job): Title {
 		modTime: job.JobModTime,
 		episode: se && seTitle ? { title: seTitle, id: job.Id, se, season, episode } : undefined
 	};
-}
-
-export function getTitleComponentsByJobs(jobs: LibraryJob[]): Titles {
-	const jobsById = new Map(jobs.map((job) => [job.Id, job]));
-	const _titles = jobs.reduce((acc: Titles, job) => {
-		if (!acc[job.Title.titleId]) {
-			acc[job.Title.titleId] = {
-				title: job.Title.title,
-				id: job.Title.id,
-				titleId: job.Title.titleId,
-				modTime: job.Title.modTime
-			};
-		}
-		if (job.Title.episode) {
-			if (!acc[job.Title.titleId].episodes) {
-				acc[job.Title.titleId].episodes = [];
-			}
-			acc[job.Title.titleId].episodes?.push(job.Title.episode);
-			acc[job.Title.titleId].modTime = Math.max(acc[job.Title.titleId].modTime, job.JobModTime);
-		}
-		return acc;
-	}, {});
-
-	return Object.keys(_titles)
-		.sort((a, b) => {
-			if (!_titles[a].episodes && _titles[b].episodes) {
-				return 1;
-			}
-			if (_titles[a].episodes && !_titles[b].episodes) {
-				return -1;
-			}
-			return _titles[a].modTime > _titles[b].modTime ? -1 : 1;
-		})
-		.reduce((acc: Titles, key) => {
-			const title = _titles[key];
-			if (title.episodes) {
-				title.episodes
-					.sort((a, b) => (a.season === b.season ? a.episode - b.episode : a.season - b.season))
-					.reverse();
-				for (let i = 0; i < title.episodes.length; i++) {
-					const episode = title.episodes[i];
-					const job = jobsById.get(episode.id);
-					if (job && job.Files['poster.jpg']) {
-						title.rep = episode;
-						break;
-					}
-				}
-			}
-			acc[key] = title;
-			return acc;
-		}, {});
 }
 
 function isIOS() {
@@ -1145,37 +1023,6 @@ export function compareSubtitleStreams(
 	return a.Language.localeCompare(b.Language);
 }
 
-export function sortTracks(job: Job) {
-	const streams = job.Streams;
-	const files = job.Files;
-	const getLanguageRank = (stream: Stream) => {
-		const mappedLanguage = languageSrcMap[stream.Language] || stream.Language;
-		const baseLanguage =
-			mappedLanguage.split('-')[0]?.toLowerCase() || mappedLanguage.toLowerCase();
-		const index = subtitleLanguagePriority.indexOf(baseLanguage);
-		return index === -1 ? subtitleLanguagePriority.length : index;
-	};
-	const compare = (a: Stream, b: Stream) => {
-		if (a.CodecType === 'subtitle' && b.CodecType === 'subtitle') {
-			return compareSubtitleStreams(a, b, files);
-		}
-		const typeCompare = getSubtitleTypeRank(a) - getSubtitleTypeRank(b);
-		if (typeCompare !== 0) {
-			return typeCompare;
-		}
-		const languageCompare = getLanguageRank(a) - getLanguageRank(b);
-		if (languageCompare !== 0) {
-			return languageCompare;
-		}
-		if (a.Language === b.Language) {
-			return (files[b.Location] ?? 0) - (files[a.Location] ?? 0);
-		}
-		return a.Language.localeCompare(b.Language);
-	};
-	streams.sort(compare);
-	return streams;
-}
-
 export interface ServerData {
 	jobs: Job[];
 	job: Job;
@@ -1187,7 +1034,6 @@ export interface ServerData {
 	displayTitle: string;
 	plot: string;
 	dominantColor: string;
-	oembedJson: string;
 	staticBaseUrl: string;
 	backendBaseUrl: string;
 	roomId: string;
@@ -1196,16 +1042,4 @@ export interface ServerData {
 export function getRealName(player: Pick<Player, 'name' | 'discordUser'> | ChatAuthor | undefined) {
 	const discordName = getName(player?.discordUser);
 	return discordName ? discordName : player?.name || 'Unknown';
-}
-
-export function getLeftAndJoined(oldPlayers: Player[], newPlayers: Player[], ignoreId: string) {
-	const left = oldPlayers.filter(
-		(oldPlayer) =>
-			oldPlayer.id !== ignoreId && !newPlayers.find((candidate) => candidate.id === oldPlayer.id)
-	);
-	const joined = newPlayers.filter(
-		(player) =>
-			player.id !== ignoreId && !oldPlayers.find((candidate) => candidate.id === player.id)
-	);
-	return { left, joined };
 }

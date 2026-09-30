@@ -2021,10 +2021,6 @@ function canUseWebKitPictureInPicture(video: SparklePictureInPictureVideoElement
 	}
 }
 
-function canUseNativePictureInPicture(video: SparklePictureInPictureVideoElement | null) {
-	return canUseStandardPictureInPicture(video) || canUseWebKitPictureInPicture(video);
-}
-
 function prepareVideoElementForBackgroundPlayback(
 	video: SparklePictureInPictureVideoElement | null
 ) {
@@ -3572,21 +3568,6 @@ function getSafePlayerCanPlay(player: MediaPlayerInstance | null) {
 	}
 	try {
 		return player.state.canPlay === true;
-	} catch {
-		return false;
-	}
-}
-
-function getSafePlayerCanPictureInPicture(player: MediaPlayerInstance | null) {
-	const videoElement = getPlayerVideoElement(player) as SparklePictureInPictureVideoElement | null;
-	if (canUseNativePictureInPicture(videoElement)) {
-		return true;
-	}
-	if (!player) {
-		return false;
-	}
-	try {
-		return player.state.canPictureInPicture === true;
 	} catch {
 		return false;
 	}
@@ -7276,7 +7257,6 @@ export function Player({
 				onCommand={handleChatCommand}
 				chatFocused={chatFocused}
 				showPlayerCount
-				controlsShowing={null}
 				className="chat-pc"
 				inputId={`chat-pc-input-${suffix}`}
 				formId={`chat-pc-form-${suffix}`}
@@ -7504,7 +7484,6 @@ export function Player({
 						send={send}
 						onCommand={handleChatCommand}
 						chatFocused={chatFocused}
-						controlsShowing={null}
 						className="w-full min-w-0"
 						inputId="chat-page-input"
 						formId="chat-page-form"

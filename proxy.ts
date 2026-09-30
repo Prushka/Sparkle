@@ -26,15 +26,6 @@ function matchesPathBase(pathname: string, base: string) {
 	return pathname === base || pathname.startsWith(`${base}/`);
 }
 
-function shouldServeFrontendShell(pathname: string) {
-	const segments = pathname.split('/').filter(Boolean);
-	const reservedRoots = new Set(['_next', 'api', 'favicon', 'json']);
-	if (!segments.length || reservedRoots.has(segments[0])) {
-		return false;
-	}
-	return segments[0] === 'rooms' && segments[1] === 'new' && segments.length === 2;
-}
-
 function joinUrl(base: string, path: string) {
 	return `${trimTrailingSlash(base)}/${path.replace(/^\/+/, '')}`;
 }
@@ -60,10 +51,6 @@ export function proxy(request: NextRequest) {
 
 	if (destination) {
 		return NextResponse.rewrite(destination);
-	}
-
-	if (shouldServeFrontendShell(request.nextUrl.pathname)) {
-		return NextResponse.rewrite(new URL('/', request.url));
 	}
 
 	return NextResponse.next();

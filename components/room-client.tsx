@@ -27,12 +27,6 @@ import {
 type RoomRoute =
 	{ roomId: string; view: 'library' } | { roomId: string; view: 'media'; mediaId: string };
 
-type SearchValues = {
-	legacyRoomId?: string;
-	legacyMediaId?: string;
-	redirectQuery?: string;
-};
-
 const libraryReturnHistoryStateKey = '__sparkleLibraryReturn';
 
 type SparkleHistoryState = {
@@ -209,19 +203,8 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 	}, [state, auth.ready, auth.canAccessRaw, auth.revision, requirePlexAccess]);
 	const previousRouteRef = useRef<RoomRoute | null>(null);
 	const previousRouteForLoadRef = useRef<RoomRoute | null>(null);
-	const searchValues = useMemo<SearchValues>(
-		() => ({
-			legacyRoomId:
-				searchParams.get('room')?.trim() || searchParams.get('channel_id')?.trim() || undefined,
-			legacyMediaId: searchParams.get('mediaId')?.trim() || undefined,
-			redirectQuery: getRedirectQuery(searchParams)
-		}),
-		[searchParams]
-	);
-	const redirectSuffix = useMemo(
-		() => (searchValues.redirectQuery ? `?${searchValues.redirectQuery}` : ''),
-		[searchValues.redirectQuery]
-	);
+	const redirectQuery = useMemo(() => getRedirectQuery(searchParams), [searchParams]);
+	const redirectSuffix = useMemo(() => (redirectQuery ? `?${redirectQuery}` : ''), [redirectQuery]);
 	const redirectSuffixRef = useLatestRef(redirectSuffix);
 
 	useLayoutEffect(() => {
@@ -248,29 +231,8 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 			if (loadGenerationRef.current !== generation) {
 				return;
 			}
-			let effectiveRoomId = route.roomId;
-			let routeMediaId = route.view === 'media' ? route.mediaId : searchValues.legacyMediaId;
-
-			if (searchValues.legacyRoomId && searchValues.legacyRoomId !== route.roomId) {
-				const legacy = await fetchRoomRecord(config.backendBaseUrl, searchValues.legacyRoomId);
-				if (loadGenerationRef.current !== generation) {
-					return;
-				}
-				if (!legacy) {
-					await createRoomRecord(
-						config.backendBaseUrl,
-						routeMediaId || route.roomId,
-						searchValues.legacyRoomId
-					);
-					if (loadGenerationRef.current !== generation) {
-						return;
-					}
-				}
-				effectiveRoomId = searchValues.legacyRoomId;
-				routeMediaId = routeMediaId || route.roomId;
-				router.replace(buildMediaPath(effectiveRoomId, routeMediaId, redirectSuffix));
-				return;
-			}
+			const effectiveRoomId = route.roomId;
+			const routeMediaId = route.view === 'media' ? route.mediaId : undefined;
 
 			let room = await fetchRoomRecord(config.backendBaseUrl, effectiveRoomId);
 			if (loadGenerationRef.current !== generation) {
@@ -317,11 +279,6 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 				return;
 			}
 
-			if (route.view !== 'media') {
-				router.replace(buildMediaPath(effectiveRoomId, routeMediaId, redirectSuffix));
-				return;
-			}
-
 			if (room.mediaId && room.mediaId !== routeMediaId) {
 				router.replace(buildMediaPath(effectiveRoomId, room.mediaId, redirectSuffix));
 				return;
@@ -351,7 +308,7 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 			lastMediaKeyRef.current = mediaKey;
 			setState({ status: 'player', data });
 		},
-		[redirectSuffixRef, route, router, searchValues.legacyMediaId, searchValues.legacyRoomId]
+		[redirectSuffixRef, route, router]
 	);
 
 	useEffect(() => {

@@ -132,13 +132,12 @@ export function DiscordBridge() {
 
 	useEffect(() => {
 		const params = new URLSearchParams(searchParamsString);
-		const room = params.get('room') || params.get('channel_id');
+		const room = params.get('channel_id');
 		if (
 			pathname &&
 			pathname !== '/' &&
 			!pathname.startsWith('/api') &&
-			!pathname.startsWith('/json') &&
-			!pathname.startsWith('/rooms')
+			!pathname.startsWith('/json')
 		) {
 			latestRoomRef.current = decodeURIComponent(pathname.replace(/^\/+/, '').split('/')[0] || '');
 		} else if (room) {
