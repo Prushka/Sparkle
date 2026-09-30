@@ -201,6 +201,15 @@ import { RemoteVoiceAudio } from '@/components/player/RemoteVoiceAudio';
 import { CottageGamePlaceholder } from '@/components/player/CottageGamePlaceholder';
 import { RoomNavigationInput } from '@/components/room-navigation-input';
 import { joinBackendPath, updateRoomRecord } from '@/lib/player/data';
+import { cn } from '@/lib/utils';
+import {
+	avatarLimitError,
+	boundedUsername,
+	fetchProfileLimits,
+	usernameLength,
+	usernameLimitError,
+	type ProfileLimits
+} from '@/lib/profile-limits';
 import type { ParsedCaptionsResult, VTTCue as MediaCaptionCue } from 'media-captions';
 
 type VideoSource = {
@@ -3729,6 +3738,10 @@ export function Player({
 	const [audioRemountKey, setAudioRemountKey] = useState(0);
 	const [name, setName] = useState('');
 	const [profileNameDraft, setProfileNameDraft] = useState('');
+	const [profileLimits, setProfileLimits] = useState<ProfileLimits | null>(null);
+	const [profileLimitsError, setProfileLimitsError] = useState('');
+	const [profileLimitsRetry, setProfileLimitsRetry] = useState(0);
+	const [avatarError, setAvatarError] = useState('');
 	const [localProfileId, setProfileId] = useState('');
 	const profileId =
 		plexAuth.authenticated && plexAuth.profileId ? plexAuth.profileId : localProfileId;
@@ -3840,7 +3853,32 @@ export function Player({
 		? plexAuth.name || 'Plex user'
 		: discordUser
 			? getName(discordUser) || ''
-			: name;
+			: profileLimits
+				? boundedUsername(name, profileLimits.maxUsernameLength)
+				: '';
+	const profileNameError =
+		profileLimits &&
+		!discordUser &&
+		usernameLength(profileNameDraft) > profileLimits.maxUsernameLength
+			? usernameLimitError(profileLimits.maxUsernameLength)
+			: '';
+	useEffect(() => {
+		const controller = new AbortController();
+		void fetchProfileLimits(backendBaseUrl, controller.signal)
+			.then((limits) => {
+				setProfileLimits(limits);
+				setProfileLimitsError('');
+			})
+			.catch((error: unknown) => {
+				if (!controller.signal.aborted)
+					setProfileLimitsError(
+						error instanceof Error
+							? error.message
+							: 'Unable to load profile limits. Please try again.'
+					);
+			});
+		return () => controller.abort();
+	}, [backendBaseUrl, profileLimitsRetry]);
 	const voiceSupported = !isDiscordActivityFrame && !discordUser;
 	const socketCommunicating = socketConnected && tickedSecsAgo >= 0 && tickedSecsAgo < 5;
 	const currentChessPlayer = useMemo<ChessPlayerSyncState | null>(() => {
@@ -4573,7 +4611,11 @@ export function Player({
 	);
 
 	const sendProfile = useCallback(() => {
-		if (!profileId || socketRef.current?.readyState !== WebSocket.OPEN) {
+		if (
+			!profileId ||
+			(!plexAuth.authenticated && !discordUser && !profileLimits) ||
+			socketRef.current?.readyState !== WebSocket.OPEN
+		) {
 			return false;
 		}
 		send({
@@ -4583,7 +4625,7 @@ export function Player({
 			discordUser
 		});
 		return true;
-	}, [discordUser, displayName, profileId, send]);
+	}, [discordUser, displayName, profileId, profileLimits, plexAuth.authenticated, send]);
 
 	const sendSettings = useCallback(
 		(options: { includeAudio?: boolean } = {}) => {
@@ -6116,6 +6158,9 @@ export function Player({
 					setControlsToDisplay((prev) => appendControlMessages(prev, state));
 				};
 				switch (state.type) {
+					case SyncTypes.ProfileError:
+						addSystemMessage(state.error || 'Profile update was rejected.');
+						break;
 					case SyncTypes.PfpSync:
 						if (state.firedBy?.id) {
 							updatePfp(state.firedBy.profileId || state.firedBy.id, state.timestamp);
@@ -6340,7 +6385,8 @@ export function Player({
 			sendProfileRef,
 			sendSettingsRef,
 			updateLastTickedRef,
-			refreshRoomMediaRef
+			refreshRoomMediaRef,
+			addSystemMessage
 		]
 	);
 
@@ -6971,25 +7017,39 @@ export function Player({
 		if (!pfp) {
 			return;
 		}
+		setAvatarError('');
+		if (!profileLimits) {
+			setAvatarError('Profile limits are not ready. Please try again.');
+			input.value = '';
+			return;
+		}
 		if (!profileId) {
 			addSystemMessage('Avatar upload is not ready yet');
 			input.value = '';
 			return;
 		}
-		if (pfp.size > 12000000) {
-			addSystemMessage('Avatar file is too large. Max size is 10MB');
+		if (pfp.size > profileLimits.maxPfpBytes) {
+			const error = avatarLimitError(profileLimits.maxPfpBytes);
+			setAvatarError(error);
+			addSystemMessage(error);
 			input.value = '';
 			return;
 		}
 		const formData = new FormData();
 		formData.append('pfp', pfp);
 		try {
-			const response = await fetch(joinBackendPath(backendBaseUrl, `/pfp/${profileId}`), {
+			const response = await backendFetch(joinBackendPath(backendBaseUrl, `/pfp/${profileId}`), {
 				method: 'POST',
 				body: formData
 			});
 			if (!response.ok) {
-				throw new Error(`Avatar upload failed: ${response.status}`);
+				const reason = (await response.text()).trim();
+				throw new Error(
+					reason ||
+						(response.status === 413
+							? avatarLimitError(profileLimits.maxPfpBytes)
+							: 'Avatar upload failed. Please try another image.')
+				);
 			}
 			let avatarRevision: number | undefined;
 			if (response.headers.get('content-type')?.includes('application/json')) {
@@ -7004,7 +7064,10 @@ export function Player({
 			addSystemMessage('Avatar updated');
 		} catch (error) {
 			console.error(error);
-			addSystemMessage('Avatar upload failed. Please try another image');
+			const message =
+				error instanceof Error ? error.message : 'Avatar upload failed. Please try another image.';
+			setAvatarError(message);
+			addSystemMessage(message);
 		} finally {
 			input.value = '';
 		}
@@ -7021,6 +7084,14 @@ export function Player({
 			return;
 		}
 		const nextName = nextDraftName.trim();
+		if (!profileLimits) {
+			addSystemMessage('Profile limits are not ready. Your name was not changed.');
+			return;
+		}
+		if (usernameLength(nextName) > profileLimits.maxUsernameLength) {
+			addSystemMessage(usernameLimitError(profileLimits.maxUsernameLength));
+			return;
+		}
 		setName(nextName);
 		send({
 			type: SyncTypes.ProfileSync,
@@ -7040,7 +7111,8 @@ export function Player({
 		profileSettingsOpenRef.current = open;
 		if (open) {
 			if (!wasOpen) {
-				setProfileNameDraft(displayName);
+				setProfileNameDraft(discordUser ? displayName : name);
+				setAvatarError('');
 			}
 			return;
 		}
@@ -7671,25 +7743,65 @@ export function Player({
 											/>
 											<input
 												accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.avif"
-												disabled={Boolean(discordUser)}
+												disabled={Boolean(discordUser) || !profileLimits}
 												onChange={handleAvatarChange}
 												type="file"
 											/>
 										</label>
 										<div className="min-w-0 flex-1">
-											<label className="mb-1 block text-xs font-bold text-muted-foreground">
+											<label
+												htmlFor="profile-username"
+												className="mb-1 block text-xs font-bold text-muted-foreground"
+											>
 												Username
 											</label>
 											<Input
-												disabled={Boolean(discordUser)}
+												id="profile-username"
+												disabled={Boolean(discordUser) || !profileLimits}
+												aria-invalid={Boolean(profileNameError)}
+												aria-describedby="profile-username-limit"
 												value={discordUser ? displayName : profileNameDraft}
 												onChange={(event) => setProfileNameDraft(event.target.value)}
 												type="text"
 												className="h-10 min-w-0 focus-visible:ring-transparent"
 												placeholder="Name"
 											/>
+											<p
+												id="profile-username-limit"
+												role={profileNameError ? 'alert' : undefined}
+												className={cn(
+													'mt-1 text-xs text-muted-foreground',
+													profileNameError && 'text-destructive'
+												)}
+											>
+												{profileNameError ||
+													(profileLimits && !discordUser
+														? `${usernameLength(profileNameDraft)}/${profileLimits.maxUsernameLength} characters`
+														: '')}
+											</p>
 										</div>
 									</div>
+									{avatarError ? (
+										<p role="alert" className="text-sm text-destructive">
+											{avatarError}
+										</p>
+									) : null}
+									{profileLimitsError ? (
+										<div className="space-y-2">
+											<p role="alert" className="text-sm text-destructive">
+												{profileLimitsError}
+											</p>
+											<Button
+												type="button"
+												variant="outline"
+												onClick={() => setProfileLimitsRetry((value) => value + 1)}
+											>
+												Retry
+											</Button>
+										</div>
+									) : !profileLimits ? (
+										<p className="text-sm text-muted-foreground">Loading profile limits...</p>
+									) : null}
 								</Dialog.Content>
 							</Dialog.Root>
 						);

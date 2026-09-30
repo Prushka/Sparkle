@@ -59,9 +59,9 @@ func New(opts Options) (*Client, error) {
 	if opts.Token == "" {
 		return nil, errors.New("PLEX_TOKEN is required")
 	}
-	var mappings []Mapping
-	if json.Unmarshal([]byte(opts.Mappings), &mappings) != nil || len(mappings) == 0 {
-		return nil, errors.New("PLEX_PATH_MAPPINGS must be a nonempty JSON array; use forward slashes in Windows paths")
+	mappings, err := parseMappings(opts.Mappings)
+	if err != nil {
+		return nil, err
 	}
 	for i := range mappings {
 		m := &mappings[i]

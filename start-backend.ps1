@@ -14,7 +14,7 @@ $envFile = if ([string]::IsNullOrWhiteSpace($env:ENV_FILE)) {
 }
 
 if (Test-Path -LiteralPath $envFile -PathType Leaf) {
-    foreach ($line in Get-Content -LiteralPath $envFile) {
+    foreach ($line in Get-Content -LiteralPath $envFile -Encoding UTF8) {
         $trimmedLine = $line.Trim()
         if ($trimmedLine.Length -eq 0 -or $trimmedLine.StartsWith('#')) {
             continue
@@ -58,7 +58,10 @@ if ([string]::IsNullOrWhiteSpace($env:JOBS_CACHE_TTL)) {
     $env:JOBS_CACHE_TTL = '15m'
 }
 if ([string]::IsNullOrWhiteSpace($env:MAX_PFP_BYTES)) {
-    $env:MAX_PFP_BYTES = '12000000'
+	$env:MAX_PFP_BYTES = '12000000'
+}
+if ([string]::IsNullOrWhiteSpace($env:MAX_USERNAME_LENGTH)) {
+    $env:MAX_USERNAME_LENGTH = '32'
 }
 
 if (-not [System.IO.Path]::IsPathRooted($env:OUTPUT)) {

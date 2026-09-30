@@ -15,6 +15,9 @@ test('room controls and current media fit desktop and mobile after the component
 		route.fulfill({ json: { enabled: true, authenticated: false, canAccessRaw: false } })
 	);
 	await page.routeWebSocket('**/be/sync/**', () => {});
+	await page.route('**/be/profile/limits', (route) =>
+		route.fulfill({ json: { maxPfpBytes: 12_000_000, maxUsernameLength: 32 } })
+	);
 	await page.route('**/be/rooms/layout-room', (route) =>
 		route.fulfill({ json: { roomId: 'layout-room', mediaId: 'layout-fixture' } })
 	);

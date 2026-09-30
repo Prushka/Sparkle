@@ -101,7 +101,10 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   scans, Plex transcoding, media modifications, or whole-original-file caching.
   Server decoding is confined to the optional encoded mode; Compatible playback remains client-side.
 - Resolve the longest matching mapping prefix and use root-confined file access. Retain
-  traversal, symlink/junction, alternate-stream, and allowed-section protections. Keep
+  traversal, symlink/junction, alternate-stream, and allowed-section protections.
+  Windows startup reads `.env` as UTF-8, including files without a BOM. Path mappings
+  accept forward slashes, literal absolute Windows backslashes and JSON-escaped
+  backslashes; the first separator selects the backslash style for each path. Keep
   `PFP_DIR`, `MEDIA_CACHE_DIR`, and `PLEX_AUTH_SESSION_DIR` outside mapped media roots;
   session storage must also stay outside `OUTPUT` and `PFP_DIR`. Legacy avatars remain readable.
 - Keep Plex account/configured owner tokens and local filesystem paths out of browser
@@ -235,8 +238,16 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   Read [HDR requirements and limits](docs/plex-raw-media.md#playback-and-hdr) before changing
   capability detection or the qualification registry.
 - Keep room participation independent of decoding. Preserve chat, profiles, notifications,
-  games/tabs, presence, and existing voice behavior on unsupported clients. Do not introduce
-  global COOP/COEP isolation headers that break Discord Activities.
+  games/tabs, presence, and existing voice behavior on unsupported clients.
+  Guest profile limits come from the backend's public, no-store `GET /profile/limits`:
+  enforce `MAX_PFP_BYTES` and `MAX_USERNAME_LENGTH` in both frontend and backend.
+  Keep Next's upload body buffer aligned with `MAX_PFP_BYTES` plus multipart overhead.
+  Count guest usernames as Unicode code points after trimming whitespace; reject
+  oversized edits without replacing the profile. Preserve Plex and Discord names.
+  Log connection roles and meaningful sync events with display names and requested
+  media titles; keep logging bounded and never log chat or voice signaling payloads.
+  Media watcher identification must not add room presence or change playback state.
+  Do not introduce global COOP/COEP isolation headers that break Discord Activities.
   Voice uses room-authorized WebSocket signaling and WebRTC audio. Keep negotiation
   serialized per peer, deterministic offer roles, session checks, bounded ICE retries,
   and established connections across mute toggles. Cancel pending microphone requests

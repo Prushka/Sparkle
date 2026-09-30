@@ -17,19 +17,27 @@ $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
 $listener.Start()
 $port = $listener.LocalEndpoint.Port
 $listener.Stop()
-@"
+$UnicodeMedia = -join (0x54d4, 0x54e9, 0x54d4, 0x54e9, 0x5e93 | ForEach-Object { [char]$_ })
+$MediaRoot = Join-Path $TestRoot $UnicodeMedia
+New-Item -ItemType Directory -Path $MediaRoot | Out-Null
+# Use only a disposable local media root and dummy Plex configuration. Startup
+# validates the mapping without contacting Plex for anonymous catalog requests.
+$FixtureEnvironment = @"
 ADDR=127.0.0.1:$port
 OUTPUT=./output
 PFP_DIR=./profiles
 MEDIA_CACHE_DIR=./media-cache
 PLEX_AUTH_SESSION_DIR=./sessions
-PLEX_URL=
-PLEX_TOKEN=
-PLEX_PATH_MAPPINGS=
+MAX_PFP_BYTES=64
+MAX_USERNAME_LENGTH=4
+PLEX_URL=http://127.0.0.1:$port/fixture-plex
+PLEX_TOKEN=fixture-secret-not-for-logs
+PLEX_PATH_MAPPINGS='[{"plex":"/fixture/media","local":"$MediaRoot"}]'
 PLEX_LIBRARY_IDS=
 ENCODE_ENABLED=false
 GO=missing-go-must-not-be-required
-"@ | Set-Content -LiteralPath (Join-Path $TestRoot '.env') -Encoding UTF8
+"@
+[IO.File]::WriteAllText((Join-Path $TestRoot '.env'), $FixtureEnvironment, [Text.UTF8Encoding]::new($false))
 
 Add-Type @'
 using System;
@@ -68,6 +76,8 @@ $trayProcess = $null
 try {
     $trayProcess = Invoke-App
     Wait-Until { Test-Api } 'compiled backend HTTP readiness'
+    $limits = Invoke-RestMethod -Uri "http://127.0.0.1:$port/profile/limits"
+    if ($limits.maxPfpBytes -ne 64 -or $limits.maxUsernameLength -ne 4) { throw 'Compiled backend did not expose the configured profile limits.' }
     $awareness = 0
     if ([SparkleLauncherTestWindow]::GetProcessDpiAwareness($trayProcess.Handle, [ref]$awareness) -ne 0 -or $awareness -ne 1) { throw 'Installed tray entry point is not system DPI aware.' }
     $api = @(Get-FixtureApi)
@@ -102,6 +112,7 @@ try {
     $archives = @(Get-ChildItem -LiteralPath $logDirectory -Filter 'sparkle-*.log')
     if ($archives.Count -ne 1) { throw 'Graceful quit did not archive exactly one tray session.' }
     $log = Get-Content -LiteralPath $archives[0].FullName -Raw
+    if ($log.Contains('fixture-secret-not-for-logs') -or $log.Contains($MediaRoot)) { throw 'Launcher leaked private configuration.' }
     if ($log -notmatch 'sparkle backend stopped' -or $log -notmatch 'exit code 0') { throw 'Backend did not exit gracefully.' }
     if ($log -notmatch 'Sparkle Backend tray exited at ') { throw 'Exit timestamp missing from archive.' }
 
@@ -120,7 +131,7 @@ try {
     $quit = Invoke-App '--quit'
     if (-not $quit.WaitForExit(5000) -or -not $trayProcess.WaitForExit(20000)) { throw 'Final fixture shutdown timed out.' }
     Wait-Until { @(Get-FixtureApi).Count -eq 0 } 'final compiled backend cleanup'
-    Write-Host 'PASS: compiled API; staged backend-only build with saved Go path; system DPI awareness; hidden login; single-instance logs activation; close hides logs; graceful quit archive; forced-exit process cleanup and log recovery.'
+    Write-Host 'PASS: compiled API with BOM-less UTF-8 and literal-backslash media mapping; staged backend-only build with saved Go path; system DPI awareness; hidden login; single-instance logs activation; close hides logs; graceful quit archive; forced-exit process cleanup and log recovery.'
 } finally {
     if ($trayProcess -and -not $trayProcess.HasExited) {
         $quit = Invoke-App '--quit'

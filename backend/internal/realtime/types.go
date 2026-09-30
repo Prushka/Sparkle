@@ -9,6 +9,7 @@ const (
 	NewPlayer         = "new player"
 	PlaybackSync      = "playback"
 	ProfileSync       = "profile"
+	ProfileError      = "profileError"
 	TimeSync          = "time"
 	PauseSync         = "pause"
 	ChatSync          = "chat"
@@ -50,14 +51,16 @@ const (
 )
 
 type Options struct {
-	VoiceICE       *VoiceICE
-	AuthorizeMedia func(http.ResponseWriter, *http.Request, string) bool
-	CanAccessMedia func(context.Context, string) bool
-	CheckOrigin    func(*http.Request) bool
-	AccountProfile func(context.Context) (id, name string, ok bool)
-	PFPDir         string
-	OutputDir      string
-	MaxUploadBytes int64
+	VoiceICE          *VoiceICE
+	AuthorizeMedia    func(http.ResponseWriter, *http.Request, string) bool
+	CanAccessMedia    func(context.Context, string) bool
+	CheckOrigin       func(*http.Request) bool
+	AccountProfile    func(context.Context) (id, name string, ok bool)
+	PFPDir            string
+	OutputDir         string
+	MaxUploadBytes    int64
+	MaxUsernameLength int
+	MediaTitle        func(string) string
 }
 
 type DiscordUser struct {
@@ -308,6 +311,7 @@ type ClientPayload struct {
 }
 
 type SendPayload struct {
+	Error          string           `json:"error,omitempty"`
 	MediaID        string           `json:"mediaId,omitempty"`
 	MediaUpdated   int64            `json:"mediaUpdated,omitempty"`
 	Type           string           `json:"type"`

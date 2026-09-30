@@ -15,6 +15,7 @@ export ADDR="${ADDR:-:1323}"
 export OUTPUT="${OUTPUT:-"$ROOT_DIR/backend/output"}"
 export JOBS_CACHE_TTL="${JOBS_CACHE_TTL:-15m}"
 export MAX_PFP_BYTES="${MAX_PFP_BYTES:-12000000}"
+export MAX_USERNAME_LENGTH="${MAX_USERNAME_LENGTH:-32}"
 
 case "$OUTPUT" in
 	/*) ;;

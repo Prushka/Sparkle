@@ -59,8 +59,9 @@ namespace Sparkle.Backend.Windows
                     Check(configuration.Contains("127.0.0.1:18991"), "root .env was not loaded");
                     foreach (string directory in new[] { "fixture output", "fixture profiles", "fixture cache", "fixture sessions" })
                         Check(configuration.Contains(Path.Combine(args[0], directory)), "relative paths were not resolved against repository root");
-                    Check(configuration.Contains("\"local\":\"X:/test media\""), "quoted mapping JSON was damaged");
-                    Check(!currentLog.Contains("fixture-secret-not-for-logs") && !currentLog.Contains("X:/test media"), "launcher leaked private configuration");
+                    const string mappings = "[{\"plex\":\"/source\",\"local\":\"X:\\test media\"},{\"plex\":\"/source/unicode\",\"local\":\"Y:\\\u54d4\u54e9\u54d4\u54e9\u5e93\"}]";
+                    Check(configuration.Contains(mappings), "BOM-less UTF-8 mapping paths or literal backslashes were damaged");
+                    Check(!currentLog.Contains("fixture-secret-not-for-logs") && !currentLog.Contains("X:\\test media") && !currentLog.Contains("Y:\\"), "launcher leaked private configuration");
                     Check(!app.LogWindow.Visible, "startup must be tray-only");
                     Wait(delegate { return File.Exists(Path.Combine(args[0], "child-console.txt")); }, "child startup");
                     Check(File.ReadAllText(Path.Combine(args[0], "backend-console.txt")) == "0", "backend unexpectedly has a console");

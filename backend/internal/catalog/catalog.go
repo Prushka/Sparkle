@@ -54,6 +54,8 @@ type Service struct {
 	matchMu          sync.Mutex
 	matches          map[matchIdentity]matchEntry
 	canAccessLibrary func(context.Context, string) bool
+	logTitleMu       sync.Mutex
+	logTitles        map[string]logTitleEntry
 }
 
 func New(j *jobs.Store, p *plex.Client, cacheDir string, canAccessLibrary func(context.Context, string) bool) *Service {
@@ -61,7 +63,7 @@ func New(j *jobs.Store, p *plex.Client, cacheDir string, canAccessLibrary func(c
 	if _, err := rand.Read(secret); err != nil {
 		panic(err)
 	}
-	return &Service{jobs: j, plex: p, secret: secret, artwork: newArtCache(cacheDir), matches: map[matchIdentity]matchEntry{}, canAccessLibrary: canAccessLibrary}
+	return &Service{jobs: j, plex: p, secret: secret, artwork: newArtCache(cacheDir), matches: map[matchIdentity]matchEntry{}, canAccessLibrary: canAccessLibrary, logTitles: map[string]logTitleEntry{}}
 }
 
 func (s *Service) permitsLibrary(ctx context.Context, id string) bool {

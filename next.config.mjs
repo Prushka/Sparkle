@@ -45,16 +45,26 @@ const nextConfig = {
 	allowedDevOrigins: ['127.0.0.1', '192.168.1.*', 'a.lyu.sh', '1251822920242823270.discordsays.com']
 };
 
-const configureNext = (phase) => ({
-	...nextConfig,
-	async rewrites() {
-		return {
-			beforeFiles:
-				phase === PHASE_DEVELOPMENT_SERVER
-					? []
-					: [{ source: '/sw.js', destination: '/_sparkle/sw.js' }]
-		};
-	}
-});
+const configureNext = (phase) => {
+	const configuredPfpBytes = Number(process.env.MAX_PFP_BYTES || 12_000_000);
+	const maxPfpBytes =
+		Number.isSafeInteger(configuredPfpBytes) && configuredPfpBytes > 0
+			? configuredPfpBytes
+			: 12_000_000;
+	return {
+		...nextConfig,
+		// Proxy clones request bodies. Include the backend's multipart allowance so
+		// its avatar limit, rather than Next's smaller default, controls uploads.
+		experimental: { proxyClientMaxBodySize: maxPfpBytes + 1024 * 1024 },
+		async rewrites() {
+			return {
+				beforeFiles:
+					phase === PHASE_DEVELOPMENT_SERVER
+						? []
+						: [{ source: '/sw.js', destination: '/_sparkle/sw.js' }]
+			};
+		}
+	};
+};
 
 export default configureNext;

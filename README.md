@@ -239,6 +239,7 @@ a username or password are ignored.
 | `JOBS_CACHE_TTL`            | Processed catalog refresh interval; `15m` in the example/startup scripts                                                    |
 | `PFP_DIR`                   | Writable directory for new avatars; `./data/pfp`                                                                            |
 | `MAX_PFP_BYTES`             | Avatar upload limit; `12000000` bytes                                                                                       |
+| `MAX_USERNAME_LENGTH`       | Guest username limit; `32` Unicode code points after trimming whitespace, configurable from 1–4096                          |
 | `MEDIA_CACHE_DIR`           | Writable artwork and optional encoded-segment cache; `./cache/media`                                                        |
 | `VOICE_TURN_URLS`           | Optional comma-separated public `turn:`/`turns:` URLs; see [voice relay setup](docs/voice-chat.md#deploy-coturn)            |
 | `VOICE_TURN_SECRET`         | Server-only coturn shared secret; required together with `VOICE_TURN_URLS`                                                  |
@@ -264,10 +265,22 @@ PLEX_PATH_MAPPINGS='[{"plex":"/data/Managed-Videos","local":"O:/Managed-Videos"}
 ```
 
 The local directory must already exist and be readable by the backend account.
-Use forward slashes in Windows JSON; services may need an accessible UNC path
-instead of an interactive mapped drive. Both writable directories must be
+Windows paths accept `/`, pasted `\` (such as `O:\Managed-Videos`), or JSON-escaped
+`\\` (such as `O:\\Managed-Videos`). The first separator selects the style for each
+backslash path; keep that style throughout the path. UNC paths can likewise use
+`\\server\share` or JSON-escaped `\\\\server\\share`. Save `.env` as UTF-8;
+the Windows launcher reads it as UTF-8 even without a BOM, preserving Unicode
+directory names. Services may need an accessible UNC path instead of an
+interactive mapped drive. Both writable directories must be
 outside mapped media roots. Existing `OUTPUT/pfp` avatars remain readable;
 new uploads go to `PFP_DIR`.
+
+The browser reads active profile limits from `GET /profile/limits`; the backend
+enforces both limits independently. Oversized avatars and guest names show an
+error without replacing the saved profile. Plex and Discord names retain their
+account identity. Room logs include the display name, identity source, media title,
+connection role and meaningful play/pause/seek events. See
+[profiles and room logs](docs/profiles-and-logs.md).
 
 The API's direct configuration defaults and optional HTTP timeout settings are
 defined in [config.go](backend/internal/config/config.go). Without the startup

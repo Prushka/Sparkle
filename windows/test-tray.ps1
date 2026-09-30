@@ -9,7 +9,7 @@ $TestRoot = Join-Path $RepoRoot ("cache\tray test " + [guid]::NewGuid().ToString
 New-Item -ItemType Directory -Path $TestRoot, (Join-Path $TestRoot 'backend') | Out-Null
 Copy-Item -LiteralPath (Join-Path $RepoRoot "start-backend.ps1") -Destination $TestRoot
 Copy-Item -LiteralPath (Join-Path $RepoRoot "build-windows-app.ps1") -Destination $TestRoot
-@'
+$FixtureEnvironment = @'
 export ADDR='127.0.0.1:18991'
 OUTPUT='fixture output'
 PFP_DIR='./fixture profiles'
@@ -18,10 +18,15 @@ PLEX_AUTH_SESSION_DIR='./fixture sessions'
 GO=missing-go-must-not-be-required
 PLEX_URL=
 PLEX_TOKEN=fixture-secret-not-for-logs
-PLEX_PATH_MAPPINGS='[{"plex":"/source","local":"X:/test media"}]'
+PLEX_PATH_MAPPINGS='[{"plex":"/source","local":"X:\test media"},{"plex":"/source/unicode","local":"Y:\UNICODE_MEDIA"}]'
 PLEX_LIBRARY_IDS=
 ENCODE_ENABLED=false
-'@ | Set-Content -LiteralPath (Join-Path $TestRoot '.env') -Encoding UTF8
+'@
+# Keep this script ASCII for Windows PowerShell 5.1, but exercise a BOM-less
+# UTF-8 environment file with Chinese directory names and literal backslashes.
+$UnicodeMedia = -join (0x54d4, 0x54e9, 0x54d4, 0x54e9, 0x5e93 | ForEach-Object { [char]$_ })
+$FixtureEnvironment = $FixtureEnvironment.Replace('UNICODE_MEDIA', $UnicodeMedia)
+[IO.File]::WriteAllText((Join-Path $TestRoot '.env'), $FixtureEnvironment, [Text.UTF8Encoding]::new($false))
 $FakeBackend = Join-Path $TestRoot "FakeBackend.exe"
 $TestApp = Join-Path $TestRoot "TrayTests.exe"
 & $Compiler /nologo /target:exe "/out:$FakeBackend" "$PSScriptRoot\tests\FakeBackend.cs"

@@ -49,7 +49,10 @@ expiry, with fresh membership verification after restart.
 ## Configuration, logs and updates
 
 Each backend start uses `start-backend.ps1 -BackendExecutable ...`, which reads the
-root `.env` (or inherited `ENV_FILE`). Relative `OUTPUT`, `PFP_DIR`, `MEDIA_CACHE_DIR`, and `PLEX_AUTH_SESSION_DIR`
+root `.env` (or inherited `ENV_FILE`) as UTF-8, with or without a BOM, preserving
+Unicode media directory names. [Media mappings](plex-raw-media.md#configuration)
+accept forward slashes, pasted Windows backslashes and JSON-escaped backslashes.
+Relative `OUTPUT`, `PFP_DIR`, `MEDIA_CACHE_DIR`, and `PLEX_AUTH_SESSION_DIR`
 paths resolve against the repository root, just as with a terminal launch. No
 credentials or media mappings are written into shortcuts. Go is not needed to run the compiled backend.
 Restart the backend after configuration changes. If media is on a mapped network
@@ -146,7 +149,8 @@ go -C backend vet ./...
 ```
 
 The first suite uses a fake backend/encoder to check absence of console windows,
-root-relative configuration, DPI scaling, icon sizes, UTF-8 live logs, bounded log
+root-relative configuration, BOM-less UTF-8 environment files and verbatim mapping
+backslashes, DPI scaling, icon sizes, UTF-8 live logs, bounded log
 display, full disk logs, five-archive retention, recovery, timestamp collisions,
 locked-file safety, final stdout/stderr capture, close/reopen,
 activation, start/stop/restart/quit and process-tree cleanup. It also invokes the real
@@ -154,7 +158,8 @@ backend-only build script with a fake compiler to check menu availability, respo
 logs, hidden compiler children, duplicate requests, compilation and replacement
 failures, successful rebuild/restart, missing-binary recovery and Quit cancellation.
 The second builds the real
-API and GUI in a path containing spaces, serves an empty catalog on a temporary loopback
+API and GUI in a path containing spaces, validates a Unicode media directory from
+a BOM-less UTF-8 environment file with pasted backslashes, serves an empty catalog on a temporary loopback
 port, and checks process DPI awareness, single-instance activation, hidden login launch,
 graceful shutdown archives, cleanup and log recovery after killing the tray process.
 Both use disposable fixtures under

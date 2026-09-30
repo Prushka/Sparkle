@@ -7,6 +7,7 @@ import (
 	cryptorand "crypto/rand"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"math"
@@ -54,14 +55,16 @@ const (
 )
 
 type Hub struct {
-	voiceICE       *VoiceICE
-	authorizeMedia func(http.ResponseWriter, *http.Request, string) bool
-	canAccessMedia func(context.Context, string) bool
-	accountProfile func(context.Context) (id, name string, ok bool)
-	outputDir      string
-	pfpDir         string
-	maxUploadBytes int64
-	upgrader       websocket.Upgrader
+	voiceICE          *VoiceICE
+	authorizeMedia    func(http.ResponseWriter, *http.Request, string) bool
+	canAccessMedia    func(context.Context, string) bool
+	accountProfile    func(context.Context) (id, name string, ok bool)
+	outputDir         string
+	pfpDir            string
+	maxUploadBytes    int64
+	maxUsernameLength int
+	mediaTitle        func(string) string
+	upgrader          websocket.Upgrader
 
 	mu     sync.RWMutex
 	rooms  map[string]*Room
@@ -69,6 +72,8 @@ type Hub struct {
 }
 
 type Room struct {
+	maxUsernameLength int
+	logEvent          func(PlayerSnapshot, string, string, string)
 	// Serialize authorization and mutations against HTTP/WebSocket media changes.
 	// The state mutex remains independent so socket writes never wait on Plex IO.
 	accessMu                  sync.Mutex
@@ -103,19 +108,27 @@ type roomResponse struct {
 }
 
 func NewHub(options Options) *Hub {
+	if options.MaxUploadBytes <= 0 {
+		options.MaxUploadBytes = 12_000_000
+	}
+	if options.MaxUsernameLength <= 0 {
+		options.MaxUsernameLength = 32
+	}
 	checkOrigin := options.CheckOrigin
 	if checkOrigin == nil {
 		checkOrigin = func(*http.Request) bool { return true }
 	}
 	return &Hub{
-		voiceICE:       options.VoiceICE,
-		authorizeMedia: options.AuthorizeMedia,
-		canAccessMedia: options.CanAccessMedia,
-		accountProfile: options.AccountProfile,
-		outputDir:      options.OutputDir,
-		pfpDir:         options.PFPDir,
-		maxUploadBytes: options.MaxUploadBytes,
-		rooms:          make(map[string]*Room),
+		voiceICE:          options.VoiceICE,
+		authorizeMedia:    options.AuthorizeMedia,
+		canAccessMedia:    options.CanAccessMedia,
+		accountProfile:    options.AccountProfile,
+		outputDir:         options.OutputDir,
+		pfpDir:            options.PFPDir,
+		maxUploadBytes:    options.MaxUploadBytes,
+		maxUsernameLength: options.MaxUsernameLength,
+		mediaTitle:        options.MediaTitle,
+		rooms:             make(map[string]*Room),
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:    1024,
 			WriteBufferSize:   1024,
@@ -204,7 +217,7 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	log.Printf("[%s] connected to room %s", playerID, roomID)
+	room.logPlayerEvent(room.playerSnapshot(player), "connected", "connection", "")
 	go player.writePump()
 	h.sendVoiceConfig(player, roomID)
 	h.readPump(room, player)
@@ -239,9 +252,15 @@ func (h *Hub) HandlePFP(w http.ResponseWriter, r *http.Request) {
 
 	r.Body = http.MaxBytesReader(w, r.Body, h.maxUploadBytes+(1<<20))
 	if err := r.ParseMultipartForm(h.maxUploadBytes); err != nil {
+		var tooLarge *http.MaxBytesError
+		if errors.As(err, &tooLarge) {
+			http.Error(w, h.avatarSizeError(), http.StatusRequestEntityTooLarge)
+			return
+		}
 		http.Error(w, "invalid multipart upload", http.StatusBadRequest)
 		return
 	}
+	defer r.MultipartForm.RemoveAll()
 
 	file, header, err := r.FormFile("pfp")
 	if err != nil {
@@ -256,7 +275,7 @@ func (h *Hub) HandlePFP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if int64(len(content)) > h.maxUploadBytes {
-		http.Error(w, "upload too large", http.StatusRequestEntityTooLarge)
+		http.Error(w, h.avatarSizeError(), http.StatusRequestEntityTooLarge)
 		return
 	}
 	if !isImageUpload(content, header.Filename) {
@@ -371,7 +390,7 @@ func (h *Hub) writeAuthorizedRoom(w http.ResponseWriter, r *http.Request, roomID
 	h.mu.Lock()
 	room := h.rooms[roomID]
 	if room == nil && create {
-		room = newRoom(roomID, mediaID)
+		room = h.newRoom(roomID, mediaID)
 		h.rooms[roomID] = room
 	}
 	h.mu.Unlock()
@@ -428,16 +447,17 @@ func writeJSON(w http.ResponseWriter, payload any) {
 
 func newRoom(id string, mediaID string) *Room {
 	room := &Room{
-		id:               id,
-		mediaID:          mediaID,
-		players:          make(map[string]*Player),
-		mediaSubscribers: make(map[string]*Player),
-		chats:            make([]Chat, 0),
-		state:            defaultVideoState(),
-		youtube:          defaultYouTubeState(),
-		chess:            defaultChessState(),
-		wordle:           defaultWordleState(),
-		cottage:          defaultCottageState(),
+		maxUsernameLength: 32,
+		id:                id,
+		mediaID:           mediaID,
+		players:           make(map[string]*Player),
+		mediaSubscribers:  make(map[string]*Player),
+		chats:             make([]Chat, 0),
+		state:             defaultVideoState(),
+		youtube:           defaultYouTubeState(),
+		chess:             defaultChessState(),
+		wordle:            defaultWordleState(),
+		cottage:           defaultCottageState(),
 	}
 	if mediaID != "" {
 		room.mediaUpdatedAt = time.Now().UnixMilli()
@@ -506,9 +526,17 @@ func (h *Hub) roomSnapshot(roomID string) (roomResponse, bool) {
 
 func (h *Hub) addPlayerToRoom(id string, player *Player) *Room {
 	h.mu.Lock()
+	baseRoom, role := socketRole(id, player.state.Id)
+	if parentRoom := h.rooms[baseRoom]; baseRoom != id && parentRoom != nil {
+		parentRoom.mu.RLock()
+		if parent := parentRoom.players[strings.TrimSuffix(player.state.Id, "-"+role)]; parent != nil {
+			player.state.Name, player.state.ProfileId, player.state.DiscordUser = parent.state.Name, parent.state.ProfileId, parent.state.DiscordUser
+		}
+		parentRoom.mu.RUnlock()
+	}
 	room := h.rooms[id]
 	if room == nil {
-		room = newRoom(id, "")
+		room = h.newRoom(id, "")
 		h.rooms[id] = room
 	}
 
@@ -575,12 +603,13 @@ func (h *Hub) syncPlayerStates(now time.Time) {
 
 func (h *Hub) readPump(room *Room, player *Player) {
 	defer func() {
+		snapshot := room.playerSnapshot(player)
 		removed, announced := room.remove(player)
 		if announced {
 			room.systemChat(displayNameFromSnapshot(removed)+" left", time.Now().UnixMilli(), removed.Time, nil)
 		}
 		player.closeSend()
-		log.Printf("[%s] disconnected from room %s", player.state.Id, room.id)
+		room.logPlayerEvent(snapshot, "disconnected", "connection", "")
 	}()
 
 	player.conn.SetReadLimit(maxMessage)
@@ -593,7 +622,12 @@ func (h *Hub) readPump(room *Room, player *Player) {
 		var payload ClientPayload
 		if err := player.conn.ReadJSON(&payload); err != nil {
 			if !isExpectedWebSocketReadClose(err) {
-				log.Printf("[%s] websocket read: %v", player.state.Id, err)
+				detail := "read failed"
+				var closeError *websocket.CloseError
+				if errors.As(err, &closeError) {
+					detail = fmt.Sprintf("close code %d", closeError.Code)
+				}
+				room.logPlayerEvent(room.playerSnapshot(player), "connection error", "connection", detail)
 			}
 			return
 		}
@@ -803,23 +837,7 @@ func (r *Room) handlePayload(current *Player, payload ClientPayload) {
 	case SubtitleSwitch:
 		r.updatePlayer(current, now, func(state *PlayerSnapshot) { state.Subtitle = payload.Subtitle })
 	case ProfileSync:
-		name := strings.TrimSpace(payload.Name)
-		profileID := strings.TrimSpace(payload.ProfileId)
-		discordUser := sanitizeDiscordUser(payload.DiscordUser)
-		if !safeID.MatchString(profileID) || strings.HasPrefix(profileID, "plex-") {
-			profileID = current.state.Id
-		}
-		if current.accountProfile != nil {
-			if accountID, accountName, ok := current.accountProfile(); ok {
-				profileID, name, discordUser = accountID, accountName, nil
-			}
-		}
-		name = trimRunes(name, 80)
-		r.updatePlayer(current, now, func(state *PlayerSnapshot) {
-			state.Name = name
-			state.ProfileId = profileID
-			state.DiscordUser = discordUser
-		})
+		r.updateProfile(current, payload, now)
 	case BroadcastSync:
 		r.broadcast(current, sanitizeBroadcast(payload.Broadcast))
 	case YouTubeSync:
@@ -849,7 +867,7 @@ func (r *Room) handlePayload(current *Player, payload ClientPayload) {
 	case PlaybackSync:
 		r.sendPlaybackState(current)
 	default:
-		log.Printf("[%s] ignored unknown sync type %q", current.state.Id, payload.Type)
+		r.logPlayerEvent(r.playerSnapshot(current), "ignored unknown sync type", payload.Type, "")
 	}
 }
 
@@ -979,6 +997,9 @@ func (r *Room) broadcast(sender *Player, broadcast map[string]any) {
 
 	if isMediaMove && !mediaChanged {
 		return
+	}
+	if mediaChanged {
+		r.logPlayerEvent(firedBy, "media changed", BroadcastSync, "")
 	}
 	payload := SendPayload{Type: BroadcastSync, FiredBy: &firedBy, Timestamp: now, Broadcast: broadcast}
 	sendPayloadToPlayers(targets, payload)
@@ -3200,6 +3221,7 @@ func (r *Room) syncTime(sender *Player, next *float64, identity ...ClientPayload
 	if !shouldBroadcast {
 		return
 	}
+	r.logPlayerEvent(firedBy, "seek", TimeSync, fmt.Sprintf("position=%.3fs", *next))
 	payload := SendPayload{Type: TimeSync, MediaID: mediaID, MediaUpdated: mediaUpdated, Time: next, FiredBy: &firedBy, Timestamp: time.Now().UnixMilli()}
 	sendPayloadToPlayers(targets, payload)
 }
@@ -3213,6 +3235,7 @@ func (r *Room) syncPause(sender *Player, paused *bool, identity ...ClientPayload
 	var targets []*Player
 	var mediaID string
 	var mediaUpdated int64
+	var changed bool
 
 	r.mu.Lock()
 	if r.players[sender.state.Id] != sender || !r.playbackIdentityMatches(identity) {
@@ -3226,6 +3249,7 @@ func (r *Room) syncPause(sender *Player, paused *bool, identity ...ClientPayload
 		r.mu.Unlock()
 		return
 	}
+	changed = r.state.Paused != *paused
 	r.state.Paused = *paused
 	firedBy = sender.state
 	targets = r.otherPlayersLocked(sender)
@@ -3234,6 +3258,13 @@ func (r *Room) syncPause(sender *Player, paused *bool, identity ...ClientPayload
 	}
 	r.mu.Unlock()
 
+	if changed {
+		event := "play"
+		if *paused {
+			event = "pause"
+		}
+		r.logPlayerEvent(firedBy, event, PauseSync, fmt.Sprintf("position=%.3fs", firedBy.Time))
+	}
 	if len(targets) == 0 {
 		return
 	}

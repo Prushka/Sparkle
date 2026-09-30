@@ -34,8 +34,14 @@ Never place the configured `PLEX_TOKEN` in a `NEXT_PUBLIC_*` variable or browser
 Optional `PLEX_PUBLIC_URL` enables [direct artwork](plex-auth.md#direct-artwork)
 using the signed-in viewer's server resource token, with proxy fallback.
 
-On Windows, use forward slashes in JSON and run the backend under an account
-that can read the mapped drive. Windows services commonly cannot see interactive
+On Windows, paths accept forward slashes, pasted absolute backslash paths such as
+`M:\bili-stream\哔哩哔哩\枯水`, and JSON-escaped paths such as
+`M:\\bili-stream\\哔哩哔哩\\枯水`. The first separator selects the backslash style
+for each path; use it consistently. UNC paths accept `\\server\share` or
+JSON-escaped `\\\\server\\share`. Other JSON syntax still applies. Save `.env`
+as UTF-8; the Windows launcher reads it explicitly, with or without a BOM.
+Run the backend under an account that can read the mapped drive.
+Windows services commonly cannot see interactive
 session drive letters; use an accessible UNC path or mount for that account.
 `start-backend.ps1` resolves writable paths before changing directories. Both
 writable directories must be outside every mapped media root; startup rejects

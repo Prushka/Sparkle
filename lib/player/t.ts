@@ -368,6 +368,7 @@ export enum SyncTypes {
 	PlaybackSync = 'playback',
 	NewPlayer = 'new player',
 	ProfileSync = 'profile',
+	ProfileError = 'profileError',
 	TimeSync = 'time',
 	PauseSync = 'pause',
 	ChatSync = 'chat',
@@ -394,6 +395,7 @@ export enum BroadcastTypes {
 }
 
 export interface SendPayload {
+	error?: string;
 	iceServers?: RTCIceServer[];
 	mediaId?: string;
 	mediaUpdated?: number;

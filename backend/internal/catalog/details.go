@@ -105,6 +105,7 @@ func (s *Service) Details(ctx context.Context, id string) (map[string]any, error
 	for k, v := range fields {
 		job[k] = v
 	}
+	s.rememberLogTitle(id, canonical, job)
 	return job, nil
 }
 

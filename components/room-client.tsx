@@ -6,6 +6,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { LibraryHome } from '@/components/library-home';
 import { PlexRoomGate, usePlexAuth } from '@/components/plex-auth';
 import { PlexAccessError, plexAccessRequiredEvent } from '@/lib/plex-access';
+import { useAppState } from '@/lib/app-state';
+import { boundedUsername, fetchProfileLimits } from '@/lib/profile-limits';
 import {
 	createRoomRecord,
 	fetchMediaData,
@@ -18,6 +20,7 @@ import {
 } from '@/lib/player/data';
 import {
 	BroadcastTypes,
+	getName,
 	SyncTypes,
 	randomString,
 	type SendPayload,
@@ -165,6 +168,8 @@ function ErrorView({ message, onRetry }: { message: string; onRetry: () => void 
 
 export function RoomClient({ route }: { route: RoomRoute }) {
 	const auth = usePlexAuth();
+	const { discordAuth } = useAppState();
+	const discordUserRef = useLatestRef(discordAuth?.user);
 	const router = useRouter();
 	const searchParams = useSearchParams();
 	const [state, setState] = useState<LoadState>({ status: 'loading' });
@@ -498,6 +503,27 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 			socket = new WebSocket(socketUrl);
 			socket.onopen = () => {
 				if (!disposed) {
+					const openedSocket = socket!;
+					void (async () => {
+						const discordUser = discordUserRef.current;
+						let name = getName(discordUser) || window.localStorage.getItem('name') || 'Guest';
+						if (!authRef.current.authenticated && !discordUser) {
+							const limits = await fetchProfileLimits(backendBaseUrl);
+							name = boundedUsername(name, limits.maxUsernameLength);
+						}
+						if (disposed || socket !== openedSocket || openedSocket.readyState !== WebSocket.OPEN)
+							return;
+						openedSocket.send(
+							JSON.stringify({
+								type: SyncTypes.ProfileSync,
+								name,
+								profileId: window.localStorage.getItem('id') || subscriberId,
+								discordUser
+							})
+						);
+					})().catch(() => {
+						if (!disposed) console.warn('Unable to identify room media watcher');
+					});
 					void refreshRoomMedia();
 				}
 			};
@@ -548,6 +574,8 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 			}
 		};
 	}, [
+		authRef,
+		discordUserRef,
 		handleRoomMediaChangedRef,
 		requirePlexAccess,
 		mediaSubscriberBackendBaseUrl,

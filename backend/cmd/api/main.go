@@ -72,14 +72,16 @@ func main() {
 		log.Fatalf("voice configuration error: %v", err)
 	}
 	hub := realtime.NewHub(realtime.Options{
-		VoiceICE:       voiceICE,
-		OutputDir:      cfg.OutputDir,
-		PFPDir:         cfg.PFPDir,
-		MaxUploadBytes: cfg.MaxPFPBytes,
-		AuthorizeMedia: auth.RequireMedia,
-		CanAccessMedia: auth.CanAccess,
-		CheckOrigin:    auth.OriginAllowed,
-		AccountProfile: auth.Profile,
+		VoiceICE:          voiceICE,
+		OutputDir:         cfg.OutputDir,
+		PFPDir:            cfg.PFPDir,
+		MaxUploadBytes:    cfg.MaxPFPBytes,
+		MaxUsernameLength: int(cfg.MaxUsernameLength),
+		MediaTitle:        mediaCatalog.LogMediaTitle,
+		AuthorizeMedia:    auth.RequireMedia,
+		CanAccessMedia:    auth.CanAccess,
+		CheckOrigin:       auth.OriginAllowed,
+		AccountProfile:    auth.Profile,
 	})
 	pruner := &cachePruner{jobStore: jobStore}
 
@@ -111,6 +113,7 @@ func main() {
 	mux.HandleFunc("GET /share/rooms/{room}", hub.HandleRoomPreview)
 	mux.HandleFunc("PUT /rooms/{room}", hub.HandleUpdateRoom)
 	mux.HandleFunc("POST /pfp/{id}", hub.HandlePFP)
+	mux.HandleFunc("GET /profile/limits", hub.HandleProfileLimits)
 	mux.HandleFunc("GET /sync/{room}/{id}", hub.HandleWebSocket)
 
 	server := &http.Server{

@@ -37,6 +37,7 @@ type Config struct {
 	OutputDir                         string
 	JobsCacheTTL                      time.Duration
 	MaxPFPBytes                       int64
+	MaxUsernameLength                 int64
 	ReadHeaderTimeout                 time.Duration
 	ReadTimeout                       time.Duration
 	WriteTimeout                      time.Duration
@@ -72,6 +73,7 @@ func Load() (Config, error) {
 		OutputDir:                         getenv("OUTPUT", "./output"),
 		JobsCacheTTL:                      30 * time.Minute,
 		MaxPFPBytes:                       12_000_000,
+		MaxUsernameLength:                 32,
 		ReadHeaderTimeout:                 5 * time.Second,
 		ReadTimeout:                       30 * time.Second,
 		WriteTimeout:                      30 * time.Second,
@@ -146,11 +148,19 @@ func Load() (Config, error) {
 	if cfg.MaxPFPBytes, err = int64Env("MAX_PFP_BYTES", cfg.MaxPFPBytes); err != nil {
 		return Config{}, err
 	}
+	if cfg.MaxUsernameLength, err = int64Env("MAX_USERNAME_LENGTH", cfg.MaxUsernameLength); err != nil {
+		return Config{}, err
+	}
 	if cfg.OutputDir == "" {
 		return Config{}, fmt.Errorf("OUTPUT must not be empty")
 	}
 	if cfg.MaxPFPBytes <= 0 {
 		return Config{}, fmt.Errorf("MAX_PFP_BYTES must be greater than zero")
+	}
+	// Keep the value representable in frontend JSON numbers and beneath the
+	// socket message budget, including multibyte names.
+	if cfg.MaxUsernameLength < 1 || cfg.MaxUsernameLength > 4096 {
+		return Config{}, fmt.Errorf("MAX_USERNAME_LENGTH must be between 1 and 4096")
 	}
 	return cfg, nil
 }
