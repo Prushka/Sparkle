@@ -254,7 +254,7 @@ image job. Public artwork/share routes cannot return these images. Originals are
 read through confined handles and private loopback ranges; no Plex transcode,
 library scan, original-file cache, or whole-title storyboard is created.
 
-The shared disk cache lives under `MEDIA_CACHE_DIR/previews`, bounded by 128 MiB,
+The shared disk cache lives under `MEDIA_CACHE_DIR/previews`, bounded by 2 GiB,
 the shared cache's 4,096-entry eviction threshold, and a twelve-hour idle TTL.
 Each image is at most 320×180 and 256 KiB. At most two extraction jobs run with
 two software decoder threads each; jobs have fifteen-second deadlines and the

@@ -64,7 +64,7 @@ func New(ctx context.Context, p *plex.Client, opts Options) (*Service, error) {
 			cancel()
 			return nil, err
 		}
-		c, err := newSizedCache(ctx, opts.PreviewDir, 128<<20, 12*time.Hour, 2, previewMaxBytes, 15*time.Second, 50*time.Millisecond)
+		c, err := newSizedCache(ctx, opts.PreviewDir, 2<<30, 12*time.Hour, 2, previewMaxBytes, 15*time.Second, 50*time.Millisecond)
 		if err != nil {
 			cancel()
 			return nil, err
