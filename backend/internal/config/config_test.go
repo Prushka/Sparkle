@@ -2,6 +2,22 @@ package config
 
 import "testing"
 
+func TestPreviewSettings(t *testing.T) {
+	for _, value := range []string{"", "true", "false", "invalid"} {
+		t.Setenv("PREVIEWS_ENABLED", value)
+		cfg, err := Load()
+		if value == "invalid" {
+			if err == nil {
+				t.Fatal("invalid preview setting accepted")
+			}
+			continue
+		}
+		if err != nil || cfg.PreviewsEnabled != (value != "false") {
+			t.Fatal("unexpected preview setting", err)
+		}
+	}
+}
+
 func TestProfileLimitSettings(t *testing.T) {
 	t.Setenv("MAX_PFP_BYTES", "")
 	t.Setenv("MAX_USERNAME_LENGTH", "")

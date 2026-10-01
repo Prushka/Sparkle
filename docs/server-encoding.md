@@ -31,7 +31,9 @@ Room recovery refreshes the authoritative timeline without changing its pause st
 
 ## Setup
 
-Compatible playback remains available without FFmpeg or a GPU. On Windows,
+Compatible playback remains available without FFmpeg or a GPU. Its independent
+[seek previews](plex-raw-media.md#seek-previews) use FFmpeg/ffprobe when available,
+without requiring `ENCODE_ENABLED` or an NVENC encoder. On Windows,
 `./scripts/install-ffmpeg.ps1` (requires 7-Zip) installs the SHA-256-checked
 [FFmpeg 9.0.2 full build](https://github.com/GyanD/codexffmpeg/releases/tag/9.0.2)
 under ignored `bin/` and prints its `FFMPEG`/`FFPROBE` settings. It preserves

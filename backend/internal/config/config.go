@@ -16,6 +16,7 @@ type Config struct {
 	PlexAuthCookieSameSite            string
 	PlexAuthSessionDir                string
 	EncodeEnabled                     bool
+	PreviewsEnabled                   bool
 	AIHDREnabled                      bool
 	NVEncC                            string
 	FFmpeg                            string
@@ -54,6 +55,7 @@ func Load() (Config, error) {
 		PlexAuthCookieSameSite:            getenv("PLEX_AUTH_COOKIE_SAMESITE", "lax"),
 		PlexAuthSessionDir:                getenv("PLEX_AUTH_SESSION_DIR", "./data/plex-auth"),
 		FFmpeg:                            getenv("FFMPEG", "ffmpeg"),
+		PreviewsEnabled:                   true,
 		FFprobe:                           getenv("FFPROBE", "ffprobe"),
 		NVEncC:                            getenv("NVENCC", "NVEncC64"),
 		EncodeCacheBytes:                  40 << 30,
@@ -88,6 +90,12 @@ func Load() (Config, error) {
 	}
 
 	var err error
+	if value := os.Getenv("PREVIEWS_ENABLED"); value != "" {
+		cfg.PreviewsEnabled, err = strconv.ParseBool(value)
+		if err != nil {
+			return Config{}, fmt.Errorf("PREVIEWS_ENABLED must be true or false")
+		}
+	}
 	if cfg.PlexPublicURL != "" {
 		u, parseErr := url.Parse(cfg.PlexPublicURL)
 		if parseErr != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" {

@@ -16,6 +16,7 @@ import {
 import { mergeSubtitleCues, type SubtitleMergeCue } from '@/lib/player/text-subtitle-cues';
 import { SubtitlesMenuSection } from './SubtitlesMenuSection';
 import { PlexPoster } from './PlexPoster';
+import { PlexStoryboardPreview } from './PlexStoryboardPreview';
 import {
 	type SubtitleTrackInfo,
 	type SelectedSubtitleTrack,
@@ -2818,7 +2819,13 @@ function StoryboardCanvasPreview({ thumbnailSrc }: { thumbnailSrc: string }) {
 	);
 }
 
-function OptimizedTimeSlider({ thumbnails }: { thumbnails: string | null }) {
+function OptimizedTimeSlider({
+	thumbnails,
+	preview
+}: {
+	thumbnails: string | null;
+	preview?: ReactNode;
+}) {
 	const [instance, setInstance] = useState<TimeSliderInstance | null>(null);
 	const [width, setWidth] = useState(0);
 	const {
@@ -2872,7 +2879,7 @@ function OptimizedTimeSlider({ thumbnails }: { thumbnails: string | null }) {
 			</TimeSlider.Chapters>
 			<TimeSlider.Thumb className="vds-slider-thumb" />
 			<TimeSlider.Preview className="vds-slider-preview">
-				{thumbnails ? <StoryboardCanvasPreview thumbnailSrc={thumbnails} /> : null}
+				{preview ?? (thumbnails ? <StoryboardCanvasPreview thumbnailSrc={thumbnails} /> : null)}
 				<TimeSlider.ChapterTitle className="vds-slider-chapter-title" />
 				<TimeSlider.Value className="vds-slider-value" />
 			</TimeSlider.Preview>
@@ -3799,7 +3806,7 @@ export function Player({
 			return null;
 		}
 		return new URL(`${BASE_STATIC}/storyboard.vtt`, window.location.origin).toString();
-	}, [BASE_STATIC]);
+	}, [BASE_STATIC, job.Raw]);
 	const [tickedSecsAgo, setTickedSecsAgo] = useState(-1);
 	const [chatFocusedSecs, setChatFocusedSecs] = useState(0);
 	const posterSrc = data.preview;
@@ -7390,7 +7397,20 @@ export function Player({
 								slots={{
 									captionButton: job.Raw ? <RawCaptionButton /> : undefined,
 									googleCastButton: job.Raw ? <RawCastButton /> : undefined,
-									timeSlider: <OptimizedTimeSlider thumbnails={thumbnailVttSrc} />,
+									timeSlider: (
+										<OptimizedTimeSlider
+											thumbnails={thumbnailVttSrc}
+											preview={
+												job.Raw && plexAuth.canAccessRaw ? (
+													<PlexStoryboardPreview
+														key={`${job.Id}:${plexAuth.revision}:${plexAuth.libraryIds?.join(',')}`}
+														raw={job.Raw}
+														base={backendBaseUrl}
+													/>
+												) : undefined
+											}
+										/>
+									),
 									settingsMenuItemsStart: job.Raw ? (
 										<RawVideoSettings raw={job.Raw} mediaId={job.Id} onVersion={switchRoomMedia} />
 									) : (

@@ -29,22 +29,29 @@ type work struct {
 	abandoned bool
 }
 type cache struct {
-	ctx      context.Context
-	dir      string
-	root     *os.Root
-	maxBytes int64
-	ttl      time.Duration
-	slots    chan struct{}
-	mu       sync.Mutex
-	files    map[string]*cached
-	jobs     map[string]*work
-	bytes    int64
-	reserved int64
-	wg       sync.WaitGroup
+	ctx         context.Context
+	dir         string
+	root        *os.Root
+	maxBytes    int64
+	ttl         time.Duration
+	slots       chan struct{}
+	mu          sync.Mutex
+	files       map[string]*cached
+	jobs        map[string]*work
+	bytes       int64
+	reserved    int64
+	wg          sync.WaitGroup
+	jobBytes    int64
+	jobTimeout  time.Duration
+	cancelDelay time.Duration
 }
 
 func newCache(ctx context.Context, dir string, maxBytes int64, ttl time.Duration, concurrent int) (*cache, error) {
-	if maxBytes < maxJobBytes*2 || concurrent < 1 || concurrent > 32 || ttl <= 0 {
+	return newSizedCache(ctx, dir, maxBytes, ttl, concurrent, maxJobBytes, 2*time.Minute, time.Second)
+}
+
+func newSizedCache(ctx context.Context, dir string, maxBytes int64, ttl time.Duration, concurrent int, jobBytes int64, jobTimeout, cancelDelay time.Duration) (*cache, error) {
+	if jobBytes <= 0 || maxBytes < jobBytes*2 || concurrent < 1 || concurrent > 32 || ttl <= 0 || jobTimeout <= 0 {
 		return nil, errors.New("invalid encoder cache limits")
 	}
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -54,7 +61,7 @@ func newCache(ctx context.Context, dir string, maxBytes int64, ttl time.Duration
 	if err != nil {
 		return nil, errors.New("cannot open encoder cache")
 	}
-	c := &cache{ctx: ctx, dir: dir, root: root, maxBytes: maxBytes, ttl: ttl, slots: make(chan struct{}, concurrent), files: map[string]*cached{}, jobs: map[string]*work{}}
+	c := &cache{ctx: ctx, dir: dir, root: root, maxBytes: maxBytes, ttl: ttl, slots: make(chan struct{}, concurrent), files: map[string]*cached{}, jobs: map[string]*work{}, jobBytes: jobBytes, jobTimeout: jobTimeout, cancelDelay: cancelDelay}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		root.Close()
@@ -155,15 +162,15 @@ retry:
 		}
 	}
 	if j == nil {
-		c.prune(maxJobBytes)
-		if len(c.jobs) >= 32 || c.bytes+c.reserved+maxJobBytes > c.maxBytes {
+		c.prune(c.jobBytes)
+		if len(c.jobs) >= 32 || c.bytes+c.reserved+c.jobBytes > c.maxBytes {
 			c.mu.Unlock()
 			return "", nil, errBusy
 		}
-		jobCtx, cancel := context.WithTimeout(c.ctx, 2*time.Minute)
+		jobCtx, cancel := context.WithTimeout(c.ctx, c.jobTimeout)
 		j = &work{done: make(chan struct{}), cancel: cancel}
 		c.jobs[key] = j
-		c.reserved += maxJobBytes
+		c.reserved += c.jobBytes
 		c.wg.Add(1)
 		go c.build(jobCtx, key, j, build)
 	}
@@ -178,7 +185,7 @@ retry:
 	if j.waiters == 0 {
 		// Give the corresponding audio/video request time to attach after an
 		// interrupted range probe; abandoned seeks then stop consuming the GPU.
-		time.AfterFunc(time.Second, func() {
+		time.AfterFunc(c.cancelDelay, func() {
 			c.mu.Lock()
 			defer c.mu.Unlock()
 			if c.jobs[key] == j && j.waiters == 0 {
@@ -231,7 +238,7 @@ func (c *cache) build(ctx context.Context, key string, j *work, build func(conte
 				case <-limited.Done():
 					return
 				case <-ticker.C:
-					if size, _ := directorySize(dir); size > maxJobBytes {
+					if size, _ := directorySize(dir); size > c.jobBytes {
 						cancel()
 						return
 					}
@@ -245,7 +252,7 @@ func (c *cache) build(ctx context.Context, key string, j *work, build func(conte
 			return limited.Err()
 		}
 		size, err := directorySize(dir)
-		if err != nil || size > maxJobBytes {
+		if err != nil || size > c.jobBytes {
 			return errEncode
 		}
 		f, err := c.root.Create(key + "/complete")
@@ -265,7 +272,7 @@ func (c *cache) build(ctx context.Context, key string, j *work, build func(conte
 		_ = c.root.RemoveAll(key)
 	}
 	c.mu.Lock()
-	c.reserved -= maxJobBytes
+	c.reserved -= c.jobBytes
 	j.err = err
 	delete(c.jobs, key)
 	close(j.done)

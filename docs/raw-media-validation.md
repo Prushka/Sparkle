@@ -659,8 +659,24 @@ control presents its direct-casting limitation; no receiver playback is claimed.
 
 Separate long-session buffering/recovery, native video PiP on other browsers, casting
 to a physical receiver and physical audio/video timing qualification remain necessary.
-Raw previews are currently
-omitted; processed storyboards continue to work.
+Plex seek-preview checks cover SDR, PQ and HLG in Compatible, Encoded AV1 and
+Encoded HEVC with actual native playback and production-generated JPEGs. All nine
+Chrome combinations pass hover timing, same-bucket/cached reuse, unchanged paused
+positions, continued playing clocks, and desktop/390-pixel layout checks. Two
+additional cases pass stale-request cancellation/failure backoff and cached reuse
+through Compatible → AV1 → HEVC → Compatible menu changes. These use disposable
+NVENC fixtures; physical iOS/Android preview qualification remains pending.
+Processed storyboards continue to use their existing rendering path.
+The five two-client track/sync regressions also pass: Compatible/AV1/HEVC/Automatic
+local selections, pause/play and seek, plus delayed join, reconnect, and rapid
+processed/raw transitions.
+
+Full-length extraction also passes at 10%, 50% and 90% of Winter in Sokcho
+(1920×1038 SDR), Avatar (3840×2160 HDR10), and Avatar: Fire and Ash (3840×2080
+HDR10). With hardware decoding on the validation machine, uncached images took
+about 0.35–0.54 seconds after metadata probing; cached server responses took
+3–5 ms and images were 4–13 KiB. CPU decoding took about 0.5–1.2 seconds. These
+are sampled local measurements, not network or physical HDR color guarantees.
 
 ## Reproduce
 
@@ -670,6 +686,16 @@ and `npm run build` at the root. Browser tests use `SPARKLE_TEST_URL` (default
 `http://127.0.0.1:3002`) and `SPARKLE_TEST_CHANNEL` (`chrome`, `msedge`, `firefox`).
 
 - `SPARKLE_RAW_TEST_ID`: mapped SDR fixture for the two-client E2E test.
+- `node scripts/tests/prepare-preview-fixture.mjs`: create disposable SDR/PQ/HLG
+  sources and NVENC AV1/HEVC outputs. Set `SPARKLE_PREVIEW_FIXTURE_DIR` to the
+  absolute `cache/preview-fixtures` directory, plus `FFMPEG`/`FFPROBE`, and run
+  `go test ./internal/encode -run TestPreviewFFmpegFixtures -count=1` from `backend`
+  to create preview JPEGs using the production extractor. Then run
+  `npx playwright test tests/e2e/plex-preview.spec.ts` against the running app.
+  For opt-in full-length extraction, load the backend environment and set
+  `SPARKLE_PREVIEW_MEDIA_IDS` to a space-separated list of mapped Plex IDs, then
+  run `go test ./internal/encode -run TestPreviewPlexMedia -count=1 -v` in `backend`.
+  This uses only named titles and a disposable cache, and never modifies originals.
 - `SPARKLE_TEST_BACKEND_URL`: E2E room/metadata API base when the running frontend
   uses a separate backend origin; defaults to `/be` relative to `SPARKLE_TEST_URL`.
 - `SPARKLE_RAW_EXPECTED_HDR`: source format label when running that same test

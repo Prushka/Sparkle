@@ -43,6 +43,7 @@ func TestAnonymousShareMetadataArtworkAndPlaybackBoundary(t *testing.T) {
 	}
 	for _, path := range []string{
 		"/media/" + id + "/parts/2/file",
+		"/media/" + id + "/parts/2/preview/0.jpg",
 		"/media/" + id + "/parts/2/encoded/av1/manifest",
 		"/media/" + id + "/parts/2/encoded/hevc/video-0.m4s",
 		"/library/items/" + id + "/children",

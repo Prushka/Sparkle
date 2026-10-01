@@ -101,7 +101,12 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   opening a popup or allocating a PIN; preserve loopback development support.
 - Plex access is read-only and endpoint-allowlisted. Do not add watched-state updates,
   scans, Plex transcoding, media modifications, or whole-original-file caching.
-  Server decoding is confined to the optional encoded mode; Compatible playback remains client-side.
+  Server video decoding for playback is confined to the optional encoded mode; Compatible playback remains client-side.
+  Independent Plex seek previews may decode individual requested frames server-side.
+  Keep previews authenticated, source/version/part keyed and shared across playback modes;
+  bound workers, time, cache bytes/count and client memory. Cancel obsolete hover work,
+  preserve the playback timeline, and tone-map HDR thumbnails to explicitly labeled SDR.
+  Never generate whole-title storyboards or expose preview images through public artwork routes.
 - Resolve the longest matching mapping prefix and use root-confined file access. Retain
   traversal, symlink/junction, alternate-stream, and allowed-section protections.
   Windows startup reads `.env` as UTF-8, including files without a BOM. Path mappings

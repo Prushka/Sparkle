@@ -122,8 +122,10 @@ channel routing when off. It can make loud passages quieter, and its stereo mix
 omits LFE; it is not an audio boost. It starts off for each title and is never saved.
 
 Raw playback supports client WASM fallbacks, including TrueHD audio and embedded
-subtitles. TrueHD output is decoded PCM, not Atmos bitstream passthrough. Raw
-storyboards are currently omitted; processed storyboards remain available.
+subtitles. TrueHD output is decoded PCM, not Atmos bitstream passthrough. Plex seek-bar
+previews load on demand in Compatible, Encoded AV1 and Encoded HEVC, with shared
+five-second image buckets and SDR thumbnails for HDR sources. Processed storyboards
+remain available. See [seek previews](docs/plex-raw-media.md#seek-previews).
 
 All active HDR modes use native video/MSE. Automatic uses a supported server encode
 and reports an error if neither encoder is available; it never falls back to the
@@ -141,7 +143,9 @@ Windows Chrome/Edge combinations and pending Safari, mobile, Firefox, and Activi
 
 Prerequisites: Node.js LTS with npm, Go 1.27.1 or newer, and either existing
 processed output or a reachable Plex server with readable local media mappings.
-Plex is optional. Raw playback does not require server FFmpeg. Optional encoded playback
+Plex is optional. Compatible playback does not require server FFmpeg. Independent seek
+previews require FFmpeg/ffprobe and default on (`PREVIEWS_ENABLED=false` disables them).
+Missing preview tools leave playback and timestamp labels working. Optional encoded playback
 requires FFmpeg/ffprobe and an NVIDIA GPU with the selected 10-bit NVENC encoder.
 Windows users can install the pinned FFmpeg build with
 [`scripts/install-ffmpeg.ps1`](scripts/install-ffmpeg.ps1); see

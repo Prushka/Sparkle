@@ -97,6 +97,9 @@ func libraryFixture(t *testing.T) (*fixture, http.Handler, *plex.Client, *http.C
 	mux.HandleFunc("GET /media/{id}/parts/{partId}/encoded/{codec}/{resource}", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, "cached encoded fixture bytes")
 	})
+	mux.HandleFunc("GET /media/{id}/parts/{partId}/preview/{frame}", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "cached preview fixture bytes")
+	})
 	mux.HandleFunc("POST /rooms", hub.HandleCreateRoom)
 	mux.HandleFunc("GET /rooms/{room}", hub.HandleGetRoom)
 	mux.HandleFunc("PUT /rooms/{room}", hub.HandleUpdateRoom)
@@ -153,7 +156,7 @@ func TestLibraryPermissionsAcrossCatalogFilesAndEncodedResources(t *testing.T) {
 			t.Fatalf("denied library query passed: %s %d", path, w.Code)
 		}
 	}
-	resources := []string{"file", "encoded/av1/manifest", "encoded/hevc/master.m3u8", "encoded/av1/video-init.mp4", "encoded/av1/video-0.m4s", "encoded/hevc/audio-0.m4s", "encoded/av1/subtitles-0.json", "encoded/av1/fonts.json", "encoded/av1/manifest?aiHDR=1"}
+	resources := []string{"file", "preview/0.jpg", "encoded/av1/manifest", "encoded/hevc/master.m3u8", "encoded/av1/video-init.mp4", "encoded/av1/video-0.m4s", "encoded/hevc/audio-0.m4s", "encoded/av1/subtitles-0.json", "encoded/av1/fonts.json", "encoded/av1/manifest?aiHDR=1"}
 	for _, method := range []string{"GET", "HEAD"} {
 		for _, resource := range resources {
 			for _, id := range []string{allowed, denied, outside} {

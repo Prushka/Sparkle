@@ -851,6 +851,21 @@ html::-webkit-scrollbar-thumb:hover,
 	height: 100%;
 }
 
+.sparkle-plex-preview img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+}
+
+.sparkle-plex-preview span {
+	display: grid;
+	place-items: center;
+	height: 100%;
+	font-size: 11px;
+	color: #ddd;
+}
+
 .media-provider > video,
 #sub-canvas {
 	width: 100% !important;

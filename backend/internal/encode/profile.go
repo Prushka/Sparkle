@@ -227,7 +227,8 @@ func encodeArgs(input, dir, codec string, segment int, duration float64, p Profi
 }
 
 // Only the input decoder may fall back to software (e.g. unsupported NVDEC
-// profiles). Output encoding remains av1_nvenc/hevc_nvenc on every attempt.
+// profiles). Output encoder arguments are preserved on every attempt, including
+// av1_nvenc/hevc_nvenc video and the independent JPEG preview encoder.
 func softwareDecodeInput(args []string) []string {
 	result := []string{}
 	input := true

@@ -226,8 +226,48 @@ Catalog construction, preference matching, toggle transitions, and storage are s
 Audio and subtitle choices stay local. Media-version choices are room-wide.
 Multipart positions are converted to one seconds-based room timeline. Parts
 without reliable durations are explicitly rejected rather than synchronized to
-an invented timeline. Raw storyboards are optional and currently omitted;
-processed storyboards remain available.
+an invented timeline. Plex seek previews are generated on demand, independently of
+the selected playback mode; processed storyboards remain available.
+
+### Seek previews
+
+Hovering or dragging the progress bar requests one preview for the selected
+five-second bucket. Multipart titles use the selected part's local timestamp.
+Compatible, Encoded AV1, Encoded HEVC and AI HDR share the original-source image;
+changing output never starts another preview encode or seeks the player. The small
+JPEGs are SDR, including HDR10/HLG tone mapping and Dolby Vision Profile 5 RPU
+conversion when FFmpeg's libplacebo filter supports it. They do not represent the
+display's HDR brightness or AI HDR enhancement.
+
+`PREVIEWS_ENABLED` defaults to `true`, independently of `ENCODE_ENABLED`. Previews
+use the configured `FFMPEG` and `FFPROBE`; no NVENC encoder is required. Hardware
+decoding is attempted where available, with bounded software decoding as fallback.
+FFmpeg needs the `scale` filter's `reset_sar` option and JPEG encoding; HDR previews
+also need `zscale`/`tonemap`, or `libplacebo` for Profile 5. The pinned Windows build
+includes these. Missing tools/filters show an unavailable preview without changing
+playback. Set `PREVIEWS_ENABLED=false` to disable extraction entirely.
+
+The authenticated `GET /media/{id}/parts/{partId}/preview/{frame}.jpg` route uses
+`frame * 5` seconds within the part. It rechecks library access and the source
+fingerprint before returning cached bytes or ETag responses. HEAD never starts an
+image job. Public artwork/share routes cannot return these images. Originals are
+read through confined handles and private loopback ranges; no Plex transcode,
+library scan, original-file cache, or whole-title storyboard is created.
+
+The shared disk cache lives under `MEDIA_CACHE_DIR/previews`, bounded by 128 MiB,
+the shared cache's 4,096-entry eviction threshold, and a twelve-hour idle TTL.
+Each image is at most 320×180 and 256 KiB. At most two extraction jobs run with
+two software decoder threads each; jobs have fifteen-second deadlines and the
+queue is bounded. Identical requests share one job; abandoned work cancels after
+50 ms. These workers are separate from video encoding slots.
+
+The browser waits 100 ms before an uncached hover request, cancels obsolete work,
+and retains up to 64 JPEG blob URLs / 8 MiB for five minutes. This memory is local
+to the title and auth revision and is released on media, session or grant changes.
+Cache hits display immediately; failures back off for five seconds. No decoder,
+subtitle, room or playback command is involved in preview rendering.
+
+### Native video output
 
 All active modes use native video/MSE, with color-managed browser conversion on
 SDR displays. Automatic always chooses supported NVENC AV1, then HEVC, independently

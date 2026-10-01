@@ -21,6 +21,8 @@ import (
 
 type Options struct {
 	Enabled              bool
+	PreviewsEnabled      bool
+	PreviewDir           string
 	AIHDREnabled         bool
 	NVEncC               string
 	FFmpeg, FFprobe, Dir string
@@ -42,6 +44,7 @@ type Service struct {
 	options       Options
 	plex          *plex.Client
 	cache         *cache
+	previews      *cache
 	codecs        []string
 	aiHDRCodecs   []string
 	aiHDRRevision string
@@ -56,7 +59,30 @@ type Service struct {
 func New(ctx context.Context, p *plex.Client, opts Options) (*Service, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	s := &Service{options: opts, plex: p, codecs: []string{}, cancel: cancel, sources: map[string]*source{}, probes: make(chan struct{}, 2)}
+	if opts.PreviewsEnabled && p != nil {
+		if err := p.ValidateWritable(opts.PreviewDir); err != nil {
+			cancel()
+			return nil, err
+		}
+		c, err := newSizedCache(ctx, opts.PreviewDir, 128<<20, 12*time.Hour, 2, previewMaxBytes, 15*time.Second, 50*time.Millisecond)
+		if err != nil {
+			cancel()
+			return nil, err
+		}
+		s.previews = c
+	}
+	// Also close the preview cache if encoder initialization fails below.
+	ready := false
+	defer func() {
+		if !ready {
+			s.Close()
+		}
+	}()
+	if p != nil && (opts.Enabled || opts.PreviewsEnabled) {
+		s.revision = toolRevision(ctx, opts.FFmpeg) + toolRevision(ctx, opts.FFprobe)
+	}
 	if !opts.Enabled || p == nil {
+		ready = true
 		return s, nil
 	}
 	if !validProfile(opts.Profile) {
@@ -73,12 +99,12 @@ func New(ctx context.Context, p *plex.Client, opts Options) (*Service, error) {
 		return nil, err
 	}
 	s.cache = c
-	s.revision = toolRevision(ctx, opts.FFmpeg) + toolRevision(ctx, opts.FFprobe)
 	s.codecs = capabilities(ctx, opts.FFmpeg, opts.Dir)
 	if opts.AIHDREnabled {
 		s.aiHDRRevision = aiHDRVersion + aiHDRToolRevision(opts.NVEncC)
 		s.aiHDRCodecs = aiHDRCapabilities(ctx, opts, s.codecs)
 	}
+	ready = true
 	return s, nil
 }
 func (s *Service) Close() {
@@ -86,10 +112,14 @@ func (s *Service) Close() {
 	if s.cache != nil {
 		s.cache.close()
 	}
+	if s.previews != nil {
+		s.previews.close()
+	}
 }
 func (s *Service) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /encoding/capabilities", s.capabilities)
 	mux.HandleFunc("GET /media/{id}/parts/{partId}/encoded/{codec}/{resource}", s.serve)
+	mux.HandleFunc("GET /media/{id}/parts/{partId}/preview/{frame}", s.preview)
 }
 func (s *Service) capabilities(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"codecs": s.codecs, "aiHDREnabled": s.options.AIHDREnabled, "aiHDRCodecs": s.aiHDRCodecs, "segmentSeconds": SegmentSeconds, "quality": s.options.Profile.Quality, "preset": s.options.Profile.Preset, "audioSurroundKbpsPerChannel": s.options.Profile.AudioSurroundKbpsPerChannel})
@@ -114,6 +144,26 @@ func failure(w http.ResponseWriter, err error) {
 }
 
 func (s *Service) resolve(ctx context.Context, id, part string) (*source, *os.File, error) {
+	src, file, err := s.resolveSource(ctx, id, part)
+	if err != nil {
+		return nil, nil, err
+	}
+	if src.probe.count("audio") > 24 || src.probe.count("subtitle") > 64 {
+		file.Close()
+		return nil, nil, errEncode
+	}
+	for _, stream := range src.probe.Streams {
+		if stream.Type == "audio" {
+			if _, ok := planAudio(stream); !ok {
+				file.Close()
+				return nil, nil, errors.New("This audio channel count is not supported by the encoder; select Compatible")
+			}
+		}
+	}
+	return src, file, nil
+}
+
+func (s *Service) resolveSource(ctx context.Context, id, part string) (*source, *os.File, error) {
 	file, err := s.plex.File(ctx, id, part)
 	if err != nil {
 		return nil, nil, err
@@ -162,15 +212,8 @@ func (s *Service) resolve(ctx context.Context, id, part string) (*source, *os.Fi
 	if err != nil {
 		return nil, nil, err
 	}
-	if p.count("video") == 0 || p.count("audio") > 24 || p.count("subtitle") > 64 {
+	if p.count("video") == 0 {
 		return nil, nil, errEncode
-	}
-	for _, stream := range p.Streams {
-		if stream.Type == "audio" {
-			if _, ok := planAudio(stream); !ok {
-				return nil, nil, errors.New("This audio channel count is not supported by the encoder; select Compatible")
-			}
-		}
 	}
 	duration, _ := strconv.ParseFloat(p.Format.Duration, 64)
 	if !isFinitePositive(duration) || duration > 7*24*3600 {
