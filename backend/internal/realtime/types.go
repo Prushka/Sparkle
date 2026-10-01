@@ -8,6 +8,7 @@ import (
 const (
 	NewPlayer         = "new player"
 	PlaybackSync      = "playback"
+	RoomSync          = "room"
 	ProfileSync       = "profile"
 	ProfileError      = "profileError"
 	TimeSync          = "time"

@@ -13,6 +13,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -322,7 +323,10 @@ func profileFiles(pfpDir, outputDir string) http.Handler {
 				_ = f.Close()
 				continue
 			}
-			w.Header().Set("Cache-Control", "no-store")
+			// Revalidate on every use, but avoid retransmitting an unchanged
+			// guest avatar each time its chat/profile component remounts.
+			w.Header().Set("Cache-Control", "private, no-cache")
+			w.Header().Set("ETag", fmt.Sprintf(`"%x-%x"`, info.Size(), info.ModTime().UnixNano()))
 			w.Header().Set("Content-Type", "image/png")
 			http.ServeContent(w, r, name, info.ModTime(), f)
 			_ = f.Close()

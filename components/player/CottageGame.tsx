@@ -38,6 +38,7 @@ type CottageGameProps = {
 	backendBaseUrl: string;
 	roomId: string;
 	socketConnected: boolean;
+	socketAccount: string;
 	currentPlayer: CottagePlayerIdentity | null;
 	roomPlayers: RoomPlayer[];
 };
@@ -2941,6 +2942,7 @@ export function CottageGame({
 	backendBaseUrl,
 	roomId,
 	socketConnected,
+	socketAccount,
 	currentPlayer,
 	roomPlayers
 }: CottageGameProps) {
@@ -3060,8 +3062,11 @@ export function CottageGame({
 		};
 	}, []);
 
+	// Profile updates already send a new snapshot. Only connection/account
+	// identity changes need a new socket, not a display-name object replacement.
+	const currentPlayerId = currentPlayer?.id;
 	useEffect(() => {
-		if (!socketConnected || !currentPlayer || !roomId) {
+		if (!socketConnected || !currentPlayerId || !roomId) {
 			const socket = socketRef.current;
 			if (socket) {
 				socket.onopen = null;
@@ -3078,7 +3083,7 @@ export function CottageGame({
 		const syncRoom = `cottage:${roomId}`;
 		const socketUrl = getBackendWebSocketUrl(
 			backendBaseUrl,
-			`/sync/${encodeURIComponent(syncRoom)}/${encodeURIComponent(`${currentPlayer.id}-cottage`)}`
+			`/sync/${encodeURIComponent(syncRoom)}/${encodeURIComponent(`${currentPlayerId}-cottage`)}`
 		);
 
 		const clearReconnectTimer = () => {
@@ -3185,10 +3190,11 @@ export function CottageGame({
 			};
 		};
 
-		connect();
+		const initial = window.setTimeout(connect, 0);
 
 		return () => {
 			disposed = true;
+			window.clearTimeout(initial);
 			clearReconnectTimer();
 			const socket = socketRef.current;
 			if (socket) {
@@ -3206,10 +3212,11 @@ export function CottageGame({
 		};
 	}, [
 		backendBaseUrl,
-		currentPlayer,
+		currentPlayerId,
 		requestPeerSnapshots,
 		roomId,
 		sendSelfSnapshot,
+		socketAccount,
 		socketConnected
 	]);
 

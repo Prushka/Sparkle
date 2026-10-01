@@ -76,24 +76,24 @@ type Room struct {
 	logEvent          func(PlayerSnapshot, string, string, string)
 	// Serialize authorization and mutations against HTTP/WebSocket media changes.
 	// The state mutex remains independent so socket writes never wait on Plex IO.
-	accessMu                  sync.Mutex
-	id                        string
-	mediaID                   string
-	mediaUpdatedAt            int64
-	players                   map[string]*Player
-	mediaSubscribers          map[string]*Player
-	chats                     []Chat
-	lastSeek                  time.Time
-	idleSince                 time.Time
-	lastPlayersSignature      string
-	lastPlayerStatusSignature string
-	lastStatusSent            time.Time
-	state                     VideoState
-	youtube                   YouTubeState
-	chess                     ChessState
-	wordle                    WordleState
-	cottage                   CottageState
-	mu                        sync.RWMutex
+	accessMu             sync.Mutex
+	id                   string
+	mediaID              string
+	mediaUpdatedAt       int64
+	players              map[string]*Player
+	mediaSubscribers     map[string]*Player
+	chats                []Chat
+	lastSeek             time.Time
+	idleSince            time.Time
+	lastPlayersSignature string
+	lastPlayerStatuses   map[string]PlayerStatus
+	lastStatusSent       time.Time
+	state                VideoState
+	youtube              YouTubeState
+	chess                ChessState
+	wordle               WordleState
+	cottage              CottageState
+	mu                   sync.RWMutex
 }
 
 type roomRequest struct {
@@ -219,6 +219,12 @@ func (h *Hub) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	room.logPlayerEvent(room.playerSnapshot(player), "connected", "connection", "")
 	go player.writePump()
+	if r.URL.Query().Get("roomSnapshot") == "1" {
+		room.mu.RLock()
+		snapshot := room.snapshotLocked()
+		room.mu.RUnlock()
+		player.sendJSON(SendPayload{Type: RoomSync, MediaID: snapshot.MediaID, MediaUpdated: snapshot.MediaUpdated, Timestamp: time.Now().UnixMilli()})
+	}
 	h.sendVoiceConfig(player, roomID)
 	h.readPump(room, player)
 }
@@ -558,7 +564,7 @@ func (h *Hub) addPlayerToRoom(id string, player *Player) *Room {
 		player.joined = false
 		player.joinMessagePending = isNewPresence
 		room.lastPlayersSignature = ""
-		room.lastPlayerStatusSignature = ""
+		room.lastPlayerStatuses = nil
 		room.lastStatusSent = time.Time{}
 	}
 	room.idleSince = time.Time{}
@@ -746,7 +752,7 @@ func (r *Room) remove(player *Player) (PlayerSnapshot, bool) {
 		r.lastSeek = time.Time{}
 		r.idleSince = time.Now()
 		r.lastPlayersSignature = ""
-		r.lastPlayerStatusSignature = ""
+		r.lastPlayerStatuses = nil
 		r.lastStatusSent = time.Time{}
 	}
 	return removed, announceLeave
@@ -792,7 +798,7 @@ func (r *Room) applyMediaIDLocked(mediaID string, timestamp int64) {
 	r.cottage = defaultCottageState()
 	r.lastSeek = time.Time{}
 	r.lastPlayersSignature = ""
-	r.lastPlayerStatusSignature = ""
+	r.lastPlayerStatuses = nil
 	r.lastStatusSent = time.Time{}
 	for _, player := range r.players {
 		player.state.Time = 0
@@ -3273,6 +3279,9 @@ func (r *Room) syncPause(sender *Player, paused *bool, identity ...ClientPayload
 }
 
 func (r *Room) newPlayer(sender *Player, recovering bool) {
+	if r.sendTabSnapshot(sender) {
+		return
+	}
 	var mediaID string
 	var mediaUpdated int64
 	var roomTime float64
@@ -3372,8 +3381,14 @@ type playerPresenceSignature struct {
 }
 
 func (r *Room) syncPlayerState(now time.Time) {
+	if base, _ := socketRole(r.id, ""); base != r.id {
+		// Tab clients consume only their game state. WebSocket ping/pong still
+		// checks liveness and authorization without unused presence broadcasts.
+		return
+	}
 	var players []PlayerSnapshot
 	var statuses []PlayerStatus
+	currentStatuses := make(map[string]PlayerStatus)
 	var presences []playerPresenceSignature
 	var targets []*Player
 
@@ -3384,7 +3399,11 @@ func (r *Room) syncPlayerState(now time.Time) {
 			continue
 		}
 		players = append(players, player.state)
-		statuses = append(statuses, playerStatusFromSnapshot(player.state))
+		status := playerStatusFromSnapshot(player.state)
+		currentStatuses[status.Id] = status
+		if previous, ok := r.lastPlayerStatuses[status.Id]; !ok || previous != status {
+			statuses = append(statuses, status)
+		}
 		presences = append(presences, playerPresenceSignature{
 			Id:          player.state.Id,
 			Name:        player.state.Name,
@@ -3407,17 +3426,16 @@ func (r *Room) syncPlayerState(now time.Time) {
 	})
 
 	playersSignature := signatureFor(presences)
-	statusSignature := signatureFor(statuses)
 	var payload *SendPayload
 	timestamp := now.UnixMilli()
 	switch {
 	case len(players) == 0:
 		r.lastPlayersSignature = ""
-		r.lastPlayerStatusSignature = ""
+		r.lastPlayerStatuses = nil
 		r.lastStatusSent = time.Time{}
 	case playersSignature != r.lastPlayersSignature:
 		r.lastPlayersSignature = playersSignature
-		r.lastPlayerStatusSignature = statusSignature
+		r.lastPlayerStatuses = currentStatuses
 		r.lastStatusSent = now
 		payload = &SendPayload{
 			Type:         PlayersStatusSync,
@@ -3425,8 +3443,8 @@ func (r *Room) syncPlayerState(now time.Time) {
 			PlayersCount: len(players),
 			Timestamp:    timestamp,
 		}
-	case statusSignature != r.lastPlayerStatusSignature:
-		r.lastPlayerStatusSignature = statusSignature
+	case len(statuses) > 0:
+		r.lastPlayerStatuses = currentStatuses
 		r.lastStatusSent = now
 		payload = &SendPayload{
 			Type:           PlayerStatusSync,

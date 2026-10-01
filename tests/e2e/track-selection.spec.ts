@@ -1838,6 +1838,14 @@ test('returning mobile viewer replaces a half-open room connection and adopts pe
 			await client.getByRole('button', { name: 'Join Watch Room', exact: true }).click();
 			await expect.poll(() => audioTitle(client), { timeout: 30000 }).toBe('Japanese');
 		}
+		// Audio metadata is available before the initial room state has finished
+		// applying. Wait until controls can publish before simulating the outage.
+		for (const client of [page, peer]) {
+			await expect
+				.poll(() => client.evaluate(() => (window as any).trackTestProvider.canPublishPlayback))
+				.toBe(true);
+			await expect(client.locator('[data-media-player]')).not.toHaveAttribute('data-paused');
+		}
 		drop = true; // Socket still reports OPEN, but the suspended connection carries no data.
 		await page.evaluate(() => {
 			Object.defineProperty(document, 'hidden', { configurable: true, value: true });

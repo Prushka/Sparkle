@@ -49,6 +49,7 @@ export function PlexAuthProvider({ children }: { children: ReactNode }) {
 	const [revision, setRevision] = useState(0);
 	const signature = useRef('');
 	const generation = useRef(0);
+	const refreshing = useRef<{ generation: number; promise: Promise<void> } | null>(null);
 	const polling = useRef<AbortController | null>(null);
 	const active = useRef(false);
 	const apply = useCallback((response: PlexSession & { artwork?: PlexArtworkCredentials }) => {
@@ -91,15 +92,24 @@ export function PlexAuthProvider({ children }: { children: ReactNode }) {
 			throw new Error(data.error || 'Plex sign-in is unavailable. Please try again.');
 		return { data, pending: response.status === 202 };
 	}, []);
-	const refresh = useCallback(async () => {
-		const current = ++generation.current;
-		try {
-			const { data } = await request('session', 'POST', AbortSignal.timeout(8_000));
-			if (current === generation.current) apply(data);
-		} catch {
-			// Fail closed while preserving the ability to retry the sign-in service.
-			if (current === generation.current) apply({ ...anonymous, enabled: true });
-		}
+	const refresh = useCallback(() => {
+		// Focus, expiry and access-denied events can arrive together. Share only
+		// the current auth generation; login/logout must always get fresh state.
+		if (refreshing.current?.generation === generation.current) return refreshing.current.promise;
+		const current = generation.current;
+		const promise = (async () => {
+			try {
+				const { data } = await request('session', 'POST', AbortSignal.timeout(8_000));
+				if (current === generation.current) apply(data);
+			} catch {
+				// Fail closed while preserving the ability to retry the sign-in service.
+				if (current === generation.current) apply({ ...anonymous, enabled: true });
+			} finally {
+				if (refreshing.current?.generation === current) refreshing.current = null;
+			}
+		})();
+		refreshing.current = { generation: current, promise };
+		return promise;
 	}, [apply, request]);
 	useEffect(() => {
 		if (!artwork) return;

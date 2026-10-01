@@ -5,15 +5,12 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { DiscordSDK } from '@discord/embedded-app-sdk';
 import { formatSeconds, isExpired, type Discord, type Watching } from '@/lib/player/t';
 import { useAppState } from '@/lib/app-state';
+import { loadRuntimeConfig } from '@/lib/player/data';
 
 const DISCORD_AUTH_STORAGE_KEY = 'sparkle:discord-auth';
 const DISCORD_SCOPES = ['identify', 'rpc.activities.write'] as const;
 const ACTIVITY_TEXT_LIMIT = 128;
 const MAX_PARTY_SIZE = 99;
-
-type RuntimeEnv = {
-	PUBLIC_DISCORD_CLIENT_ID?: string;
-};
 
 function hasDiscordFrameParams(params: Pick<URLSearchParams, 'has'>) {
 	return params.has('frame_id') || params.has('instance_id');
@@ -159,13 +156,9 @@ export function DiscordBridge() {
 
 		async function loadRuntimeEnv() {
 			try {
-				const response = await fetch('/api/runtime-env', { cache: 'no-store' });
-				if (!response.ok) {
-					throw new Error(`Failed to load runtime env: ${response.status}`);
-				}
-				const runtimeEnv = (await response.json()) as RuntimeEnv;
+				const runtimeEnv = await loadRuntimeConfig();
 				if (!cancelled) {
-					setDiscordClientId(runtimeEnv.PUBLIC_DISCORD_CLIENT_ID ?? '');
+					setDiscordClientId(runtimeEnv.discordClientId ?? '');
 				}
 			} catch (error) {
 				console.error('Failed to load runtime env', error);

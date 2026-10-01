@@ -33,6 +33,13 @@ type cacheEntry struct {
 	data  []byte
 	until time.Time
 }
+
+type metadataRequest struct {
+	done      chan struct{}
+	data      []byte
+	err       error
+	cancelled bool
+}
 type Client struct {
 	base       *url.URL
 	token      string
@@ -41,6 +48,7 @@ type Client struct {
 	http       *http.Client
 	mu         sync.Mutex
 	cache      map[string]cacheEntry
+	pending    map[string]*metadataRequest
 	cacheBytes int
 	requests   chan struct{}
 	identity   string
@@ -102,17 +110,69 @@ func (c *Client) get(ctx context.Context, endpoint string, query url.Values, tar
 		return ErrNotFound
 	}
 	key := endpoint + "?" + query.Encode()
-	c.mu.Lock()
-	entry, ok := c.cache[key]
-	c.mu.Unlock()
-	if ok && time.Now().Before(entry.until) {
-		return json.Unmarshal(entry.data, target)
+	for {
+		if ctx.Err() != nil {
+			return ErrUnavailable
+		}
+		c.mu.Lock()
+		entry, ok := c.cache[key]
+		if ok && time.Now().Before(entry.until) {
+			c.mu.Unlock()
+			return json.Unmarshal(entry.data, target)
+		}
+		if pending := c.pending[key]; pending != nil {
+			c.mu.Unlock()
+			select {
+			case <-ctx.Done():
+				return ErrUnavailable
+			case <-pending.done:
+				// A cancelled leader must not fail another viewer's request.
+				// Other upstream errors are shared, never cached or retried here.
+				if pending.cancelled {
+					continue
+				}
+				if pending.err != nil {
+					return pending.err
+				}
+				return json.Unmarshal(pending.data, target)
+			}
+		}
+		// Bound distinct queued lookups as well as active upstream requests.
+		if len(c.pending) >= 256 {
+			c.mu.Unlock()
+			return ErrUnavailable
+		}
+		if c.pending == nil {
+			c.pending = make(map[string]*metadataRequest)
+		}
+		pending := &metadataRequest{done: make(chan struct{})}
+		c.pending[key] = pending
+		c.mu.Unlock()
+
+		data, err := c.fetchMetadata(ctx, endpoint, query)
+		if err == nil && json.Unmarshal(data, target) != nil {
+			err = ErrUnavailable
+		}
+		c.mu.Lock()
+		if err == nil {
+			c.cacheMetadataLocked(key, data)
+		}
+		pending.data, pending.err, pending.cancelled = data, err, ctx.Err() != nil
+		delete(c.pending, key)
+		close(pending.done)
+		c.mu.Unlock()
+		return err
 	}
+}
+
+// Only owner metadata uses this cache/coalescing path. UserLibraries always
+// checks each session's resource token independently.
+func (c *Client) fetchMetadata(ctx context.Context, endpoint string, query url.Values) ([]byte, error) {
 	select {
 	case c.requests <- struct{}{}:
 		defer func() { <-c.requests }()
 	case <-ctx.Done():
-		return ErrUnavailable
+		return nil, ErrUnavailable
 	}
 	u := *c.base
 	u.Path = strings.TrimRight(u.Path, "/") + endpoint
@@ -124,23 +184,23 @@ func (c *Client) get(ctx context.Context, endpoint string, query url.Values, tar
 	req.Header.Set("X-Plex-Client-Identifier", "sparkle-readonly")
 	res, err := c.http.Do(req)
 	if err != nil {
-		return ErrUnavailable
+		return nil, ErrUnavailable
 	}
 	defer res.Body.Close()
 	if res.StatusCode == 404 {
-		return ErrNotFound
+		return nil, ErrNotFound
 	}
 	if res.StatusCode != 200 {
-		return ErrUnavailable
+		return nil, ErrUnavailable
 	}
 	data, err := io.ReadAll(io.LimitReader(res.Body, 8*1024*1024+1))
 	if err != nil || len(data) > 8*1024*1024 {
-		return ErrUnavailable
+		return nil, ErrUnavailable
 	}
-	if json.Unmarshal(data, target) != nil {
-		return ErrUnavailable
-	}
-	c.mu.Lock()
+	return data, nil
+}
+
+func (c *Client) cacheMetadataLocked(key string, data []byte) {
 	if old, exists := c.cache[key]; exists {
 		c.cacheBytes -= len(old.data)
 		delete(c.cache, key)
@@ -153,8 +213,6 @@ func (c *Client) get(ctx context.Context, endpoint string, query url.Values, tar
 	}
 	c.cache[key] = cacheEntry{data, time.Now().Add(time.Minute)}
 	c.cacheBytes += len(data)
-	c.mu.Unlock()
-	return nil
 }
 
 func (c *Client) Identity(ctx context.Context) (string, error) {

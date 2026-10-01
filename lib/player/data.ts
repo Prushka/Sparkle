@@ -11,9 +11,10 @@ export type RuntimeConfig = {
 	backendBaseUrl: string;
 	staticBaseUrl: string;
 	requestUrl?: string;
+	discordClientId?: string;
 };
 
-type RuntimeConfigPayload = Partial<RuntimeConfig>;
+type RuntimeConfigPayload = Partial<RuntimeConfig> & { PUBLIC_DISCORD_CLIENT_ID?: string };
 
 let runtimeConfigPromise: Promise<RuntimeConfig> | null = null;
 
@@ -30,7 +31,7 @@ export function resetClientDataCache() {
 
 export async function loadRuntimeConfig(): Promise<RuntimeConfig> {
 	if (!runtimeConfigPromise) {
-		runtimeConfigPromise = backendFetch('/api/runtime-env', { cache: 'no-store' }).then(
+		const pending = backendFetch('/api/runtime-env', { cache: 'no-store' }).then(
 			async (response) => {
 				if (!response.ok) {
 					throw new Error(`Failed to load runtime config: ${response.status}`);
@@ -42,10 +43,15 @@ export async function loadRuntimeConfig(): Promise<RuntimeConfig> {
 				return {
 					backendBaseUrl: payload.backendBaseUrl,
 					staticBaseUrl: payload.staticBaseUrl,
-					requestUrl: payload.requestUrl
+					requestUrl: payload.requestUrl,
+					discordClientId: payload.PUBLIC_DISCORD_CLIENT_ID
 				};
 			}
 		);
+		runtimeConfigPromise = pending;
+		void pending.catch(() => {
+			if (runtimeConfigPromise === pending) runtimeConfigPromise = null;
+		});
 	}
 	return runtimeConfigPromise;
 }
@@ -115,7 +121,9 @@ export async function fetchJob(backendBaseUrl: string, mediaId: string): Promise
 	const response = await backendFetch(
 		joinBackendPath(backendBaseUrl, `/media/${encodeURIComponent(mediaId)}`),
 		{
-			cache: 'no-store'
+			// Always revalidate access and metadata, while allowing an unchanged
+			// private response to reuse its body through the backend's ETag.
+			cache: 'no-cache'
 		}
 	);
 	if (!response.ok) {

@@ -95,3 +95,37 @@ func TestStaticFilesHidePrivateMetadataAndConfineAssets(t *testing.T) {
 		}
 	}
 }
+
+func TestGuestAvatarRevalidatesAndDetectsReplacement(t *testing.T) {
+	dir := t.TempDir()
+	name := filepath.Join(dir, "viewer.png")
+	if err := os.WriteFile(name, []byte("first avatar"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	handler := profileFiles(dir, t.TempDir())
+	first := httptest.NewRecorder()
+	handler.ServeHTTP(first, httptest.NewRequest("GET", "/static/pfp/viewer.png?123", nil))
+	etag := first.Header().Get("ETag")
+	if first.Code != 200 || etag == "" || first.Header().Get("Cache-Control") != "private, no-cache" {
+		t.Fatalf("missing private validator: %d %v", first.Code, first.Header())
+	}
+	for _, method := range []string{"GET", "HEAD"} {
+		req := httptest.NewRequest(method, "/static/pfp/viewer.png?123", nil)
+		req.Header.Set("If-None-Match", etag)
+		cached := httptest.NewRecorder()
+		handler.ServeHTTP(cached, req)
+		if cached.Code != 304 || cached.Body.Len() != 0 {
+			t.Fatalf("unchanged %s avatar retransmitted: %d", method, cached.Code)
+		}
+	}
+	if err := os.WriteFile(name, []byte("replacement avatar"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest("GET", "/static/pfp/viewer.png?123", nil)
+	req.Header.Set("If-None-Match", etag)
+	replaced := httptest.NewRecorder()
+	handler.ServeHTTP(replaced, req)
+	if replaced.Code != 200 || replaced.Body.String() != "replacement avatar" || replaced.Header().Get("ETag") == etag {
+		t.Fatal("replaced avatar reused stale bytes")
+	}
+}

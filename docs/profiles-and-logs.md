@@ -46,6 +46,12 @@ shows the original draft and its error so the user can choose a valid replacemen
 Plex profile pictures continue to be managed by Plex. New guest uploads stay in
 `PFP_DIR`; existing `OUTPUT/pfp` avatars remain readable.
 
+Guest avatars use `Cache-Control: private, no-cache` with size/modification-time
+ETags. Each reuse revalidates; unchanged GET/HEAD requests can return `304` without
+the image body. Uploads and explicit avatar updates retain revision URLs, and the
+frontend waits for the initial revision instead of downloading an unversioned copy
+first. Plex avatar caching keeps its separate policy.
+
 ## Room logs
 
 Connection, disconnection, profile identification and connection errors include:

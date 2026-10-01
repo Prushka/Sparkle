@@ -13,6 +13,8 @@ library from the same Library view.
   Returning from another app refreshes room playback; stalled Plex playback can rebuild
   its selected output automatically or through **Retry playback**.
   Suspended background clocks cannot overwrite room progress or its pause state.
+  [Network behavior](docs/network-performance.md) covers shared requests, room connection
+  lifetimes, conditional responses and synchronization traffic.
 - Plex sign-in in Library and the player. Members can browse and play only configured
   Raw libraries shared with their Plex account; anonymous visitors can use existing Encoded media. Raw rooms prompt
   visitors to sign in or leave. Shared Raw links render full titles, descriptions and

@@ -252,6 +252,26 @@ test('renewing the same credentials keeps loaded images without starting a fallb
 	expect(f.perCoverRequests()).toBe(0);
 });
 
+test('overlapping refresh triggers share a request without surviving logout', async ({ page }) => {
+	const f = await fixture(page);
+	await page.goto('/?artwork=refresh-burst');
+	await expect(page.locator('img[src*="X-Plex-Token"]')).toHaveCount(3);
+	const before = f.refreshes();
+	f.holdRefresh();
+	await page.evaluate(() => {
+		for (let i = 0; i < 12; i++) {
+			window.dispatchEvent(new Event('focus'));
+		}
+	});
+	await expect.poll(f.refreshes).toBe(before + 1);
+	await signOut(page);
+	const lateResponse = page.waitForResponse('**/be/auth/plex/session');
+	f.release();
+	await lateResponse;
+	await expect(page.locator('img[src*="X-Plex-Token"]')).toHaveCount(0);
+	await expect(page.getByRole('button', { name: 'Sign in with Plex', exact: true })).toBeVisible();
+});
+
 test('expired credentials are removed while the session is revalidated', async ({ page }) => {
 	await page.clock.install();
 	const f = await fixture(page);

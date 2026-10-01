@@ -137,6 +137,15 @@ Windows can use the [tray backend](docs/windows-backend.md) instead of a termina
   Room links use `/<room>` and `/<room>/media/<media>`; the path owns room identity.
   Preserve root `?mediaId=` entry links, Discord root `channel_id` launches, and the
   documented oEmbed routes. Do not restore unused query-based room or `/rooms/` aliases.
+- Reuse the joined playback socket for media changes; keep a media watcher only in
+  Library, before joining or while disconnected. Request an initial `roomSnapshot=1`
+  over the socket, retaining the bounded HTTP fallback for older backends. Tab sockets
+  preserve remote game discovery but receive only their game snapshots, without unused
+  playback/presence traffic. Keep complete roster updates for presence changes, changed
+  player statuses for deltas and the existing playback heartbeat/recovery timing.
+  Coalesce concurrent session refreshes only within an auth generation, and concurrent
+  owner metadata reads only by endpoint/query; never share viewer authorization checks.
+  See [network behavior](docs/network-performance.md).
 - Shared UI components follow shadcn/Tailwind 4 conventions. Select uses Base UI's
   non-modal primitive; other controls use Radix. Menus, selects and room dialogs must
   leave page scrolling enabled. Preserve Tabler

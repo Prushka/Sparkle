@@ -163,6 +163,12 @@ revokes the Sparkle session, not a Plex token already received by the browser.
 
 ## Session handling
 
+The browser shares simultaneous session refreshes from focus, expiry, its periodic
+check and access errors. Sign-in and sign-out advance the auth generation so an
+older response cannot overwrite the new session. This only coalesces pending
+requests; it does not extend session expiry or the backend's five-minute grant
+revalidation interval. Library source discovery waits for initial session resolution.
+
 The backend uses Plex's [strong-PIN hosted authentication flow](https://forums.plex.tv/t/authenticating-with-plex/609370).
 A short-lived HttpOnly pending cookie binds the PIN to the browser that started
 it. Only the backend polls Plex and receives the account token. The backend reads

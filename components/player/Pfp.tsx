@@ -41,7 +41,7 @@ export function Pfp({
 	const fallbackColor = useMemo(() => getPlayerFallbackColor(fallbackName), [fallbackName]);
 	const imageSrc = discordUser?.avatar
 		? getAvatarUrl(discordUser)
-		: !discordUser && id
+		: !discordUser && id && pfpRevision
 			? `${staticBaseUrl}/pfp/${id}.png?${pfpRevision || ''}`
 			: '';
 	const showImage = Boolean(imageSrc && failedImageSrc !== imageSrc);

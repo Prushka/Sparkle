@@ -260,6 +260,7 @@ type CottageGameProps = {
 	backendBaseUrl: string;
 	roomId: string;
 	socketConnected: boolean;
+	socketAccount: string;
 	currentPlayer: { id: string; name: string; profileId?: string } | null;
 	roomPlayers: RoomPlayer[];
 };
@@ -3630,10 +3631,12 @@ function useLatestRef<T>(value: T) {
 
 export function Player({
 	data,
-	onRoomMediaChanged
+	onRoomMediaChanged,
+	onRoomConnectionChanged
 }: {
 	data: ServerData;
 	onRoomMediaChanged?: (mediaId: string, mediaUpdated?: number) => void | Promise<void>;
+	onRoomConnectionChanged?: (connected: boolean) => void;
 }) {
 	const { job } = data;
 	const router = useRouter();
@@ -3723,6 +3726,10 @@ export function Player({
 	const [playerEl, setPlayerEl] = useState<MediaPlayerInstance | null>(null);
 	const [mediaProviderEl, setMediaProviderEl] = useState<MediaProviderInstance | null>(null);
 	const [socketConnected, setSocketConnected] = useState(false);
+	useEffect(() => {
+		onRoomConnectionChanged?.(socketConnected);
+		return () => onRoomConnectionChanged?.(false);
+	}, [onRoomConnectionChanged, socketConnected]);
 	const [roomPlayers, setRoomPlayers] = useState<RoomPlayer[]>([]);
 	const [historicalPlayers, setHistoricalPlayers] = useState<Record<string, RoomPlayer>>({});
 	const [roomMessages, setRoomMessages] = useState<Chat[]>([]);
@@ -6051,7 +6058,10 @@ export function Player({
 			if ((!forceInteracted && !interactedRef.current) || !player || !playerId) {
 				return;
 			}
-			const socketUrl = getBackendWebSocketUrl(backendBaseUrl, `/sync/${room}/${playerId}`);
+			const socketUrl = getBackendWebSocketUrl(
+				backendBaseUrl,
+				`/sync/${room}/${playerId}?roomSnapshot=1`
+			);
 			const existingSocket = socketRef.current;
 			if (
 				!replace &&
@@ -6087,6 +6097,7 @@ export function Player({
 			socketUrlRef.current = socketUrl;
 			socketAccountRef.current = socketAccount;
 			console.log(`Socket, connecting to ${room}`);
+			let snapshotFallback: number | undefined;
 			socket.onopen = () => {
 				if (socketRef.current !== socket) {
 					socket.close();
@@ -6095,7 +6106,9 @@ export function Player({
 				console.log(`Socket, connected to ${room}`);
 				// A media change may have happened while this socket was disconnected
 				// or while the replacement provider was mounting.
-				void refreshRoomMediaRef.current();
+				snapshotFallback = window.setTimeout(() => {
+					if (socketRef.current === socket) void refreshRoomMediaRef.current();
+				}, 250);
 				setSocketConnected(true);
 				profileSyncedRef.current = sendProfileRef.current();
 				awaitingInitialPlaybackSyncRef.current = true;
@@ -6125,6 +6138,15 @@ export function Player({
 				}
 				const broadcast = state.broadcast;
 				socketLastMessageRef.current = Date.now();
+				if (state.type === SyncTypes.RoomSync) {
+					window.clearTimeout(snapshotFallback);
+					if (state.mediaUpdated && state.mediaUpdated < mediaRevisionRef.current) return;
+					if (state.mediaUpdated) mediaRevisionRef.current = state.mediaUpdated;
+					const mediaId = state.mediaId ?? '';
+					if (mediaId !== currentMediaIdRef.current)
+						void onRoomMediaChangedRef.current?.(mediaId, state.mediaUpdated);
+					return;
+				}
 				if (state.type === SyncTypes.TimeSync || state.type === SyncTypes.PauseSync) {
 					if (state.mediaId && state.mediaId !== currentMediaIdRef.current) {
 						void refreshRoomMediaRef.current();
@@ -6326,6 +6348,7 @@ export function Player({
 			};
 
 			socket.onclose = (event) => {
+				window.clearTimeout(snapshotFallback);
 				if (socketRef.current !== socket) {
 					return;
 				}
@@ -7475,6 +7498,7 @@ export function Player({
 						backendBaseUrl={backendBaseUrl}
 						roomId={room}
 						socketConnected={socketConnected}
+						socketAccount={socketAccount}
 						currentPlayer={currentCottagePlayer}
 						roomPlayers={displayedRoomPlayers}
 					/>

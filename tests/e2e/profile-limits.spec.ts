@@ -50,6 +50,19 @@ async function profileFixture(page: Page, usernameLimit = 4) {
 	return profileMessages;
 }
 
+test('avatars start with their revision URL instead of downloading an unversioned copy first', async ({
+	page
+}) => {
+	const requests: string[] = [];
+	page.on('request', (request) => {
+		const url = new URL(request.url());
+		if (url.pathname.startsWith('/static/pfp/')) requests.push(url.search);
+	});
+	await profileFixture(page);
+	await expect.poll(() => requests.length).toBeGreaterThan(0);
+	expect(requests.every((query) => /^\?\d+$/.test(query))).toBe(true);
+});
+
 test('configured guest name limit rejects long names and counts Unicode consistently', async ({
 	page
 }) => {

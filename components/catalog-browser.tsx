@@ -110,13 +110,14 @@ export function CatalogBrowser({
 	const posterHeight = episodes ? (cardWidth * 9) / 16 : cardWidth * 1.5;
 	const rowHeight = Math.ceil(posterHeight + (episodes ? 108 : 82));
 	useEffect(() => {
+		if (!auth.ready) return;
 		const controller = new AbortController();
 		backendFetch(joinBackendPath(backendBaseUrl, '/library/sources'), { signal: controller.signal })
 			.then((r) => (r.ok ? r.json() : Promise.reject()))
 			.then((v) => setSources(v.sources))
 			.catch(() => {});
 		return () => controller.abort();
-	}, [backendBaseUrl, auth.revision]);
+	}, [backendBaseUrl, auth.ready, auth.revision]);
 	// Only user edits schedule a search. Mirroring URL/history state back into a
 	// debounce effect can resurrect a cleared query or undo hierarchy navigation.
 	useEffect(() => {

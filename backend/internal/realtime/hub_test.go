@@ -1971,8 +1971,8 @@ func TestSyncPlayerStateSendsFullDeltaAndHeartbeat(t *testing.T) {
 	room.syncPlayerState(firstSync.Add(2 * time.Second))
 
 	statusPayload := readQueuedPayload(t, alice)
-	if statusPayload.Type != PlayerStatusSync || len(statusPayload.PlayerStatuses) != 2 {
-		t.Fatalf("status payload = %#v, want 2 player statuses", statusPayload)
+	if statusPayload.Type != PlayerStatusSync || len(statusPayload.PlayerStatuses) != 1 || statusPayload.PlayerStatuses[0].Id != "alice" || statusPayload.PlayersCount != 2 {
+		t.Fatalf("status payload = %#v, want only Alice's changed status and the full player count", statusPayload)
 	}
 	if len(statusPayload.Players) != 0 {
 		t.Fatalf("status payload included %d full players, want 0", len(statusPayload.Players))

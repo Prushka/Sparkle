@@ -113,6 +113,7 @@ type LoadState =
 type PlayerProps = {
 	data: ServerData;
 	onRoomMediaChanged?: (mediaId: string, mediaUpdated?: number) => void | Promise<void>;
+	onRoomConnectionChanged?: (connected: boolean) => void;
 };
 
 const Player = dynamic<PlayerProps>(
@@ -174,6 +175,7 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 	const searchParams = useSearchParams();
 	const [state, setState] = useState<LoadState>({ status: 'loading' });
 	const [retryKey, setRetryKey] = useState(0);
+	const [playerConnected, setPlayerConnected] = useState(false);
 	const lastMediaKeyRef = useRef('');
 	const latestMediaUpdatedRef = useRef(0);
 	const loadGenerationRef = useRef(0);
@@ -449,15 +451,26 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 	const mediaSubscriberRoomId =
 		state.status === 'library' ? state.roomId : state.status === 'player' ? state.data.roomId : '';
 	const mediaSubscriberMediaId = state.status === 'player' ? state.data.job.Id : '';
+	const mediaSubscriberAccount = auth.authenticated ? auth.profileId || 'plex' : 'guest';
 
 	useEffect(() => {
-		if (!mediaSubscriberStatus || !mediaSubscriberBackendBaseUrl || !mediaSubscriberRoomId) {
+		// The joined player receives media changes on its existing socket. Keep
+		// a watcher only in the library, before joining, or while disconnected.
+		if (
+			!auth.ready ||
+			!mediaSubscriberStatus ||
+			!mediaSubscriberBackendBaseUrl ||
+			!mediaSubscriberRoomId ||
+			(mediaSubscriberStatus === 'player' && playerConnected)
+		) {
 			return;
 		}
 
 		let disposed = false;
 		let socket: WebSocket | null = null;
 		let reconnectTimer: number | null = null;
+		let reconnectAttempt = 0;
+		let snapshotFallback: number | undefined;
 		const status = mediaSubscriberStatus;
 		const currentMediaId = mediaSubscriberMediaId;
 		const backendBaseUrl = mediaSubscriberBackendBaseUrl;
@@ -465,7 +478,7 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 		const subscriberId = `media_${randomString(14)}`;
 		const socketUrl = getBackendWebSocketUrl(
 			backendBaseUrl,
-			`/sync/${encodeURIComponent(roomId)}/${encodeURIComponent(subscriberId)}`
+			`/sync/${encodeURIComponent(roomId)}/${encodeURIComponent(subscriberId)}?roomSnapshot=1`
 		);
 
 		const clearReconnectTimer = () => {
@@ -503,6 +516,7 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 			socket = new WebSocket(socketUrl);
 			socket.onopen = () => {
 				if (!disposed) {
+					reconnectAttempt = 0;
 					const openedSocket = socket!;
 					void (async () => {
 						const discordUser = discordUserRef.current;
@@ -524,7 +538,8 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 					})().catch(() => {
 						if (!disposed) console.warn('Unable to identify room media watcher');
 					});
-					void refreshRoomMedia();
+					// Older backends ignore roomSnapshot and need an HTTP lookup.
+					snapshotFallback = window.setTimeout(() => void refreshRoomMedia(), 250);
 				}
 			};
 			socket.onmessage = (event: MessageEvent) => {
@@ -533,6 +548,13 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 					payload = JSON.parse(event.data) as SendPayload;
 				} catch (error) {
 					console.warn('Ignoring malformed room media payload', error);
+					return;
+				}
+				if (payload.type === SyncTypes.RoomSync) {
+					window.clearTimeout(snapshotFallback);
+					const mediaId = payload.mediaId ?? '';
+					if (mediaId !== currentMediaId)
+						void handleRoomMediaChangedRef.current(mediaId, payload.mediaUpdated);
 					return;
 				}
 				if (
@@ -549,21 +571,27 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 				socket?.close();
 			};
 			socket.onclose = (event) => {
+				window.clearTimeout(snapshotFallback);
 				if (!disposed) {
 					if (event.code === 4003) {
 						requirePlexAccess();
 						return;
 					}
 					clearReconnectTimer();
-					reconnectTimer = window.setTimeout(connect, 1000);
+					const delay = Math.min(30_000, 1000 * 2 ** Math.min(reconnectAttempt++, 5));
+					reconnectTimer = window.setTimeout(connect, delay);
 				}
 			};
 		};
 
-		connect();
+		// Avoid opening and immediately closing a socket during Strict Mode's
+		// setup/cleanup cycle. A real mount still connects on the next task.
+		const initial = window.setTimeout(connect, 0);
 
 		return () => {
 			disposed = true;
+			window.clearTimeout(initial);
+			window.clearTimeout(snapshotFallback);
 			clearReconnectTimer();
 			if (socket && socket.readyState !== WebSocket.CLOSED) {
 				socket.onopen = null;
@@ -574,6 +602,7 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 			}
 		};
 	}, [
+		auth.ready,
 		authRef,
 		discordUserRef,
 		handleRoomMediaChangedRef,
@@ -581,7 +610,9 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 		mediaSubscriberBackendBaseUrl,
 		mediaSubscriberRoomId,
 		mediaSubscriberMediaId,
-		mediaSubscriberStatus
+		mediaSubscriberStatus,
+		mediaSubscriberAccount,
+		playerConnected
 	]);
 
 	if (state.status === 'plex-required') {
@@ -611,5 +642,11 @@ export function RoomClient({ route }: { route: RoomRoute }) {
 			/>
 		);
 	}
-	return <Player data={state.data} onRoomMediaChanged={handleRoomMediaChanged} />;
+	return (
+		<Player
+			data={state.data}
+			onRoomMediaChanged={handleRoomMediaChanged}
+			onRoomConnectionChanged={setPlayerConnected}
+		/>
+	);
 }
